@@ -257,14 +257,24 @@ describe('reserves mapping', () => {
     expect(report.reserves).not.toBeNull();
   });
 
-  it('treats a zero NAV per token, or no positive reserves, as unpublished', () => {
+  it('treats reserves with no positive total as unpublished', () => {
+    expect(toReserves({ ...REPORT, reserves: { ...REPORT.reserves, totalUsd: 0 } })!.reserves).toBeNull();
+  });
+
+  it('keeps a published NAV total without its per-token figure, and the reverse', () => {
+    const totalOnly = toReserves({ ...REPORT, nav: { asOf: '2025-12-28', totalUsd: 1003.1 } })!;
+    expect(totalOnly.nav).toMatchObject({ totalUsd: 1003.1, perToken: null });
+    const perTokenOnly = toReserves({ ...REPORT, nav: { asOf: '2025-12-28', perToken: 1.0031 } })!;
+    expect(perTokenOnly.nav).toMatchObject({ totalUsd: null, perToken: 1.0031 });
+    expect(toReserves({ ...REPORT, nav: { asOf: '2025-12-28' } })!.nav).toBeNull();
+  });
+
+  it('keeps a NAV history point that has a total but no per-token figure', () => {
     const report = toReserves({
       ...REPORT,
-      nav: { ...REPORT.nav, perToken: 0 },
-      reserves: { ...REPORT.reserves, totalUsd: 0 },
+      history: { supply: [], nav: [{ date: '2025-12-28', totalUsd: 1003.1 }] },
     })!;
-    expect(report.nav).toBeNull();
-    expect(report.reserves).toBeNull();
+    expect(report.history.nav).toEqual([{ date: '2025-12-28', totalUsd: 1003.1, perToken: null }]);
   });
 
   it('skips custodians and holdings it cannot draw', () => {
@@ -295,6 +305,13 @@ describe('reserves mapping', () => {
       ratio: 1.002,
     });
     expect(toReserves({ ...REPORT, coverage: { ratio: 1.002 } })!.coverage).toBeNull();
+  });
+
+  it('keeps a published ratio of zero, the one a reader most needs to see', () => {
+    expect(toReserves({ ...REPORT, coverage: { asOf: '2026-01-02', ratio: 0 } })!.coverage).toEqual({
+      asOf: '2026-01-02',
+      ratio: 0,
+    });
   });
 
   it('answers null for a body that is not a report', () => {

@@ -43,6 +43,21 @@ export function shareLabel(fraction: number): string {
   return t('realfi.reserves.share', { value });
 }
 
+/**
+ * A backing ratio, cut (never rounded) to two decimals of a percent: 0.9996 is
+ * "99.96%" and 0.99999 is "99.99%". Rounding would print 100% for a reserve that is
+ * short, which is exactly the difference this figure is read for.
+ */
+export function coverageLabel(ratio: number): string {
+  // The epsilon absorbs float noise (0.9996 * 10000 is 9995.999…), not real shortfall.
+  const hundredths = Math.floor(ratio * 10_000 + 1e-6);
+  const value = (hundredths / 100).toLocaleString(getLocaleCode(i18n.locale), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return t('realfi.reserves.share', { value });
+}
+
 /** RealFi's sleeves; a key we have no words for is shown as its own words, not hidden. */
 const SLEEVES = [
   'emerging_markets_private_credit',

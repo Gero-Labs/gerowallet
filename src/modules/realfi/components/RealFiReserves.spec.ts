@@ -123,6 +123,26 @@ describe('RealFiReserves', () => {
     expect(figureLabels(wrapper)[0]).toBe('realfi.reserves.coverage');
   });
 
+  it('shows a NAV total on its own when RealFi publishes no per-token figure', () => {
+    const nav = report().nav!;
+    const wrapper = mountReserves(report({ nav: { ...nav, perToken: null } }));
+    expect(figureLabels(wrapper)).toEqual([
+      'realfi.reserves.nav',
+      'realfi.reserves.supply',
+      'realfi.reserves.custody',
+    ]);
+    expect(wrapper.find('.realfi-reserves__pending').exists()).toBe(false);
+  });
+
+  it('prints a backing just under 100% as under it, and a published 0% as 0%', () => {
+    const coverageText = (ratio: number) =>
+      mountReserves(report({ coverage: { asOf: '2026-01-02', ratio } }))
+        .findAll('.realfi-reserves__figure')[0]!
+        .text();
+    expect(coverageText(0.9996)).toContain('"value":"99.96"');
+    expect(coverageText(0)).toContain('"value":"0.00"');
+  });
+
   it('says NAV is not published yet rather than leaving a gap', () => {
     const wrapper = mountReserves(report({ nav: null }));
     expect(figureLabels(wrapper)).toContain('realfi.reserves.nav');

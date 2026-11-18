@@ -329,8 +329,10 @@ export function toReserves(raw: unknown): RealFiReservesReport | null {
   const navAsOf = toDate(get(n, 'asOf'));
   const navTotal = toAmount(get(n, 'totalUsd'));
   const perToken = toAmount(get(n, 'perToken'));
+  // Either figure alone is still a published NAV; dropping one with the other would
+  // turn a real total into "not published yet".
   const nav =
-    navAsOf && navTotal !== null && perToken !== null && perToken > 0
+    navAsOf && (navTotal !== null || perToken !== null)
       ? {
           asOf: navAsOf,
           totalUsd: navTotal,
@@ -343,7 +345,8 @@ export function toReserves(raw: unknown): RealFiReservesReport | null {
   const cov = asRecord(get(r, 'coverage'));
   const covAsOf = toDate(get(cov, 'asOf'));
   const ratio = toAmount(get(cov, 'ratio'));
-  const coverage = covAsOf && ratio !== null && ratio > 0 ? { asOf: covAsOf, ratio } : null;
+  // A published 0 is RealFi's figure too, and the one a reader most needs to see.
+  const coverage = covAsOf && ratio !== null ? { asOf: covAsOf, ratio } : null;
 
   const hist = asRecord(get(r, 'history'));
   const supplyHistory = get(hist, 'supply');
@@ -368,8 +371,10 @@ export function toReserves(raw: unknown): RealFiReservesReport | null {
             const p = asRecord(entry);
             const date = toDate(get(p, 'date'));
             const total = toAmount(get(p, 'totalUsd'));
-            const per = toAmount(get(p, 'perToken'));
-            return date && total !== null && per !== null ? [{ date, totalUsd: total, perToken: per }] : [];
+            // The trend draws the total; a point without one has nothing to draw.
+            return date && total !== null
+              ? [{ date, totalUsd: total, perToken: toAmount(get(p, 'perToken')) }]
+              : [];
           })
         : [],
     },

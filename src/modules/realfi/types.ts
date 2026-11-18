@@ -438,8 +438,9 @@ export interface RealFiReserves {
 
 export interface RealFiNav {
   asOf: string;
-  totalUsd: number;
-  perToken: number;
+  /** Each figure stands alone: RealFi can publish one without the other. */
+  totalUsd: number | null;
+  perToken: number | null;
   tokensOutstanding: number | null;
   source: string | null;
 }
@@ -451,10 +452,10 @@ export interface RealFiReservesReport {
   supply: { asOf: string; usdr: number; susdr: number | null } | null;
   /** The fund administrator's net asset value, struck weekly. */
   nav: RealFiNav | null;
-  /** RealFi's official coverage ratio. Null until they publish one; never derived here. */
+  /** RealFi's official coverage ratio, 0 included. Null until they publish one; never derived here. */
   coverage: { asOf: string; ratio: number } | null;
   history: {
     supply: { date: string; usdr: number }[];
-    nav: { date: string; totalUsd: number; perToken: number }[];
+    nav: { date: string; totalUsd: number; perToken: number | null }[];
   };
 }

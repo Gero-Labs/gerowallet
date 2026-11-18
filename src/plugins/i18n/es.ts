@@ -5303,7 +5303,7 @@ export default {
   'realfi.reserves.navPending': 'Aún no publicado',
   'realfi.reserves.navPendingNote': 'RealFi lo publica cuando el administrador del fondo lo informa.',
   'realfi.reserves.supply': 'USDrf en circulación',
-  'realfi.reserves.supplyNote': 'En Cardano · {date}',
+  'realfi.reserves.supplyNote': 'Todas las cadenas · {date}',
   'realfi.reserves.custody': 'Reservas en custodia',
   'realfi.reserves.custodyNote': '{n} custodio · {date} | {n} custodios · {date}',
   'realfi.reserves.share': '{value} %',

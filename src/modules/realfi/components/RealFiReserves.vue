@@ -106,6 +106,7 @@ import RealFiReservesTrend from './RealFiReservesTrend.vue';
 import type { RealFiReservesReport } from '../types';
 import {
   assetClassLabel,
+  coverageLabel,
   holdingLabel,
   isIsin,
   navPerTokenLabel,
@@ -147,25 +148,28 @@ const figures = computed<Figure[]>(() => {
     out.push({
       key: 'coverage',
       label: t('realfi.reserves.coverage'),
-      value: shareLabel(coverage.ratio),
+      value: coverageLabel(coverage.ratio),
       note: t('realfi.reserves.coverageNote', { date: shortDate(coverage.asOf) }),
     });
   }
   if (nav) {
-    out.push(
-      {
+    // Each NAV figure on its own: RealFi can publish one without the other.
+    if (nav.perToken !== null) {
+      out.push({
         key: 'navPerToken',
         label: t('realfi.reserves.navPerToken'),
         value: navPerTokenLabel(nav.perToken),
         note: t('realfi.reserves.navPerTokenNote', { date: shortDate(nav.asOf) }),
-      },
-      {
+      });
+    }
+    if (nav.totalUsd !== null) {
+      out.push({
         key: 'nav',
         label: t('realfi.reserves.nav'),
         value: usdCompact(nav.totalUsd),
         note: t('realfi.reserves.navNote', { date: shortDate(nav.asOf) }),
-      },
-    );
+      });
+    }
   } else {
     out.push({
       key: 'nav',

@@ -10,6 +10,7 @@ vi.mock('@/plugins/i18n', () => ({
 }));
 
 import {
+  coverageLabel,
   holdingLabel,
   isIsin,
   navPerTokenLabel,
@@ -34,6 +35,14 @@ describe('reserves formatting', () => {
     expect(shareLabel(0.9293)).toBe('realfi.reserves.share{"value":"92.9"}');
     expect(shareLabel(0.00009)).toBe('realfi.reserves.shareTiny');
     expect(shareLabel(0)).toBe('realfi.reserves.share{"value":"0"}');
+  });
+
+  it('cuts a backing ratio to two decimals instead of rounding a shortfall up to 100%', () => {
+    expect(coverageLabel(0.9996)).toBe('realfi.reserves.share{"value":"99.96"}');
+    expect(coverageLabel(0.99999)).toBe('realfi.reserves.share{"value":"99.99"}');
+    expect(coverageLabel(1.0031)).toBe('realfi.reserves.share{"value":"100.31"}');
+    expect(coverageLabel(1)).toBe('realfi.reserves.share{"value":"100.00"}');
+    expect(coverageLabel(0)).toBe('realfi.reserves.share{"value":"0.00"}');
   });
 
   it('names known sleeves through i18n and shows an unknown one as words, not a key', () => {
