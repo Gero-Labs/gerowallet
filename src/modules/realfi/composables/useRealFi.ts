@@ -29,6 +29,7 @@ import {
   type RealFiPosition,
   type RealFiProtocol,
   type RealFiReferrals,
+  type RealFiReservesReport,
   type RealFiUnavailableReason,
   type SmallestUnit,
 } from '../types';
@@ -43,6 +44,8 @@ export function useRealFi() {
   const referrals = ref<RealFiReferrals>(EMPTY_REFERRALS);
   const orders = ref<RealFiOrder[]>([]);
   const protocol = ref<RealFiProtocol | null>(null);
+  /** What backs USDrf. Null until read, and wherever Nexus has no feed for the network. */
+  const reserves = ref<RealFiReservesReport | null>(null);
 
   const wallet = computed(() => WalletStore.state.loggedWallet);
 
@@ -128,6 +131,7 @@ export function useRealFi() {
     referrals.value = EMPTY_REFERRALS;
     orders.value = [];
     protocol.value = null;
+    reserves.value = null;
   }
 
   /**
@@ -176,21 +180,32 @@ export function useRealFi() {
       // Independent reads — one slow endpoint should not hold up the rest of the page.
       // `allSettled` so a single failing call degrades that card alone rather than
       // blanking a screen that may be showing someone their staked balance.
-      const [positionResult, pointsResult, referralsResult, ordersResult, protocolResult] =
-        await Promise.allSettled([
-          client.getPosition(address),
-          client.getPoints(address),
-          // Only once the user has asked for a code: reading one mints it.
-          client.getReferrals(address, hasReferralOptIn(w.network, address)),
-          client.getOrders(address),
-          client.getProtocol(),
-        ]);
+      const [
+        positionResult,
+        pointsResult,
+        referralsResult,
+        ordersResult,
+        protocolResult,
+        reservesResult,
+      ] = await Promise.allSettled([
+        client.getPosition(address),
+        client.getPoints(address),
+        // Only once the user has asked for a code: reading one mints it.
+        client.getReferrals(address, hasReferralOptIn(w.network, address)),
+        client.getOrders(address),
+        client.getProtocol(),
+        client.getReserves(),
+      ]);
 
       if (positionResult.status === 'fulfilled') position.value = positionResult.value;
       if (pointsResult.status === 'fulfilled') points.value = pointsResult.value;
       if (referralsResult.status === 'fulfilled') referrals.value = referralsResult.value;
       if (ordersResult.status === 'fulfilled') orders.value = ordersResult.value;
       if (protocolResult.status === 'fulfilled') protocol.value = protocolResult.value;
+      // Kept out of `allFailed` below: the reserves feed is RealFi's, not the wallet's,
+      // and a gap in it must never stand in for "we could not load your position".
+      if (reservesResult.status === 'fulfilled') reserves.value = reservesResult.value;
+      else debugLog('[RealFi] reserves unavailable; the section stays hidden', reservesResult.reason);
 
       const allFailed = [
         positionResult,
@@ -243,6 +258,7 @@ export function useRealFi() {
     referrals,
     orders,
     protocol,
+    reserves,
     actionableOrders,
     reviewOrders,
     failedOrders,

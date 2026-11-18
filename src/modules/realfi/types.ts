@@ -389,3 +389,72 @@ export const EMPTY_REFERRALS: RealFiReferrals = {
   invitedCount: 0,
   rewardPoints: 0,
 };
+
+/* ── Reserves ─────────────────────────────────────────────────────────────────
+ * What backs USDrf, from RealFi's private off-chain data feed. Nexus reads it (the
+ * feed only answers an allowlisted IP with Gero's key) and returns these shapes.
+ *
+ * Unlike the amounts above these are display figures, not the user's money: USD
+ * values and whole-token counts as plain numbers, each part with its own date
+ * because RealFi publishes them on different schedules (custody daily, NAV weekly).
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+/** One position at one custodian. */
+export interface RealFiReserveHolding {
+  /** A ticker, an ISIN for a bond ETF, `PRIVATE_CREDIT` for a loan, `USD` for cash. */
+  symbol: string;
+  /** RealFi's key, e.g. `tokenized_treasury`; the UI maps known keys to labels. */
+  assetClass: string;
+  sleeve: string;
+  /** Null where the position is carried in dollars alone (a loan has no unit count). */
+  quantity: number | null;
+  usd: number;
+  /** The custodian's own valuation date, which can trail the publish date. */
+  valuedAsOf: string | null;
+}
+
+export interface RealFiReserveCustodian {
+  custodian: string;
+  usd: number;
+  /** A fraction of total reserves (0.25 is a quarter). */
+  share: number;
+  valuedAsOf: string | null;
+  holdings: RealFiReserveHolding[];
+}
+
+export interface RealFiReserveSleeve {
+  sleeve: string;
+  usd: number;
+  share: number;
+}
+
+export interface RealFiReserves {
+  /** Publish date of the holdings snapshot. */
+  asOf: string;
+  totalUsd: number;
+  sleeves: RealFiReserveSleeve[];
+  custodians: RealFiReserveCustodian[];
+}
+
+export interface RealFiNav {
+  asOf: string;
+  totalUsd: number;
+  perToken: number;
+  tokensOutstanding: number | null;
+  source: string | null;
+}
+
+export interface RealFiReservesReport {
+  publishedAt: string | null;
+  reserves: RealFiReserves | null;
+  /** USDrf (and sUSDrf, once RealFi publishes it) in circulation. */
+  supply: { asOf: string; usdr: number; susdr: number | null } | null;
+  /** The fund administrator's net asset value, struck weekly. */
+  nav: RealFiNav | null;
+  /** RealFi's official coverage ratio. Null until they publish one; never derived here. */
+  coverage: { asOf: string; ratio: number } | null;
+  history: {
+    supply: { date: string; usdr: number }[];
+    nav: { date: string; totalUsd: number; perToken: number }[];
+  };
+}
