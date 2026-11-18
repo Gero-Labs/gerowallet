@@ -816,13 +816,21 @@ const initChart = () => {
       },
     });
 
-    // Set up resize observer
+    // Set up resize observer. A narrower chart keeps its bar spacing and left edge,
+    // so without a refit the newest points (the live balance tail among them) slide
+    // out of view and the price axis rescales to the older data (issue 1584). Refit
+    // on a width change only: a height change keeps the user's zoom.
     if ('ResizeObserver' in window) {
+      let lastWidth = containerWidth;
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const { width, height } = entry.contentRect;
           if (width > 0 && height > 0 && chart) {
             chart.applyOptions({ width, height });
+            if (width !== lastWidth) {
+              lastWidth = width;
+              chart.timeScale().fitContent();
+            }
           }
         }
       });
