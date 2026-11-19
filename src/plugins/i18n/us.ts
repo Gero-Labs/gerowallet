@@ -4346,6 +4346,7 @@ export default {
   'portfolio.collectibles': 'Collectibles',
   'portfolio.fundingTitle': 'Your wallet is ready',
   'portfolio.fundingSub': 'Fund it to start trading, staking and earning.',
+  'portfolio.fundingSubMidnight': 'Receive NIGHT to send it and generate DUST for fees.',
   'portfolio.perkStakeHook': 'Rewards every epoch. Funds never leave your wallet.',
   'portfolio.perkCashbackHook': 'ADA back from brands you already shop.',
   'portfolio.perkSpendHook': 'Spend your crypto like cash.',

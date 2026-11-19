@@ -4,7 +4,7 @@
        2026-07-15). A plain div, not v-card, so no Vuetify cascade fight. -->
   <div class="fill-height d-flex flex-column glass-panel funding-card">
     <h3 class="t-heading">{{ $t('portfolio.fundingTitle') }}</h3>
-    <p class="funding-card__sub t-body-sm">{{ $t('portfolio.fundingSub') }}</p>
+    <p class="funding-card__sub t-body-sm">{{ $t(subtitleKey) }}</p>
 
     <div class="funding-card__actions">
       <GButton v-if="buySupported" tier="primary" block class="funding-card__buy" @click="$emit('buy')">
@@ -32,6 +32,7 @@
 import { toRefs, ref, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 import GButton from '@/shared/components/GButton/GButton.vue';
 
 defineEmits(['buy', 'receive']);
@@ -40,6 +41,10 @@ const { loggedWallet } = toRefs(walletStore);
 
 const currencyTicker = computed(() =>
   networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+// Midnight has no trading or staking: its wallet is funded with NIGHT, which generates DUST.
+const subtitleKey = computed(() =>
+  loggedWallet.value?.chain === Blockchain.MIDNIGHT ? 'portfolio.fundingSubMidnight' : 'portfolio.fundingSub');
 
 const buySupported = computed(() =>
   networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network));
