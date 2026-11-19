@@ -1,5 +1,5 @@
-// The Solana home (SolanaDashboard) has no empty-state FundingCard, so the header must keep
-// Send and Receive for a Solana wallet whatever its balance (which is not in account.controlled_amount).
+// The Solana home (SolanaDashboard) never renders the empty-state FundingCard, and a Solana balance is
+// not in account.controlled_amount, so the header must not treat every Solana wallet as empty.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';

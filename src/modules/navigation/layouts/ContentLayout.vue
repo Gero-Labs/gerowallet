@@ -380,9 +380,9 @@ const btcTipHeight = computed(() => {
 // hide the header quick-action buttons — Send/Swap/Perps are dead ends
 // without funds and Buy/Receive live in the FundingCard front and center.
 // Mirrors PortfolioPage's isWalletEmpty semantics; Midnight and Solana are
-// excluded because their homes never render the empty state (so Send and
-// Receive would be nowhere) and their balances do not live in
-// account.controlled_amount.
+// excluded because their homes never render the empty state and their
+// balances do not live in account.controlled_amount (a funded Solana wallet
+// otherwise reads as empty: it has no Cardano account).
 const emptyStateShowing = computed(() => {
   if (currentPage.value?.path !== '/' || isMidnight.value || isSolana.value) {
     return false;
