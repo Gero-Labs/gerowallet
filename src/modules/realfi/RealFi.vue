@@ -1317,7 +1317,10 @@ onMounted(load);
   color: var(--g-text-2);
 }
 
+/* The top margin keeps the chart's heading clear of the action buttons above it:
+   the figure beside it has its own (realfi-hero__value), the chart had none. */
 .realfi-hero__yield {
+  margin-top: var(--g-s-4);
   padding-left: var(--g-s-5);
   border-left: 1px solid var(--g-hairline-1);
 }
