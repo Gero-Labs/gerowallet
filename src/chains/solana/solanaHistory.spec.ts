@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeSolanaHistory, searchSolanaHistory, solanaHistoryFromNexus } from './solanaHistory';
+import { isConfirmedSolanaTx, mergeSolanaHistory, searchSolanaHistory, solanaHistoryFromNexus } from './solanaHistory';
 
 const sig = (c: string) => c.repeat(88);
 const tx = (c: string, slot: number) => ({ signature: sig(c), slot, blockTime: 1731456000, success: true });
@@ -15,9 +15,16 @@ describe('solanaHistoryFromNexus', () => {
       null,
     ]);
     expect(rows).toEqual([
-      { signature: sig('a'), slot: 10, blockTime: 1731456000, success: false, fee: 5000 },
-      { signature: sig('b'), slot: 9, blockTime: 0, success: true },
+      { signature: sig('a'), slot: 10, blockTime: 1731456000, success: false, confirmed: true, fee: 5000 },
+      { signature: sig('b'), slot: 9, blockTime: 0, success: true, confirmed: true },
     ]);
+  });
+
+  it('marks Nexus rows landed even without a block time; a Gero Sync row without one is confirming', () => {
+    const [nexusRow] = solanaHistoryFromNexus([{ signature: sig('a'), slot: 10, blockTime: null, success: true }]);
+    expect(isConfirmedSolanaTx(nexusRow)).toBe(true);
+    expect(isConfirmedSolanaTx({ signature: sig('b'), slot: 11, blockTime: 0, success: true })).toBe(false);
+    expect(isConfirmedSolanaTx({ signature: sig('c'), slot: 12, blockTime: 5, success: true })).toBe(true);
   });
 
   it('reads nothing from a body that is not a list', () => {

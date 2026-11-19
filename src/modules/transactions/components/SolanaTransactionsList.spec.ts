@@ -20,13 +20,18 @@ vi.mock('@/api/solana-api', () => ({
   },
 }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
+vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 import ListSfc from './SolanaTransactionsList.vue';
 import { walletStore } from '@/stores/walletStore';
 import { SOLANA_HISTORY_PAGE } from '@/chains/solana/solanaHistory';
 
 const List = ListSfc as unknown as Parameters<typeof mount>[0];
-const store = walletStore as unknown as { solana: { historyTruncated: boolean }; solanaTransactions: unknown[] };
+const store = walletStore as unknown as {
+  loggedWallet: { network: string };
+  solana: { historyTruncated: boolean };
+  solanaTransactions: unknown[];
+};
 const sig = (c: string) => c.repeat(88);
 const row = (c: string, slot: number, extra: Record<string, unknown> = {}) =>
   ({ signature: sig(c), slot, blockTime: 1_758_000_000 + slot, success: true, ...extra });
@@ -63,6 +68,7 @@ const signatures = (wrapper: ReturnType<typeof mountList>) =>
 
 describe('SolanaTransactionsList', () => {
   beforeEach(() => {
+    store.loggedWallet.network = 'Devnet';
     store.solana = { historyTruncated: false };
     store.solanaTransactions = [];
     nexus.getSignatures.mockReset();
@@ -110,6 +116,46 @@ describe('SolanaTransactionsList', () => {
       'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk', { before: sig('b'), limit: SOLANA_HISTORY_PAGE });
     expect(signatures(wrapper)).toEqual(['b', 'a']);
     expect(wrapper.find('.load-older').exists()).toBe(false);
+  });
+
+  it('shows a Nexus row without a block time by its slot, not as confirming', async () => {
+    store.solana = { historyTruncated: true };
+    store.solanaTransactions = [row('b', 20)];
+    nexus.getSignatures.mockResolvedValueOnce([{ signature: sig('a'), slot: 10, blockTime: null, success: true }]);
+    const wrapper = mountList();
+    await wrapper.find('.load-older').trigger('click');
+    await flushPromises();
+    const old = wrapper.findAll('.sol-tx-row')[1];
+    expect(old.text()).toContain('poolOperator.slot 10');
+    expect(old.text()).not.toContain('solana.pending');
+  });
+
+  it('stops paging when a full page has no usable row (the same cursor would repeat)', async () => {
+    store.solana = { historyTruncated: true };
+    store.solanaTransactions = [row('b', 20)];
+    nexus.getSignatures.mockResolvedValueOnce(Array.from({ length: SOLANA_HISTORY_PAGE }, () => ({ signature: 'bad', slot: 1 })));
+    const wrapper = mountList();
+    await wrapper.find('.load-older').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.load-older').exists()).toBe(false);
+  });
+
+  it('drops an answer that arrives after a network switch, and is ready to load again', async () => {
+    store.solana = { historyTruncated: true };
+    store.solanaTransactions = [row('b', 20)];
+    let answer!: (rows: unknown[]) => void;
+    nexus.getSignatures.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    const wrapper = mountList();
+    await wrapper.find('.load-older').trigger('click');
+    store.loggedWallet.network = 'Mainnet';
+    await Vue.nextTick();
+    answer([row('a', 10)]);
+    await flushPromises();
+    expect(signatures(wrapper)).toEqual(['b']);
+    nexus.getSignatures.mockResolvedValueOnce([]);
+    await wrapper.find('.load-older').trigger('click');
+    await flushPromises();
+    expect(nexus.getSignatures).toHaveBeenCalledTimes(2);
   });
 
   it('says a failed read and offers to try again', async () => {

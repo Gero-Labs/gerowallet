@@ -73,16 +73,16 @@ import { formatSol } from '@/chains/solana/solanaAmount';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { TX_KIND_ICON, TX_KIND_TONE, type TxKind } from '@/modules/dashboard/utils/transactionClassifier';
-import type { SolanaTransaction } from '@/chains/solana/solanaWireSync';
+import { isConfirmedSolanaTx, type SolanaHistoryRow } from '@/chains/solana/solanaHistory';
 
-const props = defineProps<{ transactionInfo: SolanaTransaction }>();
+const props = defineProps<{ transactionInfo: SolanaHistoryRow }>();
 
 const { t } = useTranslation();
 
 const network = computed(() => walletStore.loggedWallet?.network ?? '');
 const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, network.value));
 
-const confirmed = computed(() => props.transactionInfo.blockTime > 0);
+const confirmed = computed(() => isConfirmedSolanaTx(props.transactionInfo));
 const kind = computed<TxKind>(() => {
   if (!props.transactionInfo.success) return 'failed';
   return confirmed.value ? 'neutral' : 'pending';
@@ -90,6 +90,8 @@ const kind = computed<TxKind>(() => {
 
 const when = computed(() => {
   if (!confirmed.value) return t('solana.pending');
+  // Landed, but Nexus had no block time for it: the slot below dates it.
+  if (!props.transactionInfo.blockTime) return t('transactions.confirmed');
   const date = new Date(props.transactionInfo.blockTime * 1000);
   return `${date.toLocaleString()} · ${time.format(date)}`;
 });

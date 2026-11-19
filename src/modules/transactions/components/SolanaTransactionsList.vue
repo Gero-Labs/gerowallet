@@ -33,7 +33,7 @@
           <TxGlyph :icon="TX_KIND_ICON[kindOf(tx)]" :tone="TX_KIND_TONE[kindOf(tx)]" />
           <span class="sol-tx-row__main">
             <span class="g-mono sol-tx-row__sig" :title="tx.signature">{{ shortSignature(tx.signature) }}</span>
-            <span class="t-caption g-num">{{ tx.blockTime ? formatTime(tx.blockTime) : $t('solana.pending') }}</span>
+            <span class="t-caption g-num">{{ whenOf(tx) }}</span>
           </span>
           <span v-if="!tx.success" class="sol-tx-row__failed t-caption">{{ $t('transactions.failed') }}</span>
         </button>
@@ -55,31 +55,40 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
 import { walletStore } from '@/stores/walletStore';
 import { TX_KIND_ICON, TX_KIND_TONE, type TxKind } from '@/modules/dashboard/utils/transactionClassifier';
-import type { SolanaTransaction } from '@/chains/solana/solanaWireSync';
 import {
   SOLANA_HISTORY_PAGE,
+  isConfirmedSolanaTx,
   mergeSolanaHistory,
   searchSolanaHistory,
   solanaHistoryFromNexus,
+  type SolanaHistoryRow,
 } from '@/chains/solana/solanaHistory';
+import { formatInt } from '@/shared/utils/format';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { debugLog } from '@/utils/debug';
 
-const props = defineProps<{ selectedTransaction?: SolanaTransaction | null }>();
-const emit = defineEmits<{ 'row-click': [tx: SolanaTransaction] }>();
+const props = defineProps<{ selectedTransaction?: SolanaHistoryRow | null }>();
+const emit = defineEmits<{ 'row-click': [tx: SolanaHistoryRow] }>();
+
+const { t } = useTranslation();
 
 const address = computed(() => walletStore.loggedWallet?.publicKey ?? '');
 const network = computed(() => walletStore.loggedWallet?.network ?? '');
 
-/** Older pages read from Nexus; dropped when the wallet changes. */
-const older = ref<SolanaTransaction[]>([]);
-/** false once Nexus returned a short page: nothing older is left. */
+/** Older pages read from Nexus; dropped when the wallet or network changes. */
+const older = ref<SolanaHistoryRow[]>([]);
+/** false once Nexus has nothing older: a short page, or one with no usable row. */
 const moreOnNexus = ref(true);
 const loading = ref(false);
 const loadError = ref(false);
+/** Bumped on a wallet or network change: an answer to an older request is dropped. */
+let request = 0;
 
 watch([address, network], () => {
+  request += 1;
   older.value = [];
   moreOnNexus.value = true;
+  loading.value = false;
   loadError.value = false;
 });
 
@@ -98,30 +107,38 @@ const canLoadOlder = computed(() =>
 async function loadOlder(): Promise<void> {
   if (loading.value) return;
   const oldest = history.value[history.value.length - 1];
-  const forAddress = address.value;
+  const mine = ++request;
   loading.value = true;
   loadError.value = false;
   try {
     const { SolanaApi } = await import('@/api/solana-api');
-    const page = await new SolanaApi(network.value).getSignatures(forAddress, {
+    const page = await new SolanaApi(network.value).getSignatures(address.value, {
       before: oldest?.signature,
       limit: SOLANA_HISTORY_PAGE,
     });
-    if (forAddress !== address.value) return; // the wallet changed meanwhile
-    older.value = mergeSolanaHistory(older.value, solanaHistoryFromNexus(page));
-    if (!Array.isArray(page) || page.length < SOLANA_HISTORY_PAGE) moreOnNexus.value = false;
+    if (mine !== request) return; // the wallet or network changed meanwhile
+    const rows = solanaHistoryFromNexus(page);
+    older.value = mergeSolanaHistory(older.value, rows);
+    // A page with no usable row would be asked for again with the same cursor, forever.
+    if (!Array.isArray(page) || page.length < SOLANA_HISTORY_PAGE || !rows.length) moreOnNexus.value = false;
   } catch (error) {
+    if (mine !== request) return;
     debugLog('SolanaTransactionsList', 'older history read failed', (error as Error)?.message);
     loadError.value = true;
   } finally {
-    loading.value = false;
+    if (mine === request) loading.value = false;
   }
 }
 
-function kindOf(tx: SolanaTransaction): TxKind {
+function kindOf(tx: SolanaHistoryRow): TxKind {
   if (!tx.success) return 'failed';
-  if (!tx.blockTime) return 'pending';
-  return 'neutral';
+  return isConfirmedSolanaTx(tx) ? 'neutral' : 'pending';
+}
+
+/** Its time; for a landed row with no block time, its slot; otherwise still confirming. */
+function whenOf(tx: SolanaHistoryRow): string {
+  if (tx.blockTime) return formatTime(tx.blockTime);
+  return isConfirmedSolanaTx(tx) ? `${t('poolOperator.slot')} ${formatInt(tx.slot)}` : t('solana.pending');
 }
 
 function shortSignature(signature: string): string {
