@@ -15,7 +15,13 @@
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <MidnightPortfolioChart />
         </v-col>
-        <v-col xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-tx-col">
+        <!-- An empty wallet gets the FundingCard in the transactions slot (the header
+             hides its quick actions then), and keeps it on small screens: Receive is
+             the one action it has. -->
+        <v-col v-if="isMidnightEmpty" cols="12" xl="3" lg="3" md="4" class="pa-2 hero-tx-col">
+          <FundingCard @buy="openBuyDialog()" @receive="openReceiveDialog()" />
+        </v-col>
+        <v-col v-else xl="3" lg="3" md="4" class="pa-2 hidden-sm-and-down hero-tx-col">
           <MidnightTransactionsCard />
         </v-col>
       </v-row>
@@ -446,6 +452,8 @@ import { useCollectibleCollections } from '@/shared/composables/useCollectibleCo
 import { walletStore, hasLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
+import { midnightStore } from '@/stores/midnightStore';
+import { isMidnightWalletEmpty } from '@/shared/utils/midnightWalletEmpty';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
 
 // Components
@@ -595,6 +603,7 @@ function openMoveToGero(ref: string) {
 const dustRegistrationOpen = ref(false);
 // Midnight data is being rebuilt: the value containers show the last values the wallet knew, greyed.
 const { refreshing: midnightRefreshing } = useMidnightRefresh();
+const isMidnightEmpty = computed(() => isMidnightWalletEmpty(midnightStore.balances));
 
 // Midnight "reset sync cache" recovery action state. Forces a full re-sync from
 // block 0 in BG (clears WS cursor + store snapshot + persisted SDK wallet-state
