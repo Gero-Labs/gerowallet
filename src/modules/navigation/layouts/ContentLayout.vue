@@ -335,6 +335,7 @@ import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
 import { formatInt } from '@/shared/utils/format';
+import { isSolanaWalletEmpty } from '@/shared/utils/solanaWalletEmpty';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -376,17 +377,18 @@ const btcTipHeight = computed(() => {
   return t && isBitcoinTip(t) ? t.height : undefined;
 });
 
-// Empty-state home (any chain but Midnight and Solana, zero or not-yet-synced balance):
+// Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
 // hide the header quick-action buttons — Send/Swap/Perps are dead ends
-// without funds and Buy/Receive live in the FundingCard front and center.
-// Mirrors PortfolioPage's isWalletEmpty semantics; Midnight and Solana are
-// excluded because their homes never render the empty state and their
-// balances do not live in account.controlled_amount (a funded Solana wallet
-// otherwise reads as empty: it has no Cardano account).
+// without funds and Buy/Receive live on the home itself (the FundingCard; the
+// Solana home's own Receive). Mirrors PortfolioPage's isWalletEmpty semantics;
+// Midnight is excluded because its home never renders the empty state (and its
+// balance does not live in account.controlled_amount).
 const emptyStateShowing = computed(() => {
-  if (currentPage.value?.path !== '/' || isMidnight.value || isSolana.value) {
+  if (currentPage.value?.path !== '/' || isMidnight.value) {
     return false;
   }
+  // Solana's balance is Gero Sync's snapshot (walletStore.solana), not a Cardano account.
+  if (isSolana.value) return isSolanaWalletEmpty(walletStore.solana);
   // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
