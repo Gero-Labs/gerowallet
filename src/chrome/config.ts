@@ -12,6 +12,12 @@ export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-11
  * CIP-113 refusal. Here, not in marketAllowance.ts, so pages can read it without importing the
  * worker's allowance state.
  */
+/**
+ * The refusal a dApp gets for a request still waiting for approval when the wallet locks.
+ * Refused (-3); nothing was signed, and the dApp may ask again once the user unlocks.
+ */
+export const APPROVAL_LOCKED_MESSAGE = 'Gero was locked before this request was approved. Unlock it, then try again.';
+
 export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
 
 /**
