@@ -83,6 +83,9 @@ export const geroSolanaWallet = Object.freeze({
       // The dApp forgets the wallet; the site stays connected in Gero (Settings > Connected sites).
       disconnect: async () => { setAccounts([]); },
     }),
+    // 'change' fires for this page's own connect and disconnect only. An account switch in Gero
+    // is not reported yet: the dApp keeps the old account, its signMessage is then refused with
+    // 4100, and it has to connect again.
     'standard:events': Object.freeze({
       version: '1.0.0' as const,
       on: (event: string, listener: (properties: { accounts?: ReadonlyArray<any> }) => void) => {

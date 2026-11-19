@@ -5,7 +5,11 @@
 // The danger is a message that is really a transaction. An ed25519 signature over a serialized
 // transaction message is a valid signature of that transaction, so a dApp could pass one as a
 // "message" and submit it with the signature it gets back. Anything that parses as a Solana
-// transaction message (legacy or versioned) or a whole serialized transaction is refused.
+// transaction message (legacy or v0) or a whole serialized transaction is refused, and so is
+// any non-text message that starts like a newer versioned one (see mayBeVersionedTransaction).
+//
+// The parse must end exactly at the last byte. Bytes with anything appended are not a valid
+// transaction, and the signature covers all of them, so it signs no transaction.
 
 /** Larger messages are refused: a login or proof text is far smaller. */
 export const SOLANA_SIGN_MESSAGE_MAX_BYTES = 8 * 1024;
@@ -95,11 +99,27 @@ export function looksLikeSolanaTransaction(bytes: Uint8Array): boolean {
   return messageStart < bytes.length && parsesAsMessage(bytes, messageStart);
 }
 
+/**
+ * A versioned message starts with 0x80 | version. Only v0 is parsed above; a later layout
+ * (v1, SIMD-0385, and whatever follows) would not parse and so would pass as a "message".
+ * Such a prefix byte (0x81-0xC1 for versions 1-65) can never start valid UTF-8, so text is
+ * never caught here: a non-text message whose first byte, or first byte after a signature
+ * block, has the high bit set is refused as a transaction the wallet cannot read.
+ */
+function mayBeVersionedTransaction(bytes: Uint8Array): boolean {
+  if (describeSolanaMessage(bytes).kind === 'text') return false;
+  if (bytes[0] & 0x80) return true;
+  const signatures = readShortVec(bytes, 0);
+  if (!signatures || signatures.value < 1) return false;
+  const messageStart = signatures.next + signatures.value * SIGNATURE;
+  return messageStart < bytes.length && (bytes[messageStart] & 0x80) !== 0;
+}
+
 /** Why the wallet will not sign these bytes as a message, or null when it may ask the user. */
 export function solanaSignMessageRefusal(bytes: Uint8Array): SolanaSignMessageRefusal | null {
   if (!bytes.length) return 'EMPTY';
   if (bytes.length > SOLANA_SIGN_MESSAGE_MAX_BYTES) return 'TOO_LARGE';
-  if (looksLikeSolanaTransaction(bytes)) return 'LOOKS_LIKE_TRANSACTION';
+  if (looksLikeSolanaTransaction(bytes) || mayBeVersionedTransaction(bytes)) return 'LOOKS_LIKE_TRANSACTION';
   return null;
 }
 

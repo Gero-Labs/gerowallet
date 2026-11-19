@@ -50,6 +50,20 @@ describe('solanaSignMessageRefusal', () => {
     expect(solanaSignMessageRefusal(legacyMessage([2]))).toBe('LOOKS_LIKE_TRANSACTION');
     expect(solanaSignMessageRefusal(text('Sign in to example.com'))).toBeNull();
   });
+
+  it('refuses a message that starts like a newer versioned transaction it cannot parse', () => {
+    // v1 (SIMD-0385) and later: 0x80 | version, a layout the v0 parser does not know.
+    const v1 = new Uint8Array([0x81, 1, 0, 0, 2, ...new Array(64).fill(4)]);
+    expect(solanaSignMessageRefusal(v1)).toBe('LOOKS_LIKE_TRANSACTION');
+    expect(solanaSignMessageRefusal(new Uint8Array([1, ...new Array(64).fill(3), ...v1]))).toBe('LOOKS_LIKE_TRANSACTION');
+  });
+
+  it('still signs text in any script, whose first byte may have the high bit set', () => {
+    expect(solanaSignMessageRefusal(text('éxample.com wants you to sign in'))).toBeNull();
+    expect(solanaSignMessageRefusal(text('日本語でサインイン'))).toBeNull();
+    expect(solanaSignMessageRefusal(text('🔐 Sign in'))).toBeNull();
+    expect(solanaSignMessageRefusal(new Uint8Array([1, 2, 3, 0x10]))).toBeNull(); // short binary, no version byte
+  });
 });
 
 describe('describeSolanaMessage', () => {
