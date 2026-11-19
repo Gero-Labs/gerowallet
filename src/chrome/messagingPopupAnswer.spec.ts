@@ -195,7 +195,7 @@ describe('one request per popup tab', () => {
 describe('popup approval: the wallet locks while it waits (issue 1592)', () => {
   it('answers every waiting request with the locked refusal, closes its popup, and ignores a late answer', async () => {
     const removed: number[] = [];
-    (globalThis as unknown as { chrome: { tabs: Record<string, unknown> } }).chrome.tabs.remove = (id: number) => { removed.push(id); return Promise.resolve(); };
+    (globalThis as unknown as { chrome: { tabs: { remove: (id: number) => Promise<void> } } }).chrome.tabs.remove = (id: number) => { removed.push(id); return Promise.resolve(); };
     const first = await request(42);
     const other = await request(43, 'signData');
     const { Messaging } = await import('./messaging');
@@ -220,7 +220,7 @@ describe('popup approval: the wallet locks while it waits (issue 1592)', () => {
   });
 
   it('a Midnight request gets the connector Rejected shape', async () => {
-    (globalThis as unknown as { chrome: { tabs: Record<string, unknown> } }).chrome.tabs.remove = () => Promise.resolve();
+    (globalThis as unknown as { chrome: { tabs: { remove: (id: number) => Promise<void> } } }).chrome.tabs.remove = () => Promise.resolve();
     const { MIDNIGHT_METHOD } = await import('./config');
     const pending = await request(44, MIDNIGHT_METHOD.connect);
     const { Messaging } = await import('./messaging');
