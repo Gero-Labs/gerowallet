@@ -2323,6 +2323,16 @@ export class WalletBg {
   }
 
   /**
+   * Signs the message of a dApp's Solana transaction (ed25519 over the message bytes) with this
+   * record's account. Only the SIGN_SOLANA_TRANSACTION handler calls it, and only after
+   * consuming the allowance the worker granted when it decoded and previewed that exact message
+   * (solanaTxAllowance.ts): this method does not check that itself.
+   */
+  async signSolanaDappTransaction(messageBytes: Uint8Array, password?: string, prfSecret?: Uint8Array): Promise<Uint8Array> {
+    return this.withSolanaKeypair(password, prfSecret, (keypair) => signSolanaBytes(messageBytes, keypair.secretKey));
+  }
+
+  /**
    * Runs `use` with this record's Solana keypair (software wallets: password or PassKey). The
    * key is derived from the recovery phrase at `m/44'/501'/accountIndex'/0'` and must give the
    * address the record stores, so a mismatched record never signs. The secret key is wiped after.

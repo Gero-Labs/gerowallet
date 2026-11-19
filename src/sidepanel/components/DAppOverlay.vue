@@ -654,6 +654,95 @@
         </template>
       </div>
 
+      <!-- Solana: Sign (and send) Transaction (Wallet Standard solana:signTransaction / signAndSendTransaction).
+           Everything here is the worker's own decoding and simulation of the dApp's bytes (solanaDappTx.ts). -->
+      <div v-else-if="currentRequest.method === 'solana_signTransaction'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-file-sign</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('solana.dapp.signTxTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <template v-if="solanaTxPreview">
+          <div v-for="row in solanaTxWarnings" :key="row.key" :class="['solana-tx-warning', 'mb-2', row.critical ? 'solana-tx-warning--critical' : '']">
+            <v-icon size="16" :color="row.critical ? 'error' : 'warning'" class="mr-2">{{ row.critical ? 'mdi-alert-octagon-outline' : 'mdi-alert-outline' }}</v-icon>
+            <span class="t-body-sm">{{ $t(row.key) }}</span>
+          </div>
+
+          <p class="t-label mb-1 mt-3">{{ $t('solana.dapp.balanceChanges') }}</p>
+          <div class="sign-data-message mb-3">
+            <p v-if="!solanaTxPreview.simulated" class="grey--text text-caption mb-0">{{ $t('solana.dapp.changesUnknown') }}</p>
+            <p v-else-if="!solanaTxChanges.length" class="grey--text text-caption mb-0">{{ $t('solana.dapp.noBalanceChange') }}</p>
+            <div v-for="row in solanaTxChanges" :key="row.asset" class="solana-tx-row">
+              <a v-if="!row.isSol" :href="solanaMintUrl(row.asset) || undefined" target="_blank" rel="noopener noreferrer" class="g-mono text-caption" :title="row.asset">{{ shortSolanaId(row.asset) }}</a>
+              <span v-else class="text-caption">SOL</span>
+              <span :class="['g-num', 'text-caption', row.direction === 'in' ? 'delta-up' : 'delta-down']">{{ row.amount }}</span>
+            </div>
+          </div>
+
+          <div class="solana-tx-row mb-1">
+            <span class="grey--text text-caption">{{ $t('signTx.networkFee') }}</span>
+            <span class="g-num text-caption">{{ solanaTxPreview.feePayerIsWallet ? solanaTxFee : $t('solana.dapp.feePaidBySite') }}</span>
+          </div>
+          <div class="solana-tx-row mb-3">
+            <span class="grey--text text-caption">{{ $t('solana.dapp.programs') }}</span>
+            <span class="text-caption text-right">{{ solanaTxPrograms }}</span>
+          </div>
+          <p v-if="solanaTxMode === 'signAndSend'" class="grey--text text-caption mb-3">{{ $t('solana.dapp.sendNote') }}</p>
+
+          <v-checkbox
+            v-if="solanaTxPreview.requiresAcknowledgement"
+            v-model="solanaTxAcknowledged"
+            :label="$t('solana.dapp.acknowledge')"
+            density="compact" hide-details color="error" class="mb-3"
+          />
+        </template>
+        <p v-else class="decode-error text-caption">{{ $t('solana.dapp.txUnreadable') }}</p>
+
+        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            variant="outlined" density="compact" theme="dark"
+            class="password-input"
+            @click:append-inner="showPassword = !showPassword"
+            @keyup.enter="signSolanaTransactionNormal"
+          />
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || !solanaTxCanSign" @click="signSolanaTransactionNormal">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaTxCanSign" @click="signSolanaTransactionPrf">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupportedTx') }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- Midnight: Sign Data (DApp Connector signData()) -->
       <div v-else-if="currentRequest.method === 'midnight_signData'" class="dapp-sign-data">
         <div class="dapp-identity mb-4">
@@ -1338,6 +1427,11 @@ import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUt
 import { Messaging } from '@/chrome/messaging';
 import { SolanaDappErrorCode, bytesFromWire, encodeSolanaPanelError } from '@/chains/solana/solanaDappProtocol';
 import { SOLANA_SIGN_MESSAGE_MAX_BYTES, describeSolanaMessage, solanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
+import { SOLANA_MAX_TRANSACTION_BYTES } from '@/chains/solana/solanaTxWire';
+import type { SolanaTxPreview } from '@/chains/solana/solanaTxPreview';
+import { solanaChangeRows, solanaWarningRows } from '@/chains/solana/solanaTxPreviewView';
+import { formatSol } from '@/chains/solana/solanaAmount';
+import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
@@ -1390,6 +1484,10 @@ interface ApprovalPayload {
   website?: string;
   /** Solana signMessage: the bytes to sign, as a plain array. */
   solanaMessage?: unknown;
+  /** Solana signTransaction: 'sign' or 'signAndSend', the dApp's transaction bytes, and the worker's preview. */
+  mode?: unknown;
+  transaction?: unknown;
+  preview?: unknown;
   favIconUrl?: string;
   tx?: string;
   partialSign?: boolean;
@@ -1454,6 +1552,7 @@ function queuedItemMethod(item: DAppRequest): string {
     wcSessionProposal: 'miniGero.connectRequest',
     solana_connect: 'miniGero.connectRequest',
     solana_signMessage: 'solana.dapp.signMessageTitle',
+    solana_signTransaction: 'solana.dapp.signTxTitle',
   };
   return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
 }
@@ -3276,6 +3375,116 @@ async function signSolanaMessagePrf() {
   });
 }
 
+// ── Solana dApp transaction (signTransaction / signAndSendTransaction) ──────────
+// The preview is the worker's (payload.preview); the panel only shows it, asks for the password
+// or PassKey, and has the worker sign the exact bytes (SIGN_SOLANA_TRANSACTION, which needs the
+// allowance the worker granted for that message). A critical warning must be acknowledged.
+const solanaTxPreview = computed(() => {
+  if (currentRequest.value?.method !== 'solana_signTransaction') return null;
+  const preview = currentRequest.value.payload?.preview as SolanaTxPreview | undefined;
+  return preview && Array.isArray(preview.warnings) && Array.isArray(preview.tokenChanges) ? preview : null;
+});
+const solanaTxMode = computed(() => (currentRequest.value?.payload?.mode === 'signAndSend' ? 'signAndSend' : 'sign'));
+const solanaTxBytes = computed(() => bytesFromWire(currentRequest.value?.payload?.transaction, SOLANA_MAX_TRANSACTION_BYTES));
+const solanaTxWarnings = computed(() => (solanaTxPreview.value ? solanaWarningRows(solanaTxPreview.value) : []));
+const solanaTxChanges = computed(() => (solanaTxPreview.value ? solanaChangeRows(solanaTxPreview.value) : []));
+const solanaTxFee = computed(() => {
+  const fee = solanaTxPreview.value?.feeLamports;
+  return fee && /^\d+$/.test(fee) ? `${formatSol(fee)} SOL` : '';
+});
+const solanaTxPrograms = computed(() => (solanaTxPreview.value?.programs ?? [])
+  .map((p) => p.name ?? `${t('solana.dapp.unknownProgram')} ${shortSolanaId(p.address)}`)
+  .join(', '));
+const solanaTxAcknowledged = ref(false);
+watch(() => currentRequest.value?.requestId, () => { solanaTxAcknowledged.value = false; });
+const solanaTxCanSign = computed(() => !!solanaTxPreview.value && !!solanaTxBytes.value
+  && (!solanaTxPreview.value.requiresAcknowledgement || solanaTxAcknowledged.value));
+
+function shortSolanaId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
+}
+
+function solanaMintUrl(mint: string): string {
+  return solscanUrl('account', mint, loggedWallet.value?.network ?? '');
+}
+
+function rejectSolanaTransaction() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(solanaDeclined());
+}
+
+async function signSolanaTransactionWith(credentials: { password?: string; prfSecret?: number[] }): Promise<void> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  const bytes = solanaTxBytes.value;
+  if (!currentRequest.value || !bytes || !solanaTxCanSign.value) return;
+  const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SIGN_SOLANA_TRANSACTION,
+    data: { transaction: Array.from(bytes), ...credentials },
+  })), approvalCurrent) as { data?: { success: boolean; signedTransaction?: number[]; error?: string } };
+  if (!res?.data?.success || !res.data.signedTransaction) throw new Error(res?.data?.error || 'Failed to sign the transaction');
+  approve(res.data.signedTransaction);
+}
+
+async function signSolanaTransactionNormal() {
+  return approval.run(async () => {
+    if (!spendingPassword.value) return;
+    signing.value = true;
+    signError.value = '';
+    try {
+      await signSolanaTransactionWith({ password: spendingPassword.value });
+      spendingPassword.value = '';
+    } catch (e: unknown) {
+      if (e instanceof StaleApprovalError) return;
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('solana.dapp.txSigningFailed');
+    } finally {
+      signing.value = false;
+    }
+  });
+}
+
+async function signSolanaTransactionPrf() {
+  return approval.run(async () => {
+    signing.value = true;
+    signError.value = '';
+    try {
+      const prfBytes = await readRawPrf();
+      try {
+        await signSolanaTransactionWith({ prfSecret: Array.from(prfBytes) });
+      } finally {
+        prfBytes.fill(0);
+      }
+    } catch (e: unknown) {
+      if (e instanceof StaleApprovalError) return;
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('solana.dapp.txSigningFailed');
+    } finally {
+      signing.value = false;
+    }
+  });
+}
+
+/** Raw PRF output from the PassKey popup (the side panel cannot run WebAuthn itself). */
+function readRawPrf(): Promise<Uint8Array> {
+  window.open(chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth'), 'PassKeyAuth', 'width=400,height=500,popup=1');
+  return new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== extensionOrigin || event.data?.type !== 'PASSKEY_AUTH_RESULT') return;
+      window.removeEventListener('message', handler);
+      const { success, prfOutput, error } = event.data.payload;
+      if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+      else rejectPromise(new Error(error || 'PassKey authentication failed'));
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      rejectPromise(new Error('PassKey authentication timed out'));
+    }, 60000);
+  });
+}
+
 function approveMidnightConnect() {
   // Whitelisting the origin (WalletStore.addConnectedDapp) happens in
   // background.ts's MIDNIGHT_METHOD.connect handler once it reads the
@@ -3310,6 +3519,8 @@ function onEscapeReject() {
     rejectSolanaConnect();
   } else if (currentRequest.value?.method === 'solana_signMessage') {
     rejectSolanaSignMessage();
+  } else if (currentRequest.value?.method === 'solana_signTransaction') {
+    rejectSolanaTransaction();
   } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
@@ -4440,6 +4651,26 @@ function approveWcSession() {
   color: var(--g-text-2);
   font-size: 11px;
   font-weight: 500;
+}
+
+/* Solana transaction preview: one row per balance change / fact; warnings as callouts. */
+.solana-tx-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+}
+
+.solana-tx-warning {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+}
+
+.solana-tx-warning--critical {
+  border-color: var(--g-error);
+  background: var(--g-error-fill);
 }
 
 .sign-data-message {

@@ -11,6 +11,12 @@ import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
+import {
+  parseSolanaAccounts,
+  parseSolanaSimulation,
+  type SolanaRemoteAccount,
+  type SolanaRemoteSimulation,
+} from '@/chains/solana/solanaNexusAccounts';
 
 export type SolanaNetwork = 'mainnet' | 'devnet';
 
@@ -147,6 +153,29 @@ export class SolanaApi {
     const { data } = await this.http.post<{ signature: string }>(
       '/api/sol/txs/submit', { signedTransaction: signedTransactionBase64 }, { params: this.params() });
     return data.signature;
+  }
+
+  /** Accounts in one read (`getMultipleAccounts`), at most 100, in the order asked. */
+  async getAccounts(addresses: string[]): Promise<SolanaRemoteAccount[]> {
+    addresses.forEach((a) => this.address(a));
+    const { data } = await this.http.post<string>(
+      '/api/sol/accounts', { addresses },
+      { params: this.params(), transformResponse: (raw) => raw },
+    );
+    return parseSolanaAccounts(typeof data === 'string' ? data : JSON.stringify(data), addresses);
+  }
+
+  /**
+   * Simulates a transaction (base64 wire format; signatures not checked, blockhash replaced)
+   * and reads `accounts` (at most 32) before and after. Broadcasts nothing.
+   */
+  async simulate(transactionBase64: string, accounts: string[]): Promise<SolanaRemoteSimulation> {
+    accounts.forEach((a) => this.address(a));
+    const { data } = await this.http.post<string>(
+      '/api/sol/txs/simulate', { transaction: transactionBase64, accounts },
+      { params: this.params(), transformResponse: (raw) => raw },
+    );
+    return parseSolanaSimulation(typeof data === 'string' ? data : JSON.stringify(data), accounts);
   }
 
   private params(): { network: string } {

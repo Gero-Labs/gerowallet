@@ -7,6 +7,8 @@ const bridge = vi.hoisted(() => ({
   solanaAvailable: vi.fn(async () => true),
   solanaConnect: vi.fn(),
   solanaSignMessage: vi.fn(),
+  solanaSignTransaction: vi.fn(),
+  solanaSignAndSendTransaction: vi.fn(),
 }));
 vi.mock('./solanaWebpage', () => bridge);
 
@@ -32,6 +34,8 @@ beforeEach(() => {
   bridge.solanaAvailable.mockReset().mockResolvedValue(true);
   bridge.solanaConnect.mockReset().mockResolvedValue({ address: ADDRESS, chain: 'solana:devnet' });
   bridge.solanaSignMessage.mockReset().mockResolvedValue(new Uint8Array(64).fill(1));
+  bridge.solanaSignTransaction.mockReset().mockResolvedValue(new Uint8Array([9, 9]));
+  bridge.solanaSignAndSendTransaction.mockReset().mockResolvedValue(new Uint8Array(64).fill(7));
 });
 
 describe('Gero Solana wallet registration', () => {
@@ -49,7 +53,7 @@ describe('Gero Solana wallet registration', () => {
     expect(wallet.icon).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(wallet.chains).toEqual(['solana:mainnet', 'solana:devnet']);
     // isWalletAdapterCompatibleStandardWallet: connect + events + one of the sign-transaction features.
-    for (const feature of ['standard:connect', 'standard:events', 'standard:disconnect', 'solana:signMessage', 'solana:signTransaction']) {
+    for (const feature of ['standard:connect', 'standard:events', 'standard:disconnect', 'solana:signMessage', 'solana:signTransaction', 'solana:signAndSendTransaction']) {
       expect(wallet.features[feature]).toBeTruthy();
     }
     expect(wallet.accounts).toEqual([]);
@@ -97,10 +101,28 @@ describe('Gero Solana wallet features', () => {
     expect(out.signatureType).toBe('ed25519');
   });
 
-  it('refuses transaction signing for now, with a code', async () => {
+  it('signs a transaction for the connected account, passing the exact bytes and chain', async () => {
     const { mod } = await loadAndCollect();
-    await expect((mod.geroSolanaWallet as any).features['solana:signTransaction'].signTransaction({}))
-      .rejects.toMatchObject({ code: 4200 });
+    const wallet: any = mod.geroSolanaWallet;
+    const transaction = new Uint8Array([1, 2, 3]);
+    await expect(wallet.features['solana:signTransaction'].signTransaction({ account: { address: ADDRESS }, transaction }))
+      .rejects.toMatchObject({ code: 4100 });
+    const { accounts } = await wallet.features['standard:connect'].connect();
+    const [out] = await wallet.features['solana:signTransaction'].signTransaction({ account: accounts[0], transaction, chain: 'solana:devnet' });
+    expect(bridge.solanaSignTransaction).toHaveBeenCalledWith(ADDRESS, transaction, 'solana:devnet');
+    expect(out.signedTransaction).toEqual(new Uint8Array([9, 9]));
+    expect(wallet.features['solana:signTransaction'].supportedTransactionVersions).toEqual(['legacy', 0]);
+  });
+
+  it('signs and sends, returning the signature', async () => {
+    const { mod } = await loadAndCollect();
+    const wallet: any = mod.geroSolanaWallet;
+    const { accounts } = await wallet.features['standard:connect'].connect();
+    const [out] = await wallet.features['solana:signAndSendTransaction'].signAndSendTransaction({ account: accounts[0], transaction: new Uint8Array([4]) });
+    expect(bridge.solanaSignAndSendTransaction).toHaveBeenCalledWith(ADDRESS, new Uint8Array([4]), undefined);
+    expect(out.signature).toEqual(new Uint8Array(64).fill(7));
+    await expect(wallet.features['solana:signAndSendTransaction'].signAndSendTransaction({ account: accounts[0], transaction: [4] }))
+      .rejects.toMatchObject({ code: -32602 });
   });
 
   it('passes a declined connect through as the error the relay gave', async () => {

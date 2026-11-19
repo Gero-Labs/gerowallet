@@ -156,6 +156,20 @@ import {
 } from '@/chains/solana/solanaDappProtocol';
 import { SOLANA_SIGN_MESSAGE_MAX_BYTES, solanaSignMessageRefusal, type SolanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
 import { verifySolanaSignature } from '@/chains/solana/solanaTransaction';
+import { SOLANA_MAX_TRANSACTION_BYTES, decodeSolanaTransaction, withSolanaSignature } from '@/chains/solana/solanaTxWire';
+import {
+  SolanaDappTxError,
+  bytesToBase64,
+  isSignedByWalletOnly,
+  prepareSolanaDappTransaction,
+  solanaMessageKey,
+  type PreparedSolanaTx,
+} from '@/chrome/solanaDappTx';
+import { consumeSolanaTxAllowance, grantSolanaTxAllowance, revokeSolanaTxAllowance } from '@/chrome/solanaTxAllowance';
+import { SolanaApi } from '@/api/solana-api';
+
+/** What the side panel shows when a transaction's preview expired before it was signed: prepare it again. */
+const SOLANA_TX_EXPIRED = 'This transaction expired before it was signed. Ask the site to send it again.';
 import { base58Decode } from '@/chains/solana/solanaBase58';
 import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
@@ -4088,7 +4102,7 @@ const SOLANA_NOT_AVAILABLE = solanaDappError(SolanaDappErrorCode.Unauthorized, '
 const SOLANA_USER_REJECTED = solanaDappError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
 
 /** The parked Solana prompts (connect, signMessage) a tab's navigation settles. */
-const PARKED_SOLANA_METHODS: ReadonlySet<string> = new Set([SOLANA_METHOD.connect, SOLANA_METHOD.signMessage]);
+const PARKED_SOLANA_METHODS: ReadonlySet<string> = new Set([SOLANA_METHOD.connect, SOLANA_METHOD.signMessage, SOLANA_METHOD.signTransaction]);
 
 /** One parked connect prompt per tab and site; a dApp's repeated connect() joins it. */
 const parkedSolanaConnects = new ParkedConnects<ReplyOpts>();
@@ -4229,6 +4243,127 @@ app.addToOptions(MessageTypes.SIGN_SOLANA_MESSAGE, async (request, sendResponse)
   } catch (error) {
     // The panel shows its own text; a wrong password reads as such there.
     debugLog('Solana message signing failed:', errorMessage(error));
+    fail(errorMessage(error) ?? 'Signing failed');
+  } finally {
+    prf?.fill(0);
+  }
+});
+
+/**
+ * Wallet Standard `solana:signTransaction` and `solana:signAndSendTransaction`, for a connected
+ * site and the connected account only. The worker decodes the dApp's transaction, simulates it
+ * through Nexus and parks a side-panel prompt with the preview (solanaDappTx.ts). It changes
+ * nothing in the transaction. The panel's signature is accepted only if it changed nothing but
+ * the wallet's own slot; then the dApp gets the signed transaction, or Gero submits it.
+ */
+function handleSolanaTransactionRequest(
+  request: Parameters<Parameters<typeof app.add>[1]>[0],
+  sendResponse: (r: unknown) => void,
+  mode: 'sign' | 'signAndSend',
+): true {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  const failed = mode === 'sign' ? 'Failed to sign the transaction' : 'Failed to send the transaction';
+  void (async (): Promise<ReplyOpts> => {
+    if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };
+    if (!WalletStore.isWhitelisted(origin)) {
+      return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'This site is not connected') };
+    }
+    const active = solanaDappWallet();
+    if ('error' in active) return { error: active.error };
+    const { wallet } = active;
+    const { address, transaction, chain } = (data ?? {}) as { address?: unknown; transaction?: unknown; chain?: unknown };
+    if (address !== wallet.publicKey) {
+      return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'That account is not connected') };
+    }
+    if (chain !== undefined && chain !== solanaChainId(wallet.network)) {
+      return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, `The wallet is on ${solanaChainId(wallet.network)}`) };
+    }
+    const bytes = bytesFromWire(transaction, SOLANA_MAX_TRANSACTION_BYTES);
+    if (!bytes) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, 'transaction must be the serialized transaction bytes') };
+    const tabId = send.tab?.id;
+    if (typeof tabId !== 'number') return { error: solanaDappError(SolanaDappErrorCode.Internal, 'No tab context for this request') };
+
+    const api = new SolanaApi(wallet.network);
+    let prepared: PreparedSolanaTx;
+    try {
+      prepared = await prepareSolanaDappTransaction(bytes, wallet.publicKey, api);
+    } catch (e) {
+      if (e instanceof SolanaDappTxError && e.reason !== 'LOOKUP_UNAVAILABLE') {
+        return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, e.message) };
+      }
+      return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Gero could not read this transaction. Try again.') };
+    }
+
+    grantSolanaTxAllowance(wallet.id, prepared.messageKey);
+    const payload = { ...promptSite(origin, send), mode, address: wallet.publicKey, transaction: Array.from(bytes), preview: prepared.preview };
+    try {
+      const response = await parkMidnightRequest(SOLANA_METHOD.signTransaction, payload, tabId);
+      const signed = bytesFromWire((response as { data?: unknown } | undefined)?.data, SOLANA_MAX_TRANSACTION_BYTES);
+      const still = walletManager.getWallet();
+      if (!still || still.id !== wallet.id || !WalletStore.isWhitelisted(origin)) {
+        return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'The wallet changed before the transaction was signed') };
+      }
+      if (!signed || !isSignedByWalletOnly(prepared, signed, wallet.publicKey)) {
+        return { error: solanaDappError(SolanaDappErrorCode.Internal, failed) };
+      }
+      if (mode === 'sign') return { data: { signedTransaction: Array.from(signed) } };
+      try {
+        await submitSolanaDappTransaction(api, signed);
+      } catch (e) {
+        debugLog('Solana dApp transaction submit failed:', errorMessage(e));
+        return { error: solanaDappError(SolanaDappErrorCode.Internal, 'The network refused the transaction. Nothing was sent.') };
+      }
+      // A transaction's id is its first signature.
+      return { data: { signature: Array.from(decodeSolanaTransaction(signed).signatures[0]) } };
+    } catch (err) {
+      return { error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, failed)) };
+    } finally {
+      revokeSolanaTxAllowance(prepared.messageKey);
+    }
+  })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, failed) }));
+  return true;
+}
+
+/** Submits through Nexus (with preflight: a transaction that would fail is refused, not sent). */
+async function submitSolanaDappTransaction(api: SolanaApi, signed: Uint8Array): Promise<string> {
+  return api.submit(bytesToBase64(signed));
+}
+
+app.add(SOLANA_METHOD.signTransaction, (request, sendResponse) => {
+  return handleSolanaTransactionRequest(request, sendResponse, 'sign');
+});
+
+app.add(SOLANA_METHOD.signAndSendTransaction, (request, sendResponse) => {
+  return handleSolanaTransactionRequest(request, sendResponse, 'signAndSend');
+});
+
+/**
+ * The side panel signs an approved dApp transaction (password or PassKey). Only a message the
+ * worker previewed is signed: the allowance prepareSolanaDappTransaction granted is consumed here.
+ */
+app.addToOptions(MessageTypes.SIGN_SOLANA_TRANSACTION, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
+  const fail = (error: string) => sendResponse({ id: request.id, data: { success: false, error }, target: TARGET, sender: SENDER.extension });
+  const wallet = walletManager.getWallet();
+  if (!wallet || wallet.chain !== Blockchain.SOLANA) return fail('No Solana wallet is active');
+  const { transaction, password, prfSecret } = (request.data ?? {}) as { transaction?: unknown; password?: unknown; prfSecret?: unknown };
+  const bytes = bytesFromWire(transaction, SOLANA_MAX_TRANSACTION_BYTES);
+  if (!bytes) return fail('Invalid request');
+  if (password !== undefined && typeof password !== 'string') return fail('Invalid request');
+  const prf = prfSecret === undefined ? undefined : bytesFromWire(prfSecret, 1024);
+  if (prf === null) return fail('Invalid request');
+  try {
+    const tx = decodeSolanaTransaction(bytes);
+    const signerIndex = tx.message.staticKeys.indexOf(wallet.publicKey);
+    if (signerIndex < 0 || signerIndex >= tx.message.numRequiredSignatures) return fail('Invalid request');
+    // Checked before the password is used: nothing is decrypted for a message nobody previewed.
+    if (!consumeSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))) return fail(SOLANA_TX_EXPIRED);
+    const signature = await wallet.signSolanaDappTransaction(tx.messageBytes, password as string | undefined, prf);
+    const signed = withSolanaSignature(bytes, tx, signerIndex, signature);
+    sendResponse({ id: request.id, data: { success: true, signedTransaction: Array.from(signed) }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    debugLog('Solana dApp transaction signing failed:', errorMessage(error));
     fail(errorMessage(error) ?? 'Signing failed');
   } finally {
     prf?.fill(0);
