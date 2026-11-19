@@ -15,6 +15,13 @@ export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-11
 export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
 
 /**
+ * The refusal a dApp gets for a request made while another of its requests is still waiting
+ * for approval. Refused (-3) as CIP-30 asks, with text that says the wallet is busy: the
+ * generic Refused text ("wallet disconnects") makes a dApp drop its connection.
+ */
+export const APPROVAL_BUSY_MESSAGE = 'Another request is waiting for approval in Gero. Answer it, then try again.';
+
+/**
  * The refusal for a transaction marked to fail (isValid: false). Such a transaction skips its
  * scripts and forfeits its collateral, and no dApp sends one honestly: listing a wallet UTxO as
  * collateral, and another at the same key as an input, would take it. Same fixed-English-string

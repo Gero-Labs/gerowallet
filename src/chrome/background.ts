@@ -10,7 +10,7 @@ import { midnightTimer } from '@/chains/midnight/midnightTiming';
 import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
 import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
-import { Messaging } from '@/chrome/messaging';
+import { Messaging, popupBusyError } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
@@ -1948,7 +1948,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
     const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx, chrome.runtime.getURL('index.html'));
     if (decision.action === 'busy') {
-      return signTxReply({ error: APIError.Refused });
+      return signTxReply({ error: popupBusyError(request) });
     }
     for (const t of popupTabs) {
       if (t.url && decision.closeTabUrls.includes(t.url) && typeof t.windowId === 'number') {
