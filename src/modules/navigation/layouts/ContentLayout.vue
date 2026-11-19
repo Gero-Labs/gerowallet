@@ -649,14 +649,13 @@ async function openMiniMode() {
 // It owns both the CSS accent slots and the Vuetify theme, so the local
 // --*-color writer and its watcher that used to sit here are gone.
 
-/** The dashboard backdrop for the logged wallet's chain: its image and framing class.
- *  Solana's waves share Bitcoin's composition (black sky, waves below), so its framing. */
+/** The dashboard backdrop for the logged wallet's chain: its image and framing class. */
 const dashboardBackground = computed(() => {
   switch (loggedWallet.value?.chain) {
     case Blockchain.BITCOIN:
       return { image: assets.bitcoinBg, className: 'bitcoin-background-dashboard' };
     case Blockchain.SOLANA:
-      return { image: assets.solanaBg, className: 'bitcoin-background-dashboard' };
+      return { image: assets.solanaBg, className: 'solana-background-dashboard' };
     case Blockchain.MIDNIGHT:
       return { image: assets.midnightBg, className: 'midnight-background-dashboard' };
     default:
@@ -806,6 +805,18 @@ onBeforeUnmount(() => {
   &[style*='url('] {
     opacity: 0.425;
   }
+}
+
+/* Solana: Cardano's framing and lighting (whole image, lifted a quarter, brightness 0.6,
+   opacity 0.425, faded at the bottom). Its asset has the waves below a black sky, the
+   opposite of the pre-flipped Cardano one, so it is turned 180deg here and the mask runs
+   the other way in the element's own (turned) coordinates: opaque at the visual top. */
+.solana-background-dashboard {
+  @extend .cardano-background-dashboard;
+  aspect-ratio: 3840 / 2153; /* solanaBg.webp native ratio */
+  transform: translate(-50%, -25%) rotate(180deg);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
 }
 
 /* Midnight background — wide cinematic shot with a fade-to-black mask so the
