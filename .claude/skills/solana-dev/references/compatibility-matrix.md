@@ -1,0 +1,360 @@
+---
+title: Version Compatibility Matrix
+description: Reference table for matching Anchor, Solana CLI, Rust, and Node.js versions to avoid toolchain conflicts.
+---
+
+# Solana Version Compatibility Matrix
+
+## Contents
+
+- [Master Compatibility Table](#master-compatibility-table)
+- [Solana CLI Version Mapping](#solana-cli-version-mapping)
+- [Platform Tools → Rust Toolchain Mapping](#platform-tools-rust-toolchain-mapping)
+- [GLIBC Requirements by OS](#glibc-requirements-by-os)
+- [Anchor ↔ Solana Crate Versions](#anchor-solana-crate-versions)
+- [Anchor CLI ↔ anchor-lang Crate Compatibility](#anchor-cli-anchor-lang-crate-compatibility)
+- [SPL Token Crate Versions](#spl-token-crate-versions)
+- [Node.js / TypeScript Requirements](#nodejs-typescript-requirements)
+- [Known Working Combinations (Tested)](#known-working-combinations-tested)
+- [Testing Tools: LiteSVM / Bankrun Compatibility](#testing-tools-litesvm-bankrun-compatibility)
+- [Transaction v1 (SIMD-0385) Minimum Versions](#transaction-v1-simd-0385-minimum-versions)
+
+## Master Compatibility Table
+
+| Anchor Version | Release Date | Solana CLI | Rust Version | Platform Tools | GLIBC Req | Node.js | Key Notes |
+|---|---|---|---|---|---|---|---|
+| **1.2.x** (latest: 1.2.1) | Sep–Oct 2026 | 4.1.x (CI-tested: 4.1.2) | MSRV 1.89 | v1.52+ | ≥2.39 | ≥20.18 | `anchor build --arch` / `--tools-version`; TS error constants file generated from the IDL; avm resolves Solana/platform-tools from the Anchor version; all-zero discriminators rejected; `LazyAccount` re-checks owner/discriminator on `unload()`; zero-copy undersized data errors instead of panicking; 1.2.1 adds opt-in `solana-v4` feature (4.x crates), default stays `solana-v3` |
+| **1.1.x** | Jun 2026 | 3.1.x (CI-tested: 3.1.10) | MSRV 1.89 | v1.52+ | ≥2.39 | ≥20.18 | anchor-syn on syn 2.0; versioned tx in anchor-client; `verifiedBuild` (OtterSec verify.osec.io); multiple named scripts in Anchor.toml; `anchor idl fetch-historical`; 1.1.2 tightens inter-crate `anchor-*` pins |
+| **1.0.x** | Apr 2026 | 3.x | 1.79–1.85+ (stable) | v1.52 | ≥2.39 | ≥17 | TS pkg → `@anchor-lang/core`; `anchor test` defaults to surfpool; LiteSVM test template default on `anchor init`; `--install-agent-skills` flag; IDL in Program Metadata; no `solana` CLI shell-out; all `solana-*` deps must be `^3`; `solana-program` removed as project dep; `solana-signer` replaces `solana-sdk` for signing; `Migration<'info, From, To>` account type; duplicate mutable accounts disallowed (new `dup` constraint) |
+| **0.32.x** (latest: 0.32.2) | Oct 2025 | 2.1.x+ | 1.79–1.85+ (stable) | v1.50+ | ≥2.39 | ≥17 | Replaces `solana-program` with smaller crates; IDL builds on stable Rust; removes Solang; 0.32.2 (Sep 2026): TS provider can fetch v1 transactions (published as `@anchor-lang/core@0.32.2`), and `anchor test` waits for the local validator to reach block height 25 |
+| **0.31.1** (patch: 0.31.2) | Apr 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.39 ⚠️ | ≥17 | New Docker image `solanafoundation/anchor`; published under solana-foundation org. **Tested: binary requires GLIBC 2.39, not 2.38**. 0.31.2 (Sep 2026): TS provider can fetch v1 transactions (published as `@anchor-lang/core@0.31.2`), and `anchor test` waits for the local validator to reach block height 25 |
+| **0.31.0** | Mar 2025 | 2.0.x–2.1.x | 1.79–1.83 | v1.47+ | ≥2.39 ⚠️ | ≥17 | Solana v2 upgrade; dynamic discriminators; `LazyAccount`; `declare_program!` improvements. **Pre-built binary needs GLIBC 2.39** |
+| **0.30.1** | Jun 2024 | 1.18.x (rec: 1.18.8+) | 1.75–1.79 | v1.43 | ≥2.31 | ≥16 | `declare_program!` macro; legacy IDL conversion; `RUSTUP_TOOLCHAIN` override |
+| **0.30.0** | Apr 2024 | 1.18.x (rec: 1.18.8) | 1.75–1.79 | v1.43 | ≥2.31 | ≥16 | New IDL spec; token extensions; `cargo build-sbf` default; `idl-build` feature required |
+| **0.29.0** | Oct 2023 | 1.16.x–1.17.x | 1.68–1.75 | v1.37–v1.41 | ≥2.28 | ≥16 | Account reference changes; `idl build` compilation method; `.anchorversion` file |
+
+## Solana CLI Version Mapping
+
+| Solana CLI | Agave Version | Era | solana-program Crate | Platform Tools | Status |
+|---|---|---|---|---|---|
+| **4.4.x** | v4.4.x (beta: 4.4.0-beta.1, Oct 2026) | Oct 2026 | N/A (validator only) | v1.52+ | Beta channel — first Agave line on the 5.x `solana-*` crates |
+| **4.3.x** | v4.3.x (latest: 4.3.1, Oct 2026) | Sep 2026 | N/A (validator only) | v1.52+ | **Stable channel** (`release.anza.xyz/stable`) — 4.3.0 released 2026-09-18 for Testnet, Devnet and Mainnet Beta |
+| **4.2.x** | v4.2.x (last: 4.2.2, Aug 2026) | Aug 2026 | N/A (validator only) | v1.52+ | Superseded by 4.3 — transaction v1 (`enable_tx_v1`) activated on mainnet 2026-09-15 with 4.2.2 |
+| **4.1.x** | v4.1.x (latest: 4.1.2, Jul 2026) | Jul 2026 | N/A (validator only) | v1.52+ | Stable — CI-tested pairing for Anchor 1.2.x (4.1.2) |
+| **3.1.x** | v3.1.x | Jan 2026 | N/A (validator only) | v1.52 | Stable — CI-tested pairing for Anchor 1.1.x (3.1.10) |
+| **3.0.x** | v3.0.x | Late 2025 | N/A (validator only) | v1.52 | Stable (mainnet) |
+| **2.1.x** | v2.1.x | Mid 2025 | 2.x | v1.47–v1.51 | Stable |
+| **2.0.x** | v2.0.x | Early 2025 | 2.x | v1.44–v1.47 | Legacy |
+| **1.18.x** | N/A (pre-Anza) | 2024 | 1.18.x | v1.43 | Legacy |
+| **1.17.x** | N/A | 2023 | 1.17.x | v1.37–v1.41 | Deprecated |
+| **1.16.x** | N/A | 2023 | 1.16.x | v1.35–v1.37 | Deprecated |
+
+### Important: Solana CLI v3.x+
+As of Agave v3.0.0, Anza **no longer publishes the `agave-validator` binary** in the release tarballs (still true for 4.3). Operators must build from source (`cargo install agave-validator` also works). The CLI tools (for program development) remain available via `agave-install` or the install script.
+
+### Agave 4.x vs SDK crate versions (Oct 2026)
+Agave validator releases (4.x) are versioned **independently** from the SDK crates. The `solana-*` crates are on the 4.x line (`solana-message` 4.2.x carries `v1::Message`; `solana-rpc-client` 4.2.x reads v1). Anchor 1.2.0 moved its CI to Solana CLI 4.1.2 but kept the 3.x crate line. **Anchor 1.2.1 adds a `solana-v4` cargo feature** on `anchor-lang`, `anchor-spl` and `anchor-client` that switches them to the 4.x crates (Agave 4.3 client crates). `solana-v3` is still the default, and the two features are mutually exclusive (`compile_error!` if both or neither are on). To opt in, set `default-features = false, features = ["solana-v4", ...]` on every `anchor-*` dependency; `anchor-spl` then needs its token features re-listed. Anchor's CI does not yet run `idl-build` under `solana-v4`. A **5.x `solana-*` line** (`solana-sdk` 5.0.0, `solana-message` 5.1.0, `solana-instruction` 4.0.0) shipped in Sep 2026 with breaking removals of deprecated items and `#[non_exhaustive]` error enums; it pairs with Agave 4.4 (beta). Agave 4.3 stable, LiteSVM 0.18 and Mollusk 0.16 still use the 4.x crates, so stay on 4.x for now. On the default cohort, keep project `solana-*` crates on `^3`; for Rust *clients* that send or read transaction v1, and for non-Anchor native programs, use the 4.x crates with matching tooling.
+
+## Platform Tools → Rust Toolchain Mapping
+
+| Platform Tools | Bundled Rust | Bundled Cargo | LLVM/Clang | Target Triple | Notes |
+|---|---|---|---|---|---|
+| **v1.52** | ~1.85 (solana fork) | ~1.85 | Clang 20 | `sbpf-solana-solana` | Latest; used by Solana CLI 3.x |
+| **v1.51** | ~1.84 (solana fork) | ~1.84 | Clang 19 | `sbpf-solana-solana` | |
+| **v1.50** | ~1.83 (solana fork) | ~1.83 | Clang 19 | `sbpf-solana-solana` | |
+| **v1.49** | ~1.82 (solana fork) | ~1.82 | Clang 18 | `sbpf-solana-solana` | |
+| **v1.48** | rustc 1.84.1-dev | cargo 1.84.0 | Clang 19 | `sbpf-solana-solana` | **Verified.** Used by Solana CLI 2.2.16. ⚠️ Cargo does NOT support `edition2024` |
+| **v1.47** | ~1.80 (solana fork) | ~1.80 | Clang 17 | `sbpf-solana-solana` | Used by Anchor 0.31.x |
+| **v1.46** | ~1.79 (solana fork) | ~1.79 | Clang 17 | `sbf-solana-solana` | |
+| **v1.45** | ~1.79 (solana fork) | ~1.79 | Clang 17 | `sbf-solana-solana` | |
+| **v1.44** | ~1.78 (solana fork) | ~1.78 | Clang 16 | `sbf-solana-solana` | |
+| **v1.43** | ~1.75 (solana fork) | ~1.75 | Clang 16 | `sbf-solana-solana` | Used by Anchor 0.30.x/Solana 1.18.x. ❌ Incompatible with CLI 2.2.16 (`sbpf-solana-solana` target not found) |
+
+**Note:** Platform Tools ship a **forked** Rust compiler from [anza-xyz/rust](https://github.com/anza-xyz/rust). The version numbers approximate the upstream Rust equivalent. The forked compiler includes SBF/SBPF target support.
+
+**⚠️ CRITICAL (Jan 2026):** Platform-tools v1.48 bundles `cargo 1.84.0` which does NOT support `edition = "2024"`. Multiple crates now require it: `blake3 ≥1.8.3`, `constant_time_eq ≥0.4.2`, `base64ct ≥1.8.3`, `indexmap ≥2.13.0`. Pin to safe versions: `blake3=1.8.2`, `constant_time_eq=0.3.1`, `base64ct=1.7.3`, `indexmap=2.11.4`. **Always commit Cargo.lock files.** See [common-errors.md](./common-errors.md#edition2024-crate-incompatibility-cargo-1840) for full details and fix scripts.
+
+## GLIBC Requirements by OS
+
+| OS / Distro | GLIBC Version | Compatible Anchor |
+|---|---|---|
+| **Ubuntu 24.04 (Noble)** | 2.39 | All (0.29–v1+) |
+| **Ubuntu 22.04 (Jammy)** | 2.35 | 0.29–0.30.x only (build 0.31+ from source) |
+| **Ubuntu 20.04 (Focal)** | 2.31 | 0.29–0.30.x only (build 0.31+ from source) |
+| **Debian 12 (Bookworm)** | 2.36 | 0.29–0.30.x only ⚠️ **Tested: 0.31.1 and 0.32.1 pre-built binaries fail.** Build from source works for Anchor CLI. (The old `litesvm` 0.5.0 npm binary also failed here; current 1.x ships cross-built gnu and musl binaries) |
+| **Debian 13 (Trixie)** | 2.40 | All |
+| **Fedora 39+** | ≥2.38 | All |
+| **Arch Linux (rolling)** | Latest | All |
+| **macOS 14+ (Sonoma)** | N/A (no GLIBC) | All |
+| **macOS 12-13** | N/A | All |
+| **Windows WSL2 (Ubuntu)** | Depends on distro | See Ubuntu version |
+
+### Why GLIBC matters
+Anchor 0.31+ and 0.32+ binaries are compiled against newer GLIBC. If your system's GLIBC is too old, you'll get:
+```
+anchor: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
+```
+
+**Solutions:**
+1. Upgrade your OS (recommended)
+2. Build Anchor from source: `cargo install --git https://github.com/otter-sec/anchor --tag v1.2.1 anchor-cli` (replace tag with desired version)
+3. Use Docker (see install-guide.md)
+
+## Anchor ↔ Solana Crate Versions
+
+| Anchor | anchor-lang Crate | Project-level solana-* | Notes |
+|---|---|---|---|
+| **1.2.x** | 1.2.x (MSRV 1.89) | `^3` by default; `^4` with the 1.2.1 `solana-v4` feature | Same rules as 1.1.x. `solana-v3` and `solana-v4` are mutually exclusive; opting into v4 needs `default-features = false` on every `anchor-*` dependency |
+| **1.1.x** | 1.1.x (MSRV 1.89) | `^3` (granular crates) | Same rules as 1.0.x; 1.1.2 tightens `anchor-*` inter-crate pins — keep all `anchor-*` crates on the exact same version |
+| **1.0.x** | 1.0.x | `^3` (granular crates) | `solana-program` removed from project deps; use `solana-signer` instead of `solana-sdk` for signing; all `solana-*` must be `^3` |
+| **0.32.x** | 0.32.x | `2` (still `solana-program` or granular v2) | anchor-lang internals use granular crates; `solana-program` still valid in user Cargo.toml |
+| **0.31.x** | 0.31.x | 2.x | Upgraded to Solana v2 crate ecosystem |
+| **0.30.x** | 0.30.x | 1.18.x | Last version using Solana v1 crates |
+| **0.29.x** | 0.29.x | 1.16.x–1.17.x | |
+
+### Solana Granular Crate Ecosystem (Anchor 0.31+)
+Anchor 0.31+ uses the Solana v2+ crate structure. The monolithic `solana-program` crate is being split into smaller crates:
+- `solana-pubkey` / `solana-address`
+- `solana-instruction`
+- `solana-account-info`
+- `solana-msg`
+- `solana-invoke`
+- `solana-entrypoint`
+- `solana-signer` (use instead of `solana-sdk` in v1+)
+- etc.
+
+Anchor 0.32+ fully replaces `solana-program` in its own internals. **Anchor v1.0+** goes further: user-facing `Cargo.toml` files must also drop `solana-program` and bump any remaining `solana-*` crates to `^3`. The `anchor build` command warns on mismatched versions.
+
+## Anchor CLI ↔ anchor-lang Crate Compatibility
+
+The Anchor CLI checks version compatibility with the `anchor-lang` crate used in your project. **Mismatched versions will produce a warning.** Always keep these in sync:
+
+```toml
+# Cargo.toml (Anchor v1)
+[dependencies]
+anchor-lang = "1.2.1"
+
+# Must match CLI:
+# anchor --version → anchor-cli 1.2.1
+```
+
+```toml
+# Cargo.toml (Anchor 0.32.x)
+[dependencies]
+anchor-lang = "0.32.1"
+
+# anchor --version → anchor-cli 0.32.1
+```
+
+## SPL Token Crate Versions
+
+| Anchor | anchor-spl | spl-token | spl-token-2022 | spl-associated-token-account |
+|---|---|---|---|---|
+| **1.2.x** | 1.2.x | Latest compatible | Latest compatible | Latest compatible |
+| **1.1.x** | 1.1.x | Latest compatible | Latest compatible | Latest compatible |
+| **1.0.x** | 1.0.x | Latest compatible | Latest compatible | Latest compatible |
+| **0.32.x** | 0.32.x | Latest compatible | Latest compatible | Latest compatible |
+| **0.31.x** | 0.31.x | 6.x | 5.x | 4.x |
+| **0.30.x** | 0.30.x | 4.x–6.x | 3.x–4.x | 3.x |
+| **0.29.x** | 0.29.x | 4.x | 1.x–3.x | 2.x–3.x |
+
+## Node.js / TypeScript Requirements
+
+| Anchor | TS Package | Node.js | TypeScript | Notes |
+|---|---|---|---|---|
+| **1.2.x** | `@anchor-lang/core ^1.2.1` | ≥20.18 | 5.x | Declares `@solana/web3.js ^1.69.1`; the provider's failed-tx log lookup uses `maxSupportedTransactionVersion: 0`, so it cannot fetch v1 yet ([#4977](https://github.com/otter-sec/anchor/pull/4977) open) |
+| **1.1.x** | `@anchor-lang/core ^1.1.0` | ≥20.18 | 5.x | `engines.node >= 20.18`; versioned transaction support |
+| **1.0.x** | `@anchor-lang/core ^1.0.0` | ≥17 | 5.x | Renamed from `@coral-xyz/anchor`. IDL types now at root of `@anchor-lang/core` (was `@coral-xyz/anchor/dist/cjs/idl`) |
+| **0.32.x** | `@coral-xyz/anchor ^0.32.x` | ≥17 | 5.x | 0.32.2 is published only as `@anchor-lang/core@0.32.2` (`@coral-xyz/anchor` stops at 0.32.1); pins `@solana/web3.js` 1.99.0 and reads v1 |
+| **0.31.x** | `@coral-xyz/anchor ^0.31.x` | ≥17 | 5.x | 0.31.2 is published only as `@anchor-lang/core@0.31.2`; pins `@solana/web3.js` 1.99.0 and reads v1 |
+| **0.30.x** | `@coral-xyz/anchor ^0.30.x` | ≥16 | 4.x–5.x | |
+| **0.29.x** | `@coral-xyz/anchor ^0.29.x` | ≥16 | 4.x | |
+
+### Anchor v1 TypeScript Package Rename
+
+The npm package moved from `@coral-xyz/anchor` to `@anchor-lang/core`. Update `package.json` and all imports:
+
+```bash
+# Find all occurrences to update
+grep -r "@coral-xyz" --include="*.ts" --include="*.js" --include="package.json" .
+grep -r "dist/cjs/idl" --include="*.ts" --include="*.js" .
+```
+
+```typescript
+// Before (0.32.x)
+import * as anchor from "@coral-xyz/anchor";
+import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
+import { Idl } from "@coral-xyz/anchor/dist/cjs/idl";
+
+// After (v1)
+import * as anchor from "@anchor-lang/core";
+import { Program, AnchorProvider, BN } from "@anchor-lang/core";
+import { Idl } from "@anchor-lang/core";
+```
+
+IDL management now uses `anchor idl init` / `anchor idl upgrade` (CLI) or `@solana-program/program-metadata` (npm) — see [migrating-v0.32-to-v1.md](./anchor/migrating-v0.32-to-v1.md#5-close-legacy-idl-accounts-and-re-publish-deploy).
+
+## Known Working Combinations (Tested)
+
+### 🟢 Anchor 1.2.x (Recommended for new projects — Oct 2026)
+```
+Anchor CLI: 1.2.1
+anchor-lang: 1.2.1
+anchor-spl: 1.2.1
+solana-* crates: ^3 (default `solana-v3`), or ^4 with the `solana-v4` feature
+litesvm (dev): 0.18.0  (Agave 4.3-based, MSRV 1.97.1 — use 0.17.x on an older host toolchain; anchor-litesvm 0.4 still needs litesvm 0.11)
+mollusk-svm (dev): 0.16.2  (Agave 4.3-based; rent-exemption checks on by default)
+TS: @anchor-lang/core ^1.2.1
+Solana CLI: 4.1.2 (Anchor CI-tested pairing)
+Surfpool: 1.5.0 (Anchor CI)
+Platform Tools: v1.52+
+Rust: ≥1.89 (anchor-lang MSRV)
+Node.js: ≥20.18 (CI: 22.22.3)
+OS: Ubuntu 24.04+ (GLIBC ≥2.39) or macOS 14+
+Test runner: surfpool (default in anchor test)
+```
+
+### 🟢 Anchor 1.1.x (Existing 1.1 projects)
+```
+Anchor CLI: 1.1.2
+anchor-lang: 1.1.2
+anchor-spl: 1.1.2
+solana-* crates: ^3
+litesvm (dev): 0.18.0  (Agave 4.3-based, MSRV 1.97.1 — use 0.17.x on an older host toolchain; anchor-litesvm 0.4 still needs litesvm 0.11)
+mollusk-svm (dev): 0.16.2  (Agave 4.3-based; rent-exemption checks on by default)
+TS: @anchor-lang/core ^1.1.0
+Solana CLI: 3.1.10 (Anchor CI-tested pairing)
+Surfpool: 1.2.0 (Anchor CI)
+Platform Tools: v1.52+
+Rust: ≥1.89 (anchor-lang MSRV)
+Node.js: ≥20.18 (22.x LTS recommended)
+OS: Ubuntu 24.04+ (GLIBC ≥2.39) or macOS 14+
+Test runner: surfpool (default in anchor test)
+```
+
+### 🟢 Anchor 1.0.x (Existing v1 projects)
+```
+Anchor CLI: 1.0.3
+anchor-lang: 1.0.3
+anchor-spl: 1.0.3
+solana-* crates: ^3
+litesvm (dev): 0.8.2  (or 0.9.1 if solana-hash 4.0 / solana-vote-interface 5.0)
+anchor-litesvm (dev): 0.3
+TS: @anchor-lang/core ^1.0.0
+Solana CLI: 3.x
+Platform Tools: v1.52
+Rust: 1.79–1.85+
+Node.js: 20.x LTS
+OS: Ubuntu 24.04+ (GLIBC ≥2.39) or macOS 14+
+Test runner: surfpool (default in anchor test)
+```
+
+### 🟢 Anchor 0.32.x (Recommended for existing 0.32 projects staying pre-v1)
+```
+Anchor CLI: 0.32.2
+anchor-lang: 0.32.2 (CLI and crate versions must match)
+TS: @anchor-lang/core 0.32.2 (needed to read v1 transactions; @coral-xyz/anchor ends at 0.32.1)
+Solana CLI: 2.1.7+
+Rust: 1.84.0+
+Platform Tools: v1.52
+Node.js: 20.x LTS
+OS: Ubuntu 24.04+ (GLIBC ≥2.39) or macOS 14+
+```
+
+### 🟡 Legacy Compatible (For older systems)
+```
+Anchor CLI: 0.30.1
+Solana CLI: 1.18.26
+Rust: 1.79.0
+Platform Tools: v1.43
+Node.js: 18.x LTS
+OS: Ubuntu 20.04+ or macOS 12+
+```
+
+### 🟡 Transitional (Upgrading from 0.30 → 0.31)
+```
+Anchor CLI: 0.31.0
+Solana CLI: 2.0.x
+Rust: 1.79.0
+Platform Tools: v1.47
+Node.js: 20.x LTS
+OS: Ubuntu 24.04 or macOS 14+
+```
+
+## Testing Tools: LiteSVM / Bankrun Compatibility
+
+### LiteSVM Rust Crate — Version Selection
+
+Use the row that matches your workspace's resolved `solana-*` granular crate versions:
+
+| litesvm (Rust) | solana-* era | Key markers | anchor-litesvm |
+|---|---|---|---|
+| **0.8.2** | `~3.0` | `solana-hash ~3.0`, `solana-vote-interface 4.0`, `solana-system-interface 2.0` | `0.3` (requires `anchor-lang ^1.0.0`, `litesvm ^0.8.2`) |
+| **0.9.1** | `~3.1`–`~3.3` | `solana-hash 4.0`, `solana-vote-interface 5.0`, `solana-system-interface 3.0` | none — `anchor-litesvm 0.3` declares `litesvm ^0.8.2`, 0.4 declares `^0.11.0` |
+| **0.10.0–0.12.0** | `3.x` | `solana-program-runtime ^3.0`, `solana-hash ^3.1` | `0.4` for `litesvm 0.11.x` only (requires `anchor-lang ^1.0.0`, `litesvm ^0.11.0`); none for `0.10.x` or `0.12.x` |
+| **0.13.0** | Agave 4.0 | `solana-program-runtime ^4.0`, `solana-hash ^4.2`, `solana-message =3.1.0` | none |
+| **0.14.0–0.15.2** | Agave 4.1 | `solana-program-runtime ^4.1.1`, `solana-message ^4.2.4` | none |
+| **0.16.0** | Agave 4.2 | `solana-program-runtime ^4.2.1`, `solana-hash ~4.5.0`; first release that runs v1 transactions | none |
+| **0.17.0–0.18.0** (current) | Agave 4.3 | `solana-program-runtime ^4.3.0`, `solana-hash ~4.6.0`. 0.17 drops `get_feature_set` and makes `serde` optional; 0.18 raises MSRV to 1.97.1, adds `TransactionMetadata::loaded_accounts_data_size`, and applies the SIMD-0437/0438 rent gates (5080 lamports per byte, as on mainnet) | none |
+
+**Diagnostic:** run `cargo tree -d` — duplicate `solana-*` minor versions in the tree means the selected `litesvm` version is mismatched.
+
+### LiteSVM npm Package (TypeScript tests)
+
+| Tool | npm Package | Linux binaries | Node.js | Notes |
+|---|---|---|---|---|
+| **LiteSVM 1.6.0** (current, Oct 2026) | `litesvm` | x64/arm64 gnu and musl | ≥20 | Wraps Rust litesvm 0.18 (Agave 4.3). Rent sysvar applies the active rent gates (5080 lamports per byte) |
+| **LiteSVM 1.5.0** | `litesvm` | x64/arm64 gnu and musl | ≥20 | Rust litesvm 0.17 (Agave 4.3). Adds `toBytes` / `fromBytes` / `saveToFile` / `loadFromFile` state snapshots |
+| **LiteSVM 1.4.1** | `litesvm` | x64/arm64 gnu and musl | ≥20 | Rust litesvm 0.16 (Agave 4.2). First release that routes v1 transactions; floor for `@solana/kit-plugin-litesvm` 0.19 (`litesvm ^1.4.1`). Depends on `@solana/kit ^8`. 1.4.0 removed `bigModularExponentiationBaseCost` / `CostDivisor` |
+| **LiteSVM 1.3.0** | `litesvm` | x64/arm64 gnu and musl | ≥20 | Rust litesvm 0.14 (Agave 4.1); depends on `@solana/kit ^6.10` |
+| **solana-bankrun** | `solana-bankrun` | — | ≥16 | **Deprecated** (its README points to LiteSVM); last published Oct 2024 |
+| **anchor-bankrun** | `anchor-bankrun` | — | ≥16 | Legacy Anchor wrapper for bankrun |
+
+### LiteSVM on Older Linux Systems
+The `litesvm` 1.x gnu binaries are built with `--use-napi-cross` on Ubuntu 22.04 runners, and musl builds (`litesvm-linux-{x64,arm64}-musl`) ship alongside them. The `undefined symbol: __isoc23_strtol` failure on Debian 12 (GLIBC 2.36) was verified on the old 0.5.0 package in Jan 2026. If a native-binding error still shows up:
+1. **Upgrade** to the current `litesvm` 1.x and reinstall so the package manager picks the right optional binary (`litesvm-linux-x64-gnu` or `-musl`)
+2. **Use Docker**: `FROM ubuntu:24.04` base image
+3. **Build litesvm from source** (requires Rust + napi-rs toolchain)
+
+Do not fall back to `solana-bankrun` for new work — it is deprecated.
+
+### Verified Test Environment (Jan 2026)
+```
+✅ Works: Anchor CLI 0.30.1 (built from source) + Solana CLI 2.2.16 + Rust 1.93.0 + Debian 12
+❌ Fails: litesvm 0.5.0 native binary on Debian 12 (GLIBC 2.36) — old package; see above
+❌ Fails: Anchor 0.31.1/0.32.1 pre-built binaries on Debian 12 (GLIBC 2.36)
+✅ Works: cargo build-sbf (Solana 2.2.16, platform-tools v1.48) on Debian 12
+✅ Works: Anchor 0.30.1 built from source with Rust 1.93.0 on Debian 12
+```
+
+---
+## Transaction v1 (SIMD-0385) Minimum Versions
+
+Full reference: [transactions-v1.md](./transactions-v1.md). Feature gate `txv1aq4pp281K9um3tnPgkfX8UqtFT6wcVW3hNezGLL` activated on mainnet 2026-09-15 with Agave 4.2.2. v1 is the default transaction version for new code in this skill.
+
+| Component | Minimum for v1 | Notes |
+|---|---|---|
+| Anza CLI / Agave | **4.2.0** (mainnet runs 4.2.2) | v1 support and `maxSupportedTransactionVersion: 1`. Local test validator activates every feature at genesis |
+| Surfpool | **1.5** | Enables the gate by default |
+| `solana-*` crates (Rust) | **4.x** (`solana-message` ≥4.2.0, `solana-rpc-client` ≥4.2.1) | `v1::Message` landed in `solana-message` 4.1.0; 4.2.0 adds the inherent `Message::serialize()`. `max_supported_transaction_version: Some(1)` on the RPC client |
+| `@solana/kit` | **8.0.0** (current 8.5.0) | 7.1.1 has the v1 codecs, config setters, and `maxSupportedTransactionVersion: 1`, but 8.0.0 is the first to *type* `createTransactionMessage({ version: 1 })` |
+| `@solana/kit-plugin-rpc` | **0.19.0** | `solanaRpc({ transactionConfig: { version: 1 } })` plans, estimates, and sends v1. ≤0.18 throws at runtime |
+| `@solana/kit-plugin-litesvm` | **0.19.0** | `litesvm({ transactionConfig: { version: 1 } })`; writes maximum limits instead of estimating |
+| `@solana/kit-plugin-wallet` | **0.20.0** (current 0.21.0) | `connected.supportedTransactionVersions` typed to include `1` (`@solana/wallet-standard-features` 1.5). 0.21 peers on `@solana/react ^8.4.0` and `react ^19.3.0` |
+| `@solana/kit-plugin-signer` | 0.19.0 | Pairs with the 0.19 rpc/litesvm plugins |
+| `@solana/react` | 8.x | Kit 8 client bindings |
+| `@solana/web3.js` v3 | **3.0.0** (current 3.1.1) | `compileToV1Message`; send and read. npm `latest` |
+| `@solana/web3.js` 1.x | **1.99.0** | ⚠️ Read-only — 1.x never sends v1 |
+| `@anchor-lang/core` | **0.32.2 / 0.31.2** | Read-only, via web3.js 1.99.0. ⚠️ 1.x through 1.2.1 still fetch with `maxSupportedTransactionVersion: 0`; v1 support is [#4977](https://github.com/otter-sec/anchor/pull/4977) (open) |
+| `solders` (Python) | **0.29.0** | Read and send. Earlier releases have neither |
+| `solana-go` | **v2.0.0** (`/v2` module) or **v1.23.0** (`gagliardetto/solana-go`) | [PR #481](https://github.com/solana-foundation/solana-go/pull/481). Current: v2.1.0 / v1.25.0; Go 1.25+ from v2.1.0 / v1.24.0 |
+| `yellowstone-grpc-proto` (Rust) | **12.6.0** | First release whose generated code has `Message.config` (field 7) |
+| `yellowstone-grpc-client` (Rust) | **13.3.0** | 12.x connects, but pair either with a direct 12.6.0 proto pin |
+| yellowstone-grpc geyser plugin | **15.1.1** | Earlier builds downgrade v1 to v0 before it reaches the wire |
+| `@triton-one/yellowstone-grpc` | **6.0.0** | 5.x drops field 7 — a `^5.0.9` pin loses every v1 budget |
+
+### ⚠️ Silent-failure pins
+
+- `yellowstone-grpc-client` 13.3.0 only *requires* `yellowstone-grpc-proto = "12.5.0"`, which has no field 7. **Pin `yellowstone-grpc-proto = "12.6.0"` directly** and build `--locked`, or the resolver hands you a proto crate that drops every v1 config without erroring.
+- yellowstone ships its Go client as pre-generated code that predates field 7. Generate stubs from the tag's `.proto` yourself.
+- Protobuf clients discard unknown fields silently. A stale stub decodes a v1 message as v0 with an empty compute budget — no error, just missing data.

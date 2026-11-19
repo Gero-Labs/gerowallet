@@ -1,0 +1,356 @@
+---
+title: Programs with Anchor
+description: Write Solana programs using the Anchor framework for fast iteration, automatic account validation, and built-in TypeScript client generation.
+---
+
+# Programs with Anchor (default choice)
+
+## Contents
+
+- [When to use Anchor](#when-to-use-anchor)
+- [Core Advantages](#core-advantages)
+- [Core Macros](#core-macros)
+- [Account Types](#account-types)
+- [Account Constraints](#account-constraints)
+- [Account Discriminators](#account-discriminators)
+- [Instruction Patterns](#instruction-patterns)
+- [Cross-Program Invocations (CPIs)](#cross-program-invocations-cpis)
+- [Error Handling](#error-handling)
+- [Token Accounts](#token-accounts)
+- [LazyAccount (Anchor 0.31+)](#lazyaccount-anchor-031)
+- [Zero-Copy Accounts](#zero-copy-accounts)
+- [Remaining Accounts](#remaining-accounts)
+- [Version Management](#version-management)
+- [Compatibility Notes for Anchor 0.32.0](#compatibility-notes-for-anchor-0320)
+- [Security Best Practices](#security-best-practices)
+- [Testing](#testing)
+- [IDL and Clients](#idl-and-clients)
+- [Migrations](#migrations)
+
+## When to use Anchor
+Use Anchor by default when:
+- You want fast iteration with reduced boilerplate
+- You want an IDL and TypeScript client story out of the box
+- You want mature testing and workspace tooling
+- You need built-in security through automatic account validation
+
+## Core Advantages
+- **Reduced Boilerplate**: Abstracts repetitive account management, instruction serialization, and error handling
+- **Built-in Security**: Automatic account-ownership verification and data validation
+- **IDL Generation**: Automatic interface definition for client generation
+
+## Core Macros
+
+### `declare_id!()`
+Declares the onchain address where the program resides—a unique public key derived from the project's keypair.
+
+### `#[program]`
+Marks the module containing every instruction entrypoint and business-logic function.
+
+### `#[derive(Accounts)]`
+Lists accounts an instruction requires and automatically enforces their constraints:
+- Declares all necessary accounts for specific instructions
+- Enforces constraint checks automatically to block bugs and exploits
+- Generates helper methods for safe account access and mutation
+
+### `#[error_code]`
+Enables custom, human-readable error types with `#[msg(...)]` attributes for clearer debugging.
+
+## Account Types
+
+| Type | Purpose |
+|------|---------|
+| `Signer<'info>` | Verifies the account signed the transaction |
+| `SystemAccount<'info>` | Confirms System Program ownership |
+| `Program<'info, T>` | Validates executable program accounts |
+| `Account<'info, T>` | Typed program account with automatic validation |
+| `UncheckedAccount<'info>` | Raw account requiring manual validation |
+
+## Account Constraints
+
+### Initialization
+```rust
+#[account(
+    init,
+    payer = payer,
+    space = 8 + CustomAccount::INIT_SPACE
+)]
+pub account: Account<'info, CustomAccount>,
+```
+
+### PDA Validation
+```rust
+#[account(
+    seeds = [b"vault", owner.key().as_ref()],
+    bump
+)]
+pub vault: SystemAccount<'info>,
+```
+
+### Ownership and Relationships
+```rust
+#[account(
+    has_one = authority @ CustomError::InvalidAuthority,
+    constraint = account.is_active @ CustomError::AccountInactive
+)]
+pub account: Account<'info, CustomAccount>,
+```
+
+### Reallocation
+```rust
+#[account(
+    mut,
+    realloc = new_space,
+    realloc::payer = payer,
+    realloc::zero = true  // Clear old data when shrinking
+)]
+pub account: Account<'info, CustomAccount>,
+```
+
+### Closing Accounts
+```rust
+#[account(
+    mut,
+    close = destination
+)]
+pub account: Account<'info, CustomAccount>,
+```
+
+## Account Discriminators
+
+Default discriminators use `sha256("account:<StructName>")[0..8]`. Custom discriminators (Anchor 0.31+):
+
+```rust
+#[account(discriminator = 1)]
+pub struct Escrow { ... }
+```
+
+**Constraints:**
+- Discriminators must be unique across your program
+- Using `[1]` prevents using `[1, 2, ...]` which also start with `1`
+- `[0]` conflicts with uninitialized accounts
+
+## Instruction Patterns
+
+### Basic Structure
+```rust
+#[program]
+pub mod my_program {
+    use super::*;
+
+    pub fn initialize(ctx: Context<Initialize>, data: u64) -> Result<()> {
+        ctx.accounts.account.data = data;
+        Ok(())
+    }
+}
+```
+
+### Context Implementation Pattern
+Move logic to context struct implementations for organization and testability:
+
+```rust
+impl<'info> Transfer<'info> {
+    pub fn transfer_tokens(&mut self, amount: u64) -> Result<()> {
+        // Implementation
+        Ok(())
+    }
+}
+```
+
+## Cross-Program Invocations (CPIs)
+
+### Basic CPI
+```rust
+let cpi_accounts = Transfer {
+    from: ctx.accounts.from.to_account_info(),
+    to: ctx.accounts.to.to_account_info(),
+};
+let cpi_ctx = CpiContext::new(System::id(), cpi_accounts);
+
+transfer(cpi_ctx, amount)?;
+```
+
+### PDA-Signed CPIs
+```rust
+let seeds = &[b"vault".as_ref(), &[ctx.bumps.vault]];
+let signer = &[&seeds[..]];
+let cpi_ctx = CpiContext::new_with_signer(System::id(), cpi_accounts, signer);
+```
+
+## Error Handling
+
+```rust
+#[error_code]
+pub enum MyError {
+    #[msg("Custom error message")]
+    CustomError,
+    #[msg("Value too large: {0}")]
+    ValueError(u64),
+}
+
+// Usage
+require!(value > 0, MyError::CustomError);
+require!(value < 100, MyError::ValueError(value));
+```
+
+## Token Accounts
+
+### SPL Token
+```rust
+#[account(
+    mint::decimals = 9,
+    mint::authority = authority,
+)]
+pub mint: Account<'info, Mint>,
+
+#[account(
+    mut,
+    associated_token::mint = mint,
+    associated_token::authority = owner,
+)]
+pub token_account: Account<'info, TokenAccount>,
+```
+
+### Token2022 Compatibility
+Use `InterfaceAccount` for dual compatibility:
+
+```rust
+use anchor_spl::token_interface::{Mint, TokenAccount};
+
+pub mint: InterfaceAccount<'info, Mint>,
+pub token_account: InterfaceAccount<'info, TokenAccount>,
+pub token_program: Interface<'info, TokenInterface>,
+```
+
+## LazyAccount (Anchor 0.31+)
+
+Heap-allocated, read-only account access for efficient memory usage:
+
+```rust
+// Cargo.toml — match the version to your Anchor CLI (1.2.x current)
+anchor-lang = { version = "1.2.1", features = ["lazy-account"] }
+
+// Usage
+pub account: LazyAccount<'info, CustomAccountType>,
+
+pub fn handler(ctx: Context<MyInstruction>) -> Result<()> {
+    let value = ctx.accounts.account.get_value()?;
+    Ok(())
+}
+```
+
+**Note:** LazyAccount is read-only. After CPIs, use `unload()` to refresh cached values. Since 1.2.0, `unload()` re-runs the owner and discriminator checks, so it returns an error if a CPI reassigned or closed the account.
+
+## Zero-Copy Accounts
+
+For accounts exceeding stack/heap limits:
+
+```rust
+#[account(zero_copy)]
+pub struct LargeAccount {
+    pub data: [u8; 10000],
+}
+```
+
+Accounts under 10,240 bytes use `init`; larger accounts require external creation then `zero` constraint initialization.
+
+## Remaining Accounts
+
+Pass dynamic accounts beyond fixed instruction structure:
+
+```rust
+pub fn batch_operation(ctx: Context<BatchOp>, amounts: Vec<u64>) -> Result<()> {
+    let remaining = &ctx.remaining_accounts;
+    require!(remaining.len() % 2 == 0, BatchError::InvalidSchema);
+
+    for (i, chunk) in remaining.chunks(2).enumerate() {
+        process_pair(&chunk[0], &chunk[1], amounts[i])?;
+    }
+    Ok(())
+}
+```
+
+## Version Management
+
+- Current stable: **Anchor 1.2.x** (latest: 1.2.1, Oct 2026). CI-tested Solana CLI pairing: 4.1.2.
+- The repo moved to [otter-sec/anchor](https://github.com/otter-sec/anchor); `solana-foundation/anchor` redirects. Crate names (`anchor-lang`, `anchor-cli`, ...) and the npm package (`@anchor-lang/core`) are unchanged.
+- Use AVM (Anchor Version Manager) for reproducible builds. Install AVM from git (`cargo install --git https://github.com/otter-sec/anchor avm --force` — the `avm` crate on crates.io is unrelated), then `avm install latest` / `avm use latest`. AVM supports `avm self-update` and pre-releases (`avm install latest-pre-release`).
+- Keep Solana CLI + Anchor versions aligned in CI and developer setup
+- Pin versions in `Anchor.toml`
+- Anchor 1.1.2 tightened inter-crate pins: keep all `anchor-*` crates on the exact same version
+- `anchor build --arch <sbpf-arch> --tools-version <platform-tools>` (1.2.0+) selects the SBPF architecture and platform-tools version for the build
+
+## Compatibility Notes for Anchor 0.32.0
+
+To resolve build conflicts with certain crates in Anchor 0.32.0, run these cargo update commands in your project root:
+
+```bash
+cargo update base64ct --precise 1.6.0
+cargo update constant_time_eq --precise 0.4.1
+cargo update blake3 --precise 1.5.5
+```
+
+Additionally, if you encounter warnings about `solana-program` conflicts, pin the v2 crate line explicitly by adding `solana-program = "2"` to the `[dependencies]` section in your program's `Cargo.toml` file (e.g., `programs/your-program/Cargo.toml`). Anchor 0.32.x is on the Solana **v2** crate ecosystem — do **not** pin `solana-program = "3"` on a 0.32 project; it forces a resolution incompatible with Anchor 0.32's own dependency graph. Bumping all `solana-*` crates to `^3` happens only as part of the v0.32 → v1 migration (see below).
+
+
+## Security Best Practices
+
+### Account Validation
+- Use typed accounts (`Account<'info, T>`) over `UncheckedAccount` when possible
+- Always validate signer requirements explicitly
+- Use `has_one` for ownership relationships
+- Validate PDA seeds and bumps
+
+### CPI Safety
+- Use `Program<'info, T>` to validate CPI targets (prevents arbitrary CPI attacks)
+- Never pass extra privileges to CPI callees
+- Prefer explicit program IDs for known CPIs
+
+### Common Gotchas
+- **Avoid `init_if_needed`**: Permits reinitialization attacks
+- **Legacy IDL formats**: Ensure tooling agrees on format (pre-0.30 vs new spec)
+- **PDA seeds**: Ensure all seed material is stable and canonical
+
+## Testing
+
+- `anchor test` (and `anchor localnet`) default to **Surfpool** as the local network in Anchor 1.0+ — see [../surfpool/overview.md](../surfpool/overview.md)
+- `anchor init` scaffolds a LiteSVM test template by default in Anchor 1.0+
+- Use `NO_DNA=1 anchor test` / `NO_DNA=1 anchor build` when run by an agent
+- Prefer Mollusk or LiteSVM for fast unit tests; Surfpool for integration tests with mainnet state — see [../testing.md](../testing.md)
+
+See [no-dna.org](https://no-dna.org) for the `NO_DNA` standard.
+
+## IDL and Clients
+
+- Treat the program's IDL as a product artifact
+- IDL management uses Program Metadata in Anchor 1.0+ (`anchor idl init` / `anchor idl upgrade`; `anchor idl fetch-historical` in 1.1+)
+- Prefer generating Kit-native clients via Codama
+- The Anchor TS client (`@anchor-lang/core`) works alongside Kit code; for new client work prefer Codama-generated Kit clients
+
+## Migrations
+
+### Anchor v0.32 → v1
+
+- **Dependencies** — bump `anchor-lang` and `anchor-spl` to `^1` (latest: 1.2.1), and all `solana-*` crates to `^3`.
+- **CPI context** — `CpiContext::new` now takes a program ID (`Pubkey`) instead of a program `AccountInfo`. Remove the program account from the accounts struct.
+- **TypeScript** — replace `@coral-xyz/anchor` with `@anchor-lang/core`.
+- **IDL** — IDL management is being moved off program, **mandatory** actions required.
+- **Duplicate mutable accounts** — disallowed by default; annotate intentional cases with the `dup` constraint.
+
+See [anchor/migrating-v0.32-to-v1.md](../anchor/migrating-v0.32-to-v1.md) for the full checklist and before/after examples.
+
+### Anchor 1.0 → 1.1
+
+- anchor-lang MSRV is Rust 1.89; TS package requires Node ≥ 20.18
+- anchor-client supports versioned transactions
+- New: `verifiedBuild` (OtterSec verify.osec.io), multiple named scripts in `Anchor.toml`, `anchor idl fetch-historical`
+- 1.1.2: keep all `anchor-*` crates pinned to the same exact version
+
+### Anchor 1.1 → 1.2
+
+- No entries under Breaking in the 1.2.0 or 1.2.1 CHANGELOG. MSRV stays 1.89, Node stays ≥ 20.18; CI moved to Solana CLI 4.1.2 and Surfpool 1.5.0.
+- Stricter checks that can surface latent bugs: all-zero account discriminators are rejected, `LazyAccount::unload()` re-checks owner and discriminator, and undersized zero-copy data returns an error instead of panicking.
+- Generated CPI and client account metas now honor `is_signer`, so PDA signers work through them.
+- `anchor build` also writes a TypeScript error constants file from the IDL; `anchor-spl` adds pausable mint, `create_native_mint`, `initialize_non_transferable_mint`, `reallocate`, `withdraw_excess_lamports` and `token_metadata_remove_key`, and deprecates the broken `cpi_guard_enable/disable`.
+- 1.2.1 adds the opt-in `solana-v4` feature for the 4.x `solana-*` crates; `solana-v3` stays the default. The two are mutually exclusive, so opting in means `default-features = false, features = ["solana-v4", ...]` on every `anchor-*` dependency. See [compatibility-matrix.md](../compatibility-matrix.md#agave-4x-vs-sdk-crate-versions-oct-2026).
+- `@anchor-lang/core` 1.2.x does not read transaction v1 yet ([#4977](https://github.com/otter-sec/anchor/pull/4977) open); use Kit or Codama clients for v1 flows.
