@@ -69,6 +69,23 @@ describe('BaseDialog keyboard focus (issue 1594)', () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 
+  it('a dialog opened from inside another returns focus to the control in the first', async () => {
+    // Dialog A is still open: its overlay is active and holds the control that opened B.
+    const outer = document.createElement('div');
+    outer.className = 'v-overlay v-overlay--active';
+    const inner = document.createElement('button');
+    outer.appendChild(inner);
+    document.body.appendChild(outer);
+    const { wrapper, leave } = setup();
+    inner.focus();
+    await wrapper.setProps({ isOpen: true });
+    (wrapper.find('.close-button').element as HTMLElement).focus();
+    await wrapper.setProps({ isOpen: false });
+    await nextTick();
+    leave();
+    expect(document.activeElement).toBe(inner);
+  });
+
   it('does nothing when the opener is gone', async () => {
     const { opener, wrapper, leave } = setup();
     await wrapper.setProps({ isOpen: true });
