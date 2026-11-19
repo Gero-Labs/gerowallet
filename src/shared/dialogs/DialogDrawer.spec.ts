@@ -7,6 +7,9 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 import BaseDialog from './BaseDialog.vue';
 import DialogDrawer from './DialogDrawer.vue';
 
+/** BaseDialog names its close button with $t, so the dialog mounts need one. */
+const withDialog = { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } };
+
 /** Every media query answers `wide`: whether the window has room beside the dialog. */
 function windowWide(wide: boolean) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -34,7 +37,7 @@ afterEach(() => { document.body.innerHTML = ''; });
 describe('DialogDrawer', () => {
   it('opens beside the dialog when the window has room, and moves the dialog aside for it', async () => {
     windowWide(true);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
+    mount(InDialog, { attachTo: body(), global: withDialog });
     await flushPromises();
     const drawer = body().querySelector('.base-dialog__drawer-host .dialog-drawer');
     expect(drawer?.textContent).toBe('Drawer');
@@ -45,7 +48,7 @@ describe('DialogDrawer', () => {
 
   it('lets the dialog back to the centre once it closes', async () => {
     windowWide(true);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
+    mount(InDialog, { attachTo: body(), global: withDialog });
     await flushPromises();
     drawerOpen.value = false;
     await flushPromises();
@@ -54,7 +57,7 @@ describe('DialogDrawer', () => {
 
   it('opens in place when the window is too narrow to hold it beside the dialog', async () => {
     windowWide(false);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
+    mount(InDialog, { attachTo: body(), global: withDialog });
     await flushPromises();
     expect(body().querySelector('.base-dialog__drawer-host .dialog-drawer')).toBeNull();
     const drawer = body().querySelector('.dialog-drawer');
