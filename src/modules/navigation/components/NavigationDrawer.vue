@@ -32,7 +32,7 @@
     <!-- Navigation items -->
     <v-list nav density="compact">
       <template :key="index" v-for="(item, index) in items" >
-        <v-list-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" >
+        <v-list-subheader role="listitem" class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" >
           {{ item.header }}
         </v-list-subheader>
 
@@ -159,11 +159,11 @@
         <template #prepend>
           <span class="account-avatar">
             <v-avatar size="40">
-              <v-img v-if="account" :src="avatar" />
+              <v-img v-if="account" :src="avatar" alt="" />
             </v-avatar>
             <v-avatar v-if="account && chainIcon" class="account-chain" size="16" role="img"
               :aria-label="account.chain" :title="account.chain">
-              <v-img :src="chainIcon" />
+              <v-img :src="chainIcon" alt="" />
             </v-avatar>
           </span>
         </template>

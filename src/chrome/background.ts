@@ -774,7 +774,7 @@ async function runAutoLockCheck(): Promise<void> {
         if (!db) throw new Error(`wallet ${walletId} database unavailable`);
         return db.table('config').where({ key }).first();
       },
-      lock: () => walletManager.lock(),
+      lock: () => lockWallet(),
       now: () => Date.now(),
     });
   } catch (error) {
@@ -4531,9 +4531,22 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
   }
 });
 
-app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
+/**
+ * Lock the wallet, then answer every dApp request still waiting in an approval popup
+ * (issue 1592): otherwise the popup falls back to the wallet list and the dApp waits
+ * until the user finds and closes that window. Every lock (the button, auto-lock) goes here.
+ */
+async function lockWallet(): Promise<void> {
   try {
     await walletManager.lock();
+  } finally {
+    Messaging.declinePopupApprovalsOnLock();
+  }
+}
+
+app.addToOptions(MessageTypes.LOCK, async (request, sendResponse) => {
+  try {
+    await lockWallet();
     sendResponse({
       id: request.id,
       data: { success: true },

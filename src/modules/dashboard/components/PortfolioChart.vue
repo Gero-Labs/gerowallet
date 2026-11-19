@@ -24,7 +24,7 @@
             </template>
             <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
           </v-tooltip>
-          <v-btn icon variant="text" size="x-small" @click="handleRefresh" :disabled="isRefreshing">
+          <v-btn icon variant="text" size="x-small" @click="handleRefresh" :disabled="isRefreshing" :aria-label="$t('common.refresh')">
             <v-icon size="small" :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
         </div>
@@ -154,7 +154,7 @@
       <div class="chart-area">
         <!-- Loading State -->
         <div v-if="globalLoading || showHistoryPending" class="loading-container">
-          <v-progress-circular indeterminate color="primary" :size="40" :width="3"></v-progress-circular>
+          <v-progress-circular indeterminate color="primary" :size="40" :width="3" :aria-label="$t('common.loading')"></v-progress-circular>
           <div class="loading-text">{{ showHistoryPending ? $t('dashboard.fetchingWalletHistory') : $t('dashboard.loadingChart') }}</div>
         </div>
 

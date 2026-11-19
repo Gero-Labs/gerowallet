@@ -193,3 +193,41 @@ describe('one request per popup tab', () => {
     expect(next.answers).toEqual([expect.objectContaining({ data: 'signed' })]);
   });
 });
+
+describe('popup approval: the wallet locks while it waits (issue 1592)', () => {
+  it('answers every waiting request with the locked refusal, closes its popup, and ignores a late answer', async () => {
+    const removed: number[] = [];
+    (globalThis as unknown as { chrome: { tabs: { remove: (id: number) => Promise<void> } } }).chrome.tabs.remove = (id: number) => { removed.push(id); return Promise.resolve(); };
+    const first = await request(42);
+    const other = await request(43, 'signData');
+    const { Messaging } = await import('./messaging');
+    const { APPROVAL_LOCKED_MESSAGE } = await import('./config');
+    Messaging.declinePopupApprovalsOnLock();
+    await first.settle();
+    const locked = { code: -3, info: APPROVAL_LOCKED_MESSAGE };
+    expect(first.answers).toEqual([expect.objectContaining({ error: locked })]);
+    expect(other.answers).toEqual([expect.objectContaining({ error: locked })]);
+    expect(removed.sort()).toEqual([42, 43]);
+    // The popup page answering after the lock changes nothing.
+    const popup = popupPort(42);
+    popup.send({ tabId: 42, method: first.METHOD.returnData, data: 'signed' });
+    await first.settle();
+    expect(first.answers).toHaveLength(1);
+    // A second lock has nothing left to answer, and the tab takes a new request.
+    Messaging.declinePopupApprovalsOnLock();
+    const next = await request(42);
+    popupPort(42).send({ tabId: 42, method: next.METHOD.returnData, data: 'signed' });
+    await next.settle();
+    expect(next.answers).toEqual([expect.objectContaining({ data: 'signed' })]);
+  });
+
+  it('a Midnight request gets the connector Rejected shape', async () => {
+    (globalThis as unknown as { chrome: { tabs: { remove: (id: number) => Promise<void> } } }).chrome.tabs.remove = () => Promise.resolve();
+    const { MIDNIGHT_METHOD } = await import('./config');
+    const pending = await request(44, MIDNIGHT_METHOD.connect);
+    const { Messaging } = await import('./messaging');
+    Messaging.declinePopupApprovalsOnLock();
+    await pending.settle();
+    expect(pending.answers).toEqual([expect.objectContaining({ error: expect.objectContaining({ type: 'DAppConnectorAPIError', code: 'Rejected' }) })]);
+  });
+});

@@ -1,4 +1,4 @@
-import { APIError, APPROVAL_BUSY_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, SOLANA_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
+import { APIError, APPROVAL_BUSY_MESSAGE, APPROVAL_LOCKED_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, SOLANA_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { toSolanaPageError } from '@/chains/solana/solanaDappProtocol';
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
@@ -317,6 +317,24 @@ export function toPageReply(response: unknown, requestId: unknown): Record<strin
 
 /** Popup tabs waiting on a request: the method, and how many share it. */
 const popupWaiters = new Map<number, { method: string | undefined; count: number }>();
+/** Every request still waiting in a popup, with what declines it because the wallet locked. */
+const popupLockDecliners = new Set<() => void>();
+
+/**
+ * The refusal for a request still waiting in a popup when the wallet locks: Refused (-3)
+ * for CIP-30 and Bitcoin, Rejected for Midnight, saying the wallet was locked.
+ */
+export function popupLockedError(request: Message): unknown {
+  if (request.method && MIDNIGHT_METHOD_VALUES.has(request.method)) {
+    return {
+      type: 'DAppConnectorAPIError',
+      code: MidnightErrorCode.Rejected,
+      reason: APPROVAL_LOCKED_MESSAGE,
+      message: APPROVAL_LOCKED_MESSAGE,
+    };
+  }
+  return { code: APIError.Refused.code, info: APPROVAL_LOCKED_MESSAGE };
+}
 /** Connect prompts a dApp may fire several times; duplicates share one popup answer. */
 const POPUP_SHARED_METHODS = new Set<string | undefined>([METHOD.enable, MIDNIGHT_METHOD.connect, BITCOIN_METHOD.enable]);
 
@@ -428,9 +446,17 @@ export const Messaging = {
         port.onDisconnect.removeListener(handlers.disconnect);
         bound.delete(port);
       };
+      // A lock answers the dApp at once and closes the popup, which would otherwise
+      // sit on the wallet list with the dApp waiting until the user closed it.
+      const declineOnLock = () => {
+        answer({ target: TARGET, sender: SENDER.extension, error: popupLockedError(request) });
+        void Promise.resolve(chrome.tabs.remove(popupTabId)).catch(() => undefined);
+      };
+      popupLockDecliners.add(declineOnLock);
       const answer = (response: unknown) => {
         if (answered) return;
         answered = true;
+        popupLockDecliners.delete(declineOnLock);
         const entry = popupWaiters.get(popupTabId);
         if (entry && --entry.count <= 0) popupWaiters.delete(popupTabId);
         chrome.runtime.onConnect.removeListener(connectionHandler);
@@ -477,6 +503,14 @@ export const Messaging = {
       chrome.runtime.onConnect.addListener(connectionHandler);
       chrome.tabs.onRemoved.addListener(tabsHandler);
     });
+  },
+  /**
+   * The wallet locked: answer every request still waiting in an approval popup with
+   * the locked refusal and close its popup. Nothing was signed for them, and nothing
+   * can be until the user unlocks and the dApp asks again.
+   */
+  declinePopupApprovalsOnLock: function (): void {
+    for (const decline of [...popupLockDecliners]) decline();
   },
   createInternalController: () => new InternalController(),
   createProxyController: () => {

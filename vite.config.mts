@@ -400,6 +400,12 @@ export default defineConfig(({ command }) => {
           assetFileNames: 'assets/[name][extname]',
           compact: false, // Disable for faster builds
           minifyInternalExports: false, // Disable for faster builds
+          // Merge chunks under 20 KB into a neighbour (issue 1596). With tree-shaking on,
+          // the dashboard entry statically reached ~280 chunks, 200+ of them under 20 KB,
+          // and the page preloaded every one before its load event (612 ms in 2.7.2,
+          // 1,002 ms in 2.8.0). Rollup only merges where no module's side effects would
+          // run differently, so this changes file count, not behaviour.
+          experimentalMinChunkSize: 20_000,
           // Pull the network layer into clearly-named chunks so DevTools XHR
           // stacks read "vendor-axios" / "market-api" instead of attributing
           // requests to whatever unrelated module a shared chunk was named after
@@ -407,6 +413,11 @@ export default defineConfig(({ command }) => {
           manualChunks(id: string) {
             if (id.includes('node_modules/axios')) return 'vendor-axios';
             if (id.includes('/api/market-api')) return 'market-api';
+            // The Help browser smokes (scripts/help-browser/*.cjs) reach these stores'
+            // live singletons by importing ./js/<name>.js, so their chunks keep their
+            // names; experimentalMinChunkSize would otherwise merge them away.
+            const store = /\/src\/stores\/(walletStore|geroStore|featureFlagsStore)\.ts$/.exec(id.replace(/\\/g, '/'));
+            if (store) return store[1];
             return undefined;
           },
         },
