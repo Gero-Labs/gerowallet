@@ -4346,6 +4346,7 @@ export default {
   'portfolio.collectibles': 'Collectibles',
   'portfolio.fundingTitle': 'Your wallet is ready',
   'portfolio.fundingSub': 'Fund it to start trading, staking and earning.',
+  'portfolio.fundingSubMidnight': 'Receive NIGHT to send it and generate DUST for fees.',
   'portfolio.perkStakeHook': 'Rewards every epoch. Funds never leave your wallet.',
   'portfolio.perkCashbackHook': 'ADA back from brands you already shop.',
   'portfolio.perkSpendHook': 'Spend your crypto like cash.',
@@ -6613,6 +6614,8 @@ export default {
   'solana.activity': 'Activity',
   'solana.noActivity': 'No transactions yet',
   'solana.olderActivity': 'Older activity is on Solscan.',
+  'solana.loadOlderFailed': "Couldn't load older transactions.",
+  'solana.detailsOnExplorer': 'Amounts and transfers are on Solscan.',
   'solana.devnetNotice': 'Devnet SOL has no value.',
   'solana.pending': 'Confirming',
 }

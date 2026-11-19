@@ -4243,6 +4243,7 @@ export default {
   'portfolio.collectibles': 'Coleccionables',
   'portfolio.fundingTitle': 'Tu billetera está lista',
   'portfolio.fundingSub': 'Agrega fondos para empezar a operar, hacer staking y ganar.',
+  'portfolio.fundingSubMidnight': 'Recibe NIGHT para enviarlo y generar DUST para las comisiones.',
   'portfolio.perkStakeHook': 'Recompensas en cada época. Los fondos nunca salen de tu billetera.',
   'portfolio.perkCashbackHook': 'ADA de vuelta en las marcas donde ya compras.',
   'portfolio.perkSpendHook': 'Gasta tus cripto como si fueran efectivo.',
@@ -6381,6 +6382,8 @@ export default {
   'solana.activity': 'Actividad',
   'solana.noActivity': 'Aún no hay transacciones',
   'solana.olderActivity': 'La actividad anterior está en Solscan.',
+  'solana.loadOlderFailed': 'No se pudieron cargar las transacciones anteriores.',
+  'solana.detailsOnExplorer': 'Los montos y las transferencias están en Solscan.',
   'solana.devnetNotice': 'El SOL de Devnet no tiene valor.',
   'solana.pending': 'Confirmando',
 }

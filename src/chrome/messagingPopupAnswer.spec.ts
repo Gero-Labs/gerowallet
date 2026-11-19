@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APPROVAL_BUSY_MESSAGE } from './config';
 
 /**
  * A popup approval (sendToPopupInternal) is answered exactly once: by the
@@ -161,7 +162,8 @@ describe('one request per popup tab', () => {
     const first = await request(42);
     const second = await request(42);
     await first.settle();
-    expect(second.answers).toEqual([expect.objectContaining({ error: expect.anything() })]);
+    // Refused, saying the wallet is busy: the generic Refused text reads as a disconnect.
+    expect(second.answers).toEqual([expect.objectContaining({ error: { code: -3, info: APPROVAL_BUSY_MESSAGE } })]);
     const popup = popupPort(42);
     popup.send({ tabId: 42, method: first.METHOD.requestData });
     expect(popup.posted).toHaveLength(1);

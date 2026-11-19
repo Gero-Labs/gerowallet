@@ -335,6 +335,8 @@ import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import { midnightNetworkChipState } from '@/chains/midnight/midnightDataFreshness';
 import { formatInt } from '@/shared/utils/format';
+import { isSolanaWalletEmpty } from '@/shared/utils/solanaWalletEmpty';
+import { isMidnightWalletEmpty } from '@/shared/utils/midnightWalletEmpty';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
@@ -376,16 +378,18 @@ const btcTipHeight = computed(() => {
   return t && isBitcoinTip(t) ? t.height : undefined;
 });
 
-// Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
-// hide the header quick-action buttons — Send/Swap/Perps are dead ends
-// without funds and Buy/Receive live in the FundingCard front and center.
-// Mirrors PortfolioPage's isWalletEmpty semantics; Midnight is excluded
-// because its home never renders the empty state (and its balance does not
-// live in account.controlled_amount).
+// Empty-state home (zero or not-yet-synced balance, any chain): hide the header
+// quick-action buttons — Send/Swap/Perps are dead ends without funds and
+// Buy/Receive live on the home itself (the FundingCard; the Solana home's own
+// Receive). Mirrors PortfolioPage's isWalletEmpty semantics.
 const emptyStateShowing = computed(() => {
-  if (currentPage.value?.path !== '/' || loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+  if (currentPage.value?.path !== '/') {
     return false;
   }
+  // Midnight's balances are its own store's, not a Cardano account.
+  if (isMidnight.value) return isMidnightWalletEmpty(midnightStore.balances);
+  // Solana's balance is Gero Sync's snapshot (walletStore.solana), not a Cardano account.
+  if (isSolana.value) return isSolanaWalletEmpty(walletStore.solana);
   // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
@@ -645,14 +649,13 @@ async function openMiniMode() {
 // It owns both the CSS accent slots and the Vuetify theme, so the local
 // --*-color writer and its watcher that used to sit here are gone.
 
-/** The dashboard backdrop for the logged wallet's chain: its image and framing class.
- *  Solana's waves share Bitcoin's composition (black sky, waves below), so its framing. */
+/** The dashboard backdrop for the logged wallet's chain: its image and framing class. */
 const dashboardBackground = computed(() => {
   switch (loggedWallet.value?.chain) {
     case Blockchain.BITCOIN:
       return { image: assets.bitcoinBg, className: 'bitcoin-background-dashboard' };
     case Blockchain.SOLANA:
-      return { image: assets.solanaBg, className: 'bitcoin-background-dashboard' };
+      return { image: assets.solanaBg, className: 'solana-background-dashboard' };
     case Blockchain.MIDNIGHT:
       return { image: assets.midnightBg, className: 'midnight-background-dashboard' };
     default:
@@ -802,6 +805,18 @@ onBeforeUnmount(() => {
   &[style*='url('] {
     opacity: 0.425;
   }
+}
+
+/* Solana: Cardano's framing and lighting (whole image, lifted a quarter, brightness 0.6,
+   opacity 0.425, faded at the bottom). Its asset has the waves below a black sky, the
+   opposite of the pre-flipped Cardano one, so it is turned 180deg here and the mask runs
+   the other way in the element's own (turned) coordinates: opaque at the visual top. */
+.solana-background-dashboard {
+  @extend .cardano-background-dashboard;
+  aspect-ratio: 3840 / 2153; /* solanaBg.webp native ratio */
+  transform: translate(-50%, -25%) rotate(180deg);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
 }
 
 /* Midnight background — wide cinematic shot with a fade-to-black mask so the

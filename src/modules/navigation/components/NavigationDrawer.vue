@@ -326,7 +326,7 @@ const version = ref('')
 const hasUnlockMethod = ref(false)
 
 const { musicPlaylist, context } = toRefs(musicStore);
-const { loggedWallet, transactions } = toRefs(walletStore);
+const { loggedWallet, transactions, solanaTransactions } = toRefs(walletStore);
 const { transactions: midnightTransactions } = toRefs(midnightStore);
 
 const account = computed(() => {
@@ -363,6 +363,15 @@ function openExternalLink(href?: string) {
 
 const isMidnight = computed(() => {
   return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
+});
+
+/** The logged wallet's history size, from the store its chain keeps it in. */
+const historyCount = computed(() => {
+  switch (loggedWallet.value?.chain) {
+    case Blockchain.MIDNIGHT: return midnightTransactions.value.length;
+    case Blockchain.SOLANA: return solanaTransactions.value?.length ?? 0;
+    default: return transactions.value.length;
+  }
 });
 
 // Nav-bar Gero mark, tinted per chain. Midnight and Bitcoin use their own
@@ -428,8 +437,8 @@ const items = computed((): NavigationItemUnion[] => {
     },
     { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
-    // Midnight tx history lives in midnightStore (walletStore.transactions is Cardano-only).
-    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && (loggedWallet.value?.chain === Blockchain.MIDNIGHT ? midnightTransactions.value.length > 0 : transactions.value.length > 0), notificationDot: hasNewFeaturesInPath(['transactions']) },
+    // Midnight and Solana histories live in their own stores (walletStore.transactions is Cardano/Bitcoin).
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionHistorySupport(loggedWallet.value?.chain, loggedWallet.value?.network) && historyCount.value > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.midnightProofServer'), icon: 'mdi-server-security', link: '/proof-server', enabled: isMidnight.value },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     // RealFi Earn — a yield product, so it sits beside Staking in Financial Hub.
