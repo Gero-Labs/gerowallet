@@ -323,7 +323,7 @@ Cashback. Hardware: Ledger, Trezor, Keystone.
 Use these slash commands when working on this project:
 - `/cardano` — Cardano transactions, staking, native tokens, UTxO model
 - `/bitcoin` — Bitcoin transactions, wallets, Lightning (multi-chain support)
-- `/solana-dev` — Solana keys, transactions, RPC, tokens, wallets, security (vendored from the Solana Foundation, `.claude/skills/solana-dev/VENDORED.md`)
+- `/solana-dev` — Solana keys, transactions, RPC, tokens, wallets, security (vendored from the Solana Foundation, `.claude/skills/solana-dev/VENDORED.md`). Its API examples assume `@solana/kit`; this repo has no `@solana/*` dependency, so `src/chains/solana` code follows its own modules, not those examples
 - `/blockchain-expert` — DeFi, smart contracts, Web3 patterns
 - `/browser-extension-builder` — Chrome extension architecture, Manifest V3, content scripts, messaging
 - `/i18n` — Sync and translate `us.ts`/`de.ts`/`es.ts` language files
