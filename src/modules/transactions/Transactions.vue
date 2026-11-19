@@ -1,6 +1,7 @@
 <template>
   <div class="tx-page">
-    <div class="tx-tabs" role="tablist" :aria-label="$t('transactions.title')">
+    <!-- Solana has no UTxOs: only the history tab. -->
+    <div v-if="!isSolana" class="tx-tabs" role="tablist" :aria-label="$t('transactions.title')">
       <button
         type="button"
         role="tab"
@@ -36,6 +37,12 @@
         @row-click="handleOnTransactionsRowClick"
         :selectedTransaction="transactionInfo"
       />
+      <SolanaTransactionsList
+        v-else-if="isSolana"
+        class="tx-split__list"
+        @row-click="handleOnTransactionsRowClick"
+        :selectedTransaction="transactionInfo"
+      />
       <TransactionsCard
         v-else
         ref="transactionsCard"
@@ -51,12 +58,13 @@
       >
         <MidnightTransactionDetails v-if="isMidnight" :transactionInfo="transactionInfo" />
         <BitcoinTransactionDetails v-else-if="isBitcoin" :transactionInfo="transactionInfo" />
+        <SolanaTransactionDetails v-else-if="isSolana" :transactionInfo="transactionInfo" />
         <TransactionDetails v-else :transactionInfo="transactionInfo" />
       </section>
     </div>
 
     <!-- UTxOs, mounted on first visit -->
-    <div v-if="utxosVisited" v-show="activeTab === 1" class="tx-split" role="tabpanel">
+    <div v-if="utxosVisited && !isSolana" v-show="activeTab === 1" class="tx-split" role="tabpanel">
       <MidnightUtxosTable
         v-if="isMidnight"
         class="tx-split__list"
@@ -105,6 +113,8 @@ import MidnightUtxosTable from '@/modules/transactions/components/MidnightUtxosT
 import MidnightUtxoDetail from '@/modules/transactions/components/MidnightUtxoDetail.vue';
 import BitcoinUtxosTable from '@/modules/transactions/components/BitcoinUtxosTable.vue';
 import BitcoinUtxoDetail from '@/modules/transactions/components/BitcoinUtxoDetail.vue';
+import SolanaTransactionsList from '@/modules/transactions/components/SolanaTransactionsList.vue';
+import SolanaTransactionDetails from '@/modules/transactions/components/SolanaTransactionDetails.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { liveMidnightRow } from '@/modules/transactions/components/midnightTxSelection';
@@ -117,8 +127,9 @@ const route = vmProxy.$route;
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 const isBitcoin = computed(() => walletStore.loggedWallet?.chain === Blockchain.BITCOIN);
+const isSolana = computed(() => walletStore.loggedWallet?.chain === Blockchain.SOLANA);
 
-const activeTab = ref(route.query?.['tab'] === 'utxos' ? 1 : 0);
+const activeTab = ref(route.query?.['tab'] === 'utxos' && !isSolana.value ? 1 : 0);
 const utxosVisited = ref(activeTab.value === 1);
 const isReportDialogOpen = ref(false);
 // Row shape is Cardano's StoredTransaction or Midnight's MidnightTransaction
@@ -150,6 +161,7 @@ const utxoCount = computed(() => {
 });
 
 function selectUtxosTab() {
+  if (isSolana.value) return;
   activeTab.value = 1;
   utxosVisited.value = true;
   markFeatureAsSeen('transactions.utxos');
@@ -176,8 +188,10 @@ const selectTransactionFromQuery = () => {
 
   const found = isMidnight.value
     ? midnightStore.transactions.find((tx) => tx.hash === txId)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    : walletStore.transactions?.find((tx: any) => tx.id === txId);
+    : isSolana.value
+      ? walletStore.solanaTransactions?.find((tx) => tx.signature === txId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : walletStore.transactions?.find((tx: any) => tx.id === txId);
   if (found) {
     transactionInfo.value = found;
     // `?tx=` asks to SEE this transaction. The page is kept alive, so it may
@@ -197,7 +211,7 @@ const selectTransactionFromQuery = () => {
 // Auto-select: query param tx takes priority, then latest transaction.
 // Cardano-only; Midnight's history is followed by the watcher further down.
 watch(() => walletStore.transactions, (transactions) => {
-  if (isMidnight.value) return;
+  if (isMidnight.value || isSolana.value) return;
   if (transactions && transactions.length > 0 && !transactionInfo.value) {
     if (selectTransactionFromQuery()) return;
 
@@ -232,6 +246,29 @@ watch(() => midnightStore.transactions, (transactions) => {
   }
   const live = liveMidnightRow(transactionInfo.value, transactions);
   if (live !== transactionInfo.value) transactionInfo.value = live;
+});
+
+// Solana: Gero Sync's history (walletStore.solanaTransactions, newest first). Select the
+// `?tx=` signature or the newest, and keep a selected row's record current as sync
+// replaces it (a confirming transaction gets its time). Older rows read from Nexus by the
+// list are not in the store: those stay as clicked.
+watch(() => walletStore.solanaTransactions, (transactions) => {
+  if (!isSolana.value || !transactions?.length) return;
+  if (!transactionInfo.value) {
+    if (!selectTransactionFromQuery()) transactionInfo.value = transactions[0];
+    return;
+  }
+  const live = transactions.find((tx) => tx.signature === transactionInfo.value?.signature);
+  if (live && live !== transactionInfo.value) transactionInfo.value = live;
+}, { immediate: true });
+
+// The page is kept alive: switching to or from a Solana wallet drops the other wallet's
+// selection (the rows are a different shape) and the watcher above picks again.
+watch(isSolana, () => {
+  transactionInfo.value = null;
+});
+watch(() => walletStore.loggedWallet?.id, () => {
+  if (isSolana.value) transactionInfo.value = null;
 });
 
 onMounted(() => {
