@@ -6507,6 +6507,8 @@ export default {
   'solana.activity': 'Aktivität',
   'solana.noActivity': 'Noch keine Transaktionen',
   'solana.olderActivity': 'Ältere Aktivität finden Sie auf Solscan.',
+  'solana.loadOlderFailed': 'Ältere Transaktionen konnten nicht geladen werden.',
+  'solana.detailsOnExplorer': 'Beträge und Überweisungen finden Sie auf Solscan.',
   'solana.devnetNotice': 'Devnet-SOL hat keinen Wert.',
   'solana.pending': 'Wird bestätigt',
 }

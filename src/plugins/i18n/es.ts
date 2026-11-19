@@ -6382,6 +6382,8 @@ export default {
   'solana.activity': 'Actividad',
   'solana.noActivity': 'Aún no hay transacciones',
   'solana.olderActivity': 'La actividad anterior está en Solscan.',
+  'solana.loadOlderFailed': 'No se pudieron cargar las transacciones anteriores.',
+  'solana.detailsOnExplorer': 'Los montos y las transferencias están en Solscan.',
   'solana.devnetNotice': 'El SOL de Devnet no tiene valor.',
   'solana.pending': 'Confirmando',
 }

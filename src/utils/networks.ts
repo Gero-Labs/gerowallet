@@ -827,6 +827,15 @@ export default {
     }
     return this.resolveNetwork(chain, network)?.transactionSupport
   },
+  /**
+   * Whether the Transactions page has a history view for this chain: every chain with
+   * transactionSupport, and Solana, whose history page needs no Cardano-shaped send path
+   * (its transactionSupport stays off for those).
+   */
+  resolveTransactionHistorySupport(chain: string, network: string): boolean {
+    return this.resolveTransactionsSupport(chain, network)
+      || (chain === Blockchain.SOLANA && !!this.resolveNetwork(chain, network));
+  },
   resolveSwapSupport(chain: string, network: string): boolean {
     if (!chain || !network) {
       return false

@@ -6614,6 +6614,8 @@ export default {
   'solana.activity': 'Activity',
   'solana.noActivity': 'No transactions yet',
   'solana.olderActivity': 'Older activity is on Solscan.',
+  'solana.loadOlderFailed': "Couldn't load older transactions.",
+  'solana.detailsOnExplorer': 'Amounts and transfers are on Solscan.',
   'solana.devnetNotice': 'Devnet SOL has no value.',
   'solana.pending': 'Confirming',
 }
