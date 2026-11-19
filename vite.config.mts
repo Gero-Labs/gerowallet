@@ -413,6 +413,11 @@ export default defineConfig(({ command }) => {
           manualChunks(id: string) {
             if (id.includes('node_modules/axios')) return 'vendor-axios';
             if (id.includes('/api/market-api')) return 'market-api';
+            // The Help browser smokes (scripts/help-browser/*.cjs) reach these stores'
+            // live singletons by importing ./js/<name>.js, so their chunks keep their
+            // names; experimentalMinChunkSize would otherwise merge them away.
+            const store = /\/src\/stores\/(walletStore|geroStore|featureFlagsStore)\.ts$/.exec(id.replace(/\\/g, '/'));
+            if (store) return store[1];
             return undefined;
           },
         },
