@@ -78,13 +78,15 @@ email-templates/
 *.rar
 *.zip
 
-# Per-developer Claude / superpowers state stays local. The shared contributor
-# skill under .claude/skills/gerowallet-dev/ is the one exception: it ships with
-# the repo so `claude` picks it up on a fresh clone.
+# Per-developer Claude / superpowers state stays local. The shared skills are the
+# exception: the contributor skill (.claude/skills/gerowallet-dev/) and the vendored
+# Solana Foundation skill (.claude/skills/solana-dev/) ship with the repo so `claude`
+# picks them up on a fresh clone.
 .claude/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/gerowallet-dev/
+!.claude/skills/solana-dev/
 .superpowers/
 
 # Local planning and working documents stay on this machine.

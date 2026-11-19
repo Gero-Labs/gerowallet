@@ -1,0 +1,254 @@
+---
+title: Frontend with Solana Kit
+description: Build React and Next.js Solana apps with a Kit plugin client, Wallet Standard connection via @solana/kit-plugin-wallet (+ its React hooks), and @solana/react client bindings.
+---
+
+# Frontend with Solana Kit (Next.js / React)
+
+## Goals
+- One Kit client instance for the app (RPC + wallet + transaction sending)
+- Wallet Standard-first discovery/connect (no wallet-specific adapters)
+- Minimal "use client" footprint in Next.js (hooks only in leaf components)
+- Transaction sending that is observable, cancelable, and UX-friendly
+
+## Recommended dependencies
+- `@solana/kit` (8.3+)
+- `@solana/kit-plugin-rpc` (0.19+ — plans transaction v1), `@solana/kit-plugin-wallet` (0.20+ — reports wallet v1 support; wallet React hooks ship in `@solana/kit-plugin-wallet/react`)
+- `@solana/react` (8+ — Kit client bindings: `ClientProvider`, `useClient`, data hooks)
+- `swr` (peer dep of `@solana/react/swr`) or `@tanstack/react-query` (peer dep of `@solana/react/query`) — pick whichever your app already uses
+- `@solana-program/system`, `@solana-program/token`, `@your-program/codama-client` etc. (only what you need)
+
+`solanaRpc` already bundles transaction planning/sending — you do not need `@solana/kit-plugin-instruction-plan` in apps.
+
+Do **not** use `@solana/client` / `@solana/react-hooks` (framework-kit) for new work — that stack is stale; the maintained path is Kit plugins + `@solana/react`. Do not use `@solana/wallet-adapter-*` for new apps either; Wallet Standard discovery covers modern wallets.
+
+## Bootstrap recommendation
+Prefer `create-solana-dapp` and pick a Kit template for new projects.
+
+## Client setup (Next.js App Router)
+
+Create a single wallet-backed client, export its type, and provide it via `ClientProvider` from `@solana/react`.
+
+Example `app/providers.tsx`:
+
+```tsx
+'use client';
+
+import React from 'react';
+import { createClient } from '@solana/kit';
+import { solanaRpc } from '@solana/kit-plugin-rpc';
+import { walletSigner } from '@solana/kit-plugin-wallet';
+import { ClientProvider } from '@solana/react';
+
+const rpcUrl =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
+
+// One client for the whole app. The connected wallet fills payer + identity.
+// version: 1 — 4096-byte transactions, budget in message.config (see transactions-v1.md).
+export const client = createClient()
+  .use(walletSigner({ chain: 'solana:devnet' }))
+  .use(solanaRpc({ rpcUrl, transactionConfig: { version: 1 } }));
+
+// Export the client type so every useClient<AppClient>() call in the app
+// is fully typed (rpc, wallet, sendTransaction, ...).
+export type AppClient = Awaited<typeof client>;
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return <ClientProvider client={client}>{children}</ClientProvider>;
+}
+```
+
+Then wrap `app/layout.tsx` with `<Providers>`.
+
+## Wallet connection
+
+Use the React hooks from `@solana/kit-plugin-wallet/react` — state hooks (`useWallets`, `useConnectedWallet`, `useWalletStatus`, `useIsWalletReady`), action hooks (`useConnect`, `useDisconnect`, `useSignIn`, `useSignMessage`), `useSelectAccount` (synchronous — returns the bound function, not an action), plus a `WalletReadyGate` component for the discovery warm-up. Every hook takes the wallet-enabled `client` as its first argument:
+
+```tsx
+'use client';
+
+import {
+  useConnect,
+  useConnectedWallet,
+  useDisconnect,
+  useWallets,
+  WalletReadyGate,
+} from '@solana/kit-plugin-wallet/react';
+import type { AppClient } from './providers';
+
+function WalletButton({ client }: { client: AppClient }) {
+  const wallets = useWallets(client);
+  const connected = useConnectedWallet(client);
+  const { dispatch: connect } = useConnect(client);
+  const { dispatch: disconnect } = useDisconnect(client);
+
+  if (!connected) {
+    return wallets.map((wallet) => (
+      <button key={wallet.name} onClick={() => connect(wallet)}>
+        Connect {wallet.name}
+      </button>
+    ));
+  }
+  return (
+    <div>
+      <p>Connected: {connected.account.address}</p>
+      {!connected.supportedTransactionVersions.has(1) && (
+        <p>Update your wallet to send larger (v1) transactions.</p>
+      )}
+      <button onClick={() => disconnect()}>Disconnect</button>
+    </div>
+  );
+}
+
+// Hide wallet UI until Wallet Standard discovery settles
+export const Wallet = ({ client }: { client: AppClient }) => (
+  <WalletReadyGate client={client} fallback={<p>Loading wallets…</p>}>
+    <WalletButton client={client} />
+  </WalletReadyGate>
+);
+```
+
+Outside React (or for imperative flows), the same state is on the client: `client.wallet.getState()` returns `{ wallets, connected, status }` and `client.wallet.connect(wallet)` / `disconnect()` / `selectAccount(account)` drive the connection.
+
+### Transaction version support
+
+`connected.supportedTransactionVersions` (a `ReadonlySet<'legacy' | 0 | 1>` from `@solana/kit-plugin-wallet` 0.20+) says what the connected wallet will sign. **Check `has(1)` before sending from a `version: 1` client** — a wallet that has not shipped v1 rejects the signing request. Two ways to handle a `false`:
+
+- Show an upgrade prompt (as above) and keep the action disabled. Simplest; right when your transactions genuinely need 4096 bytes.
+- Keep a second client with `transactionConfig: { version: 0 }` and route those users through it. Right when the transactions also fit in 1232 bytes.
+
+The set is the intersection across the wallet's signing features, so a version appears only when every signing path accepts it. Wallets that predate versioned transactions report `Set(['legacy'])` — test membership, not emptiness. See [transactions-v1.md](transactions-v1.md#wallets).
+
+## Sending transactions
+
+With the wallet plugin installed, `client.sendTransaction` plans a v1 transaction (per the client's `transactionConfig`), estimates its resource limits, asks the wallet to sign, and sends. Wrap it in `useSendTransaction` from `@solana/react` so pending/error state, abort-on-resend, and stale-while-revalidate come for free instead of hand-rolled `useState`:
+
+```tsx
+'use client';
+
+import { isAddress, sol, solToLamports } from '@solana/kit';
+import { getTransferSolInstruction } from '@solana-program/system';
+import { useConnectedWallet } from '@solana/kit-plugin-wallet/react';
+import { useClient, useSendTransaction } from '@solana/react';
+import type { AppClient } from '@/app/providers';
+
+function TipButton({ to }: { to: string }) {
+  const client = useClient<AppClient>();
+  const connected = useConnectedWallet(client);
+  // The client plans v1; a wallet that cannot sign v1 must not be asked to.
+  const canSendV1 = connected?.supportedTransactionVersions.has(1) ?? false;
+
+  // Each dispatch gets a fresh AbortSignal; resending aborts the in-flight send
+  const { dispatch, isRunning, error, data } = useSendTransaction(client);
+  const signature = data?.context.signature;
+  const recipient = isAddress(to) ? to : null;
+
+  const tip = () => {
+    if (!recipient) return;
+    dispatch([
+      getTransferSolInstruction({
+        source: client.payer,
+        destination: recipient,
+        // `sol()` returns a fixed-point value; instructions take Lamports
+        amount: solToLamports(sol('0.01')),
+      }),
+    ]);
+  };
+
+  return (
+    <>
+      <button disabled={isRunning || !canSendV1 || !recipient} onClick={tip}>
+        {isRunning ? 'Sending…' : error ? 'Retry' : 'Tip 0.01 SOL'}
+      </button>
+      {signature ? <a href={`https://explorer.solana.com/tx/${signature}`}>View</a> : null}
+    </>
+  );
+}
+```
+
+Use `dispatch` in event handlers — it returns `void` and never throws, so it can't produce an unhandled rejection. Use `useSendTransactions` when the instructions may need splitting across transactions, and plain `useAction` for any other async flow (or a send wrapped in extra logic). Full hook semantics are in [kit/react.md](kit/react.md#useplantransaction--useplantransactions--usesendtransaction--usesendtransactions).
+
+## Data fetching and subscriptions
+
+`@solana/react` ships data hooks — `useRequest` (one-shot reads), `useSubscription` (websocket streams), `useTrackedData` (a one-shot read seeded into a subscription, slot-deduped), and `useAction` — plus adapters for SWR (`@solana/react/swr`) and TanStack Query (`@solana/react/query`). Prefer these over hand-rolled polling, and always call `useClient<AppClient>()` with your exported client type. See [kit/react.md](kit/react.md#data-hooks) for the per-hook return shapes and gotchas.
+
+**Balance and other live account data: use `useTrackedDataSWR`.** It fires the initial RPC fetch and the account subscription together, slot-dedupes them so an out-of-order arrival never regresses the displayed value, and routes the result through SWR's cache so every component on the same key shares one connection. A Next.js-shaped hook:
+
+```tsx
+'use client';
+
+import { useMemo } from 'react';
+import { type Address, type Lamports } from '@solana/kit';
+import { useClient } from '@solana/react';
+import { useTrackedDataSWR } from '@solana/react/swr';
+import type { AppClient } from '@/app/providers';
+
+export function useBalance(accountAddress?: Address) {
+  const { rpc, rpcSubscriptions } = useClient<AppClient>();
+
+  // Passing `null` when there is no address is what gates the hook off —
+  // it must be memoized, since spec identity drives teardown and re-run.
+  const spec = useMemo(
+    () =>
+      accountAddress
+        ? {
+            initialValueSource: rpc.getBalance(accountAddress, { commitment: 'confirmed' }),
+            initialValueMapper: (lamports: Lamports) => lamports,
+            streamSource: rpcSubscriptions.accountNotifications(accountAddress, {
+              commitment: 'confirmed',
+            }),
+            streamValueMapper: ({ lamports }: { lamports: Lamports }) => lamports,
+          }
+        : null,
+    [rpc, rpcSubscriptions, accountAddress],
+  );
+
+  const { data, error } = useTrackedDataSWR(
+    accountAddress ? ['balance', accountAddress] : null,
+    spec,
+  );
+
+  return {
+    lamports: data?.value ?? null,
+    isLoading: accountAddress != null && data == null && error == null,
+    error,
+  };
+}
+```
+
+**Multi-cluster apps:** include the cluster in the cache key, and derive it from the same source that built the client — the client is typically rebuilt one render *after* the selection flips, so a key read from selection state binds the new network's fetch to the previous network's `rpc`. The [Kit example app](https://github.com/anza-xyz/kit/blob/main/examples/react-app/src/components/Balance.tsx) stamps `chain` onto the client with `extendClient` and reads it back off `useClient<AppClient>()` to keep the two in lockstep.
+
+Render lamports with the Kit helpers rather than dividing by `1e9`:
+
+```tsx
+import { formatDecimalFixedPoint, lamportsToSol } from '@solana/kit';
+
+const solFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 5 });
+
+function BalanceDisplay({ accountAddress }: { accountAddress: Address }) {
+  const { lamports } = useBalance(accountAddress);
+  if (lamports == null) return <span>&ndash;</span>;
+  return <span>{formatDecimalFixedPoint(solFormatter, lamportsToSol(lamports))} ◎</span>;
+}
+```
+
+For Next.js: keep server components server-side; only leaf components that call hooks should be client components. Server-side reads can use a plain Kit RPC client (no wallet plugin).
+
+## Transaction UX checklist
+
+- Disable inputs while a transaction is pending
+- Provide a signature immediately after send
+- Track confirmation states (processed/confirmed/finalized) based on UX need
+- Gate v1 sends on `connected.supportedTransactionVersions.has(1)`; show an upgrade prompt otherwise
+- Show actionable errors:
+  - user rejected signing
+  - wallet does not support transaction v1 (upgrade the wallet)
+  - insufficient SOL for fees / rent
+  - blockhash expired / dropped
+  - account already in use / already initialized
+  - program error (custom error code)
+
+## Legacy apps
+
+- App built on web3.js v1 + wallet-adapter? Migrate to web3.js v3 (Kit internals, same classes; 3.0 since Oct 2026) first — see [kit-web3-interop.md](kit-web3-interop.md) for routing to the official migration skill — then adopt Kit plugins incrementally.
+- Found `@solana/client` / `@solana/react-hooks` (framework-kit)? Migrate to the Kit plugin client + `@solana/react`: `createClient({ endpoint, walletConnectors })` becomes `createClient().use(walletSigner(...)).use(solanaRpc(...))`, and framework-kit hooks map to the `@solana/kit-plugin-wallet/react` hooks or `client.wallet` state.
