@@ -9,6 +9,7 @@
     scrim="var(--g-canvas)"
     opacity="0.6"
     :content-class="['base-dialog', { 'base-dialog--with-drawer': drawerBeside }]"
+    @after-leave="restoreFocus"
   >
     <v-card class="pa-5 liquid-glass-dialog base-dialog__card" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
       <!-- Decoration, clipped to the card: the rings are a fixed 180px, taller than a
@@ -81,7 +82,7 @@
       <!-- z-index 1, not 999: this only has to sit above the card's own content,
            and it shares a stacking context with .close-button, which uses 1. -->
       <v-progress-linear v-show="loading" indeterminate width="3" style="position: absolute; top: 0; left: 0; z-index: 1;"/>
-      <v-btn icon variant="text" @click="$emit('close')" class="close-button" :disabled="loading">
+      <v-btn icon variant="text" @click="$emit('close')" class="close-button" :disabled="loading" :aria-label="$t('common.close')">
         <v-icon color="var(--g-text-2)">mdi-window-close</v-icon>
       </v-btn>
     </v-card>
@@ -91,7 +92,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue';
+import { computed, provide, ref, watch } from 'vue';
 import { useMediaQuery } from '@vueuse/core';
 import { cssUrl } from '@/shared/utils/cssUrl';
 import { DIALOG_DRAWER_GAP, DIALOG_DRAWER_HOST, DIALOG_DRAWER_WIDTH } from './dialogDrawer';
@@ -213,6 +214,30 @@ provide(DIALOG_DRAWER_HOST, {
     openDrawers.value = next;
   },
 });
+
+// ── Focus back to the opener ──
+// The dialog is opened by `isOpen`, not a Vuetify activator, so Vuetify has nowhere to
+// return focus when it closes and a keyboard user lands at the top of the page. Remember
+// what had focus as it opened, and focus it again once the leave transition ends, unless
+// the user has since moved focus somewhere else or that control is gone.
+let returnFocusTo: HTMLElement | null = null;
+watch(() => props.isOpen, (open) => {
+  if (!open || typeof document === 'undefined') return;
+  const active = document.activeElement;
+  returnFocusTo = active instanceof HTMLElement && active !== document.body ? active : null;
+}, { flush: 'sync', immediate: true });
+
+function restoreFocus() {
+  const target = returnFocusTo;
+  returnFocusTo = null;
+  if (!target || !target.isConnected) return;
+  // Focus left on the page body, or inside an overlay that has since closed (this
+  // dialog's own content), is "nowhere": anything else is the user's own choice.
+  const active = document.activeElement;
+  const stranded = !active || active === document.body || !active.isConnected
+    || (!!active.closest('.v-overlay') && !active.closest('.v-overlay--active'));
+  if (stranded) target.focus({ preventScroll: true });
+}
 
 const isDialogOpen = computed({
   get() {
