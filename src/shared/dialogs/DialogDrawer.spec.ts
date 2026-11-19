@@ -34,7 +34,7 @@ afterEach(() => { document.body.innerHTML = ''; });
 describe('DialogDrawer', () => {
   it('opens beside the dialog when the window has room, and moves the dialog aside for it', async () => {
     windowWide(true);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()] } });
+    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
     await flushPromises();
     const drawer = body().querySelector('.base-dialog__drawer-host .dialog-drawer');
     expect(drawer?.textContent).toBe('Drawer');
@@ -45,7 +45,7 @@ describe('DialogDrawer', () => {
 
   it('lets the dialog back to the centre once it closes', async () => {
     windowWide(true);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()] } });
+    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
     await flushPromises();
     drawerOpen.value = false;
     await flushPromises();
@@ -54,7 +54,7 @@ describe('DialogDrawer', () => {
 
   it('opens in place when the window is too narrow to hold it beside the dialog', async () => {
     windowWide(false);
-    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()] } });
+    mount(InDialog, { attachTo: body(), global: { plugins: [createTestVuetify()], config: { globalProperties: { $t: (key: string) => key } as never } } });
     await flushPromises();
     expect(body().querySelector('.base-dialog__drawer-host .dialog-drawer')).toBeNull();
     const drawer = body().querySelector('.dialog-drawer');
