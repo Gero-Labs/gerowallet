@@ -8,7 +8,7 @@ import { join } from 'node:path';
  * that check runs inside the page's renderer process, so it is not a trust
  * boundary on its own.
  *
- * A new `app.add(METHOD.* | BITCOIN_METHOD.* | MIDNIGHT_METHOD.*)` handler fails
+ * A new `app.add(METHOD.* | BITCOIN_METHOD.* | MIDNIGHT_METHOD.* | SOLANA_METHOD.*)` handler fails
  * this test until it gates on `WalletStore.isWhitelisted(...)` (or one of the
  * shared gates below), or is added to EXEMPT with a reason.
  */
@@ -18,12 +18,13 @@ const SHARED_GATES = ['isWhitelisted(', 'requireMidnightProvingOrigin(', 'handle
 const EXEMPT: Record<string, string> = {
   'MIDNIGHT_METHOD.getConnectionStatus': 'public by design: reports connected/disconnected and network id',
   'MIDNIGHT_METHOD.hintUsage': 'no-op that resolves void',
+  'SOLANA_METHOD.available': 'public by design: whether the page may offer Gero to Solana dApps (the isSolanaEnabled flag)',
 };
 
 function handlers(): Array<{ name: string; body: string }> {
   const source = readFileSync(join(__dirname, 'background.ts'), 'utf8');
   const out: Array<{ name: string; body: string }> = [];
-  const re = /\napp\.add\(((?:METHOD|BITCOIN_METHOD|MIDNIGHT_METHOD)\.\w+),/g;
+  const re = /\napp\.add\(((?:METHOD|BITCOIN_METHOD|MIDNIGHT_METHOD|SOLANA_METHOD)\.\w+),/g;
   const starts: Array<{ name: string; index: number }> = [];
   for (let m = re.exec(source); m; m = re.exec(source)) starts.push({ name: m[1], index: m.index });
   for (const s of starts) {

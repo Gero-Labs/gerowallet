@@ -6617,5 +6617,13 @@ export default {
   'solana.loadOlderFailed': "Couldn't load older transactions.",
   'solana.detailsOnExplorer': 'Amounts and transfers are on Solscan.',
   'solana.devnetNotice': 'Devnet SOL has no value.',
+  'solana.dapp.seeAddress': 'See your Solana address',
+  'solana.dapp.askToSign': 'Ask you to sign messages (each one needs your approval)',
+  'solana.dapp.signMessageTitle': 'Sign message',
+  'solana.dapp.messageNotText': "This message isn't readable text. Only sign it if you trust this site.",
+  'solana.dapp.messageUnreadable': "Gero can't show this message, so it can't be signed.",
+  'solana.dapp.messageSendsNothing': 'Signing a message sends no transaction and costs nothing.',
+  'solana.dapp.walletTypeUnsupported': "This wallet can't sign Solana messages.",
+  'solana.dapp.signingFailed': "Couldn't sign the message. Try again.",
   'solana.pending': 'Confirming',
 }

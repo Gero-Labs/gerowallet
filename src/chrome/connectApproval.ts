@@ -27,7 +27,7 @@ export function isConnectApproval(response: { data?: unknown } | null | undefine
 }
 
 /** Side-panel methods whose approval may name an account to connect. */
-const CONNECT_METHODS = new Set(['enable', 'midnight_connect']);
+const CONNECT_METHODS = new Set(['enable', 'midnight_connect', 'solana_connect']);
 
 /**
  * The side panel refuses an approval answered after the active wallet changed.

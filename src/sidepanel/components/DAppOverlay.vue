@@ -2,7 +2,7 @@
   <BottomSheet
     :model-value="isVisible"
     variant="trust"
-    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect' || currentRequest?.method === 'wcSessionProposal') ? '70%' : '85%'"
+    :height="(currentRequest?.method === 'enable' || currentRequest?.method === 'midnight_connect' || currentRequest?.method === 'solana_connect' || currentRequest?.method === 'wcSessionProposal') ? '70%' : '85%'"
     @escape="onEscapeReject"
   >
     <div v-if="currentRequest" class="dapp-overlay">
@@ -542,6 +542,116 @@
             {{ $t('miniGero.approve') }}
           </v-btn>
         </div>
+      </div>
+
+      <!-- Solana: Connect (Wallet Standard standard:connect) -->
+      <div v-else-if="currentRequest.method === 'solana_connect'" class="dapp-connect">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-web</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.connectRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(enableDomain).sub }}</span><b class="dapp-root">{{ splitHost(enableDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div v-if="splitHost(enableDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
+        </div>
+
+        <div class="permissions-section mb-4">
+          <p class="t-label mb-2">{{ $t('navigation.allowTheSiteTo') }}</p>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('solana.dapp.seeAddress') }}</span>
+          </div>
+          <div class="permission-row">
+            <v-icon size="14" class="permission-check">mdi-check</v-icon>
+            <span class="t-body-sm">{{ $t('solana.dapp.askToSign') }}</span>
+          </div>
+        </div>
+
+        <ConnectAccountPicker v-model="connectAccountId" :accounts="connectAccounts" :logged-id="connectLoggedId" class="mb-4" />
+
+        <div class="action-buttons">
+          <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaConnect">{{ $t('miniGero.reject') }}</v-btn>
+          <v-btn class="geroButton" rounded variant="flat" @click="approveSolanaConnect">
+            {{ $t('miniGero.approve') }}
+          </v-btn>
+        </div>
+      </div>
+
+      <!-- Solana: Sign Message (Wallet Standard solana:signMessage) -->
+      <div v-else-if="currentRequest.method === 'solana_signMessage'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-file-sign</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('solana.dapp.signMessageTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <!-- The exact bytes the worker will sign (it refuses anything that is a transaction). -->
+        <div class="sign-data-message">
+          <p v-if="!solanaMessage" class="decode-error text-caption">{{ $t('solana.dapp.messageUnreadable') }}</p>
+          <p v-else-if="solanaMessage.kind === 'text'" class="white--text text-caption" style="word-break: break-word;">{{ solanaMessage.text }}</p>
+          <template v-else>
+            <p class="warning--text text-caption mb-1">{{ $t('solana.dapp.messageNotText') }}</p>
+            <p class="white--text text-caption g-mono" style="word-break: break-all;">{{ solanaMessage.hex }}</p>
+          </template>
+        </div>
+        <p class="grey--text text-caption mb-3">{{ $t('solana.dapp.messageSendsNothing') }}</p>
+
+        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            variant="outlined" density="compact" theme="dark"
+            class="password-input"
+            @click:append-inner="showPassword = !showPassword"
+            @keyup.enter="signSolanaMessageNormal"
+          />
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              variant="flat"
+              :loading="signing"
+              :disabled="!spendingPassword || !solanaMessage"
+              @click="signSolanaMessageNormal"
+            >
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaMessage" @click="signSolanaMessagePrf">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
       </div>
 
       <!-- Midnight: Sign Data (DApp Connector signData()) -->
@@ -1226,6 +1336,8 @@ import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview'
 import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import { Messaging } from '@/chrome/messaging';
+import { SolanaDappErrorCode, bytesFromWire, encodeSolanaPanelError } from '@/chains/solana/solanaDappProtocol';
+import { SOLANA_SIGN_MESSAGE_MAX_BYTES, describeSolanaMessage, solanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
@@ -1276,6 +1388,8 @@ interface SignTxResponse { success: boolean; error?: string; signatures?: Array<
 // approval protocol. Individual signing branches still validate their payload.
 interface ApprovalPayload {
   website?: string;
+  /** Solana signMessage: the bytes to sign, as a plain array. */
+  solanaMessage?: unknown;
   favIconUrl?: string;
   tx?: string;
   partialSign?: boolean;
@@ -1338,6 +1452,8 @@ function queuedItemMethod(item: DAppRequest): string {
     midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
     midnight_makeIntent: 'miniGero.intentRequest',
     wcSessionProposal: 'miniGero.connectRequest',
+    solana_connect: 'miniGero.connectRequest',
+    solana_signMessage: 'solana.dapp.signMessageTitle',
   };
   return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
 }
@@ -3066,6 +3182,100 @@ function midnightError(code: string, reason: string): string {
   return JSON.stringify({ type: 'DAppConnectorAPIError', code, reason, message: reason });
 }
 
+// ── Solana (Wallet Standard connect and signMessage) ──────────────────────
+// The worker owns the connection write and the account switch (as for `enable`); the panel
+// only answers. A decline is a JSON-encoded Solana error (the port carries a string).
+const solanaDeclined = () => encodeSolanaPanelError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
+
+function approveSolanaConnect() {
+  approve(connectApproval());
+}
+
+function rejectSolanaConnect() {
+  approval.invalidate();
+  reject(solanaDeclined());
+}
+
+/** The message as the worker will sign it: its text, or hex for bytes that are not text. */
+const solanaMessageBytes = computed(() => {
+  const bytes = bytesFromWire(currentRequest.value?.payload?.solanaMessage, SOLANA_SIGN_MESSAGE_MAX_BYTES);
+  return bytes && !solanaSignMessageRefusal(bytes) ? bytes : null;
+});
+const solanaMessage = computed(() => (solanaMessageBytes.value ? describeSolanaMessage(solanaMessageBytes.value) : null));
+
+function rejectSolanaSignMessage() {
+  approval.invalidate();
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(solanaDeclined());
+}
+
+async function signSolanaMessageWith(credentials: { password?: string; prfSecret?: number[] }): Promise<void> {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) throw new StaleApprovalError();
+  const bytes = solanaMessageBytes.value;
+  if (!currentRequest.value || !bytes) return;
+  const res = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SIGN_SOLANA_MESSAGE,
+    data: { message: Array.from(bytes), ...credentials },
+  })), approvalCurrent) as { data?: { success: boolean; signature?: number[]; error?: string } };
+  if (!res?.data?.success || !res.data.signature) throw new Error(res?.data?.error || 'Failed to sign the message');
+  approve(res.data.signature);
+}
+
+async function signSolanaMessageNormal() {
+  return approval.run(async () => {
+    if (!spendingPassword.value) return;
+    signing.value = true;
+    signError.value = '';
+    try {
+      await signSolanaMessageWith({ password: spendingPassword.value });
+      spendingPassword.value = '';
+    } catch (e: unknown) {
+      if (e instanceof StaleApprovalError) return;
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('solana.dapp.signingFailed');
+    } finally {
+      signing.value = false;
+    }
+  });
+}
+
+async function signSolanaMessagePrf() {
+  return approval.run(async () => {
+    signing.value = true;
+    signError.value = '';
+    try {
+      // Raw PRF output, as the Solana send decrypts its phrase with it (walletBg.withSolanaKeypair).
+      window.open(chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth'), 'PassKeyAuth', 'width=400,height=500,popup=1');
+      const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+        const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+        const handler = (event: MessageEvent) => {
+          if (event.origin !== extensionOrigin || event.data?.type !== 'PASSKEY_AUTH_RESULT') return;
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        };
+        window.addEventListener('message', handler);
+        setTimeout(() => {
+          window.removeEventListener('message', handler);
+          rejectPromise(new Error('PassKey authentication timed out'));
+        }, 60000);
+      });
+      try {
+        await signSolanaMessageWith({ prfSecret: Array.from(prfBytes) });
+      } finally {
+        prfBytes.fill(0);
+      }
+    } catch (e: unknown) {
+      if (e instanceof StaleApprovalError) return;
+      signError.value = (e instanceof Error ? friendlyDappTxError(e) : '') || t('solana.dapp.signingFailed');
+    } finally {
+      signing.value = false;
+    }
+  });
+}
+
 function approveMidnightConnect() {
   // Whitelisting the origin (WalletStore.addConnectedDapp) happens in
   // background.ts's MIDNIGHT_METHOD.connect handler once it reads the
@@ -3096,6 +3306,10 @@ function onEscapeReject() {
   if (midnightWritesPaused.value && MIDNIGHT_PAUSABLE_METHODS.has(currentRequest.value?.method ?? '')) {
     // Same answer as Close: the dapp learns why, not that the user declined.
     declineMidnightWhilePaused();
+  } else if (currentRequest.value?.method === 'solana_connect') {
+    rejectSolanaConnect();
+  } else if (currentRequest.value?.method === 'solana_signMessage') {
+    rejectSolanaSignMessage();
   } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {

@@ -19,6 +19,11 @@ This folder is the chain core. Wallet create/restore, Gero Sync and the screens 
   - `SEND_SOLANA` takes only the recipient, lamports and fee level. The worker reads the sender, balance and price itself and applies `checkSolTransfer` (`solanaSendRules.ts`, the same rules the dialog shows): a valid address that is not the wallet's own, a known balance, the fee counted, no leftover below the rent-exempt minimum, and no new recipient account opened below it.
   - It then takes a recent blockhash from Nexus `chain/tip`, signs in `WalletBg.signSolanaTransfer` (phrase → key at the record's account, refused unless it gives the record's address, wiped after) and submits through Nexus.
   - Pages see an error code only (`solanaSendErrorKey`), never server text. `SUBMIT_FAILED` tells the user to check their activity before retrying, because the transaction may have landed.
+- **dApp connection, phase 1** (behind `isSolanaEnabled`; the worker reads it from the flag mirror):
+  - `chrome/injectSolana.ts` registers Gero as a Wallet Standard wallet (never `window.solana`) once `SOLANA_METHOD.available` says the flag is on: `standard:connect` / `disconnect` / `events` and `solana:signMessage`. `solana:signTransaction` is listed because the wallet adapter only shows wallets that have it; it refuses with code 4200 until transaction signing lands.
+  - `SOLANA_METHOD.connect` answers a connected site with the account at once, never prompts a `silent` call, and otherwise parks a side-panel prompt (with the account picker) as Midnight's connect does. Connections are the account's own `connected_dapps` rows.
+  - `SOLANA_METHOD.signMessage` is for a connected site and the connected account only. `solanaSignMessage.ts` refuses empty, oversized and transaction-shaped bytes (a signature over a transaction message signs that transaction) in the handler, in the panel's `SIGN_SOLANA_MESSAGE` and in `WalletBg.signSolanaMessage`. The worker checks the panel's signature against the account's key and the exact bytes before the dApp gets it.
+  - Errors reach the page as Errors with Phantom's codes (`solanaDappProtocol.ts`: 4001 declined, 4100 not connected, 4200 unsupported).
 - Imports of this folder from code in the background bundle are static, never `await import()`: an inlined dynamic-import namespace can be read before it is declared (`scripts/check-bundle-tdz.mjs`).
 
 | File | What it does |
@@ -30,6 +35,8 @@ This folder is the chain core. Wallet create/restore, Gero Sync and the screens 
 | `solanaTransaction.ts` | Native SOL transfer: hand-encoded legacy message (SystemProgram transfer, optional ComputeBudget limit and price), ed25519 signing, fee estimate. |
 | `solanaSendRules.ts` | The rules a SOL send must pass, fee levels, Max, and the page text for each error code. Shared by the dialog and the worker. |
 | `solanaExplorer.ts` | Solscan links, only for a well-formed signature or address. |
+| `solanaSignMessage.ts` | What a dApp may have signed as a message: refuses transaction-shaped bytes; text or hex for the prompt. |
+| `solanaDappProtocol.ts` | dApp error codes and shapes, Wallet Standard chain ids, byte-array checks. No dependencies (page bundle). |
 | `solanaWireSync.ts` | Gero Sync `SOLANA` messages → transactions, balance, tokens, cursor. Contract: gero-sync `docs/solana-wire.md`. |
 
 `src/api/solana-api.ts` is the Nexus `/api/sol` client. It calls Nexus directly with the device JWT, as the Midnight client does; device tokens carry `SOLANA_READ`/`SOLANA_WRITE`. Realtime updates come from Gero Sync, and this client covers on-demand reads, fees and submit.

@@ -1,4 +1,5 @@
-import { APIError, APPROVAL_BUSY_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
+import { APIError, APPROVAL_BUSY_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, SOLANA_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
+import { toSolanaPageError } from '@/chains/solana/solanaDappProtocol';
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
 import { claimedOriginMatchesSender } from './originBinding';
@@ -104,8 +105,12 @@ export function popupBusyError(request: Message): unknown {
  * callers keep the `{code, info}` object they expect.
  */
 export function toPageError(method: string, error: unknown): unknown {
+  if (SOLANA_METHOD_VALUES.has(method)) return toSolanaPageError(error);
   return MIDNIGHT_METHOD_VALUES.has(method) ? toMidnightConnectorError(error) : error;
 }
+
+/** Solana dApp methods: the page gets an Error carrying `code` (solanaDappProtocol.ts). */
+const SOLANA_METHOD_VALUES: ReadonlySet<string> = new Set(Object.values(SOLANA_METHOD));
 
 /**
  * Generic wrapper for responses from background script
@@ -555,6 +560,11 @@ export const Messaging = {
         request.method === MIDNIGHT_METHOD.makeTransfer ||
         request.method === MIDNIGHT_METHOD.balanceUnsealedTransaction ||
         request.method === MIDNIGHT_METHOD.makeIntent ||
+        // Solana: `available` gates the page's own registration, `connect` is its own
+        // approval gate, and `signMessage` checks the whitelist in its handler.
+        request.method === SOLANA_METHOD.available ||
+        request.method === SOLANA_METHOD.connect ||
+        request.method === SOLANA_METHOD.signMessage ||
         bitcoinFastPath
       ) {
         Messaging.sendToBackground({

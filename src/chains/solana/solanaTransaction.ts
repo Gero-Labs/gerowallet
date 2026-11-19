@@ -85,6 +85,20 @@ export function buildSolTransferMessage(params: SolTransferParams): Uint8Array {
   );
 }
 
+/** ed25519 signature of `bytes` with a 32-byte seed (dApp `solana:signMessage`). */
+export function signSolanaBytes(bytes: Uint8Array, secretKey: Uint8Array): Uint8Array {
+  return ed25519.sign(bytes, secretKey);
+}
+
+/** Whether `signature` is `publicKey`'s ed25519 signature of `bytes`; false for malformed input. */
+export function verifySolanaSignature(signature: Uint8Array, bytes: Uint8Array, publicKey: Uint8Array): boolean {
+  try {
+    return signature.length === 64 && publicKey.length === 32 && ed25519.verify(signature, bytes, publicKey);
+  } catch {
+    return false;
+  }
+}
+
 /** Signs a single-signer message. Returns the signature and the serialized transaction. */
 export function signSolanaMessage(message: Uint8Array, secretKey: Uint8Array): { signature: string; transaction: Uint8Array } {
   const signature = ed25519.sign(message, secretKey);
