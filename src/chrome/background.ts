@@ -1948,7 +1948,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
     const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx, chrome.runtime.getURL('index.html'));
     if (decision.action === 'busy') {
-      return signTxReply({ error: popupBusyError(request) as ReplyOpts['error'] });
+      return signTxReply({ error: popupBusyError(request) });
     }
     for (const t of popupTabs) {
       if (t.url && decision.closeTabUrls.includes(t.url) && typeof t.windowId === 'number') {
