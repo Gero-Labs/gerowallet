@@ -39,6 +39,7 @@
         :base-url="baseUrl"
         :token-in="tokenIn"
         :token-out="resolvedTokenOut"
+        :locale="widgetLocale"
       />
 
       <!-- Keystone QR sign dialog — the SAME component + wiring SwapSheet.vue uses
@@ -369,6 +370,9 @@ const canMerge = computed(() =>
 const mergeOffered = computed(() => mergeNeeded.value && canMerge.value);
 // The drawer holds the offer and then the merge landing: named for the merge, it fits both.
 const mergeDrawerLabel = computed(() => String(i18n.t('swap.mergeTitle')));
+// The widget renders its own copy (issue 1591): hand it the wallet's language
+// ('us' | 'de' | 'es'; the widget maps 'us' to English), and follow a change.
+const widgetLocale = computed(() => i18n.locale);
 
 function swapUtxos(): Cardano.Utxo[] {
   return paymentUtxos((walletStore.utxos ?? []) as Cardano.Utxo[], walletStore.collateral as Cardano.Utxo | null | undefined, walletStore.transactions);

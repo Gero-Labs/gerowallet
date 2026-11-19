@@ -75,6 +75,21 @@ describe('GeroSwapEmbed', () => {
     expect(typeof el.resolveToken).toBe('function');
   });
 
+  it('hands the widget the wallet language and follows a change (issue 1591)', async () => {
+    const before = i18n.locale;
+    try {
+      i18n.locale = 'us';
+      const wrapper = mount(GeroSwapEmbed, { props: { tokenOut: 'SNEK' } });
+      const el = wrapper.find('gero-swap').element;
+      expect(el.getAttribute('locale')).toBe('us');
+      i18n.locale = 'de';
+      await wrapper.vm.$nextTick();
+      expect(el.getAttribute('locale')).toBe('de');
+    } finally {
+      i18n.locale = before;
+    }
+  });
+
   it('forwards arbitrary token units, including native lovelace, as token-in', async () => {
     const tokenIn = '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
     const wrapper = mount(GeroSwapEmbed, { props: { tokenIn, tokenOut: 'lovelace' } });
