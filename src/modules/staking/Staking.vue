@@ -18,9 +18,10 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ $t('staking.earnRewardsByStakingDesc') }}
-                  {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with
-                  {{ loggedWallet?.chain }}'s extensive network of stake pools.
+                  {{ $t('staking.earnRewardsByStakingDesc', {
+                    currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                    chain: loggedWallet?.chain,
+                  }) }}
                 </v-list-item-subtitle>
               </div>
               <div class="staking-gero-support ma-0 g-list-action" v-if="geroPoolExists && !delegatingToGero">
