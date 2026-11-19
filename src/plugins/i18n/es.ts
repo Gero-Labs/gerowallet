@@ -6385,5 +6385,13 @@ export default {
   'solana.loadOlderFailed': 'No se pudieron cargar las transacciones anteriores.',
   'solana.detailsOnExplorer': 'Los montos y las transferencias están en Solscan.',
   'solana.devnetNotice': 'El SOL de Devnet no tiene valor.',
+  'solana.dapp.seeAddress': 'Ver tu dirección de Solana',
+  'solana.dapp.askToSign': 'Pedirte que firmes mensajes (cada uno necesita tu aprobación)',
+  'solana.dapp.signMessageTitle': 'Firmar mensaje',
+  'solana.dapp.messageNotText': 'Este mensaje no es texto legible. Fírmalo solo si confías en este sitio.',
+  'solana.dapp.messageUnreadable': 'Gero no puede mostrar este mensaje, así que no se puede firmar.',
+  'solana.dapp.messageSendsNothing': 'Firmar un mensaje no envía ninguna transacción y no tiene costo.',
+  'solana.dapp.walletTypeUnsupported': 'Esta billetera no puede firmar mensajes de Solana.',
+  'solana.dapp.signingFailed': 'No se pudo firmar el mensaje. Inténtalo de nuevo.',
   'solana.pending': 'Confirmando',
 }

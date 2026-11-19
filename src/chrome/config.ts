@@ -194,6 +194,17 @@ export const MidnightErrorCode = {
   InsufficientFunds: 'InsufficientFunds',
 } as const;
 
+// Solana dApp connection (Wallet Standard, src/chrome/injectSolana.ts), behind the
+// `isSolanaEnabled` flag. `available` and `connect` reach the background without the
+// relay's isWhitelisted pre-check: `available` only says whether the page may offer Gero,
+// and `connect`'s own handler is the approval gate. `signMessage` checks the whitelist in
+// its handler (it is fast-pathed to keep the dApp's gesture for sidePanel.open).
+export const SOLANA_METHOD = {
+  available: 'solana_available',
+  connect: 'solana_connect',
+  signMessage: 'solana_signMessage',
+};
+
 export const BITCOIN_METHOD = {
   enable: 'bitcoin_enable',
   isEnabled: 'bitcoin_isEnabled',

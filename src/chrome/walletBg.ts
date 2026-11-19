@@ -100,6 +100,8 @@ import { InvalidAccountIndexError, cardanoAccountPath, deriveSigningAccountKey, 
 import { isSameWalletKey } from '@/db/walletIdentity';
 // Static (see gero-db.ts): no inlined dynamic-import namespace in the background bundle.
 import { deriveSolanaKeypairFromMnemonic } from '@/chains/solana/solanaKeyManager';
+import { solanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
+import { signSolanaBytes } from '@/chains/solana/solanaTransaction';
 import { buildSignedSolTransfer, type SolTransferParams } from '@/chains/solana/solanaTransaction';
 import type { MidnightDerivedKeys } from '@/chains/midnight/midnightKeyManager';
 // Static, not dynamic: walletBg and this module land in the same background
@@ -2305,7 +2307,32 @@ export class WalletBg {
     password?: string,
     prfSecret?: Uint8Array,
   ): Promise<{ signature: string; base64: string }> {
-    if (this.chain !== Blockchain.SOLANA) throw new Error('signSolanaTransfer called on a non-Solana wallet');
+    return this.withSolanaKeypair(password, prfSecret, (keypair) =>
+      buildSignedSolTransfer({ ...params, from: keypair.address }, keypair.secretKey));
+  }
+
+  /**
+   * Signs a dApp's approved `solana:signMessage` bytes (ed25519 over the raw bytes) with this
+   * record's account. Bytes that parse as a Solana transaction are refused here too, whatever
+   * the caller checked: a signature over them would be a valid transaction signature.
+   */
+  async signSolanaMessage(message: Uint8Array, password?: string, prfSecret?: Uint8Array): Promise<Uint8Array> {
+    const refusal = solanaSignMessageRefusal(message);
+    if (refusal) throw new Error(`Solana message refused: ${refusal}`);
+    return this.withSolanaKeypair(password, prfSecret, (keypair) => signSolanaBytes(message, keypair.secretKey));
+  }
+
+  /**
+   * Runs `use` with this record's Solana keypair (software wallets: password or PassKey). The
+   * key is derived from the recovery phrase at `m/44'/501'/accountIndex'/0'` and must give the
+   * address the record stores, so a mismatched record never signs. The secret key is wiped after.
+   */
+  private async withSolanaKeypair<T>(
+    password: string | undefined,
+    prfSecret: Uint8Array | undefined,
+    use: (keypair: { address: string; secretKey: Uint8Array }) => T,
+  ): Promise<T> {
+    if (this.chain !== Blockchain.SOLANA) throw new Error('Solana signing called on a non-Solana wallet');
     let mnemonic: string;
     if (this.encryptionMethod === 'prf') {
       if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
@@ -2324,7 +2351,7 @@ export class WalletBg {
       if (!isSameWalletKey(Blockchain.SOLANA, keypair.address, this.publicKey)) {
         throw new InvalidAccountIndexError('The signing key does not belong to this account');
       }
-      return buildSignedSolTransfer({ ...params, from: keypair.address }, keypair.secretKey);
+      return use(keypair);
     } finally {
       keypair.secretKey.fill(0);
     }

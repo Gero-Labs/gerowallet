@@ -18,7 +18,7 @@ import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
 import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, SOLANA_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { ownExtension } from '@/chrome/senderTrust';
@@ -145,6 +145,18 @@ import {
 } from '@/chains/midnight/midnightConnectorIntent';
 import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
 import { isNewTopDocument, ParkedConnects, takeParkedRequests } from '@/chrome/midnightParkedPrompts';
+import {
+  SolanaDappErrorCode,
+  bytesFromWire,
+  encodeSolanaPanelError,
+  parseSolanaPanelError,
+  solanaChainId,
+  solanaDappError,
+  type SolanaDappErrorShape,
+} from '@/chains/solana/solanaDappProtocol';
+import { SOLANA_SIGN_MESSAGE_MAX_BYTES, solanaSignMessageRefusal, type SolanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
+import { verifySolanaSignature } from '@/chains/solana/solanaTransaction';
+import { base58Decode } from '@/chains/solana/solanaBase58';
 import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
 import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
@@ -4044,6 +4056,182 @@ app.addToOptions(MessageTypes.SEND_SOLANA, async (request, sendResponse) => {
   } catch (error) {
     console.error('Solana send failed:', solanaSendErrorCode(error));
     sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// Solana dApp connection, phase 1 (Wallet Standard: connect and signMessage; the page side
+// is injectSolana.ts). Behind the `isSolanaEnabled` flag: with it off the page registers
+// nothing and every method here refuses. Prompts park in the side panel as Midnight's do
+// (parkMidnightRequest). Connections live in the Solana account's own `connected_dapps`.
+// ═════════════════════════════════════════════════════════════════════════
+
+async function isSolanaDappEnabled(): Promise<boolean> {
+  try {
+    return (await readFeatureFlagMirror())['isSolanaEnabled'] === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The logged, unlocked Solana wallet, or the error a dApp gets instead. */
+function solanaDappWallet(): { wallet: NonNullable<ReturnType<typeof walletManager.getWallet>> } | { error: SolanaDappErrorShape } {
+  const wallet = walletManager.getWallet();
+  if (!wallet || wallet.chain !== Blockchain.SOLANA) {
+    return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'No Solana wallet is active in Gero') };
+  }
+  if (walletStore.isLocked) return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'Gero is locked') };
+  return { wallet };
+}
+
+const SOLANA_NOT_AVAILABLE = solanaDappError(SolanaDappErrorCode.Unauthorized, 'Solana is not available in Gero');
+const SOLANA_USER_REJECTED = solanaDappError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
+
+/** The parked Solana prompts (connect, signMessage) a tab's navigation settles. */
+const PARKED_SOLANA_METHODS: ReadonlySet<string> = new Set([SOLANA_METHOD.connect, SOLANA_METHOD.signMessage]);
+
+/** One parked connect prompt per tab and site; a dApp's repeated connect() joins it. */
+const parkedSolanaConnects = new ParkedConnects<ReplyOpts>();
+
+// A new top document is not the page that asked: its parked prompts end unanswered, and a
+// connect approved there would connect a site no longer on screen (as for Midnight).
+function settleSolanaPromptsOnNavigation(details: { tabId: number; frameId: number; documentLifecycle?: string }): void {
+  if (!isNewTopDocument(details)) return;
+  parkedSolanaConnects.forgetTab(details.tabId);
+  const taken = takeParkedRequests(pendingDAppRequests, details.tabId, PARKED_SOLANA_METHODS);
+  if (!taken.length) return;
+  const encoded = encodeSolanaPanelError(SolanaDappErrorCode.Unauthorized, 'The page left before the request was answered');
+  taken.forEach((entry) => entry.resolve({ error: encoded }));
+  syncDappRequestBadge();
+}
+chrome.webNavigation?.onCommitted?.addListener(settleSolanaPromptsOnNavigation);
+
+app.add(SOLANA_METHOD.available, (request, sendResponse) => {
+  void isSolanaDappEnabled().then((enabled) => {
+    sendResponse({ id: request.id, data: enabled, target: TARGET, sender: SENDER.extension });
+  });
+  return true;
+});
+
+/**
+ * Wallet Standard `standard:connect`. An already connected site gets the account at once; a
+ * `silent` call never prompts. Otherwise the side panel asks, with the account picker; the
+ * account the user picks is switched to (connectApproved) and is the one returned.
+ */
+app.add(SOLANA_METHOD.connect, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  void (async (): Promise<ReplyOpts> => {
+    if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };
+    const active = solanaDappWallet();
+    if ('error' in active) return { error: active.error };
+    const { wallet } = active;
+    if (WalletStore.isWhitelisted(origin)) {
+      return { data: { address: wallet.publicKey, chain: solanaChainId(wallet.network) } };
+    }
+    if ((data as { silent?: unknown } | undefined)?.silent === true) {
+      return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'This site is not connected') };
+    }
+    const tabId = send.tab?.id;
+    if (typeof tabId !== 'number') return { error: solanaDappError(SolanaDappErrorCode.Internal, 'No tab context for this request') };
+    const payload = promptSite(origin, send);
+    return parkedSolanaConnects.join(tabId, origin, () => parkMidnightRequest(SOLANA_METHOD.connect, payload, tabId)
+      .then(async (response: BackgroundResponse): Promise<ReplyOpts> => {
+        const approval = readConnectApproval(response);
+        if (!approval) return { error: SOLANA_USER_REJECTED };
+        if (!(await connectApproved(approval, wallet.id, origin))) {
+          return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Could not switch to the chosen account') };
+        }
+        // The picked account, which connectApproved has made the logged one.
+        const now = walletManager.getWallet();
+        if (!now || now.chain !== Blockchain.SOLANA) {
+          return { error: solanaDappError(SolanaDappErrorCode.Internal, 'The chosen account is not a Solana account') };
+        }
+        return { data: { address: now.publicKey, chain: solanaChainId(now.network) } };
+      })
+      .catch((err): ReplyOpts => ({
+        error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, 'Failed to complete the connection request')),
+      })));
+  })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to complete the connection request') }));
+  return true;
+});
+
+function solanaMessageRefusalText(refusal: SolanaSignMessageRefusal): string {
+  switch (refusal) {
+    case 'EMPTY': return 'The message is empty';
+    case 'TOO_LARGE': return 'The message is too large';
+    case 'LOOKS_LIKE_TRANSACTION': return 'This is a transaction, not a message: Gero will not sign it through signMessage';
+  }
+}
+
+/**
+ * Wallet Standard `solana:signMessage`, for a connected site and the connected account only.
+ * Bytes that parse as a transaction are refused before any prompt (a signature over them would
+ * sign that transaction). The panel's signature is checked against the account's key and the
+ * exact bytes before the dApp gets it, and only while the same account is still logged.
+ */
+app.add(SOLANA_METHOD.signMessage, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  void (async (): Promise<ReplyOpts> => {
+    if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };
+    if (!WalletStore.isWhitelisted(origin)) {
+      return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'This site is not connected') };
+    }
+    const active = solanaDappWallet();
+    if ('error' in active) return { error: active.error };
+    const { wallet } = active;
+    const { address, message } = (data ?? {}) as { address?: unknown; message?: unknown };
+    if (address !== wallet.publicKey) {
+      return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'That account is not connected') };
+    }
+    const bytes = bytesFromWire(message, SOLANA_SIGN_MESSAGE_MAX_BYTES + 1);
+    if (!bytes) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, 'message must be bytes') };
+    const refusal = solanaSignMessageRefusal(bytes);
+    if (refusal) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, solanaMessageRefusalText(refusal)) };
+    const tabId = send.tab?.id;
+    if (typeof tabId !== 'number') return { error: solanaDappError(SolanaDappErrorCode.Internal, 'No tab context for this request') };
+
+    const payload = { ...promptSite(origin, send), address: wallet.publicKey, solanaMessage: Array.from(bytes) };
+    try {
+      const response = await parkMidnightRequest(SOLANA_METHOD.signMessage, payload, tabId);
+      const signature = bytesFromWire((response as { data?: unknown } | undefined)?.data, 64);
+      const still = walletManager.getWallet();
+      if (!still || still.id !== wallet.id || !WalletStore.isWhitelisted(origin)) {
+        return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'The wallet changed before the message was signed') };
+      }
+      if (!signature || !verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))) {
+        return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign the message') };
+      }
+      return { data: { signature: Array.from(signature) } };
+    } catch (err) {
+      return { error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign the message')) };
+    }
+  })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign the message') }));
+  return true;
+});
+
+/** The side panel signs an approved `solana:signMessage` (password or PassKey); checked again here. */
+app.addToOptions(MessageTypes.SIGN_SOLANA_MESSAGE, async (request, sendResponse) => {
+  if (refuseSettingsWhileLocked(request, sendResponse)) return;
+  const fail = (error: string) => sendResponse({ id: request.id, data: { success: false, error }, target: TARGET, sender: SENDER.extension });
+  const wallet = walletManager.getWallet();
+  if (!wallet || wallet.chain !== Blockchain.SOLANA) return fail('No Solana wallet is active');
+  const { message, password, prfSecret } = (request.data ?? {}) as { message?: unknown; password?: unknown; prfSecret?: unknown };
+  const bytes = bytesFromWire(message, SOLANA_SIGN_MESSAGE_MAX_BYTES);
+  if (!bytes || solanaSignMessageRefusal(bytes)) return fail('This message cannot be signed');
+  if (password !== undefined && typeof password !== 'string') return fail('Invalid request');
+  const prf = prfSecret === undefined ? undefined : bytesFromWire(prfSecret, 1024);
+  if (prf === null) return fail('Invalid request');
+  try {
+    const signature = await wallet.signSolanaMessage(bytes, password as string | undefined, prf);
+    sendResponse({ id: request.id, data: { success: true, signature: Array.from(signature) }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    // The panel shows its own text; a wrong password reads as such there.
+    debugLog('Solana message signing failed:', errorMessage(error));
+    fail(errorMessage(error) ?? 'Signing failed');
+  } finally {
+    prf?.fill(0);
   }
 });
 

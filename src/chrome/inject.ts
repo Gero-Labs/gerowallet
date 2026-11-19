@@ -41,6 +41,8 @@ import { CHROME_WEB_STORE_URL } from '@/config/storeLinks';
 import { BITCOIN_DAPP_ENABLED } from './bitcoinDappGate';
 // Installs window.midnight[uuid] as a side effect of import (see file).
 import './injectMidnight';
+// Registers Gero as a Solana Wallet Standard wallet when the isSolanaEnabled flag is on (see file).
+import './injectSolana';
 
 declare global {
   interface Window {

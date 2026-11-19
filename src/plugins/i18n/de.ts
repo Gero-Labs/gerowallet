@@ -6510,5 +6510,13 @@ export default {
   'solana.loadOlderFailed': 'Ältere Transaktionen konnten nicht geladen werden.',
   'solana.detailsOnExplorer': 'Beträge und Überweisungen finden Sie auf Solscan.',
   'solana.devnetNotice': 'Devnet-SOL hat keinen Wert.',
+  'solana.dapp.seeAddress': 'Ihre Solana-Adresse sehen',
+  'solana.dapp.askToSign': 'Sie um das Signieren von Nachrichten bitten (jede braucht Ihre Zustimmung)',
+  'solana.dapp.signMessageTitle': 'Nachricht signieren',
+  'solana.dapp.messageNotText': 'Diese Nachricht ist kein lesbarer Text. Signieren Sie sie nur, wenn Sie dieser Website vertrauen.',
+  'solana.dapp.messageUnreadable': 'Gero kann diese Nachricht nicht anzeigen, daher kann sie nicht signiert werden.',
+  'solana.dapp.messageSendsNothing': 'Das Signieren einer Nachricht sendet keine Transaktion und kostet nichts.',
+  'solana.dapp.walletTypeUnsupported': 'Diese Wallet kann keine Solana-Nachrichten signieren.',
+  'solana.dapp.signingFailed': 'Die Nachricht konnte nicht signiert werden. Versuchen Sie es erneut.',
   'solana.pending': 'Wird bestätigt',
 }
