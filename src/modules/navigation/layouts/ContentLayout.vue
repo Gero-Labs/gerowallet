@@ -384,8 +384,7 @@ const btcTipHeight = computed(() => {
 // Receive would be nowhere) and their balances do not live in
 // account.controlled_amount.
 const emptyStateShowing = computed(() => {
-  const chain = loggedWallet.value?.chain;
-  if (currentPage.value?.path !== '/' || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA) {
+  if (currentPage.value?.path !== '/' || isMidnight.value || isSolana.value) {
     return false;
   }
   // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.

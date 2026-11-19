@@ -9,6 +9,8 @@ const layout = readFileSync(resolve(__dirname, 'ContentLayout.vue'), 'utf8').rep
 describe('Solana header quick actions', () => {
   it('never hides the quick-action buttons for a Solana wallet', () => {
     const body = layout.match(/const emptyStateShowing = computed\(\(\) => \{([\s\S]*?)\n\}\);/)?.[1] ?? '';
-    expect(body).toMatch(/if \(currentPage\.value\?\.path !== '\/' \|\| chain === Blockchain\.MIDNIGHT \|\| chain === Blockchain\.SOLANA\) \{\s*return false;/);
+    // The first early return of the computed must cover Solana, however the condition is written.
+    const earlyReturn = body.match(/if \(([^{]*)\) \{\s*return false;/)?.[1] ?? '';
+    expect(earlyReturn).toMatch(/isSolana\.value|Blockchain\.SOLANA/);
   });
 });
