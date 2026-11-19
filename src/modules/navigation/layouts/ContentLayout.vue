@@ -376,14 +376,16 @@ const btcTipHeight = computed(() => {
   return t && isBitcoinTip(t) ? t.height : undefined;
 });
 
-// Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
+// Empty-state home (any chain but Midnight and Solana, zero or not-yet-synced balance):
 // hide the header quick-action buttons — Send/Swap/Perps are dead ends
 // without funds and Buy/Receive live in the FundingCard front and center.
-// Mirrors PortfolioPage's isWalletEmpty semantics; Midnight is excluded
-// because its home never renders the empty state (and its balance does not
-// live in account.controlled_amount).
+// Mirrors PortfolioPage's isWalletEmpty semantics; Midnight and Solana are
+// excluded because their homes never render the empty state (so Send and
+// Receive would be nowhere) and their balances do not live in
+// account.controlled_amount.
 const emptyStateShowing = computed(() => {
-  if (currentPage.value?.path !== '/' || loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+  const chain = loggedWallet.value?.chain;
+  if (currentPage.value?.path !== '/' || chain === Blockchain.MIDNIGHT || chain === Blockchain.SOLANA) {
     return false;
   }
   // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
