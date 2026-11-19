@@ -133,6 +133,15 @@ html .v-tooltip > .v-overlay__content .t-caption,
 html .v-tooltip > .v-overlay__content .t-body-sm {
   color: var(--g-text-1);
 }
+/* A closed tooltip leaves its overlay root in the page: a full-viewport element with
+   role="tooltip" whose only content is hidden, which assistive tech and axe
+   (aria-tooltip-name, issue 1595) read as a tooltip with no name. Hide the root once its
+   content has finished hiding (after the leave transition, so the fade still plays).
+   The activator's aria-describedby still reads the text: a description may come from
+   hidden content. */
+html .v-overlay.v-tooltip:not(.v-overlay--active):has(> .v-overlay__content[style*="display: none"]) {
+  display: none;
+}
 /* Ramp text inside an alert keeps the alert's tone (its status colour, or a
    screen's readability override): the ramp sets the size, the alert the colour. */
 html .v-alert :is(.t-body, .t-body-sm, .t-caption) {
