@@ -12,6 +12,13 @@ export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-11
  * CIP-113 refusal. Here, not in marketAllowance.ts, so pages can read it without importing the
  * worker's allowance state.
  */
+/**
+ * The refusal a dApp gets for a request made while another of its requests is still waiting
+ * for approval. Refused (-3) as CIP-30 asks, with text that says the wallet is busy: the
+ * generic Refused text ("wallet disconnects") makes a dApp drop its connection.
+ */
+export const APPROVAL_BUSY_MESSAGE = 'Another request is waiting for approval in Gero. Answer it, then try again.';
+
 export const NFT_MARKET_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign a market transaction that was not prepared and checked by this wallet';
 
 /**

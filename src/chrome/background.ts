@@ -18,7 +18,7 @@ import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
 import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, APPROVAL_BUSY_MESSAGE, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, NFT_MARKET_SIGN_REFUSAL_MESSAGE, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { ownExtension } from '@/chrome/senderTrust';
@@ -1948,7 +1948,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
     const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx, chrome.runtime.getURL('index.html'));
     if (decision.action === 'busy') {
-      return signTxReply({ error: APIError.Refused });
+      return signTxReply({ error: { code: APIError.Refused.code, info: APPROVAL_BUSY_MESSAGE } });
     }
     for (const t of popupTabs) {
       if (t.url && decision.closeTabUrls.includes(t.url) && typeof t.windowId === 'number') {

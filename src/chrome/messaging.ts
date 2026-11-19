@@ -1,4 +1,4 @@
-import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
+import { APIError, APPROVAL_BUSY_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
 import { claimedOriginMatchesSender } from './originBinding';
@@ -78,6 +78,22 @@ function popupDisconnectedError(request: Message): unknown {
     };
   }
   return APIError.Refused;
+}
+
+/**
+ * The refusal for a request made while the approval popup still waits on another one.
+ * Same shapes as popupDisconnectedError, with the busy text instead of "disconnects".
+ */
+export function popupBusyError(request: Message): unknown {
+  if (request.method && MIDNIGHT_METHOD_VALUES.has(request.method)) {
+    return {
+      type: 'DAppConnectorAPIError',
+      code: MidnightErrorCode.Rejected,
+      reason: APPROVAL_BUSY_MESSAGE,
+      message: APPROVAL_BUSY_MESSAGE,
+    };
+  }
+  return { code: APIError.Refused.code, info: APPROVAL_BUSY_MESSAGE };
 }
 
 /**
@@ -394,7 +410,7 @@ export const Messaging = {
     return new Promise((resolve) => {
       const waiting = popupWaiters.get(popupTabId);
       if (waiting && !(waiting.method === request.method && POPUP_SHARED_METHODS.has(request.method))) {
-        resolve({ target: TARGET, sender: SENDER.extension, error: popupDisconnectedError(request) });
+        resolve({ target: TARGET, sender: SENDER.extension, error: popupBusyError(request) });
         return;
       }
       popupWaiters.set(popupTabId, { method: request.method, count: (waiting?.count ?? 0) + 1 });
