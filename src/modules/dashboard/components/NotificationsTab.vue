@@ -32,7 +32,7 @@
             </template>
           </v-col>
           <v-col cols="3" style="display: flex;">
-            <ToggleSwitch :key="browserSwitchKey" text-left="OFF" text-right="ON" font-size="10px" v-model="browserOn" :disabled="busy || serverDisabled" style="margin: auto" />
+            <ToggleSwitch :key="browserSwitchKey" :label="$t('notify.browser.title')" text-left="OFF" text-right="ON" font-size="10px" v-model="browserOn" :disabled="busy || serverDisabled" style="margin: auto" />
           </v-col>
         </v-row>
 
@@ -54,7 +54,7 @@
             <span v-if="walletError" class="helper my-0 d-block mt-1 error--text">{{ walletError }}</span>
           </v-col>
           <v-col cols="3" style="display: flex;">
-            <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="walletOn" :disabled="walletDisabled" style="margin: auto" />
+            <ToggleSwitch :label="$t('notify.wallet.title')" text-left="OFF" text-right="ON" font-size="10px" v-model="walletOn" :disabled="walletDisabled" style="margin: auto" />
           </v-col>
         </v-row>
 
@@ -81,7 +81,7 @@
                 </button>
               </v-col>
               <v-col cols="3" style="display: flex;">
-                <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :model-value="!categoriesOff.includes(cat.id)" :disabled="busy" @update:model-value="(on) => setCategory(cat.id, on)" style="margin: auto" />
+                <ToggleSwitch :label="cat.label" text-left="OFF" text-right="ON" font-size="10px" :model-value="!categoriesOff.includes(cat.id)" :disabled="busy" @update:model-value="(on) => setCategory(cat.id, on)" style="margin: auto" />
               </v-col>
             </v-row>
             <template v-if="showTypes">
@@ -96,7 +96,7 @@
                   <!-- A switched-off category silences its alerts whatever their own setting: say so with a
                        chip instead of a greyed switch that would still read ON. The alert's own setting is kept. -->
                   <span v-if="categoriesOff.includes(cat.id)" class="t-label notify-type__chip">{{ $t('notify.types.off') }}</span>
-                  <ToggleSwitch v-else text-left="OFF" text-right="ON" font-size="10px" :model-value="!typesOff.includes(ty.id)" :disabled="busy" @update:model-value="(on) => setType(ty.id, on)" style="margin: auto" />
+                  <ToggleSwitch v-else :label="$t(`notify.type.${ty.id}.title`)" text-left="OFF" text-right="ON" font-size="10px" :model-value="!typesOff.includes(ty.id)" :disabled="busy" @update:model-value="(on) => setType(ty.id, on)" style="margin: auto" />
                 </v-col>
               </v-row>
             </template>

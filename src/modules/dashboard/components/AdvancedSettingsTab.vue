@@ -7,7 +7,7 @@
           <span class="helper my-0">{{ $t('settings.shopEarnPopupsHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="cashbackPopups" style="margin: auto" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="cashbackPopups" :label="$t('settings.shopEarnPopups')" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -16,7 +16,7 @@
           <span class="helper my-0">{{ $t('settings.txAutoSubmitHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="txAutoSubmit" style="margin: auto" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="txAutoSubmit" :label="$t('settings.txAutoSubmit')" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row
@@ -34,7 +34,7 @@
           <span class="helper my-0">{{ $t('settings.autoWithdrawRewardsHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="autoWithdrawRewards" style="margin: auto" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="autoWithdrawRewards" :label="$t('settings.autoWithdrawRewards')" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -48,7 +48,7 @@
           <span class="helper my-0">{{ $t('settings.extensionClickActionHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="FULL" text-right="MINI" font-size="10px" v-model="openMiniGeroOnClick" style="margin: auto" />
+          <ToggleSwitch text-left="FULL" text-right="MINI" font-size="10px" v-model="openMiniGeroOnClick" :label="$t('settings.extensionClickAction')" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -57,7 +57,7 @@
           <span class="helper my-0">{{ $t('settings.walletListBalancesHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="walletListBalances" style="margin: auto" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="walletListBalances" :label="$t('settings.walletListBalances')" style="margin: auto" />
         </v-col>
       </v-row>
       <!-- Only rendered when the dock could exist at all: with both flags off
@@ -68,7 +68,7 @@
           <span class="helper my-0">{{ $t('settings.supportChatButtonHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="supportChatButton" style="margin: auto" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="supportChatButton" :label="$t('settings.supportChatButton')" style="margin: auto" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
