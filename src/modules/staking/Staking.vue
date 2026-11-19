@@ -14,7 +14,7 @@
                   <v-spacer></v-spacer>
                   <div class="staking-pro-toggle">
                     <p class="mr-5 my-auto">{{ $t('staking.pro') }}</p>
-                    <v-switch inset density="compact" v-model="isPro" hide-details class="staking-switch"> </v-switch>
+                    <v-switch inset density="compact" v-model="isPro" hide-details class="staking-switch" :aria-label="$t('staking.pro')"> </v-switch>
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>

@@ -284,7 +284,7 @@
           </v-list-item-subtitle>
         </div>
         <div class="my-0 g-list-action">
-          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="websiteProtection" />
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="websiteProtection" :label="$t('settings.websiteProtection')" />
         </div>
       </v-list-item>
     </v-list>

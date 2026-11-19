@@ -278,7 +278,7 @@
                 transition="none"
               >
                 <template v-slot:activator="{ props: activatorProps }">
-                  <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
+                  <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn" :aria-label="$t('common.filter')">
                     <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || !showSolada || hasCustomColumns" dot color="primary" overlap>
                       <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>

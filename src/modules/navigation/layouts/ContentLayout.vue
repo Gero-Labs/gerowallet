@@ -101,6 +101,7 @@
                           <v-progress-linear
                             v-if="!compactNav && !isMidnight && !isBitcoin && !isSolana"
                             class="epoch-progress-liquid-glass"
+                            :aria-label="t('dashboard.epoch')"
                             height="8"
                             :buffer-value="isMidnight ? 100 : epochSlotPercentage"
                             :model-value="isMidnight ? 100 : epochSlotPercentage"
@@ -162,7 +163,7 @@
                       transition="none"
                     >
                       <template v-slot:activator="{ props: activatorProps }">
-                        <v-btn class="ml-4 toolbar-icon-btn" icon variant="text" v-bind="activatorProps">
+                        <v-btn class="ml-4 toolbar-icon-btn" icon variant="text" v-bind="activatorProps" :aria-label="t('navigation.notifications')">
                           <v-badge :model-value="bellState.visible" :content="bellState.content" :dot="bellState.dot" :color="bellState.color" text-color="var(--g-on-grad)">
                             <v-icon size="20">mdi-bell-outline</v-icon>
                           </v-badge>
@@ -182,7 +183,7 @@
 
                     <v-tooltip location="bottom" content-class="custom-tooltip">
                       <template v-slot:activator="{ props: activatorProps }">
-                        <v-btn icon variant="text" class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="toggleHideBalances()">
+                        <v-btn icon variant="text" class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="toggleHideBalances()" :aria-label="hideBalances ? t('dashboard.showBalances') : t('dashboard.hideBalances')">
                           <v-icon size="20">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
                         </v-btn>
                       </template>
