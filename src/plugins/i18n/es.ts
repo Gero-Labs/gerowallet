@@ -3177,7 +3177,7 @@ export default {
   'staking.drepDelegationRequiredTitle': 'Se requiere delegar a un DRep',
   'staking.unstakeDrepRequiredDesc': 'Al cancelar el registro de staking se retiran tus recompensas pendientes, y en Cardano las recompensas solo se pueden retirar mientras estés delegando a un DRep. Primero delega a un DRep y luego cancela el registro de staking.',
   'staking.earnRewards': 'Gana recompensas haciendo staking de tus',
-  'staking.earnRewardsByStakingDesc': 'Gana recompensas haciendo staking de tus tokens ADA con la amplia red de pools de staking de Cardano.',
+  'staking.earnRewardsByStakingDesc': 'Gana recompensas haciendo staking de tus tokens {currency} con la amplia red de pools de staking de {chain}.',
   'staking.epoch': 'Época',
   'staking.epochParametersNotAvailable': 'Parámetros de época no disponibles',
   'staking.epochYield': 'Rendimiento por época',

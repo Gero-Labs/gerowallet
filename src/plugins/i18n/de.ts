@@ -3797,7 +3797,7 @@ export default {
   'staking.drepDelegationRequiredTitle': 'DRep-Delegation erforderlich',
   'staking.unstakeDrepRequiredDesc': 'Beim Unstaking werden deine ausstehenden Belohnungen eingelöst. Auf Cardano können Belohnungen nur abgehoben werden, solange du an eine DRep delegiert bist. Delegiere zuerst an eine DRep und starte das Unstaking danach erneut.',
   'staking.earnRewards': 'Verdiene Belohnungen, indem du deine',
-  'staking.earnRewardsByStakingDesc': 'Verdiene Belohnungen, indem du deine ADA-Token beim umfangreichen Netzwerk von Stake-Pools von Cardano einsetzt.',
+  'staking.earnRewardsByStakingDesc': 'Verdiene Belohnungen, indem du deine {currency}-Token beim umfangreichen Netzwerk von Stake-Pools von {chain} einsetzt.',
   'staking.epoch': 'Epoche',
   'staking.epochParametersNotAvailable': 'Epoche-Parameter nicht verfügbar',
   'staking.epochYield': 'Epoche-Ertrag',

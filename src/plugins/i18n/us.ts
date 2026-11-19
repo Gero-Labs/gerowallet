@@ -3244,7 +3244,7 @@ export default {
   'staking.drepDelegationRequiredTitle': 'DRep Delegation Required',
   'staking.unstakeDrepRequiredDesc': 'Unstaking claims your pending rewards, and on Cardano rewards can only be withdrawn while delegated to a DRep. Delegate to a DRep first, then unstake.',
   'staking.earnRewards': 'Earn rewards by staking your',
-  'staking.earnRewardsByStakingDesc': 'Earn rewards by staking your ADA tokens with Cardano\'s extensive network of stake pools.',
+  'staking.earnRewardsByStakingDesc': 'Earn rewards by staking your {currency} tokens with {chain}\'s extensive network of stake pools.',
   'staking.epoch': 'Epoch',
   'staking.epochParametersNotAvailable': 'Epoch parameters not available',
   'staking.epochYield': 'Epoch Yield',
