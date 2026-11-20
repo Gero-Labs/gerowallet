@@ -134,6 +134,54 @@ describe('Gero Solana wallet features', () => {
     expect(bridge.solanaSignIn).toHaveBeenLastCalledWith(undefined);
   });
 
+  describe('account switches in Gero', () => {
+    const OTHER = base58Encode(new Uint8Array(32).fill(6));
+    const signal = () => window.dispatchEvent(new CustomEvent('gerowalletsolanaAccountChange'));
+
+    it('tells a connected page about the new account it is connected to', async () => {
+      const { mod } = await loadAndCollect();
+      const wallet: any = mod.geroSolanaWallet;
+      await wallet.features['standard:connect'].connect();
+      const changes: any[] = [];
+      wallet.features['standard:events'].on('change', (p: any) => changes.push(p));
+      bridge.solanaConnect.mockClear().mockResolvedValue({ address: OTHER, chain: 'solana:devnet' });
+      signal();
+      await vi.waitFor(() => expect(changes).toHaveLength(1));
+      // A silent connect: the switch never opens a prompt.
+      expect(bridge.solanaConnect).toHaveBeenCalledWith(true);
+      expect(changes[0].accounts.map((a: any) => a.address)).toEqual([OTHER]);
+      expect(wallet.accounts[0].publicKey).toEqual(new Uint8Array(32).fill(6));
+    });
+
+    it('disconnects the page when the new account is not connected to the site', async () => {
+      const { mod } = await loadAndCollect();
+      const wallet: any = mod.geroSolanaWallet;
+      await wallet.features['standard:connect'].connect();
+      const changes: any[] = [];
+      wallet.features['standard:events'].on('change', (p: any) => changes.push(p));
+      bridge.solanaConnect.mockRejectedValue(Object.assign(new Error('This site is not connected'), { code: 4100 }));
+      signal();
+      await vi.waitFor(() => expect(changes).toEqual([{ accounts: [] }]));
+    });
+
+    it('leaves a page that is not connected alone, and stays quiet when nothing changed', async () => {
+      const { mod } = await loadAndCollect();
+      const wallet: any = mod.geroSolanaWallet;
+      bridge.solanaConnect.mockClear();
+      signal();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(bridge.solanaConnect).not.toHaveBeenCalled();
+
+      await wallet.features['standard:connect'].connect();
+      const changes: unknown[] = [];
+      wallet.features['standard:events'].on('change', (p: unknown) => changes.push(p));
+      signal();
+      await vi.waitFor(() => expect(bridge.solanaConnect).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(changes).toEqual([]);
+    });
+  });
+
   it('signs and sends, returning the signature', async () => {
     const { mod } = await loadAndCollect();
     const wallet: any = mod.geroSolanaWallet;
