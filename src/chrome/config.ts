@@ -199,6 +199,14 @@ export const MidnightErrorCode = {
 // relay's isWhitelisted pre-check: `available` only says whether the page may offer Gero,
 // and `connect`'s own handler is the approval gate. `signMessage` checks the whitelist in
 // its handler (it is fast-pathed to keep the dApp's gesture for sidePanel.open).
+/**
+ * The page event (`gerowallet` + this) that tells Gero's Solana wallet in every tab that the
+ * logged account may have changed. It carries nothing, not even the new address: a connected page
+ * re-reads its account with a silent connect, which only answers a site connected to the new
+ * account. So the content relay passes it without the whitelist check other events get.
+ */
+export const SOLANA_ACCOUNT_SIGNAL = 'solanaAccountChange';
+
 export const SOLANA_METHOD = {
   available: 'solana_available',
   connect: 'solana_connect',

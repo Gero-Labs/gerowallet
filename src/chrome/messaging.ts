@@ -1,4 +1,4 @@
-import { APIError, APPROVAL_BUSY_MESSAGE, APPROVAL_LOCKED_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, SOLANA_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
+import { APIError, APPROVAL_BUSY_MESSAGE, APPROVAL_LOCKED_MESSAGE, BITCOIN_METHOD, MIDNIGHT_METHOD, SOLANA_ACCOUNT_SIGNAL, SOLANA_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { toSolanaPageError } from '@/chains/solana/solanaDappProtocol';
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
@@ -531,6 +531,13 @@ export const Messaging = {
           !response.event
         )
           return;
+
+        // Carries no data (SOLANA_ACCOUNT_SIGNAL): every page gets it, and only a page connected
+        // to the new account learns anything, by asking (injectSolana.ts).
+        if (response.event === SOLANA_ACCOUNT_SIGNAL) {
+          window.dispatchEvent(new CustomEvent(`${TARGET}${SOLANA_ACCOUNT_SIGNAL}`));
+          return;
+        }
 
         const whitelisted = await Messaging.sendToBackground({
           method: METHOD.isWhitelisted,

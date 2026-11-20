@@ -110,6 +110,21 @@ describe('Sign in with Solana', () => {
   });
 });
 
+describe('Solana account switches', () => {
+  it('the store signals every tab with an event that carries nothing, on any change of account', () => {
+    const store = read('../stores/walletStore.ts');
+    expect(store).toContain("const accountChanged = walletStore.loggedWallet?.id !== loggedWallet?.id || prevAddress !== newAddress;");
+    expect(store).toContain('{ target: TARGET, sender: SENDER.extension, event: SOLANA_ACCOUNT_SIGNAL },');
+  });
+
+  it('the relay passes that signal without data and without the whitelist round trip', () => {
+    const at = messaging.indexOf('if (response.event === SOLANA_ACCOUNT_SIGNAL) {');
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(messaging.indexOf('method: METHOD.isWhitelisted,', at - 2000 > 0 ? at - 2000 : 0));
+    expect(messaging).toContain('window.dispatchEvent(new CustomEvent(`${TARGET}${SOLANA_ACCOUNT_SIGNAL}`));');
+  });
+});
+
 describe('Solana relay and panel', () => {
   it('fast-paths the Solana methods and gives the page coded errors', () => {
     for (const name of ['available', 'connect', 'signMessage', 'signTransaction', 'signAndSendTransaction']) {

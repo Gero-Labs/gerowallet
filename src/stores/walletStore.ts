@@ -4,6 +4,7 @@ import { getContextType } from '@/utils/storageSync';
 import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { SENDER, SOLANA_ACCOUNT_SIGNAL, TARGET } from '@/chrome/config';
 import { addConnectedDapp, getConnectedDapps, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
 import { redactWalletConfig, redactWalletRecord } from '@/utils/storageRedaction';
 import LoadingState from '@/stores/loading';
@@ -478,6 +479,7 @@ export default {
   setLoggedWallet(loggedWallet: WalletStore['loggedWallet']) {
     const prevAddress = walletStore.loggedWallet?.baseAddress;
     const newAddress = loggedWallet?.baseAddress;
+    const accountChanged = walletStore.loggedWallet?.id !== loggedWallet?.id || prevAddress !== newAddress;
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
 
@@ -496,6 +498,22 @@ export default {
             tab.id,
             { action: 'geroLoggedWalletChanged', loggedIn: !!newAddress },
             // Swallow "Receiving end does not exist" — many tabs have no content script
+            () => void chrome.runtime.lastError,
+          );
+        }
+      });
+    }
+
+    // Tell Gero's Solana wallet in every tab that the account may have changed (Wallet Standard
+    // `change`). The message carries nothing: a connected page re-reads its account with a silent
+    // connect, which only answers a site connected to the new account (injectSolana.ts).
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query && accountChanged) {
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id !== 'number') continue;
+          chrome.tabs.sendMessage(
+            tab.id,
+            { target: TARGET, sender: SENDER.extension, event: SOLANA_ACCOUNT_SIGNAL },
             () => void chrome.runtime.lastError,
           );
         }

@@ -17,6 +17,7 @@ import {
   type SolanaDappErrorCodeValue,
 } from '@/chains/solana/solanaDappProtocol';
 import { GERO_CARDANO_ICON } from './injectIcon';
+import { SOLANA_ACCOUNT_SIGNAL } from './config';
 import * as bridge from './solanaWebpage';
 
 const CHAINS = ['solana:mainnet', 'solana:devnet'] as const;
@@ -83,9 +84,9 @@ export const geroSolanaWallet = Object.freeze({
       // The dApp forgets the wallet; the site stays connected in Gero (Settings > Connected sites).
       disconnect: async () => { setAccounts([]); },
     }),
-    // 'change' fires for this page's own connect and disconnect only. An account switch in Gero
-    // is not reported yet: the dApp keeps the old account, its signMessage is then refused with
-    // 4100, and it has to connect again.
+    // 'change' fires for this page's own connect and disconnect, and when the user switches
+    // accounts in Gero (watchAccountSwitches): the new account if this site is connected to it,
+    // otherwise no accounts.
     'standard:events': Object.freeze({
       version: '1.0.0' as const,
       on: (event: string, listener: (properties: { accounts?: ReadonlyArray<any> }) => void) => {
@@ -201,6 +202,38 @@ export function registerGeroSolanaWallet(target: Window = window): void {
   }
 }
 
+/**
+ * Follows account switches in Gero (SOLANA_ACCOUNT_SIGNAL, which carries nothing). Only a page
+ * that is connected reacts: it re-reads its account with a silent connect, which answers only a
+ * site connected to the new account, and reports the result as a Wallet Standard `change`. A
+ * page the dApp disconnected (or never connected) stays as it is.
+ */
+export function watchAccountSwitches(target: Window = window): void {
+  let reading = false;
+  let again = false;
+  const reread = async () => {
+    if (reading) { again = true; return; }
+    reading = true;
+    try {
+      do {
+        again = false;
+        if (!accounts.length) return;
+        try {
+          const account = await bridge.solanaConnect(true);
+          if (accounts[0]?.address !== account.address || accounts[0]?.chains?.[0] !== account.chain) {
+            setAccounts([toAccount(account.address, account.chain)]);
+          }
+        } catch {
+          setAccounts([]);
+        }
+      } while (again);
+    } finally {
+      reading = false;
+    }
+  };
+  target.addEventListener(`gerowallet${SOLANA_ACCOUNT_SIGNAL}`, () => { void reread(); });
+}
+
 /** Registers once the background confirms Solana is on; quietly does nothing otherwise. */
 export async function installGeroSolanaWallet(target: Window = window): Promise<boolean> {
   try {
@@ -209,6 +242,7 @@ export async function installGeroSolanaWallet(target: Window = window): Promise<
     return false;
   }
   registerGeroSolanaWallet(target);
+  watchAccountSwitches(target);
   return true;
 }
 
