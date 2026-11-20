@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSolanaSignIn, solanaSignInMessageText } from './solanaSignIn';
+import { checkSolanaSignIn, solanaSignInMessageText, solanaSignInTimeRefusal } from './solanaSignIn';
 import { solanaSignMessageRefusal } from './solanaSignMessage';
 
 const ADDRESS = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
@@ -41,6 +41,13 @@ describe('checkSolanaSignIn', () => {
     expect(checkSolanaSignIn({ expirationTime: '2026-11-20T11:59:59Z' }, ctx)).toEqual({ ok: false, reason: 'EXPIRED' });
     expect(checkSolanaSignIn({ notBefore: '2026-11-20T12:00:01Z' }, ctx)).toEqual({ ok: false, reason: 'NOT_YET_VALID' });
     expect(checkSolanaSignIn({ expirationTime: '2026-11-20T13:00:00Z', notBefore: '2026-11-20T11:00:00Z' }, ctx).ok).toBe(true);
+  });
+
+  it('re-checks the window after the prompt: a request that expired while waiting is refused', () => {
+    const fields = { expirationTime: '2026-11-20T12:05:00Z' };
+    expect(solanaSignInTimeRefusal(fields, Date.parse('2026-11-20T12:04:59Z'))).toBeNull();
+    expect(solanaSignInTimeRefusal(fields, Date.parse('2026-11-20T12:05:00Z'))).toBe('EXPIRED');
+    expect(solanaSignInTimeRefusal({}, 0)).toBeNull();
   });
 });
 

@@ -119,12 +119,14 @@ export const geroSolanaWallet = Object.freeze({
       signIn: (...inputs: Array<Record<string, unknown> | undefined>) => call(async () => {
         const outputs: Array<{ account: unknown; signedMessage: Uint8Array; signature: Uint8Array; signatureType: 'ed25519' }> = [];
         // signIn() with no input signs in once with every field the wallet's to fill.
+        let account: unknown = null;
         for (const input of inputs.length ? inputs : [undefined]) {
           const result = await bridge.solanaSignIn(plainSignInInput(input));
-          const account = toAccount(result.address, result.chain);
-          setAccounts([account]);
+          account = toAccount(result.address, result.chain);
           outputs.push({ account, signedMessage: result.signedMessage, signature: result.signature, signatureType: 'ed25519' });
         }
+        // The connected account changes once, whatever the number of inputs.
+        if (account) setAccounts([account]);
         return outputs;
       }),
     }),

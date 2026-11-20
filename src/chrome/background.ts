@@ -156,7 +156,7 @@ import {
 } from '@/chains/solana/solanaDappProtocol';
 import { SOLANA_SIGN_MESSAGE_MAX_BYTES, solanaSignMessageRefusal, type SolanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
 import { verifySolanaSignature } from '@/chains/solana/solanaTransaction';
-import { checkSolanaSignIn, solanaSignInMessageText, type SolanaSignInRefusal } from '@/chains/solana/solanaSignIn';
+import { checkSolanaSignIn, solanaSignInMessageText, solanaSignInTimeRefusal, type SolanaSignInRefusal } from '@/chains/solana/solanaSignIn';
 import { SOLANA_MAX_TRANSACTION_BYTES, decodeSolanaTransaction, withSolanaSignature } from '@/chains/solana/solanaTxWire';
 import {
   SolanaDappTxError,
@@ -4277,8 +4277,12 @@ app.add(SOLANA_METHOD.signIn, (request, sendResponse) => {
       if (!signature || !verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))) {
         return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign in') };
       }
+      // The prompt may have waited past the request's window: the dApp would reject it anyway.
+      const lateRefusal = solanaSignInTimeRefusal(check.fields);
+      if (lateRefusal) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, solanaSignInRefusalText(lateRefusal)) };
+      // Read again: the site may have been connected while the prompt was open.
       // The logged account (an empty approval names no other one).
-      if (!connected && !(await connectApproved({}, wallet.id, origin))) {
+      if (!WalletStore.isWhitelisted(origin) && !(await connectApproved({}, wallet.id, origin))) {
         return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to connect the site') };
       }
       return { data: { address: wallet.publicKey, chain, signedMessage: Array.from(bytes), signature: Array.from(signature) } };

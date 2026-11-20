@@ -97,7 +97,9 @@ describe('Sign in with Solana', () => {
     expect(b).toContain('verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))');
     expect(b).toContain('still.id !== wallet.id');
     expect(b).toContain('const connected = WalletStore.isWhitelisted(origin);');
-    expect(b).toContain('!connected && !(await connectApproved({}, wallet.id, origin))');
+    // After the prompt: the window again (it may have expired meanwhile) and the whitelist again.
+    expect(b.indexOf('solanaSignInTimeRefusal(check.fields)')).toBeGreaterThan(b.indexOf('parkMidnightRequest(SOLANA_METHOD.signIn'));
+    expect(b).toContain('!WalletStore.isWhitelisted(origin) && !(await connectApproved({}, wallet.id, origin))');
   });
 
   it('is fast-pathed, parked, and rendered with the message signer', () => {

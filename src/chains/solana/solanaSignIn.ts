@@ -79,13 +79,19 @@ export function checkSolanaSignIn(
   if (fields.address !== ctx.address) return { ok: false, reason: 'ADDRESS_MISMATCH' };
   if (fields.chainId !== undefined && cluster(fields.chainId) !== cluster(ctx.chain)) return { ok: false, reason: 'CHAIN_MISMATCH' };
 
-  const now = ctx.now ?? Date.now();
   for (const key of ['issuedAt', 'expirationTime', 'notBefore'] as const) {
     if (fields[key] !== undefined && Number.isNaN(Date.parse(fields[key] as string))) return { ok: false, reason: 'INVALID' };
   }
-  if (fields.expirationTime !== undefined && Date.parse(fields.expirationTime) <= now) return { ok: false, reason: 'EXPIRED' };
-  if (fields.notBefore !== undefined && Date.parse(fields.notBefore) > now) return { ok: false, reason: 'NOT_YET_VALID' };
+  const time = solanaSignInTimeRefusal(fields, ctx.now ?? Date.now());
+  if (time) return { ok: false, reason: time };
   return { ok: true, fields };
+}
+
+/** Why `fields` cannot be signed at `now` (its validity window), or null. Checked again after the prompt. */
+export function solanaSignInTimeRefusal(fields: Pick<SolanaSignInFields, 'expirationTime' | 'notBefore'>, now = Date.now()): 'EXPIRED' | 'NOT_YET_VALID' | null {
+  if (fields.expirationTime !== undefined && Date.parse(fields.expirationTime) <= now) return 'EXPIRED';
+  if (fields.notBefore !== undefined && Date.parse(fields.notBefore) > now) return 'NOT_YET_VALID';
+  return null;
 }
 
 /** The SIWS message text, line for line as @solana/wallet-standard-util's createSignInMessageText. */
