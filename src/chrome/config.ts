@@ -203,6 +203,9 @@ export const SOLANA_METHOD = {
   available: 'solana_available',
   connect: 'solana_connect',
   signMessage: 'solana_signMessage',
+  // Both park one 'solana_signTransaction' side-panel prompt (with the mode in its payload).
+  signTransaction: 'solana_signTransaction',
+  signAndSendTransaction: 'solana_signAndSendTransaction',
 };
 
 export const BITCOIN_METHOD = {

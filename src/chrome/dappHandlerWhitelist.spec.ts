@@ -13,7 +13,8 @@ import { join } from 'node:path';
  * shared gates below), or is added to EXEMPT with a reason.
  */
 
-const SHARED_GATES = ['isWhitelisted(', 'requireMidnightProvingOrigin(', 'handleMidnightDappProving('];
+// handleSolanaTransactionRequest checks WalletStore.isWhitelisted(origin) first (solanaDapp.wiring.spec.ts pins it).
+const SHARED_GATES = ['isWhitelisted(', 'requireMidnightProvingOrigin(', 'handleMidnightDappProving(', 'handleSolanaTransactionRequest('];
 
 const EXEMPT: Record<string, string> = {
   'MIDNIGHT_METHOD.getConnectionStatus': 'public by design: reports connected/disconnected and network id',

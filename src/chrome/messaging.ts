@@ -599,6 +599,8 @@ export const Messaging = {
         request.method === SOLANA_METHOD.available ||
         request.method === SOLANA_METHOD.connect ||
         request.method === SOLANA_METHOD.signMessage ||
+        request.method === SOLANA_METHOD.signTransaction ||
+        request.method === SOLANA_METHOD.signAndSendTransaction ||
         bitcoinFastPath
       ) {
         Messaging.sendToBackground({

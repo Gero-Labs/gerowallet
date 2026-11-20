@@ -68,6 +68,14 @@ describe('WalletBg.signSolanaMessage', () => {
     await expect(bg.signSolanaMessage(MESSAGE, PASSWORD)).rejects.toBeInstanceOf(InvalidAccountIndexError);
   });
 
+  it('signs a dApp transaction message (the allowance is the caller’s check), verifiable with the address', async () => {
+    const address = deriveSolanaAddressFromMnemonic(PHRASE, 0);
+    const bg = await solanaWallet(960_005, 0, address);
+    const txMessage = new Uint8Array([1, 0, 0, 1, ...new Array(32).fill(7), ...new Array(32).fill(9), 1, 0, 1, 0, 1, 2]);
+    const signature = await bg.signSolanaDappTransaction(txMessage, PASSWORD);
+    expect(verifySolanaSignature(signature, txMessage, base58Decode(address))).toBe(true);
+  });
+
   it('needs the password', async () => {
     const bg = await solanaWallet(960_004, 0, deriveSolanaAddressFromMnemonic(PHRASE, 0));
     await expect(bg.signSolanaMessage(MESSAGE)).rejects.toThrow('Password is required');

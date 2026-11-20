@@ -52,9 +52,43 @@ describe('Solana dApp handlers', () => {
   });
 });
 
+describe('Solana dApp transactions', () => {
+  const body = () => {
+    const start = background.indexOf('function handleSolanaTransactionRequest(');
+    expect(start).toBeGreaterThan(-1);
+    return background.slice(start, background.indexOf('\n}\n', start));
+  };
+
+  it('both methods share one handler, gated like signMessage, and never change the transaction', () => {
+    expect(handler('app.add(SOLANA_METHOD.signTransaction,')).toContain("handleSolanaTransactionRequest(request, sendResponse, 'sign')");
+    expect(handler('app.add(SOLANA_METHOD.signAndSendTransaction,')).toContain("handleSolanaTransactionRequest(request, sendResponse, 'signAndSend')");
+    const b = body();
+    expect(b).toContain('if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };');
+    expect(b).toContain('if (!WalletStore.isWhitelisted(origin))');
+    expect(b).toContain('if (address !== wallet.publicKey)');
+    expect(b).toContain('chain !== solanaChainId(wallet.network)');
+    expect(b).toContain('prepareSolanaDappTransaction(bytes, wallet.publicKey, api)');
+    expect(b).toContain('grantSolanaTxAllowance(wallet.id, prepared.messageKey)');
+    expect(b).toContain('isSignedByWalletOnly(prepared, signed, wallet.publicKey)');
+    expect(b).toContain('still.id !== wallet.id');
+    expect(b).toContain('releaseSolanaTxAllowance(wallet.id, prepared.messageKey)');
+    // A submit with no answer may have landed: never "nothing was sent".
+    expect(b).toContain('Gero could not confirm the transaction was sent');
+  });
+
+  it('the panel signs only a message whose preview is open, checked before any secret is opened', () => {
+    const b = handler('app.addToOptions(MessageTypes.SIGN_SOLANA_TRANSACTION,');
+    expect(b).toContain('refuseSettingsWhileLocked(request, sendResponse)');
+    const check = b.indexOf('hasSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))');
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(b.indexOf('wallet.signSolanaDappTransaction('));
+    expect(read('senderTrust.ts')).toContain("'SIGN_SOLANA_TRANSACTION',");
+  });
+});
+
 describe('Solana relay and panel', () => {
-  it('fast-paths the three methods and gives the page coded errors', () => {
-    for (const name of ['available', 'connect', 'signMessage']) {
+  it('fast-paths the Solana methods and gives the page coded errors', () => {
+    for (const name of ['available', 'connect', 'signMessage', 'signTransaction', 'signAndSendTransaction']) {
       expect(messaging).toContain(`request.method === SOLANA_METHOD.${name} ||`);
     }
     expect(messaging).toContain('if (SOLANA_METHOD_VALUES.has(method)) return toSolanaPageError(error);');
@@ -63,6 +97,10 @@ describe('Solana relay and panel', () => {
   it('renders and answers both prompts, a decline as a coded rejection', () => {
     expect(overlay).toContain(`currentRequest.method === 'solana_connect'`);
     expect(overlay).toContain(`currentRequest.method === 'solana_signMessage'`);
+    expect(overlay).toContain(`currentRequest.method === 'solana_signTransaction'`);
+    expect(overlay).toContain('method: MessageTypes.SIGN_SOLANA_TRANSACTION,');
+    // A critical warning blocks signing until acknowledged.
+    expect(overlay).toContain('(!solanaTxPreview.value.requiresAcknowledgement || solanaTxAcknowledged.value)');
     expect(overlay).toContain("encodeSolanaPanelError(SolanaDappErrorCode.UserRejected, 'User rejected the request.')");
     expect(overlay).toContain('method: MessageTypes.SIGN_SOLANA_MESSAGE,');
     expect(read('../sidepanel/services/dappRequestHub.ts')).toContain("'solana_connect', 'solana_signMessage',");

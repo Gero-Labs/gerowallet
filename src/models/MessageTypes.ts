@@ -14,6 +14,8 @@ export enum MessageTypes {
   SEND_SOLANA = 'SEND_SOLANA',
   /** Side panel only: sign a dApp's approved `solana:signMessage` bytes with the logged Solana account. */
   SIGN_SOLANA_MESSAGE = 'SIGN_SOLANA_MESSAGE',
+  /** Side panel only: sign a dApp transaction the worker previewed (consumes its allowance). */
+  SIGN_SOLANA_TRANSACTION = 'SIGN_SOLANA_TRANSACTION',
   BABYLON_STAKE = 'BABYLON_STAKE',
   SUBMIT_TX = 'SUBMIT_TX',
   REQUEST_CROSS_DEVICE_SIGNATURE = 'REQUEST_CROSS_DEVICE_SIGNATURE',

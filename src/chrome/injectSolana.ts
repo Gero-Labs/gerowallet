@@ -6,9 +6,9 @@
 // Registered only when the background says the `isSolanaEnabled` flag is on: a page script
 // cannot read feature flags, so it asks once at load.
 //
-// Features: standard:connect / disconnect / events and solana:signMessage. solana:signTransaction
-// is listed because the wallet adapter only shows wallets that have it (or
-// signAndSendTransaction); until transaction signing lands it refuses every call.
+// Features: standard:connect / disconnect / events, solana:signMessage, solana:signTransaction and
+// solana:signAndSendTransaction. A transaction is previewed in the side panel from the worker's
+// own decoding and simulation of it (solanaDappTx.ts) and signed exactly as the dApp sent it.
 import { base58Decode } from '@/chains/solana/solanaBase58';
 import {
   SolanaDappErrorCode,
@@ -20,7 +20,7 @@ import { GERO_CARDANO_ICON } from './injectIcon';
 import * as bridge from './solanaWebpage';
 
 const CHAINS = ['solana:mainnet', 'solana:devnet'] as const;
-const ACCOUNT_FEATURES = ['solana:signMessage', 'solana:signTransaction'] as const;
+const ACCOUNT_FEATURES = ['solana:signMessage', 'solana:signTransaction', 'solana:signAndSendTransaction'] as const;
 
 const ICON = (() => {
   try {
@@ -115,10 +115,43 @@ export const geroSolanaWallet = Object.freeze({
     'solana:signTransaction': Object.freeze({
       version: '1.0.0' as const,
       supportedTransactionVersions: Object.freeze(['legacy', 0] as const),
-      signTransaction: async () => refuse(SolanaDappErrorCode.Unsupported, "Gero can't sign Solana transactions for dApps yet"),
+      signTransaction: (...inputs: TransactionInput[]) => call(async () => {
+        const outputs: Array<{ signedTransaction: Uint8Array }> = [];
+        for (const input of inputs) {
+          const { address, transaction } = checkTransactionInput(input);
+          outputs.push({ signedTransaction: await bridge.solanaSignTransaction(address, transaction, input.chain) });
+        }
+        return outputs;
+      }),
+    }),
+    'solana:signAndSendTransaction': Object.freeze({
+      version: '1.0.0' as const,
+      supportedTransactionVersions: Object.freeze(['legacy', 0] as const),
+      // Gero submits through its own node with preflight; the dApp's send options are not used.
+      signAndSendTransaction: (...inputs: TransactionInput[]) => call(async () => {
+        const outputs: Array<{ signature: Uint8Array }> = [];
+        for (const input of inputs) {
+          const { address, transaction } = checkTransactionInput(input);
+          outputs.push({ signature: await bridge.solanaSignAndSendTransaction(address, transaction, input.chain) });
+        }
+        return outputs;
+      }),
     }),
   }),
 });
+
+interface TransactionInput {
+  account: { address: string };
+  transaction: Uint8Array;
+  chain?: string;
+}
+
+function checkTransactionInput(input: TransactionInput): { address: string; transaction: Uint8Array } {
+  const address = input?.account?.address;
+  if (!accounts.some((a) => a.address === address)) refuse(SolanaDappErrorCode.Unauthorized, 'That account is not connected');
+  if (!(input.transaction instanceof Uint8Array)) refuse(SolanaDappErrorCode.InvalidParams, 'transaction must be a Uint8Array');
+  return { address, transaction: new Uint8Array(input.transaction) };
+}
 
 /** Registers with the Wallet Standard registry: now, and for apps that load after us. */
 export function registerGeroSolanaWallet(target: Window = window): void {

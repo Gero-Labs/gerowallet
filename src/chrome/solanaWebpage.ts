@@ -29,6 +29,24 @@ export const solanaConnect = async (silent: boolean): Promise<SolanaConnectedAcc
   return reply.data;
 };
 
+/** Asks the user to sign the dApp's `transaction`; the transaction with the wallet's signature added. */
+export const solanaSignTransaction = async (address: string, transaction: Uint8Array, chain?: string): Promise<Uint8Array> => {
+  const reply = (await Messaging.sendToContent({
+    method: SOLANA_METHOD.signTransaction,
+    data: { address, transaction: Array.from(transaction), chain, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<{ signedTransaction: number[] }>;
+  return new Uint8Array(reply.data.signedTransaction);
+};
+
+/** As solanaSignTransaction, then Gero submits it; the transaction's signature (its id). */
+export const solanaSignAndSendTransaction = async (address: string, transaction: Uint8Array, chain?: string): Promise<Uint8Array> => {
+  const reply = (await Messaging.sendToContent({
+    method: SOLANA_METHOD.signAndSendTransaction,
+    data: { address, transaction: Array.from(transaction), chain, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<{ signature: number[] }>;
+  return new Uint8Array(reply.data.signature);
+};
+
 /** Asks the user to sign `message` with `address`; the 64-byte ed25519 signature. */
 export const solanaSignMessage = async (address: string, message: Uint8Array): Promise<Uint8Array> => {
   const reply = (await Messaging.sendToContent({
