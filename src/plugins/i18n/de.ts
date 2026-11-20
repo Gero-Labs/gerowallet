@@ -6530,6 +6530,8 @@ export default {
   'solana.dapp.txUnreadable': 'Gero kann diese Transaktion nicht lesen, daher kann sie nicht signiert werden.',
   'solana.dapp.txSigningFailed': 'Die Transaktion konnte nicht signiert werden. Versuchen Sie es erneut.',
   'solana.dapp.txExpired': 'Diese Anfrage ist abgelaufen. Bitten Sie die Website, die Transaktion erneut zu senden.',
+  'solana.dapp.signInTitle': 'Anmelden',
+  'solana.dapp.signInConnects': 'Mit der Anmeldung wird diese Website auch mit Ihrer Wallet verbunden.',
   'solana.dapp.walletTypeUnsupportedTx': 'Diese Wallet kann keine Solana-Transaktionen für dApps signieren.',
   'solana.dapp.warn.assignsWallet': 'Übergibt die Kontrolle über Ihr Solana-Konto an ein anderes Programm.',
   'solana.dapp.warn.givesTokenAccount': 'Übergibt eines Ihrer Token-Konten an eine andere Adresse.',

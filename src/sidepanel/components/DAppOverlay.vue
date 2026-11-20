@@ -654,6 +654,71 @@
         </template>
       </div>
 
+      <!-- Solana: Sign in with Solana (Wallet Standard solana:signIn). The text is the worker's own
+           SIWS message (solanaSignIn.ts), signed as a message; approving also connects a new site. -->
+      <div v-else-if="currentRequest.method === 'solana_signIn'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-login</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('solana.dapp.signInTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div v-if="splitHost(signDataDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
+        </div>
+
+        <div class="sign-data-message">
+          <p v-if="!solanaMessage || solanaMessage.kind !== 'text'" class="decode-error text-caption">{{ $t('solana.dapp.messageUnreadable') }}</p>
+          <p v-else class="white--text text-caption" style="word-break: break-word;">{{ solanaMessage.text }}</p>
+        </div>
+        <p v-if="currentRequest.payload?.connects === true" class="grey--text text-caption mb-1">{{ $t('solana.dapp.signInConnects') }}</p>
+        <p class="grey--text text-caption mb-3">{{ $t('solana.dapp.messageSendsNothing') }}</p>
+
+        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            variant="outlined" density="compact" theme="dark"
+            class="password-input"
+            @click:append-inner="showPassword = !showPassword"
+            @keyup.enter="signSolanaMessageNormal"
+          />
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || !solanaMessage" @click="signSolanaMessageNormal">
+              {{ $t('solana.dapp.signInTitle') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaMessage" @click="signSolanaMessagePrf">
+              {{ $t('solana.dapp.signInTitle') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- Solana: Sign (and send) Transaction (Wallet Standard solana:signTransaction / signAndSendTransaction).
            Everything here is the worker's own decoding and simulation of the dApp's bytes (solanaDappTx.ts). -->
       <div v-else-if="currentRequest.method === 'solana_signTransaction'" class="dapp-sign-data">
@@ -1484,6 +1549,9 @@ interface ApprovalPayload {
   website?: string;
   /** Solana signMessage: the bytes to sign, as a plain array. */
   solanaMessage?: unknown;
+  /** Solana signIn: the checked SIWS fields, and whether approving also connects the site. */
+  signIn?: unknown;
+  connects?: unknown;
   /** Solana signTransaction: 'sign' or 'signAndSend', the dApp's transaction bytes, and the worker's preview. */
   mode?: unknown;
   transaction?: unknown;
@@ -1553,6 +1621,7 @@ function queuedItemMethod(item: DAppRequest): string {
     solana_connect: 'miniGero.connectRequest',
     solana_signMessage: 'solana.dapp.signMessageTitle',
     solana_signTransaction: 'solana.dapp.signTxTitle',
+    solana_signIn: 'solana.dapp.signInTitle',
   };
   return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
 }
@@ -3522,6 +3591,8 @@ function onEscapeReject() {
     rejectSolanaSignMessage();
   } else if (currentRequest.value?.method === 'solana_signTransaction') {
     rejectSolanaTransaction();
+  } else if (currentRequest.value?.method === 'solana_signIn') {
+    rejectSolanaSignMessage();
   } else if (currentRequest.value?.method === 'midnight_connect') {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {

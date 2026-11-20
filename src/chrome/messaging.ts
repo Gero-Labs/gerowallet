@@ -601,6 +601,7 @@ export const Messaging = {
         request.method === SOLANA_METHOD.signMessage ||
         request.method === SOLANA_METHOD.signTransaction ||
         request.method === SOLANA_METHOD.signAndSendTransaction ||
+        request.method === SOLANA_METHOD.signIn ||
         bitcoinFastPath
       ) {
         Messaging.sendToBackground({

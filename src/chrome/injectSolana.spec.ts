@@ -9,6 +9,7 @@ const bridge = vi.hoisted(() => ({
   solanaSignMessage: vi.fn(),
   solanaSignTransaction: vi.fn(),
   solanaSignAndSendTransaction: vi.fn(),
+  solanaSignIn: vi.fn(),
 }));
 vi.mock('./solanaWebpage', () => bridge);
 
@@ -36,6 +37,7 @@ beforeEach(() => {
   bridge.solanaSignMessage.mockReset().mockResolvedValue(new Uint8Array(64).fill(1));
   bridge.solanaSignTransaction.mockReset().mockResolvedValue(new Uint8Array([9, 9]));
   bridge.solanaSignAndSendTransaction.mockReset().mockResolvedValue(new Uint8Array(64).fill(7));
+  bridge.solanaSignIn.mockReset().mockResolvedValue({ address: ADDRESS, chain: 'solana:devnet', signedMessage: new Uint8Array([1, 2]), signature: new Uint8Array(64).fill(3) });
 });
 
 describe('Gero Solana wallet registration', () => {
@@ -53,7 +55,7 @@ describe('Gero Solana wallet registration', () => {
     expect(wallet.icon).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(wallet.chains).toEqual(['solana:mainnet', 'solana:devnet']);
     // isWalletAdapterCompatibleStandardWallet: connect + events + one of the sign-transaction features.
-    for (const feature of ['standard:connect', 'standard:events', 'standard:disconnect', 'solana:signMessage', 'solana:signTransaction', 'solana:signAndSendTransaction']) {
+    for (const feature of ['standard:connect', 'standard:events', 'standard:disconnect', 'solana:signIn', 'solana:signMessage', 'solana:signTransaction', 'solana:signAndSendTransaction']) {
       expect(wallet.features[feature]).toBeTruthy();
     }
     expect(wallet.accounts).toEqual([]);
@@ -112,6 +114,24 @@ describe('Gero Solana wallet features', () => {
     expect(bridge.solanaSignTransaction).toHaveBeenCalledWith(ADDRESS, transaction, 'solana:devnet');
     expect(out.signedTransaction).toEqual(new Uint8Array([9, 9]));
     expect(wallet.features['solana:signTransaction'].supportedTransactionVersions).toEqual(['legacy', 0]);
+  });
+
+  it('signs in: passes only the SIWS fields, returns the wallet’s message and connects the account', async () => {
+    const { mod } = await loadAndCollect();
+    const wallet: any = mod.geroSolanaWallet;
+    const changes: unknown[] = [];
+    wallet.features['standard:events'].on('change', (p: unknown) => changes.push(p));
+    const [out] = await wallet.features['solana:signIn'].signIn({ domain: 'app.example.com', nonce: 'n1', resources: ['r'], sneaky: 'x' });
+    expect(bridge.solanaSignIn).toHaveBeenCalledWith({ domain: 'app.example.com', nonce: 'n1', resources: ['r'] });
+    expect(out.account.address).toBe(ADDRESS);
+    expect(out.account.publicKey).toEqual(new Uint8Array(32).fill(5));
+    expect(out.signedMessage).toEqual(new Uint8Array([1, 2]));
+    expect(out.signature).toEqual(new Uint8Array(64).fill(3));
+    expect(out.signatureType).toBe('ed25519');
+    expect(wallet.accounts.map((a: any) => a.address)).toEqual([ADDRESS]);
+    expect(changes).toHaveLength(1);
+    await wallet.features['solana:signIn'].signIn();
+    expect(bridge.solanaSignIn).toHaveBeenLastCalledWith(undefined);
   });
 
   it('signs and sends, returning the signature', async () => {
