@@ -47,11 +47,11 @@ describe('SolanaSignControls', () => {
   it('a password wallet: Sign needs a password and a signable request', async () => {
     const w = mountControls({ password: '' });
     expect(buttons(w)[1].attributes('disabled')).toBeDefined();
-    await w.setProps({ password: 'pw' });
+    await w.setProps({ password: 'pw' } as never);
     expect(buttons(w)[1].attributes('disabled')).toBeUndefined();
     await buttons(w)[1].trigger('click');
     expect(w.emitted('sign-password')).toHaveLength(1);
-    await w.setProps({ canSign: false });
+    await w.setProps({ canSign: false } as never);
     expect(buttons(w)[1].attributes('disabled')).toBeDefined();
     await w.find('input.password').setValue('next');
     expect(w.emitted('update:password')?.at(-1)).toEqual(['next']);
