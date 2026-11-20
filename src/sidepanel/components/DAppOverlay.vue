@@ -584,139 +584,51 @@
         </div>
       </div>
 
-      <!-- Solana: Sign Message (Wallet Standard solana:signMessage) -->
-      <div v-else-if="currentRequest.method === 'solana_signMessage'" class="dapp-sign-data">
+      <!-- Solana: Sign Message (solana:signMessage) and Sign in with Solana (solana:signIn). Both sign
+           the exact text the worker checked (solanaSignMessage.ts refuses anything that is a
+           transaction; a sign-in's text is the worker's own SIWS message, solanaSignIn.ts). Signing
+           in also connects a site that was not connected. -->
+      <div v-else-if="currentRequest.method === 'solana_signMessage' || currentRequest.method === 'solana_signIn'" class="dapp-sign-data">
         <div class="dapp-identity mb-4">
           <div class="favicon-wrapper">
             <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" :color="primaryColor">mdi-file-sign</v-icon>
+            <v-icon v-else size="32" :color="primaryColor">{{ isSolanaSignIn ? 'mdi-login' : 'mdi-file-sign' }}</v-icon>
           </div>
           <div class="dapp-domain-info">
-            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('solana.dapp.signMessageTitle') }}</h3>
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t(isSolanaSignIn ? 'solana.dapp.signInTitle' : 'solana.dapp.signMessageTitle') }}</h3>
             <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
           </div>
         </div>
 
-        <!-- The exact bytes the worker will sign (it refuses anything that is a transaction). -->
+        <div v-if="isSolanaSignIn && splitHost(signDataDomain).suspicious" class="suspicious-host mb-3">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
+        </div>
+
         <div class="sign-data-message">
-          <p v-if="!solanaMessage" class="decode-error text-caption">{{ $t('solana.dapp.messageUnreadable') }}</p>
+          <p v-if="!solanaMessage || (isSolanaSignIn && solanaMessage.kind !== 'text')" class="decode-error text-caption">{{ $t('solana.dapp.messageUnreadable') }}</p>
           <p v-else-if="solanaMessage.kind === 'text'" class="white--text text-caption" style="word-break: break-word;">{{ solanaMessage.text }}</p>
           <template v-else>
             <p class="warning--text text-caption mb-1">{{ $t('solana.dapp.messageNotText') }}</p>
             <p class="white--text text-caption g-mono" style="word-break: break-all;">{{ solanaMessage.hex }}</p>
           </template>
         </div>
+        <p v-if="isSolanaSignIn && currentRequest.payload?.connects === true" class="grey--text text-caption mb-1">{{ $t('solana.dapp.signInConnects') }}</p>
         <p class="grey--text text-caption mb-3">{{ $t('solana.dapp.messageSendsNothing') }}</p>
 
-        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
-          <v-text-field
-            v-model="spendingPassword"
-            :type="showPassword ? 'text' : 'password'"
-            :label="$t('miniGero.spendingPassword')"
-            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-            :error-messages="signError"
-            variant="outlined" density="compact" theme="dark"
-            class="password-input"
-            @click:append-inner="showPassword = !showPassword"
-            @keyup.enter="signSolanaMessageNormal"
-          />
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn
-              class="geroButton"
-              rounded
-              variant="flat"
-              :loading="signing"
-              :disabled="!spendingPassword || !solanaMessage"
-              @click="signSolanaMessageNormal"
-            >
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else-if="isPrfWallet">
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
-          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaMessage" @click="signSolanaMessagePrf">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else>
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupported') }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-          </div>
-        </template>
-      </div>
-
-      <!-- Solana: Sign in with Solana (Wallet Standard solana:signIn). The text is the worker's own
-           SIWS message (solanaSignIn.ts), signed as a message; approving also connects a new site. -->
-      <div v-else-if="currentRequest.method === 'solana_signIn'" class="dapp-sign-data">
-        <div class="dapp-identity mb-4">
-          <div class="favicon-wrapper">
-            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
-            <v-icon v-else size="32" :color="primaryColor">mdi-login</v-icon>
-          </div>
-          <div class="dapp-domain-info">
-            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('solana.dapp.signInTitle') }}</h3>
-            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(signDataDomain).sub }}</span><b class="dapp-root">{{ splitHost(signDataDomain).root }}</b></span>
-          </div>
-        </div>
-
-        <div v-if="splitHost(signDataDomain).suspicious" class="suspicious-host mb-3">
-          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
-          <span class="t-caption">{{ $t('dapp.suspiciousHostname') }}</span>
-        </div>
-
-        <div class="sign-data-message">
-          <p v-if="!solanaMessage || solanaMessage.kind !== 'text'" class="decode-error text-caption">{{ $t('solana.dapp.messageUnreadable') }}</p>
-          <p v-else class="white--text text-caption" style="word-break: break-word;">{{ solanaMessage.text }}</p>
-        </div>
-        <p v-if="currentRequest.payload?.connects === true" class="grey--text text-caption mb-1">{{ $t('solana.dapp.signInConnects') }}</p>
-        <p class="grey--text text-caption mb-3">{{ $t('solana.dapp.messageSendsNothing') }}</p>
-
-        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
-          <v-text-field
-            v-model="spendingPassword"
-            :type="showPassword ? 'text' : 'password'"
-            :label="$t('miniGero.spendingPassword')"
-            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-            :error-messages="signError"
-            variant="outlined" density="compact" theme="dark"
-            class="password-input"
-            @click:append-inner="showPassword = !showPassword"
-            @keyup.enter="signSolanaMessageNormal"
-          />
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || !solanaMessage" @click="signSolanaMessageNormal">
-              {{ $t('solana.dapp.signInTitle') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else-if="isPrfWallet">
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
-          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaMessage" @click="signSolanaMessagePrf">
-              {{ $t('solana.dapp.signInTitle') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else>
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupported') }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaSignMessage">{{ $t('miniGero.reject') }}</v-btn>
-          </div>
-        </template>
+        <SolanaSignControls
+          v-model:password="spendingPassword"
+          :wallet-type="walletType"
+          :is-prf-wallet="isPrfWallet"
+          :signing="signing"
+          :sign-error="signError"
+          :can-sign="!!solanaMessage && (!isSolanaSignIn || solanaMessage.kind === 'text')"
+          :sign-label="$t(isSolanaSignIn ? 'solana.dapp.signInTitle' : 'miniGero.sign')"
+          :unsupported-text="$t('solana.dapp.walletTypeUnsupported')"
+          @sign-password="signSolanaMessageNormal"
+          @sign-prf="signSolanaMessagePrf"
+          @reject="rejectSolanaSignMessage"
+        />
       </div>
 
       <!-- Solana: Sign (and send) Transaction (Wallet Standard solana:signTransaction / signAndSendTransaction).
@@ -769,43 +681,19 @@
         </template>
         <p v-else class="decode-error text-caption">{{ $t('solana.dapp.txUnreadable') }}</p>
 
-        <template v-if="walletType === WalletType.Normal && !isPrfWallet">
-          <v-text-field
-            v-model="spendingPassword"
-            :type="showPassword ? 'text' : 'password'"
-            :label="$t('miniGero.spendingPassword')"
-            :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
-            :error-messages="signError"
-            variant="outlined" density="compact" theme="dark"
-            class="password-input"
-            @click:append-inner="showPassword = !showPassword"
-            @keyup.enter="signSolanaTransactionNormal"
-          />
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!spendingPassword || !solanaTxCanSign" @click="signSolanaTransactionNormal">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else-if="isPrfWallet">
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
-          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
-            <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!solanaTxCanSign" @click="signSolanaTransactionPrf">
-              {{ $t('miniGero.sign') }}
-            </v-btn>
-          </div>
-        </template>
-
-        <template v-else>
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.dapp.walletTypeUnsupportedTx') }}</p>
-          <div class="action-buttons">
-            <v-btn variant="outlined" rounded theme="dark" block @click="rejectSolanaTransaction">{{ $t('miniGero.reject') }}</v-btn>
-          </div>
-        </template>
+        <SolanaSignControls
+          v-model:password="spendingPassword"
+          :wallet-type="walletType"
+          :is-prf-wallet="isPrfWallet"
+          :signing="signing"
+          :sign-error="signError"
+          :can-sign="solanaTxCanSign"
+          :sign-label="$t('miniGero.sign')"
+          :unsupported-text="$t('solana.dapp.walletTypeUnsupportedTx')"
+          @sign-password="signSolanaTransactionNormal"
+          @sign-prf="signSolanaTransactionPrf"
+          @reject="rejectSolanaTransaction"
+        />
       </div>
 
       <!-- Midnight: Sign Data (DApp Connector signData()) -->
@@ -1516,6 +1404,7 @@ import ConnectAccountPicker from '@/shared/components/ConnectAccountPicker.vue';
 import WcVerifyNotice from '@/shared/components/WcVerifyNotice.vue';
 import { readWcVerification, wcRiskUrl } from '@/services/walletConnect/verifyContext';
 import { useConnectAccount } from '@/shared/composables/useConnectAccount';
+import SolanaSignControls from './SolanaSignControls.vue';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
@@ -3354,6 +3243,7 @@ function midnightError(code: string, reason: string): string {
 // The worker owns the connection write and the account switch (as for `enable`); the panel
 // only answers. A decline is a JSON-encoded Solana error (the port carries a string).
 const solanaDeclined = () => encodeSolanaPanelError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
+const isSolanaSignIn = computed(() => currentRequest.value?.method === 'solana_signIn');
 
 function approveSolanaConnect() {
   approve(connectApproval());

@@ -5,20 +5,21 @@
         <v-col cols="12" class="text-center">
           <v-card flat class="transparent">
             <v-card-text>
-              <div class="mb-4">
-                <v-avatar size="80" color="primary">
-                  <v-img :src="assets.passKeySvg"  width="50" height="50" />
-                </v-avatar>
+              <!-- A small tinted tile, not a solid disc: the popup window is small, and the mark
+                   only says which kind of check this is. -->
+              <div class="passkey-mark mb-4" aria-hidden="true">
+                <img :src="assets.passKeySvg" alt="" class="passkey-mark__icon" />
               </div>
 
-              <h2 class="mb-2">{{ $t('security.authenticateWithPassKey') }}</h2>
-              <p class="text--secondary">{{ $t('security.passkeyAuthInProgress') }}</p>
+              <h2 class="t-heading mb-2">{{ $t('security.authenticateWithPassKey') }}</h2>
+              <p class="t-body-sm passkey-sub">{{ $t('security.passkeyAuthInProgress') }}</p>
 
               <v-progress-circular
                 v-if="loading"
                 indeterminate
                 color="primary"
-                size="50"
+                size="32"
+                width="3"
                 class="mt-4"
               />
 
@@ -270,5 +271,26 @@ onMounted(async () => {
 <style scoped>
 .fill-height {
   min-height: 100vh;
+}
+
+.passkey-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+  background: color-mix(in srgb, var(--g-accent) 14%, transparent);
+}
+
+.passkey-mark__icon {
+  width: 26px;
+  height: 26px;
+}
+
+.passkey-sub {
+  color: var(--g-text-2);
 }
 </style>
