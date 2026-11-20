@@ -165,11 +165,8 @@ import {
   solanaMessageKey,
   type PreparedSolanaTx,
 } from '@/chrome/solanaDappTx';
-import { consumeSolanaTxAllowance, grantSolanaTxAllowance, revokeSolanaTxAllowance } from '@/chrome/solanaTxAllowance';
+import { grantSolanaTxAllowance, hasSolanaTxAllowance, releaseSolanaTxAllowance } from '@/chrome/solanaTxAllowance';
 import { SolanaApi } from '@/api/solana-api';
-
-/** What the side panel shows when a transaction's preview expired before it was signed: prepare it again. */
-const SOLANA_TX_EXPIRED = 'This transaction expired before it was signed. Ask the site to send it again.';
 import { base58Decode } from '@/chains/solana/solanaBase58';
 import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
@@ -4312,14 +4309,21 @@ function handleSolanaTransactionRequest(
         await submitSolanaDappTransaction(api, signed);
       } catch (e) {
         debugLog('Solana dApp transaction submit failed:', errorMessage(e));
-        return { error: solanaDappError(SolanaDappErrorCode.Internal, 'The network refused the transaction. Nothing was sent.') };
+        // Nexus answered (a preflight refusal): nothing was sent. No answer (a timeout, the
+        // network): it may have landed, so the site must not simply resend it.
+        const refused = !!(e as { response?: unknown } | null)?.response;
+        return {
+          error: solanaDappError(SolanaDappErrorCode.Internal, refused
+            ? 'The network refused the transaction. Nothing was sent.'
+            : 'Gero could not confirm the transaction was sent. Check the account’s activity before sending it again.'),
+        };
       }
       // A transaction's id is its first signature.
       return { data: { signature: Array.from(decodeSolanaTransaction(signed).signatures[0]) } };
     } catch (err) {
       return { error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, failed)) };
     } finally {
-      revokeSolanaTxAllowance(prepared.messageKey);
+      releaseSolanaTxAllowance(wallet.id, prepared.messageKey);
     }
   })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, failed) }));
   return true;
@@ -4330,6 +4334,9 @@ async function submitSolanaDappTransaction(api: SolanaApi, signed: Uint8Array): 
   return api.submit(bytesToBase64(signed));
 }
 
+/** SIGN_SOLANA_TRANSACTION's answer when no preview prompt holds the message: the panel says it expired. */
+const SOLANA_TX_EXPIRED_CODE = 'SOLANA_TX_EXPIRED';
+
 app.add(SOLANA_METHOD.signTransaction, (request, sendResponse) => {
   return handleSolanaTransactionRequest(request, sendResponse, 'sign');
 });
@@ -4339,8 +4346,9 @@ app.add(SOLANA_METHOD.signAndSendTransaction, (request, sendResponse) => {
 });
 
 /**
- * The side panel signs an approved dApp transaction (password or PassKey). Only a message the
- * worker previewed is signed: the allowance prepareSolanaDappTransaction granted is consumed here.
+ * The side panel signs an approved dApp transaction (password or PassKey). Only a message whose
+ * preview prompt is open is signed (the allowance the transaction handler granted); a wrong
+ * password can be retried while the prompt stays open.
  */
 app.addToOptions(MessageTypes.SIGN_SOLANA_TRANSACTION, async (request, sendResponse) => {
   if (refuseSettingsWhileLocked(request, sendResponse)) return;
@@ -4358,7 +4366,7 @@ app.addToOptions(MessageTypes.SIGN_SOLANA_TRANSACTION, async (request, sendRespo
     const signerIndex = tx.message.staticKeys.indexOf(wallet.publicKey);
     if (signerIndex < 0 || signerIndex >= tx.message.numRequiredSignatures) return fail('Invalid request');
     // Checked before the password is used: nothing is decrypted for a message nobody previewed.
-    if (!consumeSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))) return fail(SOLANA_TX_EXPIRED);
+    if (!hasSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))) return fail(SOLANA_TX_EXPIRED_CODE);
     const signature = await wallet.signSolanaDappTransaction(tx.messageBytes, password as string | undefined, prf);
     const signed = withSolanaSignature(bytes, tx, signerIndex, signature);
     sendResponse({ id: request.id, data: { success: true, signedTransaction: Array.from(signed) }, target: TARGET, sender: SENDER.extension });

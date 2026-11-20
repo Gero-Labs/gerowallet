@@ -11,8 +11,9 @@ import { SolanaDappTxError, isSignedByWalletOnly, prepareSolanaDappTransaction, 
 import {
   SOLANA_TX_ALLOWANCE_TTL_MS,
   clearSolanaTxAllowancesForTests,
-  consumeSolanaTxAllowance,
   grantSolanaTxAllowance,
+  hasSolanaTxAllowance,
+  releaseSolanaTxAllowance,
 } from './solanaTxAllowance';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -121,13 +122,23 @@ describe('isSignedByWalletOnly', () => {
 describe('solana transaction allowance', () => {
   beforeEach(() => clearSolanaTxAllowancesForTests());
 
-  it('is one-shot, for the same wallet, before it expires', () => {
+  it('holds while its prompt is open, for that wallet only, until it expires', () => {
     grantSolanaTxAllowance(1, 'k', 0);
-    expect(consumeSolanaTxAllowance(2, 'k', 1)).toBe(false);
+    expect(hasSolanaTxAllowance(2, 'k', 1)).toBe(false);
+    // Checking spends nothing: a wrong password can be retried.
+    expect(hasSolanaTxAllowance(1, 'k', 1)).toBe(true);
+    expect(hasSolanaTxAllowance(1, 'k', 2)).toBe(true);
+    expect(hasSolanaTxAllowance(1, 'k', SOLANA_TX_ALLOWANCE_TTL_MS)).toBe(false);
+    releaseSolanaTxAllowance(1, 'k');
+    expect(hasSolanaTxAllowance(1, 'k', 1)).toBe(false);
+  });
+
+  it('counts prompts: the same bytes sent twice keep the second prompt’s allowance when the first settles', () => {
     grantSolanaTxAllowance(1, 'k', 0);
-    expect(consumeSolanaTxAllowance(1, 'k', 1)).toBe(true);
-    expect(consumeSolanaTxAllowance(1, 'k', 2)).toBe(false);
     grantSolanaTxAllowance(1, 'k', 0);
-    expect(consumeSolanaTxAllowance(1, 'k', SOLANA_TX_ALLOWANCE_TTL_MS)).toBe(false);
+    releaseSolanaTxAllowance(1, 'k');
+    expect(hasSolanaTxAllowance(1, 'k', 1)).toBe(true);
+    releaseSolanaTxAllowance(1, 'k');
+    expect(hasSolanaTxAllowance(1, 'k', 1)).toBe(false);
   });
 });

@@ -6636,6 +6636,7 @@ export default {
   'solana.dapp.acknowledge': 'I understand the risk and want to sign',
   'solana.dapp.txUnreadable': "Gero can't read this transaction, so it can't be signed.",
   'solana.dapp.txSigningFailed': "Couldn't sign the transaction. Try again.",
+  'solana.dapp.txExpired': 'This request expired. Ask the site to send the transaction again.',
   'solana.dapp.walletTypeUnsupportedTx': "This wallet can't sign Solana transactions for dApps.",
   'solana.dapp.warn.assignsWallet': 'Hands control of your Solana account to another program.',
   'solana.dapp.warn.givesTokenAccount': 'Hands one of your token accounts to another address.',

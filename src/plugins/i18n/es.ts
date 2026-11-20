@@ -6404,6 +6404,7 @@ export default {
   'solana.dapp.acknowledge': 'Entiendo el riesgo y quiero firmar',
   'solana.dapp.txUnreadable': 'Gero no puede leer esta transacción, así que no se puede firmar.',
   'solana.dapp.txSigningFailed': 'No se pudo firmar la transacción. Inténtalo de nuevo.',
+  'solana.dapp.txExpired': 'Esta solicitud venció. Pide al sitio que envíe la transacción de nuevo.',
   'solana.dapp.walletTypeUnsupportedTx': 'Esta billetera no puede firmar transacciones de Solana para dApps.',
   'solana.dapp.warn.assignsWallet': 'Entrega el control de tu cuenta de Solana a otro programa.',
   'solana.dapp.warn.givesTokenAccount': 'Entrega una de tus cuentas de tokens a otra dirección.',

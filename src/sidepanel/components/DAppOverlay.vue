@@ -3424,6 +3424,7 @@ async function signSolanaTransactionWith(credentials: { password?: string; prfSe
     method: MessageTypes.SIGN_SOLANA_TRANSACTION,
     data: { transaction: Array.from(bytes), ...credentials },
   })), approvalCurrent) as { data?: { success: boolean; signedTransaction?: number[]; error?: string } };
+  if (res?.data?.error === 'SOLANA_TX_EXPIRED') throw new Error(t('solana.dapp.txExpired'));
   if (!res?.data?.success || !res.data.signedTransaction) throw new Error(res?.data?.error || 'Failed to sign the transaction');
   approve(res.data.signedTransaction);
 }

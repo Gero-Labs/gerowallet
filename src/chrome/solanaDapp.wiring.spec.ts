@@ -71,15 +71,17 @@ describe('Solana dApp transactions', () => {
     expect(b).toContain('grantSolanaTxAllowance(wallet.id, prepared.messageKey)');
     expect(b).toContain('isSignedByWalletOnly(prepared, signed, wallet.publicKey)');
     expect(b).toContain('still.id !== wallet.id');
-    expect(b).toContain('revokeSolanaTxAllowance(prepared.messageKey)');
+    expect(b).toContain('releaseSolanaTxAllowance(wallet.id, prepared.messageKey)');
+    // A submit with no answer may have landed: never "nothing was sent".
+    expect(b).toContain('Gero could not confirm the transaction was sent');
   });
 
-  it('the panel signs only a message the worker previewed, checked before any secret is opened', () => {
+  it('the panel signs only a message whose preview is open, checked before any secret is opened', () => {
     const b = handler('app.addToOptions(MessageTypes.SIGN_SOLANA_TRANSACTION,');
     expect(b).toContain('refuseSettingsWhileLocked(request, sendResponse)');
-    const consume = b.indexOf('consumeSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))');
-    expect(consume).toBeGreaterThan(-1);
-    expect(consume).toBeLessThan(b.indexOf('wallet.signSolanaDappTransaction('));
+    const check = b.indexOf('hasSolanaTxAllowance(wallet.id, solanaMessageKey(tx.messageBytes))');
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(b.indexOf('wallet.signSolanaDappTransaction('));
     expect(read('senderTrust.ts')).toContain("'SIGN_SOLANA_TRANSACTION',");
   });
 });
