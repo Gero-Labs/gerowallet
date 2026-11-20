@@ -156,6 +156,7 @@ import {
 } from '@/chains/solana/solanaDappProtocol';
 import { SOLANA_SIGN_MESSAGE_MAX_BYTES, solanaSignMessageRefusal, type SolanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
 import { verifySolanaSignature } from '@/chains/solana/solanaTransaction';
+import { checkSolanaSignIn, solanaSignInMessageText, type SolanaSignInRefusal } from '@/chains/solana/solanaSignIn';
 import { SOLANA_MAX_TRANSACTION_BYTES, decodeSolanaTransaction, withSolanaSignature } from '@/chains/solana/solanaTxWire';
 import {
   SolanaDappTxError,
@@ -4099,7 +4100,7 @@ const SOLANA_NOT_AVAILABLE = solanaDappError(SolanaDappErrorCode.Unauthorized, '
 const SOLANA_USER_REJECTED = solanaDappError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
 
 /** The parked Solana prompts (connect, signMessage) a tab's navigation settles. */
-const PARKED_SOLANA_METHODS: ReadonlySet<string> = new Set([SOLANA_METHOD.connect, SOLANA_METHOD.signMessage, SOLANA_METHOD.signTransaction]);
+const PARKED_SOLANA_METHODS: ReadonlySet<string> = new Set([SOLANA_METHOD.connect, SOLANA_METHOD.signMessage, SOLANA_METHOD.signTransaction, SOLANA_METHOD.signIn]);
 
 /** One parked connect prompt per tab and site; a dApp's repeated connect() joins it. */
 const parkedSolanaConnects = new ParkedConnects<ReplyOpts>();
@@ -4219,6 +4220,72 @@ app.add(SOLANA_METHOD.signMessage, (request, sendResponse) => {
       return { error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign the message')) };
     }
   })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign the message') }));
+  return true;
+});
+
+function solanaSignInRefusalText(reason: SolanaSignInRefusal): string {
+  switch (reason) {
+    case 'DOMAIN_MISMATCH': return 'The sign-in is for another site';
+    case 'ADDRESS_MISMATCH': return 'The sign-in is for another account';
+    case 'CHAIN_MISMATCH': return 'The sign-in is for another network';
+    case 'EXPIRED': return 'The sign-in request has expired';
+    case 'NOT_YET_VALID': return 'The sign-in request is not valid yet';
+    case 'INVALID': return 'The sign-in request is malformed';
+  }
+}
+
+/**
+ * Wallet Standard `solana:signIn` (Sign in with Solana). The worker checks the dApp's fields
+ * (solanaSignIn.ts: the domain is this site, the address this account, the chain this network,
+ * no field forges a line, not expired) and builds the message text itself; the side panel shows
+ * it and signs it as a message (SIGN_SOLANA_MESSAGE re-checks the bytes). The signature is
+ * checked against the account before the dApp gets it, and approving connects a site that was
+ * not connected yet, as standard:connect would (the logged account).
+ */
+app.add(SOLANA_METHOD.signIn, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  void (async (): Promise<ReplyOpts> => {
+    if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };
+    const active = solanaDappWallet();
+    if ('error' in active) return { error: active.error };
+    const { wallet } = active;
+    let originHost = '';
+    try {
+      originHost = new URL(origin).host;
+    } catch { /* below */ }
+    if (!originHost) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, 'No site to sign in to') };
+    const chain = solanaChainId(wallet.network);
+    const check = checkSolanaSignIn((data as { input?: unknown } | undefined)?.input, { originHost, address: wallet.publicKey, chain });
+    if ('reason' in check) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, solanaSignInRefusalText(check.reason)) };
+    const bytes = new TextEncoder().encode(solanaSignInMessageText(check.fields));
+    if (solanaSignMessageRefusal(bytes)) return { error: solanaDappError(SolanaDappErrorCode.InvalidParams, 'The sign-in request is too large') };
+    const tabId = send.tab?.id;
+    if (typeof tabId !== 'number') return { error: solanaDappError(SolanaDappErrorCode.Internal, 'No tab context for this request') };
+
+    const connected = WalletStore.isWhitelisted(origin);
+    const payload = {
+      ...promptSite(origin, send), address: wallet.publicKey, solanaMessage: Array.from(bytes), signIn: check.fields, connects: !connected,
+    };
+    try {
+      const response = await parkMidnightRequest(SOLANA_METHOD.signIn, payload, tabId);
+      const signature = bytesFromWire((response as { data?: unknown } | undefined)?.data, 64);
+      const still = walletManager.getWallet();
+      if (!still || still.id !== wallet.id) {
+        return { error: solanaDappError(SolanaDappErrorCode.Unauthorized, 'The wallet changed before signing in') };
+      }
+      if (!signature || !verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))) {
+        return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign in') };
+      }
+      // The logged account (an empty approval names no other one).
+      if (!connected && !(await connectApproved({}, wallet.id, origin))) {
+        return { error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to connect the site') };
+      }
+      return { data: { address: wallet.publicKey, chain, signedMessage: Array.from(bytes), signature: Array.from(signature) } };
+    } catch (err) {
+      return { error: parseSolanaPanelError(err, solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign in')) };
+    }
+  })().then(reply, () => reply({ error: solanaDappError(SolanaDappErrorCode.Internal, 'Failed to sign in') }));
   return true;
 });
 

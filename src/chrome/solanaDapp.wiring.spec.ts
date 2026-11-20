@@ -86,6 +86,28 @@ describe('Solana dApp transactions', () => {
   });
 });
 
+describe('Sign in with Solana', () => {
+  it('checks the fields, builds the text itself, verifies the signature, and connects a new site', () => {
+    const b = handler('app.add(SOLANA_METHOD.signIn,');
+    expect(b).toContain('if (!(await isSolanaDappEnabled())) return { error: SOLANA_NOT_AVAILABLE };');
+    expect(b).toContain('originHost = new URL(origin).host;');
+    expect(b).toContain('checkSolanaSignIn((data as { input?: unknown } | undefined)?.input, { originHost, address: wallet.publicKey, chain })');
+    expect(b).toContain('solanaSignInMessageText(check.fields)');
+    expect(b).toContain('solanaSignMessageRefusal(bytes)');
+    expect(b).toContain('verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))');
+    expect(b).toContain('still.id !== wallet.id');
+    expect(b).toContain('const connected = WalletStore.isWhitelisted(origin);');
+    expect(b).toContain('!connected && !(await connectApproved({}, wallet.id, origin))');
+  });
+
+  it('is fast-pathed, parked, and rendered with the message signer', () => {
+    expect(messaging).toContain('request.method === SOLANA_METHOD.signIn ||');
+    expect(background).toContain('SOLANA_METHOD.signTransaction, SOLANA_METHOD.signIn]);');
+    expect(overlay).toContain(`currentRequest.method === 'solana_signIn'`);
+    expect(read('../sidepanel/services/dappRequestHub.ts')).toContain("'solana_signTransaction', 'solana_signIn',");
+  });
+});
+
 describe('Solana relay and panel', () => {
   it('fast-paths the Solana methods and gives the page coded errors', () => {
     for (const name of ['available', 'connect', 'signMessage', 'signTransaction', 'signAndSendTransaction']) {

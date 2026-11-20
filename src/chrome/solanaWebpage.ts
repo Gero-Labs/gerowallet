@@ -47,6 +47,16 @@ export const solanaSignAndSendTransaction = async (address: string, transaction:
   return new Uint8Array(reply.data.signature);
 };
 
+/** Sign in with Solana: the account, and the exact SIWS message the wallet built and signed. */
+export const solanaSignIn = async (input: unknown): Promise<SolanaConnectedAccount & { signedMessage: Uint8Array; signature: Uint8Array }> => {
+  const reply = (await Messaging.sendToContent({
+    method: SOLANA_METHOD.signIn,
+    data: { input, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<SolanaConnectedAccount & { signedMessage: number[]; signature: number[] }>;
+  const { address, chain, signedMessage, signature } = reply.data;
+  return { address, chain, signedMessage: new Uint8Array(signedMessage), signature: new Uint8Array(signature) };
+};
+
 /** Asks the user to sign `message` with `address`; the 64-byte ed25519 signature. */
 export const solanaSignMessage = async (address: string, message: Uint8Array): Promise<Uint8Array> => {
   const reply = (await Messaging.sendToContent({

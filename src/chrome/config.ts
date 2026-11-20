@@ -206,6 +206,8 @@ export const SOLANA_METHOD = {
   // Both park one 'solana_signTransaction' side-panel prompt (with the mode in its payload).
   signTransaction: 'solana_signTransaction',
   signAndSendTransaction: 'solana_signAndSendTransaction',
+  // Sign in with Solana: a checked SIWS message, signed in the side panel; connects the site.
+  signIn: 'solana_signIn',
 };
 
 export const BITCOIN_METHOD = {
