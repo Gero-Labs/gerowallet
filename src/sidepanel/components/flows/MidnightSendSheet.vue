@@ -444,7 +444,7 @@ import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
 import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { helperProcessorLabel } from '@/chains/midnight/geroProverState';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
 import { midnightStore } from '@/stores/midnightStore';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
@@ -910,7 +910,7 @@ async function acceptConsent() {
  */
 function sendProver() {
   return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', {
-    helper: featureFlagsStore.isGeroProverEnabled(),
+    helper: geroProverOfferedHere(),
   });
 }
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
@@ -1231,13 +1231,14 @@ const timelineLabels = computed(() => ({
   provingCloud: t('midnight.send.stageProvingCloud') as string,
 }));
 const { message: liveMessage, announce } = usePoliteAnnouncer();
+// "Keep this panel open" is always shown under the timeline, so a proving hint need not repeat it.
+const keepOpen = { keepOpenShown: true };
 const timelineNodes = useMidnightSendTimeline(
   computed(() => sendStage.value),
   timelineLabels,
   {
-    // "Keep this panel open" is always shown under the timeline, so the slow hint need not repeat it.
     provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
-      keepOpenShown: true,
+      ...keepOpen,
       helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
     }),
     announce,

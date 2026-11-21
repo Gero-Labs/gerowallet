@@ -28,7 +28,7 @@ import {
 import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { markProofServerLedger9NoticeDone } from '@/chains/midnight/proofServerLedger9Notice';
 import { isLoopbackProverUrl, localUrlForNetwork, walletProverFor, type LocalProvingEngine } from '@/chains/midnight/midnightProvingTarget';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
 import { refreshGeroProver } from '@/chains/midnight/geroProverState';
 
 
@@ -95,7 +95,7 @@ export function useMidnightProofServer() {
   }
 
   /** Gero Prover (the desktop helper) is offered: the `isGeroProverEnabled` flag. */
-  const helperOffered = computed(() => featureFlagsStore.isGeroProverEnabled());
+  const helperOffered = computed(() => geroProverOfferedHere());
 
   const proofServerMode = computed<ProofServerMode>({
     get: () => proofServer.value.mode,

@@ -505,6 +505,7 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
 import {
   HELPER_UNAVAILABLE_COPY, helperProcessorLabel, isHelperUnavailableReason, type HelperUnavailableReason,
 } from '@/chains/midnight/geroProverState';
@@ -990,7 +991,7 @@ function sendProver(forceRemote = false): WalletProver {
     isShielded.value ? 'shielded' : 'unshielded',
     {
       shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled(),
-      helper: featureFlagsStore.isGeroProverEnabled(),
+      helper: geroProverOfferedHere(),
     },
   );
 }
