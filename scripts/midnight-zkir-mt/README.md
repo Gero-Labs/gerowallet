@@ -67,6 +67,41 @@ Every proof from this build (2, 4, 8 and 16 threads, all three circuits) verifie
 against the pinned verifier keys with a native verifier built from the same
 upstream source.
 
+## Experiment: the multiplication on the thread pool (not this build)
+
+`experiments/parallel-msm.diff` is a 26-line change to `midnight-curves`
+(`G1Projective::multi_exp`, the one place both proving stacks reach blst): on wasm32,
+with more than one rayon thread and at least 512 points, the input is split into one
+chunk per thread, blst's unchanged serial multiplication runs on each, and the partial
+results are added. The diff also holds the two `[patch.crates-io]` lines and the lock
+entries it needs; the build flags are the `mt` ones above.
+
+Measured the same day on the same machine and harness, in a later session (in which the
+unpatched 8-thread build was slower than in the table above: 7.33 s, 17.0 s, 31.7 s):
+
+| Proof | npm binary, 1 thread | patched, 8 threads | patched, 16 threads |
+|---|---|---|---|
+| DUST fee spend | 7.90 s | 2.24 s (3.5x) | 1.97 s (4.0x) |
+| Zswap output | 20.3 s | 5.58 s (3.6x) | 4.70 s (4.3x) |
+| Zswap spend | 39.2 s | 10.1 s (3.9x) | 7.95 s (4.9x) |
+
+100 of 100 proofs from the patched build (2 to 16 threads, the three circuits) verified
+against the pinned verifier keys with the native verifier; three builds gave the same
+bytes (`midnight_zkir_wasm_mt_bg.wasm`, 5,642,199 bytes, sha256 `32f8be98…11f25f`).
+Memory peaked at 507 MiB at 8 threads on the Zswap spend, as unpatched.
+
+**It is not pinned and not shipped**, because it changes the cryptographic library
+rather than only how it is built. Before it could be:
+
+- blst's C code, compiled without atomics, would run on several threads at once. Nobody
+  has audited it for shared state under this build; the 100 proofs are evidence, not proof.
+- The change belongs upstream (`midnight-curves`, or a thread pool in blst for wasm32),
+  not in a patch redone at every ledger version.
+- A wasm32 unit test of chunked against serial (points at infinity, an all-zero chunk,
+  the 512 threshold), and a check that no caller depends on the result's coordinates.
+- Only the proving stack these circuits use (0.2.1) was exercised; 0.3.1 compiles with
+  the edit and made no proof here.
+
 ## Not known
 
 - Stack depth: 8 MiB per worker is a margin, not a measured need, and a worker
@@ -84,3 +119,4 @@ upstream source.
 - `Dockerfile`, `build.sh`: the pinned build (`build.sh` runs inside the image).
 - `build-in-docker.sh <out dir> [mt|st|mt-simd ...]`: host driver.
 - `sanity.mjs`: loads a built package in Node and reads a circuit's size from its IR.
+- `experiments/parallel-msm.diff`: the experiment above. Nothing builds or reads it.
