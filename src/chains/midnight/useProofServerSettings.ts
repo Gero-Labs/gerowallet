@@ -27,7 +27,9 @@ import {
 } from '@/chains/midnight/midnightConfig';
 import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { markProofServerLedger9NoticeDone } from '@/chains/midnight/proofServerLedger9Notice';
-import { isLoopbackProverUrl, localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
+import { isLoopbackProverUrl, localUrlForNetwork, walletProverFor, type LocalProvingEngine } from '@/chains/midnight/midnightProvingTarget';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { refreshGeroProver } from '@/chains/midnight/geroProverState';
 
 
 export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
@@ -46,6 +48,11 @@ const HEALTH_POLL_INTERVAL_MS: Record<'local' | 'zkpaas', number> = {
   local: 4_000,
   zkpaas: 30_000,
 };
+/**
+ * Gero Prover is a program the browser starts to ask and stops again, so its
+ * status is read seldom: polling it like a URL would keep it running.
+ */
+const HELPER_POLL_INTERVAL_MS = 5 * 60_000;
 
 // The coarse "3m ago" label, shared with the wallet list (src/shared/utils/relativeTime.ts).
 export { formatRelativeTime } from '@/shared/utils/relativeTime';
@@ -87,13 +94,30 @@ export function useMidnightProofServer() {
     }
   }
 
+  /** Gero Prover (the desktop helper) is offered: the `isGeroProverEnabled` flag. */
+  const helperOffered = computed(() => featureFlagsStore.isGeroProverEnabled());
+
   const proofServerMode = computed<ProofServerMode>({
     get: () => proofServer.value.mode,
     set: (mode) => {
       if (mode === proofServer.value.mode) return;
-      void saveProofServer({ mode });
+      // First time on "This computer" with Gero Prover on offer: start with
+      // it. A stored choice (Docker included) is never changed here.
+      const firstLocal = mode === 'local' && helperOffered.value && proofServer.value.localEngine === undefined;
+      void saveProofServer(firstLocal ? { mode, localEngine: 'helper' } : { mode });
     },
   });
+
+  /** What "local" proves with, as the user chose it and as it is on offer. */
+  const localEngine = computed<LocalProvingEngine>(() => (
+    helperOffered.value && proofServer.value.localEngine === 'helper' ? 'helper' : 'docker'
+  ));
+
+  async function setLocalEngine(engine: LocalProvingEngine) {
+    if (proofServer.value.mode === 'local' && proofServer.value.localEngine === engine) return;
+    await saveProofServer({ mode: 'local', localEngine: engine });
+    restartHealthPollingIfActive();
+  }
 
   // ── Drafts: field edits buffer locally and persist on blur ──────────────
 
@@ -181,6 +205,16 @@ export function useMidnightProofServer() {
 
   const walletNetwork = computed(() => walletStore.loggedWallet?.network);
 
+  /**
+   * A send from the active wallet would be proved by Gero Prover: the same
+   * rule the send uses (`walletProverFor`), so the status shown is the status
+   * of the prover that would be used. A chain still on ledger 8 keeps the
+   * Docker server even with the helper chosen.
+   */
+  const usesHelper = computed(() => walletProverFor(
+    walletNetwork.value ?? '', proofServer.value, 'unshielded', { helper: helperOffered.value },
+  ) === 'helper');
+
   /** Effective Arkhia endpoint (override, else per-network default). Shown
    * as the URL field's placeholder so "automatic" is a visible URL, not a
    * mystery. */
@@ -228,8 +262,27 @@ export function useMidnightProofServer() {
     return null;
   }
 
+  async function runHelperCheck() {
+    healthCheckInFlight = true;
+    const startedAt = Date.now();
+    try {
+      const snapshot = await refreshGeroProver();
+      serverVersion.value = snapshot.connection === 'wrong-version' ? snapshot.version ?? null : null;
+      healthStatus.value = snapshot.connection === 'connected' ? 'detected'
+        : snapshot.connection === 'wrong-version' ? 'wrongVersion' : 'notDetected';
+      lastCheckedAt.value = Date.now();
+      lastCheckLatencyMs.value = lastCheckedAt.value - startedAt;
+    } finally {
+      healthCheckInFlight = false;
+    }
+  }
+
   async function runHealthCheck() {
     if (healthCheckInFlight) return;
+    if (usesHelper.value) {
+      await runHelperCheck();
+      return;
+    }
     const target = currentHealthTarget();
     if (!target) {
       healthStatus.value = proofServer.value.mode === 'zkpaas' ? 'notConfigured' : 'notDetected';
@@ -275,7 +328,7 @@ export function useMidnightProofServer() {
     if (mode === 'remote') return;
     healthPollTimer = setInterval(() => {
       void runHealthCheck();
-    }, HEALTH_POLL_INTERVAL_MS[mode]);
+    }, usesHelper.value ? HELPER_POLL_INTERVAL_MS : HEALTH_POLL_INTERVAL_MS[mode]);
   }
 
   function restartHealthPollingIfActive() {
@@ -285,6 +338,8 @@ export function useMidnightProofServer() {
   // Switching wallets across ledgers changes which local server is relevant,
   // so re-check rather than keep showing the other server's status.
   watch(() => isLedger9Network(walletNetwork.value), () => { restartHealthPollingIfActive(); });
+  // Docker and Gero Prover are checked differently and at different rates.
+  watch(usesHelper, () => { restartHealthPollingIfActive(); });
 
   async function testConnection() {
     testingConnection.value = true;
@@ -325,6 +380,11 @@ export function useMidnightProofServer() {
     proofServer,
     proofServerMode,
     proofServerSaving,
+    /** Gero Prover is offered (the flag). Off, every surface is as it was before the helper. */
+    helperOffered,
+    localEngine,
+    setLocalEngine,
+    usesHelper,
     localUrlDraft,
     localUrlError,
     onLocalUrlBlur,

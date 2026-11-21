@@ -94,6 +94,14 @@ export interface FeatureFlags {
   // here (Zswap proofs: 30-70 s on a fast laptop) and Gero receives no secret.
   // Public sends prove their DUST fee on this device either way.
   isMidnightShieldedDeviceProvingEnabled: boolean;
+  // Gero Prover: Midnight proofs made by a desktop helper app on this computer (native, all
+  // cores, the graphics processor where it has a backend) instead of the WASM prover in the
+  // browser. Default OFF, ships dark: the helper and its upstream provers are unaudited. Off,
+  // the Proof server page and the send dialogs are exactly as before, and a stored choice of
+  // the helper reads as the Docker proof server (walletProverFor). The flag never loosens a
+  // check: the helper is used only when the user also chose it and allowed the browser to
+  // talk to it (midnightHelperOffer.ts).
+  isGeroProverEnabled: boolean;
   // CIP-113 Send (Gero's own transfer of a programmable token). Default OFF, ships dark.
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
@@ -171,6 +179,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
     isMidnightShieldedDeviceProvingEnabled: false,
+    isGeroProverEnabled: false,
     isCip113Enabled: false,
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
@@ -266,6 +275,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
     // Shielded on-device proving ships DARK (default false).
     featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled = featureFlagService.getFlag('isMidnightShieldedDeviceProvingEnabled', false);
+    // Gero Prover ships DARK (default false).
+    featureFlagsState.flags.isGeroProverEnabled = featureFlagService.getFlag('isGeroProverEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     // NFT rescue ships DARK (default false); UI-only gate for the stuck-listings card.
@@ -381,6 +392,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isMidnightShieldedDeviceProvingEnabled', (newValue) => {
       featureFlagsState.flags['isMidnightShieldedDeviceProvingEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isGeroProverEnabled', (newValue) => {
+      featureFlagsState.flags['isGeroProverEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
@@ -658,6 +672,14 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled;
   },
 
+  /**
+   * Offer Gero Prover, the desktop helper that makes Midnight proofs on this
+   * computer. Ships DARK (default false); see the flag's declaration.
+   */
+  isGeroProverEnabled(): boolean {
+    return featureFlagsState.flags.isGeroProverEnabled;
+  },
+
   /** Gero Card cardholder-details step; on unless the flag service says false. */
   isCardholderDetailsEnabled(): boolean {
     return featureFlagsState.flags.isCardholderDetailsEnabled;
@@ -733,6 +755,7 @@ export const featureFlagsStore = {
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
       isMidnightShieldedDeviceProvingEnabled: false,
+    isGeroProverEnabled: false,
       isCip113Enabled: false,
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,

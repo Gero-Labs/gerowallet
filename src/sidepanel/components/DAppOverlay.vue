@@ -3645,16 +3645,20 @@ async function buildMidnightTransferTx(
 // that click).
 const transferConsentOpen = ref(false);
 const transferProver = computed<WalletProver>(() =>
-  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded'));
+  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', {
+    helper: featureFlagsStore.isGeroProverEnabled(),
+  }));
 const transferProverLabel = computed(() => t(
   transferProver.value === 'device' ? 'midnight.proofServer.deviceLabel'
+    : transferProver.value === 'helper' ? 'midnight.prover.name'
     : transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
       : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
 ));
 /** True (and the consent dialog opens) when the chosen remote prover has no recorded consent yet. */
 function transferNeedsProvingConsent(): boolean {
   const prover = transferProver.value;
-  if (prover === 'local' || prover === 'device' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
+  if (prover === 'local' || prover === 'device' || prover === 'helper'
+    || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
   transferConsentOpen.value = true;
   return true;
 }

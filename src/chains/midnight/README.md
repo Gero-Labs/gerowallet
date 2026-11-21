@@ -183,7 +183,7 @@ proves a transaction can therefore spend what it reveals.
 | Mode | Public send (DUST fee) | Private send (Zswap + DUST) |
 |---|---|---|
 | Gero Cloud (`remote`, default) | this device | Gero Cloud `/tx/prove-and-submit`, consent-gated; this device with `isMidnightShieldedDeviceProvingEnabled` |
-| local | the user's loopback proof server | same |
+| local | the user's loopback proof server, or Gero Prover with `isGeroProverEnabled` and `localEngine: 'helper'` | same |
 | zkPaaS | Arkhia, consent-gated | same |
 
 - **This device** (`midnightDeviceProver.ts`): zkir-v2 2.2.0 (which fixes
@@ -198,6 +198,20 @@ proves a transaction can therefore spend what it reveals.
   needed only by the shielded flag; that host must serve the released files
   (`--verify --host <url>` checks it). The worker exists only in built pages,
   not under the Vite dev server.
+- **Gero Prover** (`midnightHelperProver.ts`, protocol in
+  `midnightHelperProtocol.ts`): a desktop helper app that makes the same
+  ledger 9 built-in proofs natively (all cores, the graphics processor where it
+  has a backend). Behind the default-off `isGeroProverEnabled` flag, and only
+  when the user chose it under "This computer" (`proofServer.localEngine`) and
+  granted the optional `nativeMessaging` permission. The background reaches it
+  over Chrome native messaging (host `io.gerowallet.prover`), tells it this
+  build's key pins, hands over any file it lacks (verified here first; the
+  helper has no network access) and sends a witness only once it reports every
+  file of the circuit as held and verified. A failure is one `GERO_PROVER_*`
+  code the pages translate; nothing switches to another prover by itself. A
+  dapp's own contract circuits are not proved by it (their keys are not
+  pinned). The helper program itself is not in this repository. Design:
+  `docs/superpowers/specs/2026-11-21-gero-prover-design.md` (docs/ is gitignored).
 - **Local proof server**: `midnightntwrk/proof-server:9.0.0` for ledger 9 on
   `127.0.0.1:6301`, the ledger 8 server (8.1.0) on 6300. Ledger 9 keeps 6301
   on every network so a ledger 8 server still running on 6300 never gets

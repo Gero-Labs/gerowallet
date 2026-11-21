@@ -105,6 +105,13 @@ export interface MidnightProvingLogEntry {
   success: boolean;
   /** Present only when {@code success} is false. Never the tx hex/witness. */
   error?: string;
+  /**
+   * Gero Prover only (midnightHelperProver.ts): whether the graphics processor
+   * took part in the transaction's proofs. Absent for every other prover.
+   */
+  processor?: 'gpu' | 'cpu';
+  /** Gero Prover only: a graphics-processor proof failed and was made again on the main processor. */
+  cpuRetry?: boolean;
 }
 
 /**
@@ -267,6 +274,14 @@ export interface MidnightStore {
     zkpaasApiKey: string;
     /** Optional Arkhia API secret for hardened (2-layer) projects. */
     zkpaasApiSecret: string;
+    /**
+     * What {@code local} proves with: a Docker proof server at the URLs above
+     * ({@code docker}, and what an absent value means) or Gero Prover, the
+     * desktop helper ({@code helper}, midnightHelperProver.ts). Read through
+     * {@code walletProverFor}, which honours {@code helper} only while the
+     * {@code isGeroProverEnabled} flag is on.
+     */
+    localEngine?: 'docker' | 'helper';
   };
 
   /**
@@ -579,6 +594,8 @@ function hydrateProvingHistory(stored: unknown): MidnightProvingLogEntry[] {
       durationMs: typeof e['durationMs'] === 'number' ? e['durationMs'] : 0,
       success: !!e['success'],
       error: typeof e['error'] === 'string' ? e['error'] : undefined,
+      ...(e['processor'] === 'gpu' || e['processor'] === 'cpu' ? { processor: e['processor'] as 'gpu' | 'cpu' } : {}),
+      ...(e['cpuRetry'] === true ? { cpuRetry: true } : {}),
     }))
     .slice(0, PROVING_HISTORY_LIMIT);
 }
@@ -1076,6 +1093,7 @@ export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'
   const localUrl = (stored as { localUrl?: unknown }).localUrl;
   const zkpaasUrl = (stored as { zkpaasUrl?: unknown }).zkpaasUrl;
   const storedLedger9 = (stored as { localUrlLedger9?: unknown }).localUrlLedger9;
+  const localEngine = (stored as { localEngine?: unknown }).localEngine;
   // Migration from the retired `localProfile` toggle. A stored 'stagenet'
   // profile meant "the server at localUrl is ledger 9", so that URL moves to
   // the ledger-9 slot and the ledger-8 slot returns to its default — where a
@@ -1097,6 +1115,7 @@ export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
     zkpaasApiKey: hydrateCredentialString((stored as { zkpaasApiKey?: unknown }).zkpaasApiKey),
     zkpaasApiSecret: hydrateCredentialString((stored as { zkpaasApiSecret?: unknown }).zkpaasApiSecret),
+    ...(localEngine === 'docker' || localEngine === 'helper' ? { localEngine } : {}),
   };
 }
 
@@ -1652,7 +1671,9 @@ export const midnightActions = {
    * proving mode. Never pass tx hex or witness data as `error` — see the
    * file-header privacy note on `midnightLocalProver.ts`.
    */
-  recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
+  recordLocalProvingAttempt(entry: {
+    durationMs: number; success: boolean; error?: string; processor?: 'gpu' | 'cpu'; cpuRetry?: boolean;
+  }) {
     bgDurableTouched.provingHistory = true;
     const next = [
       { timestamp: Date.now(), ...entry, ...(entry.error !== undefined ? { error: sanitizeProvingError(entry.error) } : {}) },

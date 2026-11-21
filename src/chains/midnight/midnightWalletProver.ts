@@ -1,7 +1,8 @@
 /**
  * The `ProvingProvider` for a wallet-built transaction, from a
- * {@link WalletProvingRequest}: this device (midnightDeviceProver.ts) or a
- * native-API proof server (midnightLocalProver.ts). One place, so the
+ * {@link WalletProvingRequest}: this device (midnightDeviceProver.ts), Gero
+ * Prover (midnightHelperProver.ts) or a native-API proof server
+ * (midnightLocalProver.ts). One place, so the
  * unshielded, shielded and dapp-balancing paths cannot disagree.
  */
 
@@ -10,10 +11,16 @@ import type * as ledger9 from '@midnightntwrk/ledger-v9';
 import type { WalletProvingRequest } from './midnightProvingTarget';
 import { resolveMidnightLedger } from './midnightChainLedger';
 import { midnightNetworkName, type MidnightLedger } from './midnightLedger';
+// Static: small, and the background (one iife) must not gain a lazily read module (scripts/check-bundle-tdz.mjs).
+import { makeHelperProvingProvider } from './midnightHelperProver';
 
 /** Inlined (not midnightProvingTarget's): this module stays free of that one's value imports. */
 function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
   return 'device' in request && request.device === true;
+}
+
+function isHelperProving(request: WalletProvingRequest): request is { helper: true } {
+  return 'helper' in request && request.helper === true;
 }
 
 export async function walletProvingProvider(
@@ -40,11 +47,19 @@ export async function walletProvingProvider(
     const { makeDeviceProvingProvider } = await import('./midnightDeviceProver');
     return makeDeviceProvingProvider({ shielded: options.shielded });
   }
+  if (isHelperProving(proving)) {
+    // The helper is handed the same pinned ledger 9 keys as this device.
+    if (ledger !== 9) {
+      throw new Error(`Gero Prover does not support Midnight ${midnightNetworkName(options.sdkNetworkId)} (ledger ${ledger}) in this version`);
+    }
+    return makeHelperProvingProvider({ shielded: options.shielded });
+  }
   const { makeLocalProvingProvider } = await import('./midnightLocalProver');
   return makeLocalProvingProvider(proving.url, { headers: proving.headers, sdkNetworkId: options.sdkNetworkId, ledger });
 }
 
 /** For logs: where a proof is made. A server URL, never its auth headers. */
 export function describeWalletProving(proving: WalletProvingRequest): string {
-  return isDeviceProving(proving) ? 'this device' : proving.url;
+  if (isDeviceProving(proving)) return 'this device';
+  return isHelperProving(proving) ? 'Gero Prover' : proving.url;
 }
