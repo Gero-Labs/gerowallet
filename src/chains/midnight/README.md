@@ -183,7 +183,7 @@ proves a transaction can therefore spend what it reveals.
 | Mode | Public send (DUST fee) | Private send (Zswap + DUST) |
 |---|---|---|
 | Gero Cloud (`remote`, default) | this device | Gero Cloud `/tx/prove-and-submit`, consent-gated; this device with `isMidnightShieldedDeviceProvingEnabled` |
-| local | the user's loopback proof server, or Gero Prover with `isGeroProverEnabled` and `localEngine: 'helper'` | same |
+| local | the user's loopback proof server; Gero Prover with `isGeroProverEnabled` and `localEngine: 'helper'`; this device with `isMidnightThreadedProvingEnabled` and `localEngine: 'browser'` | same |
 | zkPaaS | Arkhia, consent-gated | same |
 
 - **This device** (`midnightDeviceProver.ts`): zkir-v2 2.2.0 (which fixes
@@ -198,6 +198,21 @@ proves a transaction can therefore spend what it reveals.
   needed only by the shielded flag; that host must serve the released files
   (`--verify --host <url>` checks it). The worker exists only in built pages,
   not under the Vite dev server.
+- **Several threads** (`midnightZkirThreads.ts`, recipe and measurements in
+  `scripts/midnight-zkir-mt/`): with `isMidnightThreadedProvingEnabled` (default
+  off) the worker proves with a multi-threaded build of the same prover when the
+  browser has shared WebAssembly memory and every file of the package matches
+  its pin; otherwise it proves with the standard build and says why. The package
+  is not committed (`node scripts/midnight-zkir-mt.mjs --build`). Measured gain on
+  one desktop: 1.2 to 1.35 times, because blst's multi-scalar multiplication
+  stays on one thread under WebAssembly. The same flag offers "In this browser"
+  under This computer (`localEngine: 'browser'`): every proof of a send, private
+  ones included, is made here. Test proofs use a bundled preimage from a
+  throwaway key (`midnightProverSelfTestFixture.ts`).
+- The offscreen page must import no other chunk: an offscreen document has only
+  `chrome.runtime`, and app code throws there, which stops the prover from ever
+  connecting. `vite.config.mts` (`offscreenProverStandsAlone`) fails the build
+  if it does.
 - **Gero Prover** (`midnightHelperProver.ts`, protocol in
   `midnightHelperProtocol.ts`): a desktop helper app that makes the same
   ledger 9 built-in proofs natively (all cores, the graphics processor where it

@@ -40,7 +40,7 @@ import {
   type WalletProvingRequest,
 } from '@/chains/midnight/midnightProvingTarget';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
+import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type {
   BuildMidnightTxRequest,
@@ -693,7 +693,7 @@ export function walletProverForSend(network: string, kind: 'unshielded' | 'shiel
   const mode = forceRemote ? 'remote' : midnightStore.proofServer.mode;
   return walletProverFor(network, { mode, localEngine: midnightStore.proofServer.localEngine }, kind, {
     shieldedOnDevice: shieldedOnDevice(),
-    helper: geroProverOfferedHere(),
+    ...localProvingOffersHere(),
   });
 }
 

@@ -39,6 +39,26 @@ const sassQuiet = {
 // esbuild, which skips this hook; dev is never shipped.
 const EFFECT_API_DOCS_MODULE = /[\\/]@effect[\\/]platform[\\/]dist[\\/](?:esm|cjs)[\\/]HttpApi(Scalar|Swagger)\.js$/;
 
+// The offscreen prover page (src/offscreen/midnight-prover.html) must be a file of
+// its own. An offscreen document has chrome.runtime and no other extension API, so
+// any app chunk it loads (the stores read chrome.storage as they load) throws there,
+// and the prover then never connects to the background. Chunk merging can pull one
+// in without a line of the page's source changing, so the built page is checked.
+const offscreenProverStandsAlone: Plugin = {
+  name: 'offscreen-prover-stands-alone',
+  generateBundle(_options, bundle) {
+    for (const chunk of Object.values(bundle)) {
+      if (chunk.type !== 'chunk' || !chunk.isEntry || chunk.name !== 'offscreen') continue;
+      if (chunk.imports.length > 0) {
+        this.error(
+          `The offscreen prover page imports ${chunk.imports.join(', ')}. It must import no other chunk: `
+          + 'app code throws in an offscreen document and the Midnight prover then never starts.',
+        );
+      }
+    }
+  },
+};
+
 const stubEffectApiDocs: Plugin = {
   name: 'stub-effect-api-docs',
   enforce: 'pre',
@@ -149,6 +169,7 @@ export const sharedConfig: UserConfig = {
     // Bring origins. Fails the build if the SDK no longer matches the reviewed one.
     bringSdkPatch,
     forbidRemoteCode,
+    offscreenProverStandsAlone,
     localeMessagesPlugin(),
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
@@ -364,6 +385,16 @@ export default defineConfig(({ command }) => {
       reportCompressedSize: false,
       assetsInlineLimit: 0, // Don't inline any assets
       copyPublicDir: false, // Skip copying public directory
+      // No modulepreload polyfill. Chrome has had <link rel="modulepreload"> since
+      // version 66, so it did nothing, and it did harm: it is one small module shared
+      // by every HTML entry, which experimentalMinChunkSize (below) merged into a
+      // chunk that depends on the wallet's stores. The offscreen prover page then
+      // loaded walletStore first, which throws there (an offscreen document has
+      // chrome.runtime and nothing else: no chrome.storage), so the page never opened
+      // its port and every on-device proof failed with "The Midnight prover did not
+      // start". `offscreenProverStandsAlone` below fails the build if that page ever
+      // imports another chunk again.
+      modulePreload: { polyfill: false },
       rollupOptions: {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
@@ -430,6 +461,11 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public', flatten: true },
               // Pinned Midnight DUST-fee proving keys (midnightZkKeys.ts), read by the prover worker.
               { src: 'src/assets/midnight-zk/*', dest: 'extension/midnight-zk', flatten: true },
+              // The multi-threaded prover build (midnightZkirThreads.ts), when it has been made
+              // (scripts/midnight-zkir-mt.mjs): the folder copied whole, because its glue
+              // starts its own worker threads from a script beside it. Absent, nothing is copied
+              // and the prover proves on one thread.
+              { src: 'src/assets/midnight-zkir-mt', dest: 'extension' },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|bg-dapp).*',

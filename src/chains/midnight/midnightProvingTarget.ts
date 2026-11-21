@@ -46,14 +46,16 @@ export interface ProofServerPreference extends ZkpaasSettings {
   localUrlLedger9?: string;
   /**
    * What "local" proves with: a Docker proof server at the URLs above
-   * (`docker`, and what an absent value means), or Gero Prover, the desktop
-   * helper (`helper`, midnightHelperProver.ts). Both keep proof inputs on this
-   * computer, so neither needs a remote prover's consent.
+   * (`docker`, and what an absent value means), Gero Prover, the desktop
+   * helper (`helper`, midnightHelperProver.ts), or the prover inside the
+   * browser for every proof of a send (`browser`, midnightDeviceProver.ts).
+   * All three keep proof inputs on this computer, so none needs a remote
+   * prover's consent.
    */
   localEngine?: LocalProvingEngine;
 }
 
-export type LocalProvingEngine = 'docker' | 'helper';
+export type LocalProvingEngine = 'docker' | 'helper' | 'browser';
 
 /**
  * The local proof-server URL for the circuit family of `network`'s chain
@@ -156,7 +158,8 @@ export function canProveOnDevice(network: string): boolean {
  * proofs, which take 30-70 s on a fast laptop; it stays on Gero Cloud unless
  * `shieldedOnDevice` (the `isMidnightShieldedDeviceProvingEnabled` flag) moves
  * it here too. Local and zkPaaS mean what the user chose, for both kinds;
- * local is Gero Prover when the user chose it (`localEngine`) and it is offered.
+ * local is Gero Prover, or this device for both kinds, when the user chose
+ * that (`localEngine`) and it is offered.
  */
 export function walletProverFor(
   network: string,
@@ -170,11 +173,22 @@ export function walletProverFor(
      * "local" meant before the helper existed.
      */
     helper?: boolean;
+    /**
+     * "In this browser" is offered (the `isMidnightThreadedProvingEnabled`
+     * flag). Without it a stored `localEngine: 'browser'` reads as the Docker
+     * server too.
+     */
+    browser?: boolean;
   } = {},
 ): WalletProver {
-  // The helper holds the same pinned ledger 9 keys as this device, so it
-  // proves the same chains; a chain still on ledger 8 keeps the Docker server.
-  if (ps.mode === 'local') return options.helper && ps.localEngine === 'helper' && canProveOnDevice(network) ? 'helper' : 'local';
+  if (ps.mode === 'local') {
+    // The helper and the browser prover hold the same pinned ledger 9 keys, so
+    // they prove the same chains; a chain still on ledger 8 keeps the Docker server.
+    if (options.helper && ps.localEngine === 'helper' && canProveOnDevice(network)) return 'helper';
+    // The user chose the browser for every proof, private sends included.
+    if (options.browser && ps.localEngine === 'browser' && canProveOnDevice(network)) return 'device';
+    return 'local';
+  }
   if (ps.mode === 'zkpaas') return 'zkpaas';
   if (canProveOnDevice(network) && (kind === 'unshielded' || options.shieldedOnDevice)) return 'device';
   return 'cloud';

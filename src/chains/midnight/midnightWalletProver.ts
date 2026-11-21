@@ -13,6 +13,7 @@ import { resolveMidnightLedger } from './midnightChainLedger';
 import { midnightNetworkName, type MidnightLedger } from './midnightLedger';
 // Static: small, and the background (one iife) must not gain a lazily read module (scripts/check-bundle-tdz.mjs).
 import { makeHelperProvingProvider } from './midnightHelperProver';
+import { threadedProvingOffered } from './midnightProvingFlags';
 
 /** Inlined (not midnightProvingTarget's): this module stays free of that one's value imports. */
 function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
@@ -45,7 +46,8 @@ export async function walletProvingProvider(
     }
     // Loaded only when this device proves: a host bundle can shim it (gero-ios).
     const { makeDeviceProvingProvider } = await import('./midnightDeviceProver');
-    return makeDeviceProvingProvider({ shielded: options.shielded });
+    // The multi-threaded build of the same prover, when it is offered and this browser can run it.
+    return makeDeviceProvingProvider({ shielded: options.shielded, threaded: await threadedProvingOffered() });
   }
   if (isHelperProving(proving)) {
     // The helper is handed the same pinned ledger 9 keys as this device.

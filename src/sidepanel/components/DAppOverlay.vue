@@ -1407,7 +1407,7 @@ import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import SolanaSignControls from './SolanaSignControls.vue';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
+import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
@@ -3646,9 +3646,7 @@ async function buildMidnightTransferTx(
 // that click).
 const transferConsentOpen = ref(false);
 const transferProver = computed<WalletProver>(() =>
-  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', {
-    helper: geroProverOfferedHere(),
-  }));
+  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere()));
 const transferProverLabel = computed(() => t(
   transferProver.value === 'device' ? 'midnight.proofServer.deviceLabel'
     : transferProver.value === 'helper' ? 'midnight.prover.name'

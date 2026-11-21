@@ -9,7 +9,8 @@
  * - Gero Cloud (proving inside the submit request): after 20 s, "Taking longer
  *   than usual." It stays until the step ends. Where the surface does not
  *   already say to keep it open, the hint says so too.
- * - This device: "This can take up to a minute on this device."
+ * - This device: "This can take up to a minute on this device.", or the
+ *   number of processor threads when the multi-threaded prover is in use.
  * - Gero Prover (the desktop helper): which processor is proving, when known
  *   ("Graphics processor · Apple M3 Pro").
  * - A local proof server or Arkhia: the counter only.
@@ -58,10 +59,13 @@ export function provingDetail(
     keepOpenShown?: boolean;
     /** Gero Prover: the processor it is proving on, already translated. */
     helperProcessor?: string;
+    /** The browser prover on several threads ("8 processor threads"), already translated. */
+    deviceThreads?: string;
   } = {},
 ): ProvingDetail {
   const elapsed = t('midnight.send.provingElapsed', { n: seconds });
-  if (step.prover === 'device') return { elapsed, hint: t('midnight.send.provingDeviceHint') };
+  // On several threads the minute-long warning no longer holds: say what it is using.
+  if (step.prover === 'device') return { elapsed, hint: options.deviceThreads ?? t('midnight.send.provingDeviceHint') };
   if (step.prover === 'helper') return options.helperProcessor ? { elapsed, hint: options.helperProcessor } : { elapsed };
   if (step.prover === 'cloud' && seconds >= CLOUD_SLOW_AFTER_S) {
     return { elapsed, hint: t(options.keepOpenShown ? 'midnight.send.provingSlowHintShort' : 'midnight.send.provingSlowHint') };

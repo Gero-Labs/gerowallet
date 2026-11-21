@@ -81,6 +81,35 @@ type GeroProverAction =
   | { action: 'status' | 'selfTest' | 'removeKeys' }
   | { action: 'setAccelerator'; enabled: boolean };
 
+/** A test proof made by the prover inside the browser. */
+export interface BrowserSelfTest {
+  proveMs: number;
+  /** Processor threads it used: 1 for the standard build. */
+  threads: number;
+  /** Why the multi-threaded build was asked for and not used. */
+  threadsUnavailable?: string;
+}
+
+/**
+ * Prove the bundled test preimage (a throwaway key, no wallet data) with the
+ * browser prover, standard or multi-threaded. Throws when it cannot be made.
+ */
+export async function askBrowserSelfTest(threaded: boolean): Promise<BrowserSelfTest> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.GERO_PROVER,
+    data: { action: 'browserSelfTest', threaded },
+  }) as { data?: { success?: boolean; error?: string; result?: { browserSelfTest?: Partial<BrowserSelfTest> } } };
+  const test = response?.data?.result?.browserSelfTest;
+  if (!response?.data?.success || !test || typeof test.proveMs !== 'number' || typeof test.threads !== 'number') {
+    throw new GeroProverActionError(response?.data?.error || 'The browser prover did not answer');
+  }
+  return {
+    proveMs: test.proveMs,
+    threads: test.threads,
+    ...(typeof test.threadsUnavailable === 'string' ? { threadsUnavailable: test.threadsUnavailable } : {}),
+  };
+}
+
 /** The background refused or failed a helper action. `message` is a code or the background's own text. */
 export class GeroProverActionError extends Error {
   constructor(message: string) {

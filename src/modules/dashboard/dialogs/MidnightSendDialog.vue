@@ -67,6 +67,12 @@
           </div>
 
           <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
+          <!-- While the proof is made on this computer (the browser, Gero Prover or a
+               local proof server): what that means for the proof inputs. -->
+          <p v-if="provingOnThisComputer" class="t-caption mpv-local-note" data-test="midnight-send-local-note">
+            <v-icon size="14" aria-hidden="true">mdi-lock-outline</v-icon>
+            <span>{{ t('midnight.send.provingLocalNote') }}</span>
+          </p>
         </div>
         <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
              signed and kept in memory; Try again resends the same bytes, no password.
@@ -505,7 +511,7 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
+import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import {
   HELPER_UNAVAILABLE_COPY, helperProcessorLabel, isHelperUnavailableReason, type HelperUnavailableReason,
 } from '@/chains/midnight/geroProverState';
@@ -889,6 +895,7 @@ const timelineLabels = computed<SendTimelineLabels>(() => ({
 const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels, {
   provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
     helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
+    deviceThreads: browserThreadsLabel((key, params) => String(t(key, params))),
   }),
   announce,
   // Gero Cloud is busy: counting down to the automatic resubmit.
@@ -991,12 +998,19 @@ function sendProver(forceRemote = false): WalletProver {
     isShielded.value ? 'shielded' : 'unshielded',
     {
       shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled(),
-      helper: geroProverOfferedHere(),
+      ...localProvingOffersHere(),
     },
   );
 }
 // The one-off fallback proves on this device rather than on Gero Cloud.
 const fallbackOnDevice = computed(() => sendProver(true) === 'device');
+// The proof is being made on this computer right now: in the browser, by Gero
+// Prover or by a local proof server. `working` + the background's own report is
+// the fee proof the browser makes.
+const provingOnThisComputer = computed(() => (
+  sendStage.value === 'provingDevice' || sendStage.value === 'provingHelper' || sendStage.value === 'provingLocal'
+  || (sendStage.value === 'working' && midnightStore.sendProgress?.phase === 'proving')
+));
 // This send would be proved by Gero Prover (the desktop helper).
 const provesWithHelper = computed(() => sendProver() === 'helper');
 // The fallback is from Gero Prover (the desktop helper), not from a proof server.
@@ -1947,6 +1961,14 @@ function shortToken(colour: string): string {
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
+}
+
+.mpv-local-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-1);
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 
 /* Local proof-server fallback (WP-P5) — reuses .midnight-info-note's tone,

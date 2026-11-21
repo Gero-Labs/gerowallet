@@ -444,7 +444,7 @@ import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
 import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { helperProcessorLabel } from '@/chains/midnight/geroProverState';
-import { geroProverOfferedHere } from '@/chains/midnight/geroProverFlag';
+import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { midnightStore } from '@/stores/midnightStore';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
@@ -909,9 +909,7 @@ async function acceptConsent() {
  * which this device cannot prove) still needs a consent notice.
  */
 function sendProver() {
-  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', {
-    helper: geroProverOfferedHere(),
-  });
+  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere());
 }
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }
@@ -1240,6 +1238,7 @@ const timelineNodes = useMidnightSendTimeline(
     provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
       ...keepOpen,
       helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
+      deviceThreads: browserThreadsLabel((key, params) => String(t(key, params))),
     }),
     announce,
     // Gero Cloud is busy: counting down to the automatic resubmit.

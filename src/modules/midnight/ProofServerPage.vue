@@ -74,12 +74,12 @@
                 <div class="ps-mode-icon"><v-icon size="22">mdi-laptop</v-icon></div>
                 <div class="ps-mode-body">
                   <div class="ps-mode-title-row">
-                    <span class="t-body-lg">{{ t(helperOffered ? 'midnight.prover.thisComputerTitle' : 'midnight.proofServerPage.compareLocalTitle') }}</span>
+                    <span class="t-body-lg">{{ t(engineChoice ? 'midnight.prover.thisComputerTitle' : 'midnight.proofServerPage.compareLocalTitle') }}</span>
                     <span v-if="proofServerMode === 'local'" class="ps-active-badge">
                       <v-icon size="12">mdi-check</v-icon>{{ t('midnight.proofServerPage.activeBadge') }}
                     </span>
                   </div>
-                  <p class="t-caption ps-mode-hint">{{ t(helperOffered ? 'midnight.prover.thisComputerBody' : 'midnight.proofServerPage.localCardBody') }}</p>
+                  <p class="t-caption ps-mode-hint">{{ t(engineChoice ? 'midnight.prover.thisComputerBody' : 'midnight.proofServerPage.localCardBody') }}</p>
                 </div>
               </button>
             </div>
@@ -110,18 +110,34 @@
               @accepted="consentOpen = false"
             />
 
-            <!-- This computer, with Gero Prover (the desktop helper; behind the
-                 isGeroProverEnabled flag). A chain still on ledger 8 is proved
-                 by the Docker server even then, so its guide shows instead. -->
-            <template v-if="proofServerMode === 'local' && localEngine === 'helper'">
+            <!-- This computer, without Docker: the prover inside the browser
+                 (isMidnightThreadedProvingEnabled) or the Gero Prover app
+                 (isGeroProverEnabled). With neither flag on, none of this
+                 renders and the page is the Docker guide it always was. -->
+            <template v-if="proofServerMode === 'local' && engineChoice">
+              <ProvingEngineChooser
+                :model-value="localEngine"
+                :browser-offered="browserOffered"
+                :helper-offered="helperOffered"
+                :disabled="proofServerSaving"
+                @update:model-value="setLocalEngine($event)"
+              />
               <GeroProverCard v-if="usesHelper" @use-docker="setLocalEngine('docker')" />
-              <GNote v-else icon="mdi-information-outline" role="status" class="mb-4" data-testid="ps-helper-ledger8">
+              <BrowserProverCard v-else-if="usesBrowser" />
+              <!-- A chain still on ledger 8 is proved by the Docker server whatever
+                   was chosen, so its guide shows below instead. -->
+              <GNote v-else-if="localEngine !== 'docker'" icon="mdi-information-outline" role="status" class="mb-4" data-testid="ps-engine-ledger8">
                 {{ t('midnight.prover.ledger8Note', activeServer) }}
               </GNote>
+              <ProverSpeedCompare
+                v-if="usesHelper || usesBrowser"
+                :browser-offered="browserOffered"
+                :helper-offered="helperOffered"
+              />
             </template>
 
             <!-- Local setup guide -->
-            <div v-if="proofServerMode === 'local' && !usesHelper" class="ps-card">
+            <div v-if="proofServerMode === 'local' && !usesHelper && !usesBrowser" class="ps-card">
               <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.setupTitle') }}</h2>
               <!-- No profile to choose: the active wallet's network picks the
                    server. Say which one so the steps below make sense. -->
@@ -230,23 +246,6 @@
                   </v-expansion-panel-text>
                 </v-expansion-panel>
               </v-expansion-panels>
-            </div>
-
-            <!-- The other way to prove on this computer: one card, one action. -->
-            <div v-if="proofServerMode === 'local' && helperOffered" class="ps-card ps-switch-card" data-testid="ps-engine-switch">
-              <div>
-                <div class="t-body-lg">{{ t(localEngine === 'helper' ? 'midnight.prover.dockerTitle' : 'midnight.prover.promoTitle') }}</div>
-                <p class="t-body-sm ps-step-hint">{{ t(localEngine === 'helper' ? 'midnight.prover.dockerBody' : 'midnight.prover.promoBody') }}</p>
-              </div>
-              <GButton
-                tier="secondary"
-                compact
-                :disabled="proofServerSaving"
-                data-testid="ps-engine-switch-action"
-                @click="setLocalEngine(localEngine === 'helper' ? 'docker' : 'helper')"
-              >
-                {{ t(localEngine === 'helper' ? 'midnight.prover.useDocker' : 'midnight.prover.promoAction') }}
-              </GButton>
             </div>
 
             <!-- Arkhia zkPaaS setup guide: same stepped structure as the
@@ -469,6 +468,9 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
 import GeroProverCard from '@/modules/midnight/GeroProverCard.vue';
+import BrowserProverCard from '@/modules/midnight/BrowserProverCard.vue';
+import ProvingEngineChooser from '@/modules/midnight/ProvingEngineChooser.vue';
+import ProverSpeedCompare from '@/modules/midnight/ProverSpeedCompare.vue';
 import { helperErrorCopyKey } from '@/chains/midnight/geroProverState';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
@@ -483,9 +485,11 @@ const {
   proofServerMode,
   proofServerSaving,
   helperOffered,
+  browserOffered,
   localEngine,
   setLocalEngine,
   usesHelper,
+  usesBrowser,
   localUrlDraft,
   localUrlError,
   onLocalUrlBlur,
@@ -525,6 +529,9 @@ const remoteProverName = computed(() => t(remoteProver.value === 'zkpaas'
 const remoteProverConsented = computed(() => !!remoteProver.value
   && hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, remoteProver.value));
 const consentOpen = ref(false);
+
+/** There is a choice of how this computer proves: at least one no-Docker way is on offer. */
+const engineChoice = computed(() => !!helperOffered?.value || !!browserOffered?.value);
 
 /** A history row's error: Gero Prover records a code, said here in the user's language. */
 function provingErrorText(error: string): string {
@@ -825,13 +832,6 @@ const faqs = computed(() => ([
   color: var(--g-accent);
 }
 
-.ps-switch-card {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--g-s-3);
-}
 
 .ps-advanced {
   margin-top: var(--g-s-2);

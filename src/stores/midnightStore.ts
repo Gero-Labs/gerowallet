@@ -276,12 +276,14 @@ export interface MidnightStore {
     zkpaasApiSecret: string;
     /**
      * What {@code local} proves with: a Docker proof server at the URLs above
-     * ({@code docker}, and what an absent value means) or Gero Prover, the
-     * desktop helper ({@code helper}, midnightHelperProver.ts). Read through
+     * ({@code docker}, and what an absent value means), Gero Prover, the
+     * desktop helper ({@code helper}, midnightHelperProver.ts), or the prover
+     * inside the browser for every proof ({@code browser}). Read through
      * {@code walletProverFor}, which honours {@code helper} only while the
-     * {@code isGeroProverEnabled} flag is on.
+     * {@code isGeroProverEnabled} flag is on and {@code browser} only while
+     * {@code isMidnightThreadedProvingEnabled} is.
      */
-    localEngine?: 'docker' | 'helper';
+    localEngine?: 'docker' | 'helper' | 'browser';
   };
 
   /**
@@ -1115,7 +1117,7 @@ export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
     zkpaasApiKey: hydrateCredentialString((stored as { zkpaasApiKey?: unknown }).zkpaasApiKey),
     zkpaasApiSecret: hydrateCredentialString((stored as { zkpaasApiSecret?: unknown }).zkpaasApiSecret),
-    ...(localEngine === 'docker' || localEngine === 'helper' ? { localEngine } : {}),
+    ...(localEngine === 'docker' || localEngine === 'helper' || localEngine === 'browser' ? { localEngine } : {}),
   };
 }
 

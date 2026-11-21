@@ -4,7 +4,7 @@ import './backgroundLocales';
 import '@/api/signedFetchInstall';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances, transferOutputTotals } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
-import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
+import { acceptMidnightProverPort, runDeviceSelfTest } from '@/chains/midnight/midnightDeviceProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import {
   helperProofProcessor, helperStatus, removeHelperKeys, runHelperSelfTest, setHelperAccelerator,
@@ -7003,8 +7003,8 @@ app.addToOptions(
       // Optional like the fields above: absent keeps what "local" proves with
       // (a Docker proof server unless the user chose Gero Prover).
       const localEngineValue = localEngine === undefined || localEngine === null ? current.localEngine : localEngine;
-      if (localEngineValue !== undefined && localEngineValue !== 'docker' && localEngineValue !== 'helper') {
-        throw new Error('localEngine must be "docker" or "helper"');
+      if (localEngineValue !== undefined && localEngineValue !== 'docker' && localEngineValue !== 'helper' && localEngineValue !== 'browser') {
+        throw new Error('localEngine must be "docker", "helper" or "browser"');
       }
       midnightActions.setProofServer({
         mode,
@@ -7043,14 +7043,22 @@ app.addToOptions(
  * Response: `{ success: true, result: { snapshot, selfTest? } }`. A helper that is
  * missing or cannot be used is a successful answer (its `connection` says why);
  * only a failed test proof or a malformed request is an error.
+ *
+ * `{ action: 'browserSelfTest', threaded: boolean }` proves the same bundled test
+ * preimage (a throwaway key, no wallet data) with the prover inside the browser,
+ * standard or multi-threaded, for the speed comparison on that page. Response:
+ * `{ success: true, result: { browserSelfTest: { proveMs, threads, threadsUnavailable? } } }`.
  */
 app.addToOptions(
   MessageTypes.GERO_PROVER,
   async (request, sendResponse) => {
     try {
-      const { action, enabled } = request.data || {};
-      let result: { snapshot: unknown; selfTest?: unknown };
-      if (action === 'status') {
+      const { action, enabled, threaded } = request.data || {};
+      let result: { snapshot?: unknown; selfTest?: unknown; browserSelfTest?: unknown };
+      if (action === 'browserSelfTest') {
+        if (typeof threaded !== 'boolean') throw new Error('threaded must be a boolean');
+        result = { browserSelfTest: await runDeviceSelfTest(threaded) };
+      } else if (action === 'status') {
         result = { snapshot: await helperStatus() };
       } else if (action === 'setAccelerator') {
         if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean');
@@ -7061,7 +7069,7 @@ app.addToOptions(
         const selfTest = await runHelperSelfTest();
         result = { snapshot: await helperStatus(), selfTest };
       } else {
-        throw new Error('action must be "status", "setAccelerator", "selfTest" or "removeKeys"');
+        throw new Error('action must be "status", "setAccelerator", "selfTest", "removeKeys" or "browserSelfTest"');
       }
       sendResponse({
         id: request.id,

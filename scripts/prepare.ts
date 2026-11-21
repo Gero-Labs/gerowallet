@@ -46,6 +46,17 @@ async function copyDevAssets() {
     }
   }
 
+  // The multi-threaded prover build, when it has been made (scripts/midnight-zkir-mt.mjs).
+  const midnightZkirMt = r('src/assets/midnight-zkir-mt')
+  if (await fs.pathExists(midnightZkirMt)) {
+    try {
+      await fs.copy(midnightZkirMt, r('extension/midnight-zkir-mt'), { overwrite: true })
+      log('PRE', 'copied the multi-threaded Midnight prover')
+    } catch (error) {
+      console.warn('Failed to copy the multi-threaded Midnight prover:', error)
+    }
+  }
+
   // Copy the vendored gero-swap widget (js + css) so the dev stub's absolute
   // /vendor/gero-swap/* hrefs resolve against the extension. The prod build's
   // viteStaticCopy (vite.config.mts) copies only gero-swap.js — the css is

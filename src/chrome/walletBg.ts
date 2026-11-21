@@ -119,7 +119,7 @@ import {
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
 import { resolveDappProvingTarget, walletProverFor, type WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
-import { geroProverOfferedFor } from '@/chains/midnight/midnightHelperOffer';
+import { localProvingOffersFor } from '@/chains/midnight/midnightProvingFlags';
 import { helperProofProcessor } from '@/chains/midnight/midnightHelperProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
@@ -2890,9 +2890,9 @@ export class WalletBg {
         // the DUST secret must not leave the wallet); otherwise on the proof
         // server the user chose.
         let proving: WalletProvingRequest;
-        const feeProver = walletProverFor(network, midnightStore.proofServer, 'unshielded', {
-          helper: await geroProverOfferedFor(midnightStore.proofServer),
-        });
+        const feeProver = walletProverFor(
+          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
+        );
         if (feeProver === 'device') {
           proving = { device: true };
         } else if (feeProver === 'helper') {
@@ -3000,9 +3000,9 @@ export class WalletBg {
         // Same prover choice as the connector balance: the fee is the wallet's
         // own DUST spend, proved on this device in Gero Cloud mode.
         let proving: WalletProvingRequest;
-        const feeProver = walletProverFor(network, midnightStore.proofServer, 'unshielded', {
-          helper: await geroProverOfferedFor(midnightStore.proofServer),
-        });
+        const feeProver = walletProverFor(
+          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
+        );
         if (feeProver === 'device') {
           proving = { device: true };
         } else if (feeProver === 'helper') {
