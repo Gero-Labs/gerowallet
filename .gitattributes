@@ -1,0 +1,3 @@
+# Run inside a Linux container: these keep Unix line ends on every checkout.
+scripts/midnight-zkir-mt/*.sh text eol=lf
+scripts/midnight-zkir-mt/Dockerfile text eol=lf
