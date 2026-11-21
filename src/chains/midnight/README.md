@@ -225,7 +225,8 @@ proves a transaction can therefore spend what it reveals.
   file of the circuit as held and verified. A failure is one `GERO_PROVER_*`
   code the pages translate; nothing switches to another prover by itself. A
   dapp's own contract circuits are not proved by it (their keys are not
-  pinned). The helper program itself is not in this repository. Design:
+  pinned). The helper program itself is not in this repository: its source is
+  in `Gero-Labs/gero-prover` (work in progress, nothing released). Design:
   `docs/superpowers/specs/2026-11-21-gero-prover-design.md` (docs/ is gitignored).
 - **Local proof server**: `midnightntwrk/proof-server:9.0.0` for ledger 9 on
   `127.0.0.1:6301`, the ledger 8 server (8.1.0) on 6300. Ledger 9 keeps 6301
