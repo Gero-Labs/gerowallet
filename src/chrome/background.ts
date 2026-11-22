@@ -8146,8 +8146,9 @@ app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
       midnightActions.recordSiteActivity(origin, { type: 'funding' });
       await parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
         .then((response: BackgroundResponse) => {
-          midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
+          // Answer first: a failure to record the activity must not turn a built transaction into an error.
           reply({ data: response.data }); // response.data === { tx }
+          midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
         })
         .catch(err => {
           const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction');

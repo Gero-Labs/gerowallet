@@ -255,9 +255,10 @@ export type SealedBalancePrompt =
  * asked: what the wallet gives, what it receives, and whom the sealed
  * transaction pays (recipients as bech32m). `ownAddress` is the wallet's
  * unshielded bech32m address; when it is unknown every output is listed.
- * What the sealed part pays straight to `ownAddress` is not a payment to
- * someone else, so it is counted in `receives` beside the surplus the wallet
- * takes: otherwise the approval could show a give with nothing received.
+ * What the sealed part's guaranteed section pays straight to `ownAddress` is
+ * not a payment to someone else, so it is counted in `receives` beside the
+ * surplus the wallet takes (otherwise the approval could show a give with
+ * nothing received), unless the sealed part spends the wallet's own coins.
  */
 export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, ownAddress: string): Promise<SealedBalancePrompt> {
   const name = midnightNetworkName(sdkNetworkId);
@@ -291,12 +292,20 @@ export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, o
     }
   });
   const receives = new Map(summary.receives.map(({ token, amount }) => [token, BigInt(amount)]));
-  if (ownHex) {
-    for (const intent of tx.intents?.values() ?? []) {
-      for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {
-        for (const output of offer?.outputs ?? []) {
-          if (output.owner.toLowerCase() === ownHex.toLowerCase()) receives.set(output.type, (receives.get(output.type) ?? 0n) + output.value);
-        }
+  const own = ownHex.toLowerCase();
+  const intents = [...(tx.intents?.values() ?? [])];
+  // When the sealed part spends the wallet's own coins (its own earlier
+  // offer), an output to the wallet is that offer's change, not something
+  // received: show the imbalances only.
+  const spendsOwn = intents.some(intent => [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]
+    .some(offer => offer?.inputs.some(input => ledger.addressFromKey(input.owner).toLowerCase() === own)));
+  if (own && !spendsOwn) {
+    // GUARANTEED outputs only: that section is all-or-nothing with the
+    // wallet's give, while a fallible section can fail (an input missing)
+    // after the give went through, so its payment may never arrive.
+    for (const intent of intents) {
+      for (const output of intent.guaranteedUnshieldedOffer?.outputs ?? []) {
+        if (output.owner.toLowerCase() === own) receives.set(output.type, (receives.get(output.type) ?? 0n) + output.value);
       }
     }
   }

@@ -176,6 +176,14 @@ describe('balanceSealedTransaction: checked before prompting, shown in the balan
     }
   });
 
+  it('answers with the built transaction before recording the activity, which cannot turn it into an error', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    const answered = body.indexOf('reply({ data: response.data });');
+    const recorded = body.indexOf("midnightActions.recordSiteActivity(origin, { type: 'funding-done' });");
+    expect(answered).toBeGreaterThan(-1);
+    expect(recorded).toBeGreaterThan(answered);
+  });
+
   it('a ledger the wallet could not read is InternalError, not the dapp\'s InvalidRequest', () => {
     const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
     expect(body).toContain('const code = prompt.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;');

@@ -53,15 +53,20 @@ async function offer(network = 'preprod', fallible = false, ttl = new Date(Date.
 type Spend = { value: bigint; type: string; intentHash: string; outputNo: number };
 type Pay = { value: bigint; type: string; to: string };
 
-/** A sealed transaction of one guaranteed offer per `{ segment, ttl }`, each signed by `signer` (whose coins `inputs` are). */
-async function sealed(intents: Array<{ segment: number; ttl: Date; inputs: Spend[]; outputs: Pay[] }>,
+/**
+ * A sealed transaction of one guaranteed offer per `{ segment, ttl }` (and a
+ * fallible one with `fallible`), each signed by `signer` (whose coins `inputs` are).
+ */
+async function sealed(intents: Array<{ segment: number; ttl: Date; inputs: Spend[]; outputs: Pay[]; fallible?: { inputs: Spend[]; outputs: Pay[] } }>,
   signer = maker): Promise<string> {
   let tx = ledger.Transaction.fromParts('preprod');
-  for (const { segment, ttl, inputs, outputs } of intents) {
+  const offerOf = (inputs: Spend[], outputs: Pay[]) => ledger.UnshieldedOffer.new(
+    inputs.map(input => ({ ...input, owner: signer.getPublicKey() })),
+    outputs.map(({ value, type, to }) => ({ value, type, owner: to })), []);
+  for (const { segment, ttl, inputs, outputs, fallible } of intents) {
     const intent = ledger.Intent.new(ttl);
-    intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new(
-      inputs.map(input => ({ ...input, owner: signer.getPublicKey() })),
-      outputs.map(({ value, type, to }) => ({ value, type, owner: to })), []);
+    intent.guaranteedUnshieldedOffer = offerOf(inputs, outputs);
+    if (fallible) intent.fallibleUnshieldedOffer = offerOf(fallible.inputs, fallible.outputs);
     tx = tx.addIntent({ tag: 'specific', value: segment }, intent);
   }
   const proven = await tx.prove(noProver, ledger.CostModel.initialCostModel());
@@ -222,6 +227,27 @@ describe('balanceSealedTransaction on a ledger 9 chain', () => {
         { token: NIGHT, amount: '5', recipient: bech32('preprod', maker.getAddress()) },
         { token: TOKEN, amount: '5000', recipient: bech32('preprod', maker.getAddress()) },
       ],
+    });
+  });
+
+  it('never counts what a FALLIBLE section pays the wallet: it can fail after the wallet\'s give went through', async () => {
+    const txHex = await sealed([{ segment: 7, ttl: new Date(Date.now() + 600_000),
+      inputs: [{ value: 18n, type: NIGHT, intentHash: '33'.repeat(32), outputNo: 0 }],
+      outputs: [{ value: 8n, type: NIGHT, to: maker.getAddress() }, { value: 5_000n, type: TOKEN, to: maker.getAddress() }],
+      // Balanced on its own, so no refusal; its input may be missing on chain, and then only this section fails.
+      fallible: { inputs: [{ value: 3n, type: NIGHT, intentHash: '33'.repeat(32), outputNo: 1 }], outputs: [{ value: 3n, type: NIGHT, to: own.getAddress() }] } }]);
+    expect(await sealedBalancePrompt(txHex, 'preprod', ownAddress)).toMatchObject({
+      ok: true, gives: [{ token: TOKEN, amount: '5000' }], receives: [{ token: NIGHT, amount: '10' }],
+    });
+  });
+
+  it('the wallet\'s own earlier offer: its change back is not "received", only the surplus is', async () => {
+    // 18 NIGHT of the wallet's in, 8 back as change, 5,000 TOKEN asked: 10 NIGHT offered.
+    const txHex = await sealed([{ segment: 7, ttl: new Date(Date.now() + 600_000),
+      inputs: [{ value: 18n, type: NIGHT, intentHash: '11'.repeat(32), outputNo: 5 }],
+      outputs: [{ value: 8n, type: NIGHT, to: own.getAddress() }, { value: 5_000n, type: TOKEN, to: own.getAddress() }] }], own);
+    expect(await sealedBalancePrompt(txHex, 'preprod', ownAddress)).toMatchObject({
+      ok: true, gives: [{ token: TOKEN, amount: '5000' }], receives: [{ token: NIGHT, amount: '10' }],
     });
   });
 
