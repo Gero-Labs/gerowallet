@@ -91,6 +91,7 @@ export function summarizeSealed9(tx: SealedTransaction9, now = Date.now()): Seal
   for (const segment of new Set<number>([0, ...(tx.intents ? [...tx.intents.keys()] : [])])) {
     for (const [token, value] of tx.imbalances(segment)) {
       if (value === 0n || token.tag === 'dust') continue;
+      // Fails closed: today the only other kind is shielded, and a kind this build does not know is refused the same way.
       if (token.tag !== 'unshielded') { problem ??= 'shielded'; continue; }
       if (segment !== 0) { problem ??= 'fallible'; continue; }
       const side = value < 0n ? gives : receives;
@@ -155,7 +156,12 @@ const defaultDeps: BalanceSealedTransaction9Deps = {
     await walletProvingProvider(proving, { sdkNetworkId, shielded: false, ledger: 9 }) as unknown as ledger.ProvingProvider,
 };
 
-/** The sealed part's own deadline bounds the wallet's intent; 5 minutes for a transaction without intents. */
+/**
+ * The sealed part's own deadline bounds the wallet's intent; 5 minutes for a
+ * transaction without intents. That case skips the expiry check in
+ * `summarizeSealed9` on purpose: with no intent there is no deadline of the
+ * other party's to bound, and the wallet's own intent then lives 5 minutes.
+ */
 function earliestTtl(tx: SealedTransaction9): Date {
   return sealedTtl(tx) ?? new Date(Date.now() + 5 * 60_000);
 }
