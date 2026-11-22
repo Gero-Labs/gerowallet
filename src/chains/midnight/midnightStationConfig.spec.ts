@@ -16,7 +16,7 @@ describe('fee station config', () => {
   it('knows the server codes and nothing else', () => {
     for (const code of ['NOT_REGISTERED', 'NOT_DELEGATED', 'BELOW_THRESHOLD', 'ALREADY_ISSUED', 'CHALLENGE_INVALID',
       'VOUCHER_INVALID', 'VOUCHER_SPENT', 'TX_NOT_ELIGIBLE', 'FEE_OVER_CAP', 'BUDGET_EXHAUSTED', 'STATION_OFF', 'STATION_BUSY',
-      'STATION_UNAVAILABLE', 'STATION_NO_ANSWER', 'STATION_NO_VOUCHER', 'NO_TWIN']) {
+      'STATION_UNAVAILABLE', 'STATION_NO_ANSWER', 'STATION_NO_VOUCHER', 'SEAL_UNKNOWN', 'NO_TWIN']) {
       expect(isStationCode(code)).toBe(true);
     }
     expect(isStationCode('SOMETHING_ELSE')).toBe(false);
@@ -44,6 +44,8 @@ describe('fee station config', () => {
   it('has copy for every code, and only a lost answer leaves the send uncertain', () => {
     expect(stationCopyKey('STATION_BUSY')).toBe('midnight.station.error.busy');
     expect(stationCopyKey('VOUCHER_SPENT')).toBe('midnight.station.error.voucher');
+    // "Nothing was sent. Try again.": sealing again makes the transaction known to the worker.
+    expect(stationCopyKey('SEAL_UNKNOWN')).toBe('midnight.station.error.voucher');
     expect(stationCopyKey('NOT_DELEGATED')).toBe('midnight.station.error.notEligible');
     expect(stationCopyKey('STATION_NO_ANSWER')).toBe('midnight.station.error.noAnswer');
     expect(stationSubmitUncertain('STATION_NO_ANSWER')).toBe(true);

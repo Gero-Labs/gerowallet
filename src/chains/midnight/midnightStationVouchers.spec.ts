@@ -79,6 +79,10 @@ describe('station vouchers: blind signatures', () => {
     const small = await suite.generateKey({ publicExponent: Uint8Array.from([1, 0, 1]), modulusLength: 1024 });
     const spki = b64(new Uint8Array(await crypto.subtle.exportKey('spki', small.publicKey)));
     await expect(importStationKey(spki)).rejects.toThrow('too short');
+    // Only the standard public exponent 65537: an unusual one is not a key Gero's station would publish.
+    const odd = await suite.generateKey({ publicExponent: Uint8Array.from([3]), modulusLength: 2048 });
+    const oddSpki = b64(new Uint8Array(await crypto.subtle.exportKey('spki', odd.publicKey)));
+    await expect(importStationKey(oddSpki)).rejects.toThrow('public exponent');
     await expect(importStationKey('bm90IGEga2V5')).rejects.toThrow();
   });
 });

@@ -6,7 +6,10 @@ import { Network } from '@/models/types';
 import { resetPrivateStoreForTest } from '@/utils/privateStore';
 import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
 import { countFreeVouchers, utcDay } from '@/chains/midnight/midnightStationVouchers';
-import { ensureStationVouchers, midnightStationStatus, redeemSealedWithStation, type StationDeps } from './midnightStation';
+import {
+  ensureStationVouchers, forgetSealedForStationForTests, midnightStationStatus, redeemSealedWithStation,
+  rememberSealedForStation, type StationDeps,
+} from './midnightStation';
 
 vi.mock('@/services/nexusDevice.service', () => ({ getNexusAccessToken: vi.fn(), reauthenticateNexus: vi.fn() }));
 
@@ -120,7 +123,12 @@ describe('issuing a batch', () => {
 
 describe('redeeming', () => {
   const TTL = NOW + 300_000;
-  beforeEach(async () => { await ensureStationVouchers(NET, STAKE, sign, deps); });
+  beforeEach(async () => {
+    forgetSealedForStationForTests();
+    await ensureStationVouchers(NET, STAKE, sign, deps);
+    // What the SEAL handler does once it has sealed a transaction for this wallet.
+    rememberSealedForStation(NET, STAKE, ['id-1'], NOW);
+  });
 
   it('spends one voucher for the transaction and reports how many are left', async () => {
     const result = await redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, deps);
@@ -152,6 +160,25 @@ describe('redeeming', () => {
 
   it('needs an identifier and a voucher', async () => {
     await expect(redeemSealedWithStation(NET, STAKE, 'c0ffee', [], TTL, deps)).rejects.toMatchObject({ code: 'TX_NOT_ELIGIBLE' });
-    await expect(redeemSealedWithStation(NET, 'stake_test1uother', 'c0ffee', ['id-1'], TTL, deps)).rejects.toMatchObject({ code: 'STATION_NO_VOUCHER' });
+    rememberSealedForStation(NET, 'stake_test1uother', ['id-2'], NOW);
+    await expect(redeemSealedWithStation(NET, 'stake_test1uother', 'c0ffee', ['id-2'], TTL, deps)).rejects.toMatchObject({ code: 'STATION_NO_VOUCHER' });
+  });
+
+  it('spends a voucher only on a transaction this worker sealed for this wallet, and not long after', async () => {
+    // Never sealed here.
+    await expect(redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-9'], TTL, deps)).rejects.toMatchObject({ code: 'SEAL_UNKNOWN' });
+    // Sealed here, for another wallet's stake address.
+    await expect(redeemSealedWithStation(NET, 'stake_test1uother', 'c0ffee', ['id-1'], TTL, deps)).rejects.toMatchObject({ code: 'SEAL_UNKNOWN' });
+    // Sealed here, too long ago.
+    const later: StationDeps = { ...deps, now: () => NOW + 10 * 60_000 };
+    await expect(redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, later)).rejects.toMatchObject({ code: 'SEAL_UNKNOWN' });
+    expect(client.redeemStationVoucher).not.toHaveBeenCalled();
+    expect(await countFreeVouchers(NET, STAKE, NOW)).toBe(3);
+  });
+
+  it('forgets a sealed transaction once it is paid: the same bytes are not redeemed twice', async () => {
+    await redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, deps);
+    await expect(redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, deps)).rejects.toMatchObject({ code: 'SEAL_UNKNOWN' });
+    expect(client.redeemStationVoucher).toHaveBeenCalledOnce();
   });
 });

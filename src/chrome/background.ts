@@ -147,7 +147,9 @@ import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
 // Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
 // in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
 import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
-import { ensureStationVouchers, midnightStationStatus, redeemSealedWithStation } from '@/chrome/midnightStation';
+import {
+  ensureStationVouchers, midnightStationStatus, redeemSealedWithStation, rememberSealedForStation,
+} from '@/chrome/midnightStation';
 import { isNewTopDocument, ParkedConnects, takeParkedRequests } from '@/chrome/midnightParkedPrompts';
 import {
   SolanaDappErrorCode,
@@ -6619,6 +6621,8 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_SEAL, async (request, sendRespons
       const sealed = await timer.time('seal', () => walletBg.sealMidnightTransferForStation(unprovenTxHex, password, prfBytes, intendedOutputs));
       await assertMidnightChainIdentityUnchanged(endpoints, identity);
       assertSession();
+      // Only what was sealed here, for this wallet, is redeemed (MIDNIGHT_STATION_REDEEM).
+      rememberSealedForStation(network, stakeAddress, sealed.identifiers);
       outcome = 'ok';
       sendResponse({
         id: request.id,
@@ -6638,7 +6642,8 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_SEAL, async (request, sendRespons
 
 /**
  * Gero's fee station, step 2: spend one voucher on the sealed bytes. No
- * credential. The request to the station carries no device token.
+ * credential. The request to the station carries no device token. Only a
+ * transaction step 1 sealed for this wallet a moment ago is redeemed.
  *
  * Request: `{ sealedTxHex, ttlMs }`.
  * Response: `{ success: true, txHash, ledgerTxHash, status, blockHeight?, remaining }`.

@@ -19,6 +19,12 @@ import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice
 const HEX_32_BYTES = /^[0-9a-f]{64}$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * `expiresAt` is epoch MILLISECONDS. Anything below this (2001 in milliseconds; an epoch in
+ * seconds is about 1.8e9) is an answer in another unit: refused as unreadable, not read as
+ * a challenge that expired long ago.
+ */
+const MIN_EPOCH_MS = 1_000_000_000_000;
 const CALL_TIMEOUT_MS = 30_000;
 // Cloudflare in front of Nexus gives up at 100 s (as MIDNIGHT_SUBMIT_TIMEOUT_MS in midnight-api.ts).
 const REDEEM_TIMEOUT_MS = 110_000;
@@ -82,6 +88,7 @@ export interface StationChallenge {
   thresholdLovelace: string;
   /** The four below are empty or zero when not eligible. */
   challenge: string;
+  /** Epoch milliseconds. */
   expiresAt: number;
   keyId: string;
   /** Base64 SPKI of the day's voucher key. */
@@ -102,7 +109,7 @@ export async function fetchStationChallenge(network: string, stakeAddress: strin
     return { eligible: false, reason, allowance, thresholdLovelace, challenge: '', expiresAt: 0, keyId: '', publicKey: '' };
   }
   if (typeof challenge !== 'string' || !HEX_32_BYTES.test(challenge)
-    || typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)
+    || typeof expiresAt !== 'number' || !Number.isInteger(expiresAt) || expiresAt < MIN_EPOCH_MS
     || typeof keyId !== 'string' || !DAY.test(keyId)
     || typeof publicKey !== 'string' || !BASE64.test(publicKey)) throw unavailable();
   return { eligible: true, allowance, thresholdLovelace, challenge, expiresAt, keyId, publicKey };

@@ -35,11 +35,18 @@ export interface StationVoucher {
 const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
 const fromBase64 = (text: string): Uint8Array<ArrayBuffer> => Uint8Array.from(Buffer.from(text, 'base64'));
 
-/** The day's public key, as the challenge delivers it (base64 SPKI). Throws unless it is RSA of 2048 bits or more. */
+/**
+ * The day's public key, as the challenge delivers it (base64 SPKI). Throws unless it is RSA of
+ * 2048 bits or more with the standard public exponent 65537.
+ */
 export async function importStationKey(spkiBase64: string): Promise<CryptoKey> {
   // Extractable: the library reads the modulus and exponent to blind.
   const key = await crypto.subtle.importKey('spki', fromBase64(spkiBase64), { name: 'RSA-PSS', hash: 'SHA-384' }, true, ['verify']);
-  if ((key.algorithm as RsaHashedKeyAlgorithm).modulusLength < 2048) throw new Error('The station voucher key is too short');
+  const { modulusLength, publicExponent } = key.algorithm as RsaHashedKeyAlgorithm;
+  if (modulusLength < 2048) throw new Error('The station voucher key is too short');
+  if (publicExponent.length !== 3 || publicExponent[0] !== 1 || publicExponent[1] !== 0 || publicExponent[2] !== 1) {
+    throw new Error('The station voucher key has an unexpected public exponent');
+  }
   return key;
 }
 

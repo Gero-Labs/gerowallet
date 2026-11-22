@@ -37,6 +37,30 @@ const defaultDeps: StationDeps = {
 const RESERVATION_MARGIN_MS = 60_000;
 /** Vouchers tried for one transaction when the station calls them spent or invalid. */
 const MAX_VOUCHER_TRIES = 3;
+/** How long after sealing a transaction may be redeemed. A send expires after 5 minutes. */
+const SEALED_MEMORY_MS = 10 * 60_000;
+
+/**
+ * The transactions this worker sealed for the station, by their first identifier. In memory
+ * only: a redeem spends a voucher of the user's daily allowance, so it is done only for bytes
+ * the SEAL step produced for the same wallet a moment ago, never for bytes a page hands over.
+ * A worker restart between the two steps forgets them; the send then fails with nothing sent.
+ */
+const sealedHere = new Map<string, { network: string; stakeAddress: string; until: number }>();
+
+/** Remember a transaction this worker just sealed for the wallet whose twin is `stakeAddress`. */
+export function rememberSealedForStation(
+  network: string, stakeAddress: string, identifiers: readonly string[], now: number = Date.now(),
+): void {
+  for (const [identifier, entry] of sealedHere) if (entry.until <= now) sealedHere.delete(identifier);
+  const txIdentifier = identifiers[0];
+  if (txIdentifier) sealedHere.set(txIdentifier, { network, stakeAddress, until: now + SEALED_MEMORY_MS });
+}
+
+/** Test seam: forget every sealed transaction. */
+export function forgetSealedForStationForTests(): void {
+  sealedHere.clear();
+}
 
 function networkSlug(network: string): string {
   const endpoints = getMidnightEndpoints(network);
@@ -128,6 +152,10 @@ export async function redeemSealedWithStation(
   if (!isStationNetwork(network)) throw new MidnightStationError('STATION_OFF');
   const txIdentifier = identifiers[0];
   if (!txIdentifier) throw new MidnightStationError('TX_NOT_ELIGIBLE');
+  const sealed = sealedHere.get(txIdentifier);
+  if (!sealed || sealed.network !== network || sealed.stakeAddress !== stakeAddress || sealed.until <= deps.now()) {
+    throw new MidnightStationError('SEAL_UNKNOWN');
+  }
   for (let attempt = 0; attempt < MAX_VOUCHER_TRIES; attempt++) {
     const voucher = await reserveVoucher(network, stakeAddress, txIdentifier, ttlMs + RESERVATION_MARGIN_MS, deps.now());
     if (!voucher) throw new MidnightStationError('STATION_NO_VOUCHER');
@@ -136,6 +164,8 @@ export async function redeemSealedWithStation(
         keyId: voucher.keyId, message: voucher.message, signature: voucher.signature, signedTxHex: sealedTxHex,
       });
       await dropVoucher(network, stakeAddress, voucher.message, deps.now());
+      // Paid: these bytes are not redeemed again.
+      sealedHere.delete(txIdentifier);
       return { ...result, remaining: await countFreeVouchers(network, stakeAddress, deps.now()) };
     } catch (error) {
       const code = stationCodeOfError(error);

@@ -54,6 +54,9 @@ describe('station client: challenge', () => {
     ['a key id that is not a day', { ...eligible, keyId: 'today' }],
     ['an unknown reason', { eligible: false, reason: 'BECAUSE', allowance: 5, thresholdLovelace: '1' }],
     ['a threshold that is not a number', { ...eligible, thresholdLovelace: '1e8' }],
+    // The contract is epoch MILLISECONDS: seconds would read as long expired, so they are refused as unreadable.
+    ['an expiry in seconds, not milliseconds', { ...eligible, expiresAt: 1_763_800_000 }],
+    ['an expiry that is not a whole number', { ...eligible, expiresAt: 1_763_800_000_000.5 }],
     ['no body', null],
   ])('treats %s as unavailable', async (_name, data) => {
     fetchMock.mockResolvedValue(answer(200, data));

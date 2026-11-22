@@ -41,6 +41,11 @@ const CODES = {
   STATION_NO_ANSWER: 'midnight.station.error.noAnswer',
   /** No usable voucher is stored. */
   STATION_NO_VOUCHER: 'midnight.station.error.voucher',
+  /**
+   * The bytes to redeem are not a transaction this worker sealed for this wallet in the last
+   * few minutes (or the worker restarted since). Nothing was sent; sending again seals anew.
+   */
+  SEAL_UNKNOWN: 'midnight.station.error.voucher',
   /** The wallet record has no Cardano twin stake address, or it is not the key's. */
   NO_TWIN: 'midnight.station.error.unavailable',
 } as const;
