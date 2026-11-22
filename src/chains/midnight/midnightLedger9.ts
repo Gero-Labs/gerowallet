@@ -11,6 +11,7 @@ import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged
 import { reconstructDustState } from './midnightDustLightSync';
 import { createDustLightTransport } from './midnightDustLightTransport';
 import { dustLedger9, balanceLightDust9, type DustBalanceable9 } from './midnightDustLightLedger9';
+import { spreadLightDust9, type SealedTransaction9 } from './midnightDustSpread9';
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 import { midnightTimer, timedDustTransport } from './midnightTiming';
 import { loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
@@ -122,14 +123,27 @@ export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshield
   return signLedger9Transaction(args.sdkNetworkId, Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
 }
 
+/** Pay inside `carrier` (the wallet's own one-intent transaction; a new intent when absent) with the fewest DUST spends that fit. */
+export interface Ledger9FeeSpread { readonly carrier?: ledger.UnprovenTransaction }
+
 /**
  * Fee ownership follows the supplied DUST seed, independently of the
  * transaction signer. `minimumDustSpends: 2` for a dApp's contract call (see
- * `BalanceLightDust9Options`).
+ * `BalanceLightDust9Options`). With `spread`, the transactions are other
+ * parties' sealed parts and the result is the carrier with the DUST spends in
+ * its intent (midnightDustSpread9.ts), not a fee transaction of its own.
  */
 export async function balanceLedger9Fees(
-  args: SyncDustAndBalanceFeesArgs & { readonly minimumDustSpends?: number },
+  args: SyncDustAndBalanceFeesArgs & { readonly spread: Ledger9FeeSpread },
+  transactions: SealedTransaction9[],
+): Promise<ledger.UnprovenTransaction>;
+export async function balanceLedger9Fees(
+  args: SyncDustAndBalanceFeesArgs & { readonly minimumDustSpends?: number; readonly spread?: undefined },
   transactions: DustBalanceable9[],
+): Promise<ledger.UnprovenTransaction>;
+export async function balanceLedger9Fees(
+  args: SyncDustAndBalanceFeesArgs & { readonly minimumDustSpends?: number; readonly spread?: Ledger9FeeSpread },
+  transactions: Array<DustBalanceable9 | SealedTransaction9>,
 ): Promise<ledger.UnprovenTransaction> {
   const network = midnightLedgerKey(args.sdkNetworkId);
   if (args.endpoints.sdkNetworkId !== network) throw new Error('Midnight endpoint network mismatch');
@@ -159,8 +173,11 @@ export async function balanceLedger9Fees(
     timer.note({ reconstructMs: Date.now() - reconstructStart, resumedBlocks: saved ? block.height - saved.checkedThrough : undefined });
     controller.signal.throwIfAborted();
     timer.lap('reconstructLocal');
-    const fee = balanceLightDust9(state, dustKey, network, transactions, args.ttl, new Date(block.timestamp), block.ledgerParameters,
-      { minimumSpends: args.minimumDustSpends });
+    const fee = args.spread
+      ? spreadLightDust9(state, dustKey, network, transactions as SealedTransaction9[], args.spread.carrier, args.ttl,
+        new Date(block.timestamp), block.ledgerParameters)
+      : balanceLightDust9(state, dustKey, network, transactions as DustBalanceable9[], args.ttl, new Date(block.timestamp),
+        block.ledgerParameters, { minimumSpends: args.minimumDustSpends });
     timer.lap('balance');
     watchdog.activity();
     await timer.time('chainIdentityRecheck', () => assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal));

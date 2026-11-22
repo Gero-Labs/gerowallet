@@ -1,16 +1,17 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { balanceAndSignLedger9Transfer } from './midnightLedger9';
+import { balanceAndSignLedger9Transfer, balanceLedger9Fees } from './midnightLedger9';
 import { getMidnightEndpoints } from './midnightConfig';
 import { DUST_SYNC_INACTIVITY_MS } from './midnightDustSyncWatch';
 import { balanceAndSignUnshieldedTransfer } from './midnightTxBuilder';
 import fixture from './fixtures/nexus-ledger-signing.json';
 import { LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useMidnightChains } from '@test/helpers/midnightChains';
 
-const mocks = vi.hoisted(() => ({ reconstruct: vi.fn(), balance: vi.fn(), transport: vi.fn(), identity: vi.fn(), recheck: vi.fn() }));
+const mocks = vi.hoisted(() => ({ reconstruct: vi.fn(), balance: vi.fn(), spread: vi.fn(), transport: vi.fn(), identity: vi.fn(), recheck: vi.fn() }));
 vi.mock('./midnightDustLightSync', () => ({ reconstructDustState: mocks.reconstruct }));
 vi.mock('./midnightDustLightLedger9', () => ({ dustLedger9: {}, balanceLightDust9: mocks.balance }));
+vi.mock('./midnightDustSpread9', () => ({ spreadLightDust9: mocks.spread }));
 vi.mock('./midnightDustLightTransport', () => ({ createDustLightTransport: mocks.transport }));
 vi.mock('./midnightChainIdentity', () => ({ readVerifiedMidnightChainIdentity: mocks.identity, assertMidnightChainIdentityUnchanged: mocks.recheck }));
 
@@ -161,5 +162,35 @@ describe('unshielded send on a ledger 9 mainnet or preprod', () => {
       dustSecretSeed: new Uint8Array(32).fill(2), ttl: new Date(Date.now() + 300000), unprovenTxHex: vector.unprovenTxHex,
     })).rejects.toThrow();
     expect(mocks.balance).not.toHaveBeenCalled();
+  });
+});
+
+describe('a fee spread inside the wallet\'s own intent', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.identity.mockResolvedValue({ network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.recheck.mockResolvedValue(undefined);
+    mocks.transport.mockReturnValue({});
+    mocks.reconstruct.mockResolvedValue({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
+  });
+
+  it('hands the sealed parts and the carrier to the spread, and builds no fee transaction of its own', async () => {
+    const ttl = new Date(Date.now() + 300_000);
+    const carrier = ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 1 }, ledger.Intent.new(ttl));
+    const sealed = (await ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 2 }, ledger.Intent.new(ttl))
+      .prove({ check: async () => [], prove: async () => new Uint8Array(), lookupKey: async () => undefined }, ledger.CostModel.initialCostModel())).bind();
+    mocks.spread.mockReturnValue(carrier);
+    const fee = await balanceLedger9Fees({
+      sdkNetworkId: 'stagenet', endpoints: getMidnightEndpoints('Stagenet')!, dustSecretSeed: new Uint8Array(32).fill(2), ttl, spread: { carrier },
+    }, [sealed]);
+    expect(fee).toBe(carrier);
+    expect(mocks.spread).toHaveBeenCalledOnce();
+    const call = mocks.spread.mock.calls[0];
+    expect(call[2]).toBe('stagenet');
+    expect(call[3]).toEqual([sealed]);
+    expect(call[4]).toBe(carrier);
+    expect(call[7]).toBe('params');
+    expect(mocks.balance).not.toHaveBeenCalled();
+    expect(mocks.recheck).toHaveBeenCalledOnce();
   });
 });
