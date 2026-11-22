@@ -5766,6 +5766,8 @@ export default {
   'midnight.connector.balanceTitle': 'Finanzieren und Gebühren zahlen',
   'midnight.connector.balanceBody': 'Diese Seite bittet deine Wallet, die unten aufgeführten Beträge zu einer von ihr erstellten Transaktion beizusteuern und die Netzwerkgebühr zu zahlen.',
   'midnight.connector.balanceNothing': 'Es werden keine Beträge benötigt; deine Wallet zahlt nur die Netzwerkgebühr.',
+  'midnight.connector.sealedTitle': 'Tausch abschließen',
+  'midnight.connector.sealedBody': 'Diese Seite bittet deine Wallet, die folgende Transaktion abzuschließen. Deine Wallet fügt hinzu, was du gibst, nimmt entgegen, was du erhältst, und zahlt die Netzwerkgebühr.',
   'midnight.connector.intentTitle': 'Tausch anbieten',
   'midnight.connector.intentBody': 'Diese Seite bittet deine Wallet, den unten stehenden Tausch anzubieten. Die Transaktion bleibt absichtlich unvollständig: Sie wird erst abgeschlossen, wenn eine andere Partei hinzufügt, was du verlangst.',
   'midnight.connector.intentGive': 'Du gibst',

@@ -5669,6 +5669,8 @@ export default {
   'midnight.connector.balanceTitle': 'Financiar y pagar comisiones',
   'midnight.connector.balanceBody': 'Este sitio le pide a tu billetera que agregue los fondos de abajo a una transacción que creó y que pague su comisión de red.',
   'midnight.connector.balanceNothing': 'No se necesitan fondos; tu billetera solo paga la comisión de red.',
+  'midnight.connector.sealedTitle': 'Completar un intercambio',
+  'midnight.connector.sealedBody': 'Este sitio le pide a tu billetera completar la transacción de abajo. Tu billetera agrega lo que das, recibe lo que te corresponde y paga la comisión de red.',
   'midnight.connector.intentTitle': 'Ofrecer un intercambio',
   'midnight.connector.intentBody': 'Este sitio le pide a tu billetera que ofrezca el intercambio de abajo. La transacción queda incompleta a propósito: solo se completa cuando otra parte agrega lo que pides.',
   'midnight.connector.intentGive': 'Das',

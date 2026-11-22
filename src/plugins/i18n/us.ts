@@ -5872,6 +5872,8 @@ export default {
   'midnight.connector.balanceTitle': 'Fund and pay fees',
   'midnight.connector.balanceBody': 'This site asks your wallet to add the funds below to a transaction it built, and to pay its network fee.',
   'midnight.connector.balanceNothing': 'No funds are needed; your wallet only pays the network fee.',
+  'midnight.connector.sealedTitle': 'Complete a swap',
+  'midnight.connector.sealedBody': 'This site asks your wallet to complete the transaction below. Your wallet adds what you give, takes what you receive, and pays the network fee.',
   'midnight.connector.intentTitle': 'Offer a swap',
   'midnight.connector.intentBody': 'This site asks your wallet to offer the swap below. The transaction is left incomplete on purpose: it only completes when another party adds what you ask for.',
   'midnight.connector.intentGive': 'You give',
