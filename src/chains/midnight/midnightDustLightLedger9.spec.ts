@@ -6,7 +6,7 @@ import { balanceLightDust9, dustLedger9 } from './midnightDustLightLedger9';
 import {
   DUST_SCAN_ALIGN_BLOCKS, DUST_SCAN_MAX_SLICES, DUST_SCAN_MIN_SLICE_BLOCKS, DUST_SPEND_CONCURRENCY, dustScanSlices,
   dustWarmScanStart, reconstructDustState,
-  littleEndianHex, type CollapsedDustTree, type DustLightTransport, type DustSnapshot, type DustSpendTransaction,
+  littleEndianHex, type CollapsedDustTree, type DustLightTransport, type DustSnapshot, type DustSpendCheckpoint, type DustSpendTransaction,
 } from './midnightDustLightSync';
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
@@ -513,6 +513,134 @@ describe('sliced DUST spend scans', () => {
       const transport: DustLightTransport = { ...f.transport, snapshot: vi.fn(async () => snapshot),
         spends: vi.fn(async () => ({ transactions: [], nextBlock: null })) };
       await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', transport)).rejects.toThrow('Invalid DUST spend page cursor');
+    } finally { f.key.clear(); }
+  });
+});
+
+describe('DUST synchronization that survives a failed attempt', () => {
+  /** `f`'s transport, recording each scan's first block and answering only spends inside the range asked for. */
+  function ranged(f: ReturnType<typeof fundedFixture>) {
+    const starts: number[] = [];
+    const transport: DustLightTransport = {
+      ...f.transport,
+      spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+        starts.push(fromBlock);
+        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+        return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
+      }),
+    };
+    return { transport, starts };
+  }
+  const wire = (checkpoint: DustSpendCheckpoint): DustSpendCheckpoint => JSON.parse(JSON.stringify(checkpoint));
+  const unavailable = 'DUST synchronization is temporarily unavailable. Please try again shortly.';
+
+  it('reports a checkpoint after each pass of the spend scan, each one further along', async () => {
+    const f = fundedFixture();
+    try {
+      const reported: DustSpendCheckpoint[] = [];
+      // The fixture's chain is spent at heights 3, 4 and 5 (the snapshot block): four passes.
+      const { checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined,
+        { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) });
+      // After a pass the newest coin is not looked up yet, so the scan is settled only below the block it was created in.
+      expect(reported.map(partial => partial.checkedThrough)).toEqual([2, 3, 4]);
+      expect(reported.map(partial => Object.values(partial.heads).map(head => head.seq))).toEqual([[0], [1], [2]]);
+      expect(reported[2]).toEqual(wire(checkpoint!));
+    } finally { f.key.clear(); }
+  });
+
+  it.each([1, 2, 3])('an attempt that fails after pass %i leaves a checkpoint the next attempt resumes from', async completedPasses => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      const reported: DustSpendCheckpoint[] = [];
+      const failing = ranged(f);
+      const spends = failing.transport.spends;
+      failing.transport.spends = vi.fn(async (block, prefixes, fromBlock, toBlock) => {
+        // A pass ends by reporting where the scan stands, so the next request after it belongs to the next pass.
+        if (reported.length >= completedPasses) throw new Error(unavailable);
+        return spends(block, prefixes, fromBlock, toBlock);
+      });
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+        { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('temporarily unavailable');
+      expect(reported).toHaveLength(completedPasses);
+      const left = reported[reported.length - 1];
+      // Both chains are in it: the spent one at its head so far, the unspent one at its only coin.
+      expect(Object.values(left.heads).map(head => head.seq).sort()).toEqual([0, completedPasses - 1]);
+
+      const { transport, starts } = ranged(f);
+      const next = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: left, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(next.state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(next.state)).toEqual(dustLedger9.roots(f.local));
+      // Nothing at or below the checkpoint is scanned again.
+      expect(starts.length).toBeGreaterThan(0);
+      expect(starts.every(from => from === left.checkedThrough + 1)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it('a failure after the spend scan (the commitment tree) keeps the whole scan', async () => {
+    const f = fundedFixture();
+    try {
+      const reported: DustSpendCheckpoint[] = [];
+      const failing: DustLightTransport = { ...ranged(f).transport, commitments: vi.fn(async () => { throw new Error(unavailable); }) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing, undefined,
+        { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('temporarily unavailable');
+      const left = reported[reported.length - 1];
+      expect(left.checkedThrough).toBe(f.snapshot.block.height - 1);
+
+      const { transport, starts } = ranged(f);
+      const next = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+        { checkpoint: left, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(next.state.utxos).toEqual(f.local.utxos);
+      expect(starts.every(from => from === f.snapshot.block.height)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it('a resumed attempt reports nothing until it is further along than its checkpoint', async () => {
+    const f = fundedFixture();
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const onCheckpoint = vi.fn();
+      await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined,
+        { checkpoint: wire(cold.checkpoint!), checkpointMarginBlocks: 1, scanAlignBlocks: 0, onCheckpoint });
+      expect(onCheckpoint).not.toHaveBeenCalled();
+    } finally { f.key.clear(); }
+  });
+
+  it('a callback that throws does not fail the synchronization', async () => {
+    const f = fundedFixture();
+    try {
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined,
+        { checkpointMarginBlocks: 1, onCheckpoint: () => { throw new Error('store is gone'); } });
+      expect(state.utxos).toEqual(f.local.utxos);
+    } finally { f.key.clear(); }
+  });
+
+  // Two of these queries running together hung Gero's preprod indexer until it was restarted (2026-11-22).
+  it('asks for the commitment tree one range per request, one request at a time', async () => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      let inFlight = 0;
+      let mostInFlight = 0;
+      const commitments = vi.fn<DustLightTransport['commitments']>(async (block, ranges) => {
+        mostInFlight = Math.max(mostInFlight, ++inFlight);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        try { return await f.transport.commitments(block, ranges); } finally { inFlight--; }
+      });
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', { ...f.transport, commitments });
+      expect(state.utxos).toEqual(f.local.utxos);
+      // Two owned coins that are not neighbours: more than one stretch of other people's leaves.
+      expect(commitments.mock.calls.length).toBeGreaterThan(1);
+      expect(commitments.mock.calls.every(([, ranges]) => ranges.length === 1)).toBe(true);
+      expect(mostInFlight).toBe(1);
+    } finally { f.key.clear(); }
+  });
+
+  it('refuses a commitment answer that is not exactly the one range asked for', async () => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      const doubled: DustLightTransport = { ...f.transport,
+        commitments: vi.fn(async (block, ranges) => { const [update] = await f.transport.commitments(block, ranges); return [update, update]; }) };
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', doubled)).rejects.toThrow('Incomplete DUST commitment snapshot');
     } finally { f.key.clear(); }
   });
 });

@@ -155,7 +155,11 @@ export async function balanceLedger9Fees(
     const reconstructStart = Date.now();
     const { state, block, checkpoint } = await reconstructDustState(dustLedger9, dustKey, network,
       timedDustTransport(createDustLightTransport(args.endpoints, controller.signal, reply), timer), progress,
-      { checkpoint: saved, ledgerFirstBlock: Object.hasOwn(MIDNIGHT_LEDGER9_FIRST_BLOCK, network) ? MIDNIGHT_LEDGER9_FIRST_BLOCK[network] : undefined });
+      { checkpoint: saved, ledgerFirstBlock: Object.hasOwn(MIDNIGHT_LEDGER9_FIRST_BLOCK, network) ? MIDNIGHT_LEDGER9_FIRST_BLOCK[network] : undefined,
+        // Kept as the scan goes, so a build that fails later (a timeout, a server error, the TTL)
+        // leaves the next one only the rest to scan. Not awaited, like the save below. Saves can
+        // land out of order; an older checkpoint is still a correct one, only a longer scan.
+        onCheckpoint: partial => { void saveDustSpendCheckpoint(network, args.dustSecretSeed, identity, partial); } });
     timer.note({ reconstructMs: Date.now() - reconstructStart, resumedBlocks: saved ? block.height - saved.checkedThrough : undefined });
     controller.signal.throwIfAborted();
     timer.lap('reconstructLocal');

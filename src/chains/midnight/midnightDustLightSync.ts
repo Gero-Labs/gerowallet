@@ -169,6 +169,16 @@ export interface ReconstructDustOptions {
   checkpointMarginBlocks?: number;
   /** Warm scans start on a multiple of this many blocks (`dustWarmScanStart`); 0 starts right after the checkpoint. Default `DUST_SCAN_ALIGN_BLOCKS`. */
   scanAlignBlocks?: number;
+  /**
+   * Called during the spend scan, each time more of it is settled, with a
+   * checkpoint the next attempt can resume from. A cold scan is one full pass
+   * per link of the longest spend chain (minutes with dozens of spends), so a
+   * failure near the end must not send the next attempt back to the first
+   * block. The checkpoint is not yet checked against the commitment root: like
+   * any stored one it is a hint, and a head the chain does not have is dropped
+   * by `reconstructDustState`'s cold attempts. Must not throw or block.
+   */
+  onCheckpoint?: (checkpoint: DustSpendCheckpoint) => void;
 }
 
 /** About half an hour of Midnight blocks: a spend this deep is final. */
@@ -347,10 +357,25 @@ async function reconstructDustStateOnce<State, Key>(
     coin: QualifiedDustOutput; generation: DustGenerationInfo; generationKey: string;
     /** First block this chain's spends are looked for in. */
     scanFrom: number;
-    /** The chain's newest coin created at or below `checkedThrough`. */
-    stable: QualifiedDustOutput;
+    /** The coin this attempt started the chain from: its first coin, or the checkpoint's head. */
+    base: QualifiedDustOutput;
+    /** Each successor found since, in chain order, with the height of the spend that created it. */
+    links: { coin: QualifiedDustOutput; height: number }[];
   }
   const live = new Map<bigint, LiveCoin>();
+  /** The chain's newest coin created at or below `height`. */
+  const headAt = (entry: LiveCoin, height: number): QualifiedDustOutput => {
+    let head = entry.base;
+    for (const link of entry.links) {
+      if (link.height > height) break;
+      head = link.coin;
+    }
+    return head;
+  };
+  const checkpointAt = (through: number): DustSpendCheckpoint => ({
+    checkedThrough: through,
+    heads: Object.fromEntries([...live.values()].map(entry => [entry.generationKey, dustCoinToWire(headAt(entry, through))])),
+  });
   const segments = [...gaps.map(gap => ({ start: gap.startIndex, gap })),
     ...generations.map(generation => ({ start: generation.generationMtIndex, generation }))]
     .sort((a, b) => a.start - b.start);
@@ -390,7 +415,7 @@ async function reconstructDustStateOnce<State, Key>(
     const fromFirst = first && Number.isSafeInteger(first.height) && first.height >= 0 && first.height <= block.height
       && coin.ctime.getTime() >= first.timestamp ? first.height : 0;
     live.set(nullifier, { coin: start, generation, generationKey: chainKey,
-      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, stable: start });
+      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, base: start, links: [] });
     cursor++;
   }
   if (cursor !== generationEnd) throw new Error('Incomplete DUST generation tree');
@@ -409,6 +434,22 @@ async function reconstructDustStateOnce<State, Key>(
   const seen = new Set<bigint>();
   let discovered = 0;
   const limit = concurrencyLimit(DUST_SPEND_CONCURRENCY);
+  // How far the scan is settled for every chain at once. A chain whose newest
+  // coin is still to be looked up is settled only below the block that coin
+  // was created in: its own spend cannot be earlier. A chain whose newest coin
+  // was looked up to the tip is settled to the tip. Resuming from it scans
+  // from a shared day boundary before that height, as after any checkpoint.
+  let settled = resume ? resume.checkedThrough : -1;
+  const reportSettled = () => {
+    let through = checkedThrough;
+    for (const [nullifier, entry] of live) {
+      if (checked.has(nullifier)) continue;
+      through = Math.min(through, entry.links.length ? entry.links[entry.links.length - 1].height - 1 : -1);
+    }
+    if (through <= settled) return;
+    settled = through;
+    try { options.onCheckpoint?.(checkpointAt(through)); } catch { /* advisory */ }
+  };
   for (;;) {
     const pending = [...live.keys()].filter(n => !checked.has(n));
     // One scan per prefix and start block, each in fixed block slices; a
@@ -493,10 +534,11 @@ async function reconstructDustStateOnce<State, Key>(
       matches.delete(nullifier);
       live.delete(nullifier);
       live.set(ledger.nullifier(successor, key), { ...entry, coin: successor,
-        stable: index(transaction.block.height) <= checkedThrough ? successor : entry.stable });
+        links: [...entry.links, { coin: successor, height: index(transaction.block.height) }] });
       advanced = true;
       if (++discovered > commitmentEnd) throw new Error('Invalid DUST spend chain');
     }
+    reportSettled();
     if (!advanced) break;
     report(50, '');
   }
@@ -512,12 +554,16 @@ async function reconstructDustStateOnce<State, Key>(
   }
   if (cursor < commitmentEnd) ranges.push({ startIndex: cursor, endIndex: commitmentEnd - 1 });
   const updates: CollapsedDustTree[] = [];
-  for (let i = 0; i < ranges.length; i += 64) {
-    const batch = ranges.slice(i, i + 64);
-    const result = await transport.commitments(block, batch);
-    if (result.length !== batch.length) throw new Error('Incomplete DUST commitment snapshot');
-    result.forEach((update, j) => assertTreeUpdate(update, batch[j].startIndex, batch[j].endIndex, block.protocolVersion));
-    updates.push(...result);
+  // One range per request, one request at a time. Nexus asks its indexer for
+  // up to four ranges of a request at once, and two of these queries running
+  // together can hang the indexer until it is restarted (reproduced on preprod
+  // on 2026-11-22, where it failed the fee builds of a wallet with ten coins).
+  // A range alone answers in well under a second, so this costs little.
+  for (const range of ranges) {
+    const result = await transport.commitments(block, [range]);
+    if (result.length !== 1) throw new Error('Incomplete DUST commitment snapshot');
+    assertTreeUpdate(result[0], range.startIndex, range.endIndex, block.protocolVersion);
+    updates.push(result[0]);
   }
   const commitments = [...updates.map(gap => ({ start: gap.startIndex, gap })),
     ...coins.map(coin => ({ start: Number(coin.mtIndex), coin }))].sort((a, b) => a.start - b.start);
@@ -527,9 +573,5 @@ async function reconstructDustStateOnce<State, Key>(
     throw new DustRootMismatch('DUST commitment root verification failed');
   }
   report(100, '');
-  const checkpoint: DustSpendCheckpoint | null = checkedThrough < 0 ? null : {
-    checkedThrough,
-    heads: Object.fromEntries([...live.values()].map(entry => [entry.generationKey, dustCoinToWire(entry.stable)])),
-  };
-  return { state, block, checkpoint };
+  return { state, block, checkpoint: checkedThrough < 0 ? null : checkpointAt(checkedThrough) };
 }
