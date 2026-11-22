@@ -18,7 +18,6 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi, type BuildMidnightTxRequest, type SubmitMidnightTxResponse } from '@/api/midnight-api';
 import { StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
-import { withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
 import {
   MidnightStationError, isStationCode, stationCopyKey, type StationCode, type StationStatus,
 } from '@/chains/midnight/midnightStationConfig';
@@ -64,7 +63,7 @@ function assertCurrent(current: () => boolean): void {
   if (!current()) throw new StaleApprovalError();
 }
 
-interface SealReply { success: boolean; sealedTxHex?: string; txIdentifiers?: unknown; error?: string; buildFailure?: string }
+interface SealReply { success: boolean; sealedTxHex?: string; txIdentifiers?: unknown; error?: string }
 interface RedeemReply {
   success: boolean; txHash?: string; ledgerTxHash?: string; status?: SubmitMidnightTxResponse['status'];
   blockHeight?: number; remaining?: number; error?: string;
@@ -106,7 +105,7 @@ export async function sendUnshieldedViaStation(
   const sealed = sealResponse?.data;
   if (!sealed?.success || !sealed.sealedTxHex) {
     if (isStationCode(sealed?.error)) throw stationError(sealed.error);
-    throw withBuildFailure(backgroundError(sealed?.error, 'Midnight signing failed'), sealed?.buildFailure);
+    throw backgroundError(sealed?.error, 'Midnight signing failed');
   }
   assertCurrent(current);
   onStage?.('submitting');

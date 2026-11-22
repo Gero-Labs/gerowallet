@@ -6630,12 +6630,9 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_SEAL, async (request, sendRespons
       midnightActions.setSendProgress(null);
     }
   } catch (error) {
-    sendResponse({
-      id: request.id,
-      data: { success: false, error: getErrorMessage(error), ...buildFailureReply(error) },
-      target: TARGET,
-      sender: SENDER.extension,
-    });
+    // No build-failure mark: that tells a dApp approval a decline was the wallet's (midnightBuildFailure.ts),
+    // and a station send only ever starts from the wallet's own send screens.
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
   } finally { timer.done(outcome); secretBuffers.forEach(bytes => bytes.fill(0)); }
 });
 

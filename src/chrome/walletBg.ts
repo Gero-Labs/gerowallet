@@ -3555,14 +3555,14 @@ export class WalletBg {
       try {
         assertSession();
         // Nexus built this transaction: sign only the send the user asked for.
-        await asBuildStep(() => assertMidnightTransferMatches(
+        await assertMidnightTransferMatches(
           endpoints.sdkNetworkId, unprovenTxHex,
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
           intendedOutputs,
-        ));
-        const sealed = await asBuildStep(() => sealTransferForStation({
+        );
+        const sealed = await sealTransferForStation({
           sdkNetworkId: endpoints.sdkNetworkId, unprovenTxHex, unshieldedSecretKey: derived.unshieldedSecretKey,
-        }));
+        });
         assertSession();
         return sealed;
       } finally {
