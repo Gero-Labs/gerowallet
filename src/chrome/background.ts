@@ -6542,8 +6542,9 @@ const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
 
 /**
  * Side panel → background for the DApp Connector's balanceUnsealedTransaction
- * (the panel has already shown the user what the wallet will add and taken
- * the credential). Returns the sealed tx hex.
+ * and, with `sealed`, balanceSealedTransaction (the panel has already shown
+ * the user what the wallet will add and taken the credential). Returns the
+ * sealed tx hex.
  */
 app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sendResponse) => {
   let prfBytes: Uint8Array | undefined;
@@ -6551,15 +6552,16 @@ app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sen
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
     if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BALANCE_MIDNIGHT_CONNECTOR_TX called on non-Midnight wallet');
-    const { tx, password, prfSecret } = request.data || {};
+    const { tx, password, prfSecret, sealed } = request.data || {};
     if (typeof tx !== 'string' || tx.length === 0) throw new Error('tx is required');
+    if (sealed !== undefined && typeof sealed !== 'boolean') throw new Error('Invalid sealed flag');
     if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
     if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
       || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
       throw new Error('Invalid PassKey authorization');
     }
     prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes);
+    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes, sealed === true);
     sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({

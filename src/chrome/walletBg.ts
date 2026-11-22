@@ -125,6 +125,7 @@ import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } 
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
+import { balanceSealedTransaction9 } from '@/chains/midnight/midnightSealedBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
 import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
@@ -2842,11 +2843,16 @@ export class WalletBg {
    * proof is generated wallet-side, on this device in Gero Cloud mode or on
    * the user's proof server otherwise, never through Gero Cloud, so the
    * dapp's contract proofs and the wallet's witness stay off our servers.
+   * With `sealed`, the tx is another party's sealed part (DApp Connector
+   * `balanceSealedTransaction`): the wallet adds its own intent and the fee
+   * (midnightSealedBalancer9.ts).
    */
   async balanceMidnightConnectorTransaction(
     txHex: string,
     password?: string,
     prfSecret?: Uint8Array,
+    /** `balanceSealedTransaction`: the tx is another party's sealed part (ledger 9 only). */
+    sealed = false,
   ): Promise<{ tx: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('balanceMidnightConnectorTransaction called on non-Midnight wallet');
@@ -2855,6 +2861,11 @@ export class WalletBg {
 
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
+    {
+      // A sealed transaction is completed from the wallet's own synced coins: nothing is unlocked before that sync (review S1).
+      const { midnightStore } = await import('@/stores/midnightStore');
+      if (sealed && !connectorIntentSyncReady(midnightStore)) throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
+    }
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -2899,6 +2910,20 @@ export class WalletBg {
         // conservative 90-day lookback.
         // The chain's ledger decides the path, never the network's name.
         if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          if (sealed) {
+            const sealed9 = await asBuildStep(() => balanceSealedTransaction9({
+              sdkNetworkId: endpoints.sdkNetworkId,
+              endpoints,
+              txHex,
+              unshieldedSecretKey: derived.unshieldedSecretKey,
+              dustSecretSeed: derived.dustSecretKey,
+              utxos: midnightStore.utxos,
+              sync: midnightStore,
+              proving,
+            }));
+            assertSession();
+            return { tx: sealed9.txHex };
+          }
           // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
           const result9 = await asBuildStep(() => balanceDappTransaction9({
             sdkNetworkId: endpoints.sdkNetworkId,
@@ -2912,6 +2937,7 @@ export class WalletBg {
           assertSession();
           return { tx: result9.txHex };
         }
+        if (sealed) throw new Error('balanceSealedTransaction needs a ledger 9 network');
         const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
         const result = await asBuildStep(() => balanceDappTransaction({
           sdkNetworkId: endpoints.sdkNetworkId,

@@ -55,7 +55,7 @@ import {
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
-import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
+import { MIDNIGHT_DUST_COINS_SHORT, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import { markBuildStep, withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
@@ -99,12 +99,14 @@ export class MidnightBuiltTxRefusedError extends Error {
 
 /**
  * The chain's ledger couldn't be read, or changed while the transaction was
- * prepared; or a ledger 9 makeIntent came before the wallet's sync.
+ * prepared; or a ledger 9 makeIntent came before the wallet's sync; or a fee
+ * that needs more DUST coins than the wallet holds.
  */
 const LEDGER_REFUSAL_COPY: Record<string, string> = {
   [MIDNIGHT_LEDGER_UNKNOWN]: 'midnight.errors.ledgerUnknown',
   [MIDNIGHT_LEDGER_CHANGED]: 'midnight.errors.ledgerMismatch',
   [MIDNIGHT_WALLET_NOT_SYNCED]: 'midnight.errors.walletNotSynced',
+  [MIDNIGHT_DUST_COINS_SHORT]: 'midnight.errors.dustCoinsShort',
 };
 
 /**
@@ -453,6 +455,8 @@ export async function balanceConnectorTransaction(
   tx: string,
   credentials: MidnightSendCredentials,
   current: () => boolean = () => true,
+  /** `balanceSealedTransaction`: `tx` is another party's sealed part. */
+  sealed = false,
 ): Promise<{ tx: string }> {
   assertCurrentApproval(current);
   const timer = midnightTimer('page connector balanceUnsealedTransaction');
@@ -463,6 +467,7 @@ export async function balanceConnectorTransaction(
     method: MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX,
     data: {
       tx,
+      sealed,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },

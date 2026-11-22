@@ -5456,6 +5456,7 @@ export default {
   'midnight.errors.ledgerUnknown': 'GeroWallet no pudo comprobar qué versión de la red de Midnight está activa, así que no se envió nada. Revisa tu conexión e inténtalo de nuevo.',
   'midnight.errors.ledgerMismatch': 'La red de Midnight cambió mientras se preparaba esta transacción. No se envió nada. Inténtalo de nuevo.',
   'midnight.errors.walletNotSynced': 'Tu billetera todavía se está sincronizando con la red de Midnight, así que no se firmó nada. Inténtalo de nuevo en un momento.',
+  'midnight.errors.dustCoinsShort': 'Tu billetera tiene muy pocas monedas de DUST para pagar la comisión de esta transacción, así que no se firmó nada. Cada pago de NIGHT que recibes por separado añade una moneda de DUST.',
   'midnight.errors.updateRequired': 'Actualiza GeroWallet para enviar en Midnight. Esta versión no puede crear transacciones para la nueva versión de la red de Midnight. Tus fondos están seguros.',
   'midnight.errors.noAnswer': 'Midnight no respondió. No se envió nada. Inténtalo de nuevo.',
   'midnight.errors.dustInsufficient': 'La billetera que paga la comisión no tiene suficiente DUST para cubrirla, así que no se envió nada. Espera a que se genere más DUST a partir del NIGHT registrado o elige otra billetera para pagarla.',

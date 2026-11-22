@@ -5650,6 +5650,7 @@ export default {
   'midnight.errors.ledgerUnknown': 'GeroWallet couldn\'t check which version of Midnight\'s network is running, so nothing was sent. Check your connection and try again.',
   'midnight.errors.ledgerMismatch': 'Midnight\'s network changed while this transaction was being prepared. Nothing was sent. Try again.',
   'midnight.errors.walletNotSynced': 'Your wallet is still syncing with Midnight\'s network, so nothing was signed. Try again in a moment.',
+  'midnight.errors.dustCoinsShort': 'Your wallet holds too few DUST coins to pay this transaction\'s fee, so nothing was signed. Each separate NIGHT payment you receive adds one DUST coin.',
   'midnight.errors.updateRequired': 'Update GeroWallet to send on Midnight. This version can\'t build transactions for Midnight\'s new network version. Your funds are safe.',
   'midnight.errors.noAnswer': 'Midnight didn\'t answer. Nothing was sent. Try again.',
   'midnight.errors.dustInsufficient': 'The wallet paying the fee doesn\'t have enough DUST for it, so nothing was sent. Wait for more DUST to generate from registered NIGHT, or choose another wallet to pay.',

@@ -103,3 +103,37 @@ describe('parked connect prompts are bounded', () => {
     expect(body).toContain('settleParkedMidnightRequests(details.tabId, PARKED_MIDNIGHT_METHODS, {');
   });
 });
+
+describe('balanceSealedTransaction reuses the balance worker path', () => {
+  const bg = read('chrome/background.ts');
+  const wallet = read('chrome/walletBg.ts');
+  const service = read('services/midnight-tx.service.ts');
+
+  it('the worker message carries the sealed flag to the wallet', () => {
+    const start = bg.indexOf('app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, ');
+    expect(start).toBeGreaterThan(-1);
+    const body = bg.slice(start, bg.indexOf('\napp.addToOptions(', start + 10));
+    expect(body).toContain('const { tx, password, prfSecret, sealed } = request.data || {};');
+    expect(body).toContain("if (sealed !== undefined && typeof sealed !== 'boolean') throw new Error('Invalid sealed flag');");
+    expect(body).toContain('walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes, sealed === true)');
+  });
+
+  it('the wallet balances a sealed transaction on ledger 9 only, and checks its sync before unlocking keys', () => {
+    const start = wallet.indexOf('async balanceMidnightConnectorTransaction(');
+    expect(start).toBeGreaterThan(-1);
+    const body = wallet.slice(start, wallet.indexOf('async buildMidnightConnectorIntent(', start));
+    const syncCheck = body.indexOf('if (sealed && !connectorIntentSyncReady(midnightStore)) throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);');
+    expect(syncCheck).toBeGreaterThan(-1);
+    expect(syncCheck).toBeLessThan(body.indexOf('openMnemonicWithPassword('));
+    expect(body).toContain('asBuildStep(() => balanceSealedTransaction9({');
+    expect(body).toContain("if (sealed) throw new Error('balanceSealedTransaction needs a ledger 9 network');");
+  });
+
+  it('the page passes the flag and says a DUST-coin shortfall in the user\'s language', () => {
+    expect(service).toContain("[MIDNIGHT_DUST_COINS_SHORT]: 'midnight.errors.dustCoinsShort',");
+    const start = service.indexOf('export async function balanceConnectorTransaction(');
+    const body = service.slice(start, service.indexOf('\nexport async function ', start + 10));
+    expect(body).toContain('sealed = false,');
+    expect(body).toContain('      sealed,');
+  });
+});
