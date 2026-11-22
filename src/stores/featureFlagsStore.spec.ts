@@ -126,6 +126,25 @@ test('exposes isCip113Enabled, defaulting to false, following the remote flag an
   expect(featureFlagsStore.isCip113Enabled()).toBe(false);
 });
 
+test('exposes isMidnightSponsoredFeesEnabled, defaulting to false, following the remote flag and a live flip', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isMidnightSponsoredFeesEnabled()).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isMidnightSponsoredFeesEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isMidnightSponsoredFeesEnabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isMidnightSponsoredFeesEnabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isMidnightSponsoredFeesEnabled()).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isMidnightSponsoredFeesEnabled()).toBe(false);
+});
+
 test('exposes isNftMarketEnabled, defaulting to false, following the remote flag and a live flip', () => {
   featureFlagsStore.reset();
   expect(featureFlagsStore.isNftMarketEnabled()).toBe(false);
