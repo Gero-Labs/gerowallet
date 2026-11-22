@@ -271,6 +271,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Sync WS drop**: reconnect in `websocket.service.ts`; re-subscribe to addresses/stake key on wallet switch
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
+- **"The Midnight prover did not start"**: the offscreen prover page (`src/offscreen/midnight-prover.html`) must import no app chunk. An offscreen document has `chrome.runtime` and no `chrome.storage`, so a store chunk throws as it loads and the page never opens its port. Vite's modulepreload polyfill (shared by every HTML entry, merged into a store-dependent chunk by `experimentalMinChunkSize`) did that once, so it is off (`modulePreload: { polyfill: false }`), and `scripts/offscreen-prover-guard.mjs` fails the build if the page imports a chunk again.
 - **`assert` in the background**: the background build stubs `assert` (`\0virtual:assert-stub`), and `requireReturnsDefault` hands CommonJS callers the stub's function, not its namespace. Otherwise `@subsquid/scale-codec` (the Midnight address codecs) gets a namespace and the worker derives no Midnight key at all. `scripts/check-background-interop.mjs` builds a small entry with that config and runs it (CI: "Background CommonJS interop").
 
 ## Chrome Web Store: No Remotely Hosted Code
