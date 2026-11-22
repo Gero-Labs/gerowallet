@@ -144,4 +144,94 @@ describe('DUST projection transport', () => {
       .rejects.toThrow('temporarily unavailable');
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+
+  // Preprod, 2026-11-22: one 503 and one 502 each ended a synchronization that had been
+  // running for minutes.
+  describe('transient failures of a page pinned to the snapshot', () => {
+    const page = () => Response.json({ blockHash: block.hash, transactions: [], nextBlock: null });
+    it.each([502, 503, 504])('retries a %i with back-off and resumes the same page', async status => {
+      vi.useFakeTimers();
+      fetchMock.mockResolvedValueOnce(new Response('', { status }))
+        .mockResolvedValueOnce(new Response('', { status }))
+        .mockResolvedValueOnce(page());
+      const result = createDustLightTransport(endpoints, new AbortController().signal).spends(block, ['12'], 0, 100);
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(4000);
+      await expect(result).resolves.toEqual({ transactions: [], nextBlock: null });
+      expect(fetchMock.mock.calls[2]).toEqual(fetchMock.mock.calls[0]);
+      expect(log.warn.mock.calls.map(call => call[1])).toEqual([
+        { operation: 'spends', status, retryInMs: 2000 }, { operation: 'spends', status, retryInMs: 4000 },
+      ]);
+    });
+    it('gives up after three retries', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(() => Promise.resolve(new Response('', { status: 503 })));
+      const result = expect(createDustLightTransport(endpoints, new AbortController().signal)
+        .commitments(block, [{ startIndex: 0, endIndex: 9 }])).rejects.toThrow('temporarily unavailable');
+      await vi.advanceTimersByTimeAsync(14_000);
+      await result;
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(log.warn.mock.calls.map(call => call[1].retryInMs)).toEqual([2000, 4000, 8000, null]);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+    it('honours a Retry-After on a 503, and never retries before it', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockResolvedValueOnce(new Response('', { status: 503, headers: { 'Retry-After': '5' } })).mockResolvedValueOnce(page());
+      const result = createDustLightTransport(endpoints, new AbortController().signal).spends(block, ['12'], 0, 100);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(result).resolves.toEqual({ transactions: [], nextBlock: null });
+    });
+    it('retries a dropped connection and an answer cut mid-body, without counting a dropped connection as activity', async () => {
+      vi.useFakeTimers();
+      const activity = vi.fn();
+      const cut = new Response('{"blockHash":"', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(cut).mockResolvedValueOnce(page());
+      const result = createDustLightTransport(endpoints, new AbortController().signal, activity).spends(block, ['12'], 0, 100);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(activity).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2000 + 4000);
+      await expect(result).resolves.toEqual({ transactions: [], nextBlock: null });
+      // The cut answer's headers, then the good answer's headers and body.
+      expect(activity).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+    it('gives a dropped connection back to the caller once the retries are spent', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+      const result = expect(createDustLightTransport(endpoints, new AbortController().signal).spends(block, ['12'], 0, 100))
+        .rejects.toThrow('Failed to fetch');
+      await vi.advanceTimersByTimeAsync(14_000);
+      await result;
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+    it('stops retrying when the shared deadline expires', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(() => Promise.resolve(new Response('', { status: 502 })));
+      const controller = new AbortController();
+      const result = expect(createDustLightTransport(endpoints, controller.signal).spends(block, ['12'], 0, 100))
+        .rejects.toThrow('cancelled');
+      await vi.advanceTimersByTimeAsync(500);
+      controller.abort(new Error('cancelled'));
+      await result;
+      expect(vi.getTimerCount()).toBe(0);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+    it.each([400, 409, 500])('does not retry a %i: the same request would get the same answer', async status => {
+      fetchMock.mockResolvedValue(new Response('', { status }));
+      await expect(createDustLightTransport(endpoints, new AbortController().signal).spends(block, ['12'], 0, 100))
+        .rejects.toThrow('temporarily unavailable');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+    it('does not retry a snapshot whose connection dropped: nothing is lost by starting again', async () => {
+      fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+      await expect(createDustLightTransport(endpoints, new AbortController().signal).snapshot('public-address'))
+        .rejects.toThrow('Failed to fetch');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+  });
 });
