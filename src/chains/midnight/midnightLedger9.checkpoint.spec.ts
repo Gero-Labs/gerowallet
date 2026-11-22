@@ -6,13 +6,13 @@ import { getMidnightEndpoints } from './midnightConfig';
 import type { DustSpendCheckpoint, ReconstructDustOptions } from './midnightDustLightSync';
 
 const mocks = vi.hoisted(() => ({
-  reconstruct: vi.fn(), balance: vi.fn(), identity: vi.fn(), recheck: vi.fn(), load: vi.fn(), save: vi.fn(),
+  reconstruct: vi.fn(), balance: vi.fn(), identity: vi.fn(), recheck: vi.fn(), load: vi.fn(), writer: vi.fn(), save: vi.fn(),
 }));
 vi.mock('./midnightDustLightSync', () => ({ reconstructDustState: mocks.reconstruct }));
 vi.mock('./midnightDustLightLedger9', () => ({ dustLedger9: {}, balanceLightDust9: mocks.balance }));
 vi.mock('./midnightDustLightTransport', () => ({ createDustLightTransport: () => ({}) }));
 vi.mock('./midnightChainIdentity', () => ({ readVerifiedMidnightChainIdentity: mocks.identity, assertMidnightChainIdentityUnchanged: mocks.recheck }));
-vi.mock('./midnightDustSpendCheckpoint', () => ({ loadDustSpendCheckpoint: mocks.load, saveDustSpendCheckpoint: mocks.save }));
+vi.mock('./midnightDustSpendCheckpoint', () => ({ loadDustSpendCheckpoint: mocks.load, dustSpendCheckpointWriter: mocks.writer }));
 
 const identity = { network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` };
 const seed = new Uint8Array(32).fill(2);
@@ -37,6 +37,7 @@ describe('ledger 9 DUST fee: the spend scan is kept as it goes', () => {
     mocks.identity.mockResolvedValue(identity);
     mocks.recheck.mockResolvedValue(undefined);
     mocks.load.mockResolvedValue(null);
+    mocks.writer.mockReturnValue(mocks.save);
     mocks.save.mockResolvedValue(undefined);
     mocks.balance.mockReturnValue(ledger.Transaction.fromParts('stagenet'));
   });
@@ -48,10 +49,8 @@ describe('ledger 9 DUST fee: the spend scan is kept as it goes', () => {
       throw new Error('DUST synchronization is temporarily unavailable. Please try again shortly.');
     });
     await expect(balanceAndSignLedger9Transfer(args())).rejects.toThrow('temporarily unavailable');
-    expect(mocks.save.mock.calls).toEqual([
-      ['stagenet', seed, identity, checkpoint(100)],
-      ['stagenet', seed, identity, checkpoint(250)],
-    ]);
+    expect(mocks.writer.mock.calls).toEqual([['stagenet', seed, identity]]);
+    expect(mocks.save.mock.calls).toEqual([[checkpoint(100)], [checkpoint(250)]]);
     expect(mocks.balance).not.toHaveBeenCalled();
   });
 
@@ -61,7 +60,8 @@ describe('ledger 9 DUST fee: the spend scan is kept as it goes', () => {
     await balanceAndSignLedger9Transfer(args());
     expect(mocks.load).toHaveBeenCalledWith('stagenet', seed, identity);
     expect(options().checkpoint).toEqual(checkpoint(250));
-    expect(mocks.save.mock.calls).toEqual([['stagenet', seed, identity, checkpoint(300)]]);
+    expect(mocks.writer.mock.calls).toEqual([['stagenet', seed, identity]]);
+    expect(mocks.save.mock.calls).toEqual([[checkpoint(300)]]);
   });
 
   it('a store that never answers does not hold the build back', async () => {
@@ -72,5 +72,16 @@ describe('ledger 9 DUST fee: the spend scan is kept as it goes', () => {
     });
     await expect(balanceAndSignLedger9Transfer(args())).resolves.toMatch(/^[0-9a-f]+$/);
     expect(mocks.save).toHaveBeenCalledTimes(2);
+  });
+
+  it('every save of a build goes through one writer, the save at its end last', async () => {
+    mocks.reconstruct.mockImplementation(async () => {
+      options().onCheckpoint!(checkpoint(100));
+      options().onCheckpoint!(checkpoint(250));
+      return { state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params', height: 400 }, checkpoint: checkpoint(300) };
+    });
+    await balanceAndSignLedger9Transfer(args());
+    expect(mocks.writer).toHaveBeenCalledTimes(1);
+    expect(mocks.save.mock.calls).toEqual([[checkpoint(100)], [checkpoint(250)], [checkpoint(300)]]);
   });
 });

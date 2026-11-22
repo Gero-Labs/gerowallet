@@ -17,7 +17,7 @@
 
 import type { MidnightChainIdentity } from './midnightChainIdentity';
 import type { DustSpendCheckpoint } from './midnightDustLightSync';
-import { clearWalletStatesByPrefix, loadWalletState, saveWalletState, walletStateKindPrefix } from './midnightWalletStatePersistence';
+import { clearWalletStatesByPrefix, loadWalletState, walletStateKindPrefix, walletStateWriter } from './midnightWalletStatePersistence';
 
 const KIND = 'dust-light9';
 const VERSION = 1;
@@ -48,14 +48,31 @@ export async function loadDustSpendCheckpoint(
 export async function saveDustSpendCheckpoint(
   network: string, dustSecretSeed: Uint8Array, identity: MidnightChainIdentity, checkpoint: DustSpendCheckpoint,
 ): Promise<void> {
-  const stored: StoredDustSpendCheckpoint = {
-    version: VERSION, genesisHash: identity.genesis_hash, chainGeneration: identity.chain_generation, checkpoint,
+  await dustSpendCheckpointWriter(network, dustSecretSeed, identity)(checkpoint);
+}
+
+/**
+ * The saves of one fee build, stored in the order they are asked for. A build
+ * saves as it scans and once more at its end, none of them awaited, and the last
+ * one asked for must be the one that stays, however slow an earlier write is.
+ * The order asked, not the highest `checkedThrough`: after a head the chain does
+ * not have, the cold attempt's checkpoints are lower than the bad one and have to
+ * replace it. The row is keyed here, so the seed may be wiped while saves are queued.
+ */
+export function dustSpendCheckpointWriter(
+  network: string, dustSecretSeed: Uint8Array, identity: MidnightChainIdentity,
+): (checkpoint: DustSpendCheckpoint) => Promise<void> {
+  const write = walletStateWriter(network, KIND, dustSecretSeed);
+  return async checkpoint => {
+    const stored: StoredDustSpendCheckpoint = {
+      version: VERSION, genesisHash: identity.genesis_hash, chainGeneration: identity.chain_generation, checkpoint,
+    };
+    try {
+      await write(JSON.stringify(stored));
+    } catch {
+      // Best-effort: the next build scans from the start.
+    }
   };
-  try {
-    await saveWalletState(network, KIND, dustSecretSeed, JSON.stringify(stored));
-  } catch {
-    // Best-effort: the next build scans from the start.
-  }
 }
 
 /**
