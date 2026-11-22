@@ -181,6 +181,12 @@ export enum MessageTypes {
   // `makeIntent` swap intent the user approved. The worker re-validates the
   // request and answers `{ tx, segmentId }`.
   BUILD_MIDNIGHT_CONNECTOR_INTENT = 'BUILD_MIDNIGHT_CONNECTOR_INTENT',
+  // Gero's fee station (Gero pays the DUST fee of a send for an ADA staker, midnightStation.ts).
+  // STATUS: can it be offered (no credential). SEAL: check, sign and seal the send with no fee,
+  // getting the day's vouchers first when none is held. REDEEM: spend one voucher on the sealed bytes.
+  MIDNIGHT_STATION_STATUS = 'MIDNIGHT_STATION_STATUS',
+  MIDNIGHT_STATION_SEAL = 'MIDNIGHT_STATION_SEAL',
+  MIDNIGHT_STATION_REDEEM = 'MIDNIGHT_STATION_REDEEM',
   // Sent by ChangePasswordDialog after a spending-password change. The DB
   // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
   // the background WalletBg (used to sign) and walletStore.loggedWallet (used to
