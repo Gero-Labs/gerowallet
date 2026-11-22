@@ -39,6 +39,38 @@ export const DUST_SPREAD_MAXIMUM_SPENDS = 8;
 export interface DustSpread9Options {
   /** Cap on the number of spends tried (default {@link DUST_SPREAD_MAXIMUM_SPENDS}). */
   maximumSpends?: number;
+  /**
+   * Signs the wallet's inputs of a trial transaction, called after its DUST
+   * actions are added (they are part of what is signed). Every signature adds
+   * bytes and validation time, so the limit is checked on the signed shape and
+   * the signed transaction is returned.
+   */
+  sign?: (tx: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
+}
+
+/** The margin the SDK's capability is built with below: the same in every fee figure here. */
+const FEE_BLOCKS_MARGIN = 1;
+
+/**
+ * The DUST `parts` already carry towards the fee (an offer made with
+ * `payFees: true` pays its own), measured as the SDK's
+ * `computeBalancingRecipe` measures it: each part's DUST imbalance net of its
+ * own fee, plus that fee.
+ */
+function carriedDust(parts: readonly SealedTransaction9[], params: ledger.LedgerParameters): bigint {
+  let carried = 0n;
+  for (const part of parts) {
+    const fee = part.feesWithMargin(params, FEE_BLOCKS_MARGIN);
+    const [, imbalance] = [...part.imbalances(0, fee)].find(([token]) => token.tag === 'dust') ?? [];
+    carried += (imbalance ?? 0n) + fee;
+  }
+  return carried;
+}
+
+/** The ledger's refusal of a transaction over its validation-time limit; any other error is not "too few coins". */
+function overTimeLimit(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('time to dismiss');
 }
 
 /** The SDK prices a candidate set of DUST inputs with this (on its capability implementation). */
@@ -65,7 +97,11 @@ function splitFee(need: bigint, coins: ReadonlyArray<{ value: bigint }>): bigint
  * which the merged transaction passes the ledger's validation-time limit.
  *
  * The fee is priced with the SDK's `dryRunFee`, which prices the spends in an
- * intent of their own: never less than the same spends inside the carrier.
+ * intent of their own: never less than the same spends inside the carrier. It
+ * is the fee of the whole merged transaction, so the DUST `fixed` already
+ * carries is taken off it: the spends pay only the rest. When nothing is left
+ * to pay, the result is the carrier as it is (signed), or with no carrier an
+ * empty transaction, which merges into anything without effect.
  *
  * @throws DustSpreadError when no count the wallet can make fits.
  */
@@ -76,7 +112,7 @@ export function spreadLightDust9(state: ledger.DustLocalState, key: ledger.DustS
   const keysCapability = Keys.makeDefaultKeysCapability();
   const coinsAndBalancesCapability = CoinsAndBalances.makeDefaultCoinsAndBalancesCapability({}, () => ({ keysCapability }));
   const context = { keysCapability, coinSelection: CoinsAndBalances.chooseCoin, coinsAndBalancesCapability };
-  const capability = Transacting.makeDefaultTransactingCapability({ networkId: network, costParameters: { feeBlocksMargin: 1 } }, () => context);
+  const capability = Transacting.makeDefaultTransactingCapability({ networkId: network, costParameters: { feeBlocksMargin: FEE_BLOCKS_MARGIN } }, () => context);
   const dryRunFee = (capability as { dryRunFee?: DryRunFee }).dryRunFee?.bind(capability);
   if (!dryRunFee) throw new Error('The DUST wallet cannot price a fee for a chosen set of coins');
   const wallet = CoreWallet.init(state, key, network);
@@ -92,12 +128,37 @@ export function spreadLightDust9(state: ledger.DustLocalState, key: ledger.DustS
   /** A fresh copy for every trial: adding DUST actions mutates the intent. */
   const blank = (): ledger.UnprovenTransaction => ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', carrierBytes);
   if ((blank().intents?.size ?? 0) !== 1) throw new Error('The fee carrier must hold exactly one intent');
+  const sign = options.sign ?? ((tx: ledger.UnprovenTransaction) => tx);
+  const existing = carriedDust(fixed, params);
+
+  /** `tx` signed, when merged with `fixed` it passes the validation-time limit; `undefined` when it is over. */
+  const fitting = (tx: ledger.UnprovenTransaction): ledger.UnprovenTransaction | undefined => {
+    const signed = sign(tx);
+    const mock: SealedTransaction9 = ledger.Transaction.deserialize('signature', 'proof', 'binding', signed.mockProve().serialize());
+    // A failed merge is not a count that does not fit: it propagates.
+    const merged = [...fixed, mock].reduce((sum, part) => sum.merge(part));
+    try {
+      merged.cost(params, true);
+    } catch (error) {
+      if (overTimeLimit(error)) return undefined;
+      throw error;
+    }
+    return signed;
+  };
+
+  // Nothing left to pay: no DUST action (an intent with empty DustActions is not well formed).
+  const unpaid = dryRunFee([], carrier ? [...fixed, blank()] : [...fixed], key, wallet, ttl, timestamp, params) - existing;
+  if (unpaid <= 0n) {
+    const asIs = fitting(carrier ? blank() : ledger.Transaction.fromParts(network));
+    if (asIs) return asIs;
+  }
 
   const limit = Math.min(coins.length, options.maximumSpends ?? DUST_SPREAD_MAXIMUM_SPENDS);
   for (let count = 1; count <= limit; count++) {
     const set = coins.slice(0, count);
+    // What these spends must pay: the whole merged fee less what `fixed` already carries.
     const price = (values: bigint[]) => dryRunFee(set.map((coin, i) => ({ token: coin.token, value: values[i] })),
-      [...fixed, blank()], key, wallet, ttl, timestamp, params);
+      [...fixed, blank()], key, wallet, ttl, timestamp, params) - existing;
     // The fee follows the size, which the spend values move a little (their
     // encoding): settle at a fixed point, never paying less than priced.
     let need = price(set.map(() => 1n));
@@ -117,13 +178,9 @@ export function spreadLightDust9(state: ledger.DustLocalState, key: ledger.DustS
     const [segment, intent] = [...tx.intents!][0];
     intent.dustActions = new ledger.DustActions('signature', 'pre-proof', timestamp, [...spends], []);
     tx.intents = tx.intents!.set(segment, intent);
-    const mock: SealedTransaction9 = ledger.Transaction.deserialize('signature', 'proof', 'binding', tx.mockProve().serialize());
-    try {
-      [...fixed, mock].reduce((sum, part) => sum.merge(part)).cost(params, true);
-      return tx;
-    } catch {
-      // Over the limit with this many spends (or the parts do not merge): one more.
-    }
+    const fits = fitting(tx);
+    if (fits) return fits;
+    // Over the limit with this many spends: one more.
   }
   throw new DustSpreadError(coins.length, limit);
 }

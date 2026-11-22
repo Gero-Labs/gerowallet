@@ -21,7 +21,7 @@ import type { MidnightUnshieldedUtxo } from './midnightTypes';
 import {
   summarizeForeignPayments, unshieldedAddressCodec, type ConnectorContribution, type ConnectorPayment,
 } from './midnightConnectorBalance';
-import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from './midnightConnectorIntent';
+import { CONNECTOR_INTENT_TTL_MS, connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from './midnightConnectorIntent';
 import { ledger9WalletState } from './midnightDappBalancer9';
 import type { SealedTransaction9 } from './midnightDustSpread9';
 import { midnightLedgerKey, midnightLedgerVersion, midnightNetworkName, strictMidnightHex } from './midnightLedger';
@@ -32,10 +32,16 @@ import { describeWalletProving, walletProvingProvider } from './midnightWalletPr
 import { debugLog } from '@/utils/debug';
 import { midnightTimer } from './midnightTiming';
 
+/** Closer to expiry than this, the proof the wallet would make is likely wasted. */
+export const SEALED_MINIMUM_TTL_MS = 2 * 60_000;
+/** Clock skew allowed over {@link CONNECTOR_INTENT_TTL_MS} (an offer made with the full makeIntent TTL on a clock a little ahead). */
+const SEALED_TTL_SKEW_MS = 60_000;
+
 /** Why a sealed transaction cannot be balanced by this wallet; told to the dapp as `InvalidRequest`. */
 export const SEALED_BALANCE_REFUSALS = {
   shielded: 'tx needs shielded value balanced; this version balances public (unshielded) tokens only',
   fallible: 'tx is imbalanced in a fallible section; a sealed transaction can only be balanced in its guaranteed section',
+  expiry: `tx must expire between ${SEALED_MINIMUM_TTL_MS / 60_000} and ${CONNECTOR_INTENT_TTL_MS / 60_000} minutes from now`,
 } as const;
 
 export interface SealedBalanceSummary {
@@ -44,6 +50,15 @@ export interface SealedBalanceSummary {
   /** What the wallet takes, per colour: the guaranteed section's surpluses. */
   readonly receives: ConnectorContribution[];
   readonly problem?: keyof typeof SEALED_BALANCE_REFUSALS;
+}
+
+/** The earliest TTL of `tx`'s intents (the ledger refuses the merged transaction after it); `undefined` without intents. */
+function sealedTtl(tx: SealedTransaction9): Date | undefined {
+  let ttl: Date | undefined;
+  for (const intent of tx.intents?.values() ?? []) {
+    if (!ttl || intent.ttl < ttl) ttl = intent.ttl;
+  }
+  return ttl;
 }
 
 /**
@@ -62,8 +77,14 @@ export function decodeSealedTransaction9(hex: string, network: string): SealedTr
  * section across every intent; a segment's own id is its fallible section,
  * which nobody can add to once the intent is bound. DUST (the fee) is not a
  * token the wallet gives here: the fee is paid separately.
+ *
+ * The wallet's signed, completed intent is valid until the sealed part
+ * expires: an offer that expires far ahead would let the dapp hold the
+ * completed swap and submit it whenever the price suits it, and one about to
+ * expire wastes the proof. So the earliest TTL must lie within
+ * {@link SEALED_MINIMUM_TTL_MS} .. {@link CONNECTOR_INTENT_TTL_MS} of `now`.
  */
-export function summarizeSealed9(tx: SealedTransaction9): SealedBalanceSummary {
+export function summarizeSealed9(tx: SealedTransaction9, now = Date.now()): SealedBalanceSummary {
   const gives = new Map<string, bigint>();
   const receives = new Map<string, bigint>();
   let problem: SealedBalanceSummary['problem'];
@@ -75,6 +96,11 @@ export function summarizeSealed9(tx: SealedTransaction9): SealedBalanceSummary {
       const side = value < 0n ? gives : receives;
       side.set(token.raw, (side.get(token.raw) ?? 0n) + (value < 0n ? -value : value));
     }
+  }
+  const ttl = sealedTtl(tx);
+  if (ttl) {
+    const ahead = ttl.getTime() - now;
+    if (ahead < SEALED_MINIMUM_TTL_MS || ahead > CONNECTOR_INTENT_TTL_MS + SEALED_TTL_SKEW_MS) problem ??= 'expiry';
   }
   const list = (totals: Map<string, bigint>) => [...totals].map(([token, amount]) => ({ token, amount: amount.toString() }));
   return { gives: list(gives), receives: list(receives), problem };
@@ -131,11 +157,18 @@ const defaultDeps: BalanceSealedTransaction9Deps = {
 
 /** The sealed part's own deadline bounds the wallet's intent; 5 minutes for a transaction without intents. */
 function earliestTtl(tx: SealedTransaction9): Date {
-  let ttl: Date | undefined;
+  return sealedTtl(tx) ?? new Date(Date.now() + 5 * 60_000);
+}
+
+/** `intentHash#outputNo` of every UTxO the sealed part already spends (lower-case hash). */
+function spentBySealed(tx: SealedTransaction9): Set<string> {
+  const spent = new Set<string>();
   for (const intent of tx.intents?.values() ?? []) {
-    if (!ttl || intent.ttl < ttl) ttl = intent.ttl;
+    for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {
+      for (const input of offer?.inputs ?? []) spent.add(`${input.intentHash.toLowerCase()}#${input.outputNo}`);
+    }
   }
-  return ttl ?? new Date(Date.now() + 5 * 60_000);
+  return spent;
 }
 
 export async function balanceSealedTransaction9(
@@ -164,14 +197,29 @@ export async function balanceSealedTransaction9(
       coinsAndBalancesCapability: CoinsAndBalances.makeDefaultCoinsAndBalancesCapability(),
       keysCapability,
     }));
-    const result = capability.balanceFinalizedTransaction(ledger9WalletState(network, keystore, args.utxos), tx);
+    // A coin the sealed part already spends (the wallet's own earlier offer)
+    // is not the wallet's to select again: the node would refuse the double spend.
+    const spent = spentBySealed(tx);
+    const selectable = args.utxos.filter(utxo => !spent.has(`${utxo.intentHash.toLowerCase()}#${utxo.outputIndex}`));
+    const result = capability.balanceFinalizedTransaction(ledger9WalletState(network, keystore, selectable), tx);
     if (result._tag === 'Left') throw result.left;
     // `undefined` = the guaranteed section is already balanced: the wallet only pays the fee.
     const balancing: ledger.UnprovenTransaction | undefined = result.right[0];
+    if (balancing) {
+      // The SDK gives the wallet's intent the FIRST intent's TTL; the merged
+      // transaction is dead after the EARLIEST one, so the wallet's signature
+      // need not outlive it. Set before anything is signed.
+      for (const [segment, intent] of balancing.intents ?? []) {
+        intent.ttl = ttl;
+        balancing.intents = balancing.intents!.set(segment, intent);
+      }
+    }
     timer.lap('decodeAndSelectInputs');
 
     const withFee = await timer.time('dustFee', () => deps.balanceFees({
-      sdkNetworkId: network, endpoints: args.endpoints, dustSecretSeed: args.dustSecretSeed, ttl, spread: { carrier: balancing },
+      sdkNetworkId: network, endpoints: args.endpoints, dustSecretSeed: args.dustSecretSeed, ttl,
+      // Signed inside the spread, after its DUST actions are in and before the limit check.
+      spread: { carrier: balancing, sign: unproven => signLedger9Intents(unproven, keystore) },
     }, [tx]));
     const dustSpends = [...(withFee.intents?.values() ?? [])].reduce((sum, intent) => sum + (intent.dustActions?.spends.length ?? 0), 0);
 
@@ -181,6 +229,7 @@ export async function balanceSealedTransaction9(
     const proven = await timer.time('prove', () => withFee.prove(provider, ledger.CostModel.initialCostModel()));
     const proveDurationMs = Date.now() - proveStart;
 
+    // The spread signed already; this pass keeps those signatures and signs any input it did not.
     const merged = tx.merge(signLedger9Intents(proven, keystore).bind());
     // What the approval promised: nothing public left open.
     for (const [token, value] of merged.imbalances(0)) {
@@ -198,13 +247,17 @@ export async function balanceSealedTransaction9(
 
 export type SealedBalancePrompt =
   | { ok: true; gives: ConnectorContribution[]; receives: ConnectorContribution[]; payments: ConnectorPayment[] }
-  | { ok: false; reason: string };
+  /** `internal`: the wallet could not check the request (a network failure), not the dapp's mistake. */
+  | { ok: false; reason: string; internal?: true };
 
 /**
  * What the `balanceSealedTransaction` approval shows, built before the user is
  * asked: what the wallet gives, what it receives, and whom the sealed
  * transaction pays (recipients as bech32m). `ownAddress` is the wallet's
  * unshielded bech32m address; when it is unknown every output is listed.
+ * What the sealed part pays straight to `ownAddress` is not a payment to
+ * someone else, so it is counted in `receives` beside the surplus the wallet
+ * takes: otherwise the approval could show a give with nothing received.
  */
 export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, ownAddress: string): Promise<SealedBalancePrompt> {
   const name = midnightNetworkName(sdkNetworkId);
@@ -212,7 +265,7 @@ export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, o
   try {
     version = await resolveMidnightLedger(sdkNetworkId);
   } catch {
-    return { ok: false, reason: `Could not read which ledger Midnight ${name} runs` };
+    return { ok: false, reason: `Could not read which ledger Midnight ${name} runs`, internal: true };
   }
   if (version !== 9) return { ok: false, reason: `balanceSealedTransaction needs a ledger 9 network; Midnight ${name} runs ledger ${version}` };
   let tx: SealedTransaction9;
@@ -237,5 +290,18 @@ export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, o
       return payment;
     }
   });
-  return { ok: true, gives: summary.gives, receives: summary.receives, payments };
+  const receives = new Map(summary.receives.map(({ token, amount }) => [token, BigInt(amount)]));
+  if (ownHex) {
+    for (const intent of tx.intents?.values() ?? []) {
+      for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {
+        for (const output of offer?.outputs ?? []) {
+          if (output.owner.toLowerCase() === ownHex.toLowerCase()) receives.set(output.type, (receives.get(output.type) ?? 0n) + output.value);
+        }
+      }
+    }
+  }
+  return {
+    ok: true, gives: summary.gives, payments,
+    receives: [...receives].map(([token, amount]) => ({ token, amount: amount.toString() })),
+  };
 }

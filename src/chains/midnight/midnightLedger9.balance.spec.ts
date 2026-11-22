@@ -180,8 +180,9 @@ describe('a fee spread inside the wallet\'s own intent', () => {
     const sealed = (await ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 2 }, ledger.Intent.new(ttl))
       .prove({ check: async () => [], prove: async () => new Uint8Array(), lookupKey: async () => undefined }, ledger.CostModel.initialCostModel())).bind();
     mocks.spread.mockReturnValue(carrier);
+    const sign = (tx: ledger.UnprovenTransaction) => tx;
     const fee = await balanceLedger9Fees({
-      sdkNetworkId: 'stagenet', endpoints: getMidnightEndpoints('Stagenet')!, dustSecretSeed: new Uint8Array(32).fill(2), ttl, spread: { carrier },
+      sdkNetworkId: 'stagenet', endpoints: getMidnightEndpoints('Stagenet')!, dustSecretSeed: new Uint8Array(32).fill(2), ttl, spread: { carrier, sign },
     }, [sealed]);
     expect(fee).toBe(carrier);
     expect(mocks.spread).toHaveBeenCalledOnce();
@@ -190,6 +191,8 @@ describe('a fee spread inside the wallet\'s own intent', () => {
     expect(call[3]).toEqual([sealed]);
     expect(call[4]).toBe(carrier);
     expect(call[7]).toBe('params');
+    // The wallet's signer reaches the spread, which signs before checking the limit.
+    expect(call[8]).toEqual({ sign });
     expect(mocks.balance).not.toHaveBeenCalled();
     expect(mocks.recheck).toHaveBeenCalledOnce();
   });

@@ -157,6 +157,31 @@ describe('balanceSealedTransaction: checked before prompting, shown in the balan
     expect(body).not.toContain('waitForMiniGeroPort(');
   });
 
+  it('always answers the dapp, exactly once: a throw anywhere in the async part ends in InternalError', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    // `reply` is idempotent, so the catch-all can never answer twice.
+    expect(body).toContain('let replied = false;');
+    expect(body).toMatch(/const reply = \(opts: ReplyOpts\) => \{\n\s+\/\/[^\n]*\n\s+if \(replied\) return;\n\s+replied = true;\n\s+sendResponse\(/);
+    const asyncStart = body.indexOf('void (async () => {\n    try {\n');
+    const catchAll = body.lastIndexOf("} catch {\n      // A failed import, prompt read or funds check still answers the dapp");
+    expect(asyncStart).toBeGreaterThan(-1);
+    expect(catchAll).toBeGreaterThan(asyncStart);
+    expect(body.indexOf("reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction') });", catchAll))
+      .toBeGreaterThan(catchAll);
+    // The import, the prompt, the funds check and the parked prompt are all inside the try.
+    for (const step of ["await import('@/stores/midnightStore')", 'await sealedBalancePrompt(', 'uncoveredIntentInput(', 'await parkMidnightRequest(']) {
+      const at = body.indexOf(step);
+      expect(at, step).toBeGreaterThan(asyncStart);
+      expect(at, step).toBeLessThan(catchAll);
+    }
+  });
+
+  it('a ledger the wallet could not read is InternalError, not the dapp\'s InvalidRequest', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    expect(body).toContain('const code = prompt.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;');
+    expect(body).toContain('reply({ error: midnightApiError(code, prompt.reason) });');
+  });
+
   it('the page API calls the wallet instead of the stub', () => {
     const inject = read('chrome/injectMidnight.ts');
     expect(inject).toContain('return bridge.midnightBalanceSealedTransaction(tx, options);');

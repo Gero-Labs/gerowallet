@@ -8086,7 +8086,11 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
  */
 app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
   const { id, origin, send, data } = request;
+  let replied = false;
   const reply = (opts: ReplyOpts) => {
+    // Once only: the catch-all below must never answer a request already answered.
+    if (replied) return;
+    replied = true;
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
   };
   const currentWallet = walletManager.getWallet();
@@ -8108,48 +8112,55 @@ app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
     return true;
   }
   void (async () => {
-    await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
-    const validation = validateConnectorBalanceRequest(data, currentWallet.network);
-    if (validation.ok === false) {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
-      return;
-    }
-    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
-    // Completed from the wallet's synced coins: no prompt before that sync (as makeIntent, review S1).
-    if (!connectorIntentSyncReady(midnightStore)) {
-      reply({ error: midnightApiError(MidnightErrorCode.InternalError, CONNECTOR_NOT_SYNCED_REASON) });
-      return;
-    }
-    const prompt = await sealedBalancePrompt(
-      validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
-    );
-    if (prompt.ok === false) {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, prompt.reason) });
-      return;
-    }
-    if (uncoveredIntentInput(prompt.gives.map((give) => ({ type: give.token.toLowerCase(), value: give.amount })), midnightStore)) {
-      reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this transaction asks for') });
-      return;
-    }
-    const payload = {
-      data: { tx: validation.tx, sealed: true, contributions: prompt.gives, receives: prompt.receives, payments: prompt.payments },
-      ...promptSite(origin, send),
-    };
-    // Usually called without a user gesture left (the dapp fetched the offer first): park it, as balanceUnsealedTransaction.
-    midnightActions.recordSiteActivity(origin, { type: 'funding' });
-    parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
-      .then((response: BackgroundResponse) => {
-        midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
-        reply({ data: response.data }); // response.data === { tx }
-      })
-      .catch(err => {
-        const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction');
-        midnightActions.recordSiteActivity(origin, {
-          type: 'funding-failed',
-          reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
+    try {
+      await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
+      const validation = validateConnectorBalanceRequest(data, currentWallet.network);
+      if (validation.ok === false) {
+        reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+        return;
+      }
+      const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+      // Completed from the wallet's synced coins: no prompt before that sync (as makeIntent, review S1).
+      if (!connectorIntentSyncReady(midnightStore)) {
+        reply({ error: midnightApiError(MidnightErrorCode.InternalError, CONNECTOR_NOT_SYNCED_REASON) });
+        return;
+      }
+      const prompt = await sealedBalancePrompt(
+        validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
+      );
+      if (prompt.ok === false) {
+        // A ledger the wallet could not read is its own failure, not a bad request.
+        const code = prompt.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+        reply({ error: midnightApiError(code, prompt.reason) });
+        return;
+      }
+      if (uncoveredIntentInput(prompt.gives.map((give) => ({ type: give.token.toLowerCase(), value: give.amount })), midnightStore)) {
+        reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this transaction asks for') });
+        return;
+      }
+      const payload = {
+        data: { tx: validation.tx, sealed: true, contributions: prompt.gives, receives: prompt.receives, payments: prompt.payments },
+        ...promptSite(origin, send),
+      };
+      // Usually called without a user gesture left (the dapp fetched the offer first): park it, as balanceUnsealedTransaction.
+      midnightActions.recordSiteActivity(origin, { type: 'funding' });
+      await parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+        .then((response: BackgroundResponse) => {
+          midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
+          reply({ data: response.data }); // response.data === { tx }
+        })
+        .catch(err => {
+          const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction');
+          midnightActions.recordSiteActivity(origin, {
+            type: 'funding-failed',
+            reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
+          });
+          reply({ error });
         });
-        reply({ error });
-      });
+    } catch {
+      // A failed import, prompt read or funds check still answers the dapp, which would otherwise wait forever.
+      reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction') });
+    }
   })();
   return true;
 });

@@ -123,8 +123,16 @@ export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshield
   return signLedger9Transaction(args.sdkNetworkId, Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
 }
 
-/** Pay inside `carrier` (the wallet's own one-intent transaction; a new intent when absent) with the fewest DUST spends that fit. */
-export interface Ledger9FeeSpread { readonly carrier?: ledger.UnprovenTransaction }
+/**
+ * Pay inside `carrier` (the wallet's own one-intent transaction; a new intent
+ * when absent) with the fewest DUST spends that fit. `sign` signs the wallet's
+ * inputs once the spends are in, so the limit is checked on the signed shape
+ * (`DustSpread9Options.sign`).
+ */
+export interface Ledger9FeeSpread {
+  readonly carrier?: ledger.UnprovenTransaction;
+  readonly sign?: (tx: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
+}
 
 /**
  * Fee ownership follows the supplied DUST seed, independently of the
@@ -175,7 +183,7 @@ export async function balanceLedger9Fees(
     timer.lap('reconstructLocal');
     const fee = args.spread
       ? spreadLightDust9(state, dustKey, network, transactions as SealedTransaction9[], args.spread.carrier, args.ttl,
-        new Date(block.timestamp), block.ledgerParameters)
+        new Date(block.timestamp), block.ledgerParameters, { sign: args.spread.sign })
       : balanceLightDust9(state, dustKey, network, transactions as DustBalanceable9[], args.ttl, new Date(block.timestamp),
         block.ledgerParameters, { minimumSpends: args.minimumDustSpends });
     timer.lap('balance');
