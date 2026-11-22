@@ -137,3 +137,32 @@ describe('balanceSealedTransaction reuses the balance worker path', () => {
     expect(body).toContain('      sealed,');
   });
 });
+
+describe('balanceSealedTransaction: checked before prompting, shown in the balance approval', () => {
+  it('validates, requires the sync, reads the prompt, checks the funds, then parks as a sealed balance request', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    const validated = body.indexOf('const validation = validateConnectorBalanceRequest(data, currentWallet.network);');
+    const synced = body.indexOf('if (!connectorIntentSyncReady(midnightStore)) {');
+    const prompted = body.indexOf('const prompt = await sealedBalancePrompt(');
+    const funded = body.indexOf('if (uncoveredIntentInput(prompt.gives.map(');
+    const parked = body.indexOf('parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, ');
+    expect(validated).toBeGreaterThan(-1);
+    expect(synced).toBeGreaterThan(validated);
+    expect(prompted).toBeGreaterThan(synced);
+    expect(funded).toBeGreaterThan(prompted);
+    expect(body.indexOf('MidnightErrorCode.InsufficientFunds', funded)).toBeGreaterThan(funded);
+    expect(parked).toBeGreaterThan(funded);
+    expect(body).toContain('sealed: true');
+    expect(body).toContain('WalletStore.isWhitelisted(origin)');
+    expect(body).not.toContain('waitForMiniGeroPort(');
+  });
+
+  it('the page API calls the wallet instead of the stub', () => {
+    const inject = read('chrome/injectMidnight.ts');
+    expect(inject).toContain('return bridge.midnightBalanceSealedTransaction(tx, options);');
+    expect(inject).not.toContain('notYetImplemented(');
+    expect(read('chrome/midnightWebpage.ts')).toContain('method: MIDNIGHT_METHOD.balanceSealedTransaction,');
+    expect(read('chrome/messaging.ts')).toContain('request.method === MIDNIGHT_METHOD.balanceSealedTransaction ||');
+    expect(read('chrome/config.ts')).toContain("balanceSealedTransaction: 'midnight_balanceSealedTransaction',");
+  });
+});
