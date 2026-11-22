@@ -158,6 +158,24 @@ export function releaseVoucher(network: string, stakeAddress: string, message: s
   });
 }
 
+const issuedKey = (network: string, stakeAddress: string) => `midnightStationIssued:${network}:${stakeAddress}`;
+
+/**
+ * Remember that the batch of key day `keyId` was issued to this stake key (or
+ * that the server said it already was). The server gives one batch per stake
+ * key per UTC day and its challenge does not say whether today's was taken:
+ * that answer would tell anyone who asks that the stake key uses the station.
+ * Kept in the private store, like the vouchers.
+ */
+export function noteBatchIssued(network: string, stakeAddress: string, keyId: string): Promise<void> {
+  return lock.runExclusive(() => setPrivate(issuedKey(network, stakeAddress), keyId));
+}
+
+/** Whether today's batch (UTC) was already issued to this stake key: a second one would be refused. */
+export async function batchIssuedToday(network: string, stakeAddress: string, now: number): Promise<boolean> {
+  return await getPrivate<unknown>(issuedKey(network, stakeAddress)) === utcDay(now);
+}
+
 /** Spent, or refused as spent or invalid: gone. */
 export function dropVoucher(network: string, stakeAddress: string, message: string, now: number): Promise<void> {
   return lock.runExclusive(async () => {

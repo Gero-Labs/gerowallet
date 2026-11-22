@@ -5,7 +5,7 @@ import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import { Network } from '@/models/types';
 import { resetPrivateStoreForTest } from '@/utils/privateStore';
 import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
-import { countFreeVouchers, utcDay } from '@/chains/midnight/midnightStationVouchers';
+import { countFreeVouchers, dropVoucher, reserveVoucher, utcDay } from '@/chains/midnight/midnightStationVouchers';
 import {
   ensureStationVouchers, forgetSealedForStationForTests, midnightStationStatus, redeemSealedWithStation,
   rememberSealedForStation, type StationDeps,
@@ -180,5 +180,65 @@ describe('redeeming', () => {
     await redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, deps);
     await expect(redeemSealedWithStation(NET, STAKE, 'c0ffee', ['id-1'], TTL, deps)).rejects.toMatchObject({ code: 'SEAL_UNKNOWN' });
     expect(client.redeemStationVoucher).toHaveBeenCalledOnce();
+  });
+});
+
+// The server's challenge does not say whether today's batch was taken (it would tell anyone who
+// asks that the stake key uses the station). The wallet knows from its own record.
+describe('the day\'s batch, once issued', () => {
+  /** Spend every voucher held, as three paid sends would. */
+  async function useAll(): Promise<void> {
+    for (let index = 0; ; index++) {
+      const voucher = await reserveVoucher(NET, STAKE, `tx-${index}`, NOW + 1_000, NOW);
+      if (!voucher) return;
+      await dropVoucher(NET, STAKE, voucher.message, NOW);
+    }
+  }
+
+  it('says the day is used up without asking the server, once the vouchers are gone', async () => {
+    await ensureStationVouchers(NET, STAKE, sign, deps);
+    await useAll();
+    client.fetchStationChallenge.mockClear();
+
+    expect(await midnightStationStatus(NET, STAKE, deps)).toEqual({ available: false, remaining: 0, reason: 'ALREADY_ISSUED' });
+    expect(client.fetchStationChallenge).not.toHaveBeenCalled();
+  });
+
+  it('does not ask for a second batch the same day: no challenge, no signature', async () => {
+    await ensureStationVouchers(NET, STAKE, sign, deps);
+    await useAll();
+    vi.clearAllMocks();
+
+    await expect(ensureStationVouchers(NET, STAKE, sign, deps)).rejects.toMatchObject({ code: 'ALREADY_ISSUED' });
+    expect(client.fetchStationChallenge).not.toHaveBeenCalled();
+    expect(sign).not.toHaveBeenCalled();
+    expect(client.issueStationVouchers).not.toHaveBeenCalled();
+  });
+
+  it('asks again on the next UTC day', async () => {
+    await ensureStationVouchers(NET, STAKE, sign, deps);
+    await useAll();
+    const tomorrow: StationDeps = { ...deps, now: () => NOW + 86_400_000 };
+    client.fetchStationChallenge.mockImplementation(async () => ({ ...challenge(), keyId: utcDay(NOW + 86_400_000), expiresAt: NOW + 86_400_000 + 60_000 }));
+
+    expect(await midnightStationStatus(NET, STAKE, tomorrow)).toMatchObject({ available: true, remaining: 0 });
+    await ensureStationVouchers(NET, STAKE, sign, tomorrow);
+    expect(await countFreeVouchers(NET, STAKE, NOW + 86_400_000)).toBe(3);
+  });
+
+  it('learns it from the server when another install of the wallet took the batch', async () => {
+    client.issueStationVouchers.mockRejectedValueOnce(new MidnightStationError('ALREADY_ISSUED'));
+    await expect(ensureStationVouchers(NET, STAKE, sign, deps)).rejects.toMatchObject({ code: 'ALREADY_ISSUED' });
+    client.fetchStationChallenge.mockClear();
+
+    expect(await midnightStationStatus(NET, STAKE, deps)).toEqual({ available: false, remaining: 0, reason: 'ALREADY_ISSUED' });
+    expect(client.fetchStationChallenge).not.toHaveBeenCalled();
+  });
+
+  it('another refusal at issuance is not remembered as issued', async () => {
+    client.issueStationVouchers.mockRejectedValueOnce(new MidnightStationError('CHALLENGE_INVALID'));
+    await expect(ensureStationVouchers(NET, STAKE, sign, deps)).rejects.toMatchObject({ code: 'CHALLENGE_INVALID' });
+
+    expect(await midnightStationStatus(NET, STAKE, deps)).toMatchObject({ available: true, remaining: 0 });
   });
 });

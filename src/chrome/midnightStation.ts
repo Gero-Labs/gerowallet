@@ -14,8 +14,8 @@ import {
   fetchStationChallenge, issueStationVouchers, redeemStationVoucher, type StationSubmitResult,
 } from '@/chains/midnight/midnightStationClient';
 import {
-  STATION_MAX_BATCH, addVouchers, blindBatch, countFreeVouchers, dropVoucher, finalizeBatch, importStationKey,
-  releaseVoucher, reserveVoucher, voucherKeyUsable,
+  STATION_MAX_BATCH, addVouchers, batchIssuedToday, blindBatch, countFreeVouchers, dropVoucher, finalizeBatch,
+  importStationKey, noteBatchIssued, releaseVoucher, reserveVoucher, voucherKeyUsable,
 } from '@/chains/midnight/midnightStationVouchers';
 
 /** Injected so the flows are tested without a server. */
@@ -82,6 +82,8 @@ export async function midnightStationStatus(
   try {
     const remaining = await countFreeVouchers(network, stakeAddress, deps.now());
     if (remaining > 0) return { available: true, remaining };
+    // The server's challenge does not say whether today's batch was taken: the wallet's own record does.
+    if (await batchIssuedToday(network, stakeAddress, deps.now())) return off('ALREADY_ISSUED');
     const challenge = await deps.client.fetchStationChallenge(network, stakeAddress);
     return challenge.eligible
       ? { available: true, remaining: 0, allowance: challenge.allowance, thresholdLovelace: challenge.thresholdLovelace }
@@ -108,6 +110,8 @@ export async function ensureStationVouchers(
 ): Promise<void> {
   if (!isStationNetwork(network)) throw new MidnightStationError('STATION_OFF');
   if (await countFreeVouchers(network, stakeAddress, deps.now()) > 0) return;
+  // One batch per stake key per UTC day: do not sign a challenge the server would refuse.
+  if (await batchIssuedToday(network, stakeAddress, deps.now())) throw new MidnightStationError('ALREADY_ISSUED');
   const challenge = await deps.client.fetchStationChallenge(network, stakeAddress);
   if (!challenge.eligible) throw new MidnightStationError(challenge.reason ?? 'STATION_UNAVAILABLE');
   if (!voucherKeyUsable(challenge.keyId, deps.now()) || challenge.expiresAt <= deps.now()) {
@@ -123,10 +127,19 @@ export async function ensureStationVouchers(
   const proof = await sign(buildStationChallengeSubject(networkSlug(network), challenge.keyId, challenge.challenge, stakeAddress));
   // The key signs for the address it controls: it must be the one vouchers are kept under.
   if (proof.stakeAddress !== stakeAddress) throw new MidnightStationError('NO_TWIN');
-  const blindSignatures = await deps.client.issueStationVouchers(network, {
-    stakeAddress, keyId: challenge.keyId, challenge: challenge.challenge,
-    coseSign1: proof.coseSign1, coseKey: proof.coseKey, blinded: pending.blinded,
-  });
+  let blindSignatures: string[];
+  try {
+    blindSignatures = await deps.client.issueStationVouchers(network, {
+      stakeAddress, keyId: challenge.keyId, challenge: challenge.challenge,
+      coseSign1: proof.coseSign1, coseKey: proof.coseKey, blinded: pending.blinded,
+    });
+  } catch (error) {
+    // Another install of this wallet took the day's batch: remember it, so the screens say so up front.
+    if (stationCodeOfError(error) === 'ALREADY_ISSUED') await noteBatchIssued(network, stakeAddress, challenge.keyId);
+    throw error;
+  }
+  // The server has recorded the batch whatever happens to these signatures next.
+  await noteBatchIssued(network, stakeAddress, challenge.keyId);
   let issued: Awaited<ReturnType<typeof finalizeBatch>>;
   try {
     issued = await finalizeBatch(key, challenge.keyId, pending, blindSignatures);

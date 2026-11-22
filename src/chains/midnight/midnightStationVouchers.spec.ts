@@ -4,8 +4,8 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import { resetPrivateStoreForTest } from '@/utils/privateStore';
 import {
-  STATION_MAX_BATCH, addVouchers, blindBatch, countFreeVouchers, dropVoucher, finalizeBatch, importStationKey,
-  releaseVoucher, reserveVoucher, utcDay, voucherKeyUsable,
+  STATION_MAX_BATCH, addVouchers, batchIssuedToday, blindBatch, countFreeVouchers, dropVoucher, finalizeBatch, importStationKey,
+  noteBatchIssued, releaseVoucher, reserveVoucher, utcDay, voucherKeyUsable,
 } from './midnightStationVouchers';
 
 const suite = RSABSSA.SHA384.PSS.Randomized();
@@ -131,5 +131,27 @@ describe('station vouchers: the store', () => {
     expect(await countFreeVouchers(NET, STAKE, NOW)).toBe(2);
     await dropVoucher(NET, STAKE, first!.message, NOW);
     expect(await countFreeVouchers(NET, STAKE, NOW)).toBe(1);
+  });
+});
+
+// The server gives a stake key one batch per UTC day, and its challenge no longer says whether
+// today's was taken (that told anyone who asked that the stake key uses the station). So the
+// wallet remembers it.
+describe('station vouchers: the issued day', () => {
+  it('remembers the day a batch was issued, per network and stake address, until the next UTC day', async () => {
+    expect(await batchIssuedToday(NET, STAKE, NOW)).toBe(false);
+    await noteBatchIssued(NET, STAKE, '2026-11-22');
+    expect(await batchIssuedToday(NET, STAKE, NOW)).toBe(true);
+    expect(await batchIssuedToday(NET, 'stake_test1uother', NOW)).toBe(false);
+    expect(await batchIssuedToday('Mainnet', STAKE, NOW)).toBe(false);
+    expect(await batchIssuedToday(NET, STAKE, NOW + DAY)).toBe(false);
+  });
+
+  it('keeps the vouchers and the issued day apart', async () => {
+    await noteBatchIssued(NET, STAKE, '2026-11-22');
+    expect(await countFreeVouchers(NET, STAKE, NOW)).toBe(0);
+    await addVouchers(NET, STAKE, await issue(2), NOW);
+    expect(await countFreeVouchers(NET, STAKE, NOW)).toBe(2);
+    expect(await batchIssuedToday(NET, STAKE, NOW)).toBe(true);
   });
 });
