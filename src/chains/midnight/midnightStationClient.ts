@@ -52,11 +52,14 @@ async function post(url: string, body: unknown, token: string | undefined, timeo
   }
 }
 
-const record = (data: unknown): Record<string, unknown> | null =>
-  (data !== null && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : null);
+/** The named fields of a JSON object answer, each still unknown; null when the answer is not an object. */
+type Fields<K extends string> = { readonly [P in K]?: unknown };
+function fields<K extends string>(data: unknown): Fields<K> | null {
+  return data !== null && typeof data === 'object' && !Array.isArray(data) ? data as Fields<K> : null;
+}
 
 function refusalOf(answer: Answer): StationCode | null {
-  const code = record(answer.data)?.code;
+  const code = fields<'code'>(answer.data)?.code;
   return isStationCode(code) ? code : null;
 }
 
@@ -87,7 +90,7 @@ export interface StationChallenge {
 
 export async function fetchStationChallenge(network: string, stakeAddress: string): Promise<StationChallenge> {
   const answer = await authedPost(nexusMidnightPathFor(network, 'sponsor/challenge'), { stakeAddress });
-  const data = record(answer.data);
+  const data = fields<'eligible' | 'reason' | 'allowance' | 'thresholdLovelace' | 'challenge' | 'expiresAt' | 'keyId' | 'publicKey'>(answer.data);
   const unavailable = () => new MidnightStationError(refusalOf(answer) ?? 'STATION_UNAVAILABLE');
   if (answer.status !== 200 || !data) throw unavailable();
   const { eligible, reason, allowance, thresholdLovelace, challenge, expiresAt, keyId, publicKey } = data;
@@ -120,7 +123,7 @@ export interface IssueVouchersRequest {
 /** The blind signatures for `request.blinded`, same order. Throws the server's refusal by its code. */
 export async function issueStationVouchers(network: string, request: IssueVouchersRequest): Promise<string[]> {
   const answer = await authedPost(nexusMidnightPathFor(network, 'sponsor/vouchers'), request);
-  const data = record(answer.data);
+  const data = fields<'keyId' | 'blindSignatures'>(answer.data);
   const signatures = data?.blindSignatures;
   if (answer.status !== 200 || !data || data.keyId !== request.keyId || !Array.isArray(signatures)
     || signatures.length !== request.blinded.length
@@ -149,7 +152,7 @@ export interface StationSubmitResult {
   blockHeight?: number;
 }
 
-function paidResult(data: Record<string, unknown> | null): StationSubmitResult | null {
+function paidResult(data: Fields<'txHash' | 'ledgerTxHash' | 'status' | 'blockHeight'> | null): StationSubmitResult | null {
   if (!data || typeof data.txHash !== 'string' || data.txHash.length === 0 || typeof data.ledgerTxHash !== 'string') return null;
   const ledgerTxHash = normalizeMidnightTxHash(data.ledgerTxHash);
   if (!HEX_32_BYTES.test(ledgerTxHash)) return null;
@@ -176,7 +179,7 @@ export async function redeemStationVoucher(network: string, request: RedeemVouch
     if (answer) {
       const refusal = refusalOf(answer);
       if (refusal) throw new MidnightStationError(refusal);
-      const paid = answer.status === 200 ? paidResult(record(answer.data)) : null;
+      const paid = answer.status === 200 ? paidResult(fields(answer.data)) : null;
       if (paid) return paid;
     }
     if (attempt < STATION_REDEEM_ATTEMPTS) await sleep(REDEEM_RETRY_MS);

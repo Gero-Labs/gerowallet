@@ -33,7 +33,7 @@ export interface StationVoucher {
 }
 
 const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
-const fromBase64 = (text: string): Uint8Array => Uint8Array.from(Buffer.from(text, 'base64'));
+const fromBase64 = (text: string): Uint8Array<ArrayBuffer> => Uint8Array.from(Buffer.from(text, 'base64'));
 
 /** The day's public key, as the challenge delivers it (base64 SPKI). Throws unless it is RSA of 2048 bits or more. */
 export async function importStationKey(spkiBase64: string): Promise<CryptoKey> {

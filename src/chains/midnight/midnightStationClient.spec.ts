@@ -36,7 +36,7 @@ describe('station client: challenge', () => {
     fetchMock.mockResolvedValue(answer(200, eligible));
     const challenge = await fetchStationChallenge(NET, STAKE);
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/midnight\/midnight-preprod\/sponsor\/challenge$/);
-    expect(headersOf(0).Authorization).toBe('Bearer token-1');
+    expect(headersOf(0)['Authorization']).toBe('Bearer token-1');
     expect(bodyOf(0)).toEqual({ stakeAddress: STAKE });
     expect(challenge).toMatchObject({ eligible: true, allowance: 5, challenge: CHALLENGE, keyId: '2026-11-22', publicKey: KEY });
   });
@@ -64,7 +64,7 @@ describe('station client: challenge', () => {
     fetchMock.mockResolvedValueOnce(answer(401, {})).mockResolvedValueOnce(answer(200, eligible));
     await fetchStationChallenge(NET, STAKE);
     expect(auth.reauth).toHaveBeenCalledOnce();
-    expect(headersOf(1).Authorization).toBe('Bearer token-2');
+    expect(headersOf(1)['Authorization']).toBe('Bearer token-2');
     fetchMock.mockReset().mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await codeOf(fetchStationChallenge(NET, STAKE))).toBe('STATION_UNAVAILABLE');
   });
@@ -104,7 +104,7 @@ describe('station client: redeem', () => {
     fetchMock.mockResolvedValue(answer(200, paid));
     expect(await redeemStationVoucher(NET, request)).toEqual(paid);
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/sponsor\/submit$/);
-    expect(headersOf(0).Authorization).toBeUndefined();
+    expect(headersOf(0)['Authorization']).toBeUndefined();
     expect(Object.keys(headersOf(0)).sort()).toEqual(['Content-Type', 'X-Gero-Client']);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
     expect(auth.token).not.toHaveBeenCalled();
