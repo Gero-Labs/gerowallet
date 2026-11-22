@@ -9,7 +9,7 @@ import { XPROVE_VERSION } from '@/services/crossDevice/proveSession';
 import { NOTIFY_SIGNING_DOMAIN } from '@/services/notify/notifyAuth';
 import { buildSessionSubject } from '@/services/crossDevice/sessionBinding';
 import { DELEGATION_PREFIX, REVOCATION_PREFIX } from './signedResponseRoots';
-import { STATION_CHALLENGE_DOMAIN } from '@/chains/midnight/midnightStationChallenge';
+import { STATION_CHALLENGE_DOMAIN } from '@/chains/midnight/midnightStationConfig';
 
 const hex = (text: string) => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
 

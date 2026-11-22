@@ -127,6 +127,10 @@ import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
+// Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
+// in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
+import { sealTransferForStation } from '@/chains/midnight/midnightStationSeal';
+import { signStationChallenge } from '@/chains/midnight/midnightStationChallenge';
 import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { asBuildStep } from '@/chains/midnight/midnightBuildFailure';
@@ -3544,7 +3548,6 @@ export class WalletBg {
     let mnemonic = await this.openMidnightMnemonic(password, prfSecret);
     try {
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
-      const { sealTransferForStation } = await import('@/chains/midnight/midnightStationSeal');
       const endpoints = getMidnightEndpoints(network);
       if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
       // Refuses an added account whose phrase does not derive its unshielded address.
@@ -3589,7 +3592,6 @@ export class WalletBg {
     try {
       const { resolvePrivateKey } = await import('@/shared/utils/resolver');
       const { cardanoTwinNetwork } = await import('@/chains/midnight/midnightConfig');
-      const { signStationChallenge } = await import('@/chains/midnight/midnightStationChallenge');
       const rootKey = resolvePrivateKey(mnemonic);
       const accountKey = this.accountIndex === 0
         ? rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + 0])

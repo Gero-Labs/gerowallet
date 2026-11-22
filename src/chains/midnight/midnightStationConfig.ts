@@ -80,6 +80,30 @@ export function stationCodeOfError(error: unknown): StationCode {
   return isMidnightStationError(error) ? error.code : 'STATION_UNAVAILABLE';
 }
 
+/**
+ * The domain of the stake-key proof that asks for vouchers. Reserved
+ * (reservedSigningDomains.ts): no dApp gets a subject under it signed.
+ */
+export const STATION_CHALLENGE_DOMAIN = 'gero-station/v1|ISSUE';
+
+/**
+ * The exact string the stake key signs (midnightStationChallenge.ts).
+ * `networkSlug` is Nexus's Midnight network (`midnight-preprod`), `keyId` the
+ * voucher key the batch is blinded for, `challenge` the server's nonce (hex).
+ */
+export function buildStationChallengeSubject(networkSlug: string, keyId: string, challenge: string, stakeAddress: string): string {
+  return `${STATION_CHALLENGE_DOMAIN}|${networkSlug}|${keyId}|${challenge}|${stakeAddress}`;
+}
+
+/** The signed challenge, as a CIP-30 signData answer plus the address it is for. */
+export interface StationChallengeProof {
+  /** COSE_Sign1, hex: the CIP-30 `signature`. */
+  readonly coseSign1: string;
+  /** COSE_Key, hex: the CIP-30 `key`. */
+  readonly coseKey: string;
+  readonly stakeAddress: string;
+}
+
 /** What a page learns about the station before the user sends. Counts and reasons only. */
 export interface StationStatus {
   /** A station-paid send can be offered now. */

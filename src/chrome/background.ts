@@ -144,6 +144,10 @@ import {
   validateConnectorIntentRequest,
 } from '@/chains/midnight/midnightConnectorIntent';
 import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
+// Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
+// in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
+import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
+import { ensureStationVouchers, midnightStationStatus, redeemSealedWithStation } from '@/chrome/midnightStation';
 import { isNewTopDocument, ParkedConnects, takeParkedRequests } from '@/chrome/midnightParkedPrompts';
 import {
   SolanaDappErrorCode,
@@ -6540,7 +6544,6 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_STATUS, async (request, sendRespo
   try {
     const walletBg = walletManager.getWallet();
     if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('No Midnight wallet logged in');
-    const { midnightStationStatus } = await import('@/chrome/midnightStation');
     // Software wallets only: a watch wallet cannot sign, and Midnight has no hardware wallets.
     const stakeAddress = walletBg.encryptedMnemonic || walletBg.prfEncryptedMnemonic
       ? (await walletBg.getMidnightWalletKeys()).cardanoStakeAddress
@@ -6594,8 +6597,6 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_SEAL, async (request, sendRespons
     const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
     if (prfBytes) secretBuffers.push(prfBytes);
 
-    const { MidnightStationError } = await import('@/chains/midnight/midnightStationConfig');
-    const { ensureStationVouchers } = await import('@/chrome/midnightStation');
     const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
     const { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } = await import('@/chains/midnight/midnightChainIdentity');
     const { midnightActions } = await import('@/stores/midnightStore');
@@ -6654,8 +6655,6 @@ app.addToOptions(MessageTypes.MIDNIGHT_STATION_REDEEM, async (request, sendRespo
     const { sealedTxHex, ttlMs } = request.data || {};
     if (typeof sealedTxHex !== 'string' || !/^(?:[0-9a-f]{2})+$/i.test(sealedTxHex)) throw new Error('sealedTxHex is required');
     if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) throw new Error('ttlMs is required (epoch millis)');
-    const { MidnightStationError } = await import('@/chains/midnight/midnightStationConfig');
-    const { redeemSealedWithStation } = await import('@/chrome/midnightStation');
     const stakeAddress = (await walletBg.getMidnightWalletKeys()).cardanoStakeAddress;
     if (!stakeAddress) throw new MidnightStationError('NO_TWIN');
     // Read from the bytes themselves: the voucher is held for exactly this transaction.

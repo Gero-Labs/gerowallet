@@ -8,9 +8,8 @@ import { HexBlob } from '@cardano-sdk/util';
 import { keyHashFromAddress } from '@/chrome/serialization';
 import { CoseLabel } from '@/shared/utils/converter';
 import { reservedSigningDomain, RESERVED_SIGNING_DOMAINS } from '@/shared/utils/reservedSigningDomains';
-import {
-  STATION_CHALLENGE_DOMAIN, buildStationChallengeSubject, signStationChallenge, stakeAddressOf,
-} from './midnightStationChallenge';
+import { signStationChallenge, stakeAddressOf } from './midnightStationChallenge';
+import { STATION_CHALLENGE_DOMAIN, buildStationChallengeSubject } from './midnightStationConfig';
 
 // Synthetic key. Never fund.
 const stakeKey = Ed25519PrivateKey.fromNormalBytes(new Uint8Array(32).fill(7));
@@ -29,7 +28,7 @@ describe('the station challenge proof', () => {
   });
 
   it('is a CIP-8 signature a server can check: the key hashes to the stake address and signs the subject', async () => {
-    const proof = signStationChallenge(stakeKey, TESTNET, subject);
+    const proof = await signStationChallenge(stakeKey, TESTNET, subject);
     expect(proof.stakeAddress).toBe(stake);
     const sign1 = COSESign1.from_bytes(bytes(proof.coseSign1));
     const key = COSEKey.from_bytes(bytes(proof.coseKey));
@@ -41,13 +40,13 @@ describe('the station challenge proof', () => {
     expect(await ed25519.verifyAsync(sign1.signature(), sign1.signed_data().to_bytes(), x)).toBe(true);
   });
 
-  it('refuses a subject of another domain or for another stake address', () => {
-    expect(() => signStationChallenge(stakeKey, TESTNET, `gero-support/v1|${stake}`)).toThrow('Not a station challenge');
+  it('refuses a subject of another domain or for another stake address', async () => {
+    await expect(signStationChallenge(stakeKey, TESTNET, `gero-support/v1|${stake}`)).rejects.toThrow('Not a station challenge');
     const other = stakeAddressOf(Ed25519PrivateKey.fromNormalBytes(new Uint8Array(32).fill(8)), TESTNET);
-    expect(() => signStationChallenge(stakeKey, TESTNET, buildStationChallengeSubject('midnight-preprod', '2026-11-22', CHALLENGE, other)))
-      .toThrow('another stake address');
+    await expect(signStationChallenge(stakeKey, TESTNET, buildStationChallengeSubject('midnight-preprod', '2026-11-22', CHALLENGE, other)))
+      .rejects.toThrow('another stake address');
     // The same key on mainnet has another address: a preprod subject is not signed with it.
-    expect(() => signStationChallenge(stakeKey, Cardano.NetworkId.Mainnet, subject)).toThrow('another stake address');
+    await expect(signStationChallenge(stakeKey, Cardano.NetworkId.Mainnet, subject)).rejects.toThrow('another stake address');
   });
 
   it('is a reserved subject: no dApp gets one signed through signData', () => {

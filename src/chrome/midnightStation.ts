@@ -7,9 +7,9 @@
 
 import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
 import {
-  MidnightStationError, isStationNetwork, stationCodeOfError, type StationStatus,
+  MidnightStationError, buildStationChallengeSubject, isStationNetwork, stationCodeOfError,
+  type StationChallengeProof, type StationStatus,
 } from '@/chains/midnight/midnightStationConfig';
-import { buildStationChallengeSubject, type StationChallengeProof } from '@/chains/midnight/midnightStationChallenge';
 import {
   fetchStationChallenge, issueStationVouchers, redeemStationVoucher, type StationSubmitResult,
 } from '@/chains/midnight/midnightStationClient';
