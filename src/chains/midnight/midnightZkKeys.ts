@@ -3,8 +3,9 @@
  * prove on this device (see midnightDeviceProver.ts).
  *
  * Pins: every SHA-256 below is the value the OFFICIAL ledger source publishes
- * for `@midnightntwrk/ledger-v9` 1.0.1 (ledger 9.1.0.1, the version this wallet
- * ships), at `midnightntwrk/midnight-ledger` tag `ledger-9.1.0.1`:
+ * at `midnightntwrk/midnight-ledger` tag `ledger-9.1.0.1` (the ledger the
+ * networks run). They are unchanged at tag `ledger-9.1.0.2`, which is
+ * `@midnightntwrk/ledger-v9` 1.0.2, the version this wallet ships:
  *   - `ledger/static/dust/spend.{prover,verifier,bzkir}.sha256` (generation 10)
  *   - `zswap/static/{spend,output,sign}.{prover,verifier,bzkir}.sha256`
  *   - the `bls_midnight_2p{k}` entries of `base-crypto/src/data_provider.rs`

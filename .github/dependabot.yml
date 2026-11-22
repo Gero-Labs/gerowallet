@@ -47,10 +47,12 @@ updates:
         versions: [">6.1.7"]
       # Coupled WASM pin, and it fails QUIETLY. Four sibling packages —
       # wallet-sdk-address-format, -dust-wallet, -shielded and
-      # -unshielded-wallet, aliased here as midnight-v9-* — each declare
-      # `"@midnightntwrk/ledger-v9": "1.0.0-rc.3"` as an exact dependency, so
-      # npm cannot dedupe them. Bumping the root alone does not move them; it
-      # nests a second copy, and ledger-v9 ships a wasm-bindgen module. Two
+      # -unshielded-wallet, aliased here as midnight-v9-* — depend on
+      # `@midnightntwrk/ledger-v9`. The aliased releases accept `^1.0.0`, but
+      # wallet SDK 2.0.1's releases of them pin it EXACTLY (`1.0.2`), so the
+      # root and the aliases must move in one change. Where the versions
+      # disagree, npm nests a second copy, and ledger-v9 ships a wasm-bindgen
+      # module. Two
       # instances means two linear memories and two sets of generated classes,
       # so objects minted by one fail `instanceof` inside the other:
       # midnightLedger9.ts and midnightPrivateSync.ts import both sides, and
@@ -58,7 +60,8 @@ updates:
       # ZswapSecretKeys" (PR 1084). Unlike the bitcoinjs-lib peer pin above,
       # this is a regular dependency, so npm nests silently instead of raising
       # ERESOLVE. The required Ledger tests and extension bundles job exercises it.
-      # Bump all five together once the betas repin, then drop this entry.
+      # Bump by hand, all five together; `npm ls @midnightntwrk/ledger-v9`
+      # must show a single copy.
       - dependency-name: "@midnightntwrk/ledger-v9"
       # Reviewed and patched at build time. The Bring cashback SDK runs in our
       # content script on every page, so scripts/bring-sdk-patch.mjs rewrites
