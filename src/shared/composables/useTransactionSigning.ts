@@ -3,7 +3,7 @@ import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
 import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, SUBMIT_API_ENDPOINT_PREFIX, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
@@ -85,6 +85,7 @@ export interface SweepStop {
   total: number;
   mergesSent: number;
   reason: string;
+  unconfirmedStep?: 'merge' | 'payment';
 }
 
 /** How long a sweep's payment waits for its merges to land after a node did not know them. */
@@ -184,6 +185,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   // already submitted: signing again after a failure does not send those twice.
   let prerequisiteWitnesses: string[] = [];
   const submittedPrerequisites = new Set<string>();
+  let unconfirmedMerge: string | null = null;
+  let unconfirmedPayment: string | null = null;
   const deferredAuth = new Set<ReturnType<typeof setTimeout>>();
   const captureAuthorization = () => {
     const epoch = authorizationEpoch;
@@ -222,6 +225,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     let prerequisites: SigningAttempt['prerequisites'] = [];
     try {
       cbor = serializeCardanoJsSdkTx(tx);
+      if (unconfirmedPayment === cbor) return null;
       if (sweep && sweep.cbors.length > 0) prerequisites = chainedPrerequisites(tx, sweep, decodeMerge, ownAddresses());
     }
     catch (error) {
@@ -288,6 +292,8 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     authorizedAttempt = null;
     prerequisiteWitnesses = [];
     submittedPrerequisites.clear();
+    unconfirmedMerge = null;
+    unconfirmedPayment = null;
     keystoneApproval = null;
     for (const timer of deferredAuth) clearTimeout(timer);
     deferredAuth.clear();
@@ -611,7 +617,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     const reply = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: { txCbor: cbor, witnessHex, utxos: utxos.value },
-    }) as { data?: { txId?: string; error?: string } } | null | undefined;
+    }).catch(() => undefined) as { data?: { txId?: string; error?: string } } | null | undefined;
     if (reply?.data?.error) return { error: reply.data.error };
     const txId = reply?.data?.txId;
     // A lost runtime reply can follow a successful broadcast. Only the worker can acknowledge it.
@@ -632,7 +638,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const submitTx = async (attempt = authorizedAttempt): Promise<void> => {
-    if (!attempt?.current() || submitting || !txWitnesses.value) return;
+    if (!attempt?.current() || submitting || !txWitnesses.value || unconfirmedPayment === attempt.cbor) return;
     submitting = true;
     const total = attempt.prerequisites.length + 1;
     let step = total;
@@ -643,6 +649,18 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       for (const [index, prerequisite] of attempt.prerequisites.entries()) {
         step = index + 1;
         if (submittedPrerequisites.has(prerequisite.id)) continue;
+        if (unconfirmedMerge === prerequisite.id) {
+          // A lost receipt may belong to a merge already on chain. The exact outputs
+          // bound to this payment are evidence that it landed; never rebroadcast it here.
+          const held = (utxos.value ?? []) as Cardano.Utxo[];
+          const expected = attempt.prerequisiteOutputs.filter(([input]) => input.txId === prerequisite.id);
+          if (!expected.length || !expected.every(([input]) => held.some(([utxo]) => utxo.txId === input.txId && utxo.index === input.index))) {
+            throw new Error(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+          }
+          submittedPrerequisites.add(prerequisite.id);
+          unconfirmedMerge = null;
+          continue;
+        }
         options.onProgress?.({ phase: 'sending', step, total });
         const result = await submitSigned(prerequisite.cbor, prerequisiteWitnesses[index]);
         if (!attempt.current()) return;
@@ -674,7 +692,22 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       if (!attempt.current()) return;
       console.error('Error submitting transaction:', e);
       const reason = e instanceof Error ? friendlyTxError(e) : t('errors.unknownError');
-      if (total > 1 && options.onInterrupted) options.onInterrupted({ step, total, mergesSent: submittedPrerequisites.size, reason });
+      const message = e instanceof Error ? e.message : '';
+      const unconfirmed = message.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE) ||
+        message.startsWith(SUBMIT_API_ENDPOINT_PREFIX + TX_SUBMIT_UNCONFIRMED_MESSAGE);
+      let unconfirmedStep: SweepStop['unconfirmedStep'];
+      if (total > 1 && unconfirmed) {
+        if (step === total) {
+          unconfirmedPayment = attempt.cbor;
+          unconfirmedStep = 'payment';
+        } else {
+          unconfirmedMerge = attempt.prerequisites[step - 1].id;
+          unconfirmedStep = 'merge';
+        }
+      }
+      if (total > 1 && options.onInterrupted) options.onInterrupted({ step, total, mergesSent: submittedPrerequisites.size, reason,
+        ...(unconfirmedStep ? { unconfirmedStep } : {}),
+      });
       else snackbar.setError(total > 1 ? t('send.sweepInterrupted', { step, total, reason }) : reason);
     } finally {
       submitting = false;

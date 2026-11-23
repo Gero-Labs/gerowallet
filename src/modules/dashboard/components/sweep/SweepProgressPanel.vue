@@ -61,7 +61,7 @@
       </ol>
 
       <SweepStackedText v-if="view.caption" class="t-caption sweep-progress__caption" :shown="view.caption" :options="view.captions" />
-      <p v-else-if="view.stop" class="t-caption sweep-progress__caption">{{ tt(view.stop.tryAgain) }}</p>
+      <p v-else-if="view.stop?.tryAgain" class="t-caption sweep-progress__caption">{{ tt(view.stop.tryAgain) }}</p>
     </section>
   </div>
 </template>

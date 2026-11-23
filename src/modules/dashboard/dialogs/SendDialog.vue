@@ -214,7 +214,7 @@
           {{ $t('crossDevice.settings.policyRequireHint') }}
         </div>
         <!-- Transaction Authentication Section (step 2 only) -->
-        <div v-else-if="currentStep === 2" v-show="!sweepProgress" class="send-dialog__auth">
+        <div v-else-if="currentStep === 2 && sweepStop?.unconfirmedStep !== 'payment'" v-show="!sweepProgress" class="send-dialog__auth">
           <TransactionAuthSection
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
@@ -265,7 +265,7 @@
                disabled while a "require remote" policy is active (unless already
                at the submit step with a remote witness in hand). -->
           <v-btn
-            v-else-if="!isPrfWallet"
+            v-else-if="!isPrfWallet && sweepStop?.unconfirmedStep !== 'payment'"
             class="continue-button"
             @click="nextStep"
             :disabled="!isValid || txSignLoading || (requiresRemoteForSend && !isSubmit)"

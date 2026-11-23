@@ -3415,6 +3415,8 @@ export default {
   'send.sweepShowDetails': 'Details anzeigen',
   'send.sweepMergesStopped': '{sent} von {merges} gesendet · bei der nächsten angehalten',
   'send.sweepPaymentNotSent': 'Nicht gesendet',
+  'send.sweepUnconfirmed': 'Übermittlung unbestätigt',
+  'send.sweepMergeCheck': 'Diese Zusammenführung wurde möglicherweise schon gesendet. Prüfe deine Aktivitäten und versuche es erneut, sobald die Ausgabe in deinem Wallet erscheint. Die Zahlung wartet noch.',
   'send.sweepTryAgainNote': 'Erneut versuchen macht bei Transaktion {step} weiter und überspringt bereits Gesendetes. Hält es wieder an, warte eine Minute und tippe auf Max: Gero plant mit dem, was übrig ist.',
   'send.sweepDoneTitle': 'Zahlung gesendet',
   'send.sweepDoneTo': 'an {address}',

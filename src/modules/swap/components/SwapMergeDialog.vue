@@ -47,10 +47,11 @@
         <p v-if="stopText" class="t-caption swap-merge__error" role="alert">{{ stopText }}</p>
 
         <CardSignSection
+          v-show="stop?.unconfirmedStep !== 'payment'"
           ref="signSection"
           :label="t('swap.mergeApprove')"
           :prepare="prepare"
-          :disabled="!planned || !!planError"
+          :disabled="!planned || !!planError || stop?.unconfirmedStep === 'payment'"
           :prerequisites="prerequisites"
           @busy="busy = $event"
           @progress="onProgress"
