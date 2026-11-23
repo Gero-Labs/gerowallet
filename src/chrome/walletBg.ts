@@ -129,6 +129,10 @@ import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
+// Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
+// in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
+import { sealTransferForStation } from '@/chains/midnight/midnightStationSeal';
+import { signStationChallenge } from '@/chains/midnight/midnightStationChallenge';
 import { connectorIntentSyncReady, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import type { ConnectorIntentRequest } from '@/chains/midnight/midnightConnectorIntent';
 import { asBuildStep } from '@/chains/midnight/midnightBuildFailure';
@@ -3509,6 +3513,104 @@ export class WalletBg {
         // ownership to the caller) and must not outlive this send.
         sponsorDustSeed?.fill(0);
       }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /** Open this Midnight wallet's recovery phrase with its password or its PassKey output. */
+  private async openMidnightMnemonic(password?: string, prfSecret?: Uint8Array): Promise<string> {
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      return decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    }
+    if (!password) throw new Error('Password is required for password wallet signing');
+    if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+    return this.openMnemonicWithPassword(password);
+  }
+
+  /**
+   * Check, sign and SEAL an unshielded send Nexus built, with NO DUST fee:
+   * Gero's fee station pays it (midnightStationSeal.ts). The same checks as
+   * balanceAndSignMidnightUnshieldedTransfer before anything is signed, plus
+   * the balance check a transaction handed to a third party needs. No DUST
+   * key is used.
+   */
+  async sealMidnightTransferForStation(
+    unprovenTxHex: string,
+    password: string | undefined,
+    prfSecret: Uint8Array | undefined,
+    intendedOutputs: ReadonlyArray<{ address: string; amount: string; token: string }>,
+  ): Promise<{ sealedTxHex: string; identifiers: string[] }> {
+    if (this.chain !== Blockchain.MIDNIGHT) throw new Error('sealMidnightTransferForStation called on non-Midnight wallet');
+    if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) throw new Error('unprovenTxHex is required');
+    if (intendedOutputs.length === 0) throw new Error('The requested outputs are required to check the transaction before signing');
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+    let mnemonic = await this.openMidnightMnemonic(password, prfSecret);
+    try {
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const endpoints = getMidnightEndpoints(network);
+      if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+      // Refuses an added account whose phrase does not derive its unshielded address.
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
+      try {
+        assertSession();
+        // Nexus built this transaction: sign only the send the user asked for.
+        await assertMidnightTransferMatches(
+          endpoints.sdkNetworkId, unprovenTxHex,
+          { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
+          intendedOutputs,
+        );
+        const sealed = await sealTransferForStation({
+          sdkNetworkId: endpoints.sdkNetworkId, unprovenTxHex, unshieldedSecretKey: derived.unshieldedSecretKey,
+        });
+        assertSession();
+        return sealed;
+      } finally {
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * Sign a fee-station challenge with this Midnight wallet's Cardano twin STAKE
+   * key: the same account of the same phrase (midnightStationChallenge.ts). An
+   * added account's key must be the twin its record stores, as for the DUST
+   * registration signer. The address signed for is the key's own.
+   */
+  async signMidnightStationChallenge(
+    subject: string,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ coseSign1: string; coseKey: string; stakeAddress: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) throw new Error('signMidnightStationChallenge called on non-Midnight wallet');
+    let mnemonic = await this.openMidnightMnemonic(password, prfSecret);
+    try {
+      const { resolvePrivateKey } = await import('@/shared/utils/resolver');
+      const { cardanoTwinNetwork } = await import('@/chains/midnight/midnightConfig');
+      const rootKey = resolvePrivateKey(mnemonic);
+      const accountKey = this.accountIndex === 0
+        ? rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + 0])
+        : deriveSigningAccountKey(rootKey, this.accountIndex, (await this.getMidnightWalletKeys()).cardanoXpub);
+      const stakeKey = accountKey.derive([2, 0]).toRawKey();
+      const networkId = networks.resolveNetworkId(Blockchain.CARDANO, cardanoTwinNetwork(this.network));
+      return signStationChallenge(stakeKey, networkId, subject);
     } finally {
       mnemonic = '';
       void mnemonic;
