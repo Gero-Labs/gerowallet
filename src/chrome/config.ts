@@ -164,6 +164,9 @@ export const MIDNIGHT_METHOD = {
   // Funds + fee-pays a dapp's proven, unbound tx after side-panel approval
   // (midnightConnectorBalance.ts / midnightDappBalancer.ts).
   balanceUnsealedTransaction: 'midnight_balanceUnsealedTransaction',
+  // Completes another party's sealed transaction (a swap offer) after
+  // side-panel approval (midnightSealedBalancer9.ts). Ledger 9 only.
+  balanceSealedTransaction: 'midnight_balanceSealedTransaction',
   // Builds a purposefully imbalanced, sealed swap intent after side-panel
   // approval (midnightConnectorIntent.ts / midnightIntentBuilder.ts).
   makeIntent: 'midnight_makeIntent',

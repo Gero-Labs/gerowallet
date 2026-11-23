@@ -899,16 +899,20 @@
             <v-icon v-else size="32" :color="primaryColor">mdi-scale-balance</v-icon>
           </div>
           <div class="dapp-domain-info">
-            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.balanceTitle') }}</h3>
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t(balanceIsSealed ? 'midnight.connector.sealedTitle' : 'midnight.connector.balanceTitle') }}</h3>
             <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
           </div>
         </div>
 
         <div class="sign-data-message">
-          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.balanceBody') }}</p>
+          <p class="grey--text text-caption mb-3">{{ $t(balanceIsSealed ? 'midnight.connector.sealedBody' : 'midnight.connector.balanceBody') }}</p>
           <div v-for="(c, i) in balanceContributions" :key="i" class="d-flex justify-space-between mb-2">
-            <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+            <span class="grey--text text-caption">{{ $t(balanceIsSealed ? 'midnight.connector.intentGive' : 'common.amount') }}</span>
             <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(c) }} {{ contributionTicker(c) }}</span>
+          </div>
+          <div v-for="(r, i) in balanceReceives" :key="'recv' + i" class="d-flex justify-space-between mb-2" data-testid="midnight-balance-receive">
+            <span class="grey--text text-caption">{{ $t('copilot.swap.youReceive') }}</span>
+            <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(r) }} {{ contributionTicker(r) }}</span>
           </div>
           <p v-if="balanceContributions.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.balanceNothing') }}</p>
           <template v-if="balancePayments.length">
@@ -1407,6 +1411,7 @@ import { useConnectAccount } from '@/shared/composables/useConnectAccount';
 import SolanaSignControls from './SolanaSignControls.vue';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
@@ -3645,16 +3650,18 @@ async function buildMidnightTransferTx(
 // that click).
 const transferConsentOpen = ref(false);
 const transferProver = computed<WalletProver>(() =>
-  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded'));
+  walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere()));
 const transferProverLabel = computed(() => t(
   transferProver.value === 'device' ? 'midnight.proofServer.deviceLabel'
+    : transferProver.value === 'helper' ? 'midnight.prover.name'
     : transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
       : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
 ));
 /** True (and the consent dialog opens) when the chosen remote prover has no recorded consent yet. */
 function transferNeedsProvingConsent(): boolean {
   const prover = transferProver.value;
-  if (prover === 'local' || prover === 'device' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
+  if (prover === 'local' || prover === 'device' || prover === 'helper'
+    || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
   transferConsentOpen.value = true;
   return true;
 }
@@ -3763,6 +3770,13 @@ const balancePayments = computed<ConnectorPayment[]>(() => {
   const data = currentRequest.value?.payload?.data as { payments?: ConnectorPayment[] } | undefined;
   return Array.isArray(data?.payments) ? (data!.payments as ConnectorPayment[]) : [];
 });
+// `balanceSealedTransaction` arrives through the same approval: the wallet completes
+// another party's sealed transaction, so it also RECEIVES what that party offers.
+const balanceIsSealed = computed(() => (currentRequest.value?.payload?.data as { sealed?: unknown } | undefined)?.sealed === true);
+const balanceReceives = computed<ConnectorContribution[]>(() => {
+  const data = currentRequest.value?.payload?.data as { receives?: ConnectorContribution[] } | undefined;
+  return Array.isArray(data?.receives) ? (data!.receives as ConnectorContribution[]) : [];
+});
 
 /** A contribution rendered through the same colour-aware helpers as transfer outputs. */
 function contributionAsOutput(c: ConnectorContribution): ConnectorDesiredOutput {
@@ -3810,10 +3824,11 @@ async function buildMidnightBalanceTx(
 ): Promise<{ tx: string }> {
   const approvalCurrent = approval.capture();
   if (!approvalCurrent()) throw new StaleApprovalError();
-  const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
+  const data = currentRequest.value?.payload?.data as { tx?: string; sealed?: unknown } | undefined;
   if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
+  const sealed = data.sealed === true;
   const { balanceConnectorTransaction } = await awaitFreshApproval(async () => (import('@/services/midnight-tx.service')), approvalCurrent);
-  return buildFailure.record(() => balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent));
+  return buildFailure.record(() => balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent, sealed));
 }
 
 async function signMidnightBalanceNormal() {

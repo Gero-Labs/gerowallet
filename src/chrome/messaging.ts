@@ -600,6 +600,7 @@ export const Messaging = {
         request.method === MIDNIGHT_METHOD.signData ||
         request.method === MIDNIGHT_METHOD.makeTransfer ||
         request.method === MIDNIGHT_METHOD.balanceUnsealedTransaction ||
+        request.method === MIDNIGHT_METHOD.balanceSealedTransaction ||
         request.method === MIDNIGHT_METHOD.makeIntent ||
         // Solana: `available` gates the page's own registration, `connect` is its own
         // approval gate, and `signMessage` checks the whitelist in its handler.

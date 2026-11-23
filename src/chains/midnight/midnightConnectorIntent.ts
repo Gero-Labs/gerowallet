@@ -228,6 +228,14 @@ export function connectorSegmentSpecifier(intentId: ConnectorIntentId): { tag: '
  */
 export const MIDNIGHT_WALLET_NOT_SYNCED = 'MIDNIGHT_WALLET_NOT_SYNCED';
 
+/**
+ * The message of a fee the wallet cannot pay within ledger 9's validation-time
+ * limit: it needs more DUST coins than the wallet holds (midnightDustSpread9.ts).
+ * A code, like MIDNIGHT_WALLET_NOT_SYNCED. Here, not beside the spread, so the
+ * extension pages can name it without loading the DUST wallet.
+ */
+export const MIDNIGHT_DUST_COINS_SHORT = 'MIDNIGHT_DUST_COINS_SHORT';
+
 /** What the dapp is told when a ledger 9 intent is asked for before the wallet has synced. */
 export const CONNECTOR_NOT_SYNCED_REASON = 'The wallet is still syncing. Try again in a moment.';
 

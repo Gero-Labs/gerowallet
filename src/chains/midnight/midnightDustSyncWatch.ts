@@ -5,9 +5,9 @@
 
 /**
  * Longest silence allowed while preparing a DUST fee: no reply from Nexus and no sync step.
- * A slow device on a long DUST history can need many minutes for one pass, and every attempt
- * starts from zero, so the sync is bounded by silence and by the transaction's TTL rather than
- * by a flat time. Keep this well under the mobile apps' 150 s watchdog
+ * A slow device on a long DUST history can need many minutes, so the sync is bounded by
+ * silence and by the transaction's TTL rather than by a flat time; what a stopped sync had
+ * settled is kept for the next attempt (`ReconstructDustOptions.onCheckpoint`). Keep this well under the mobile apps' 150 s watchdog
  * (`dustSyncInactivityLimit`) so the sync reports its own timeout first.
  */
 export const DUST_SYNC_INACTIVITY_MS = 60_000;
