@@ -412,6 +412,7 @@
               <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
                 {{ passwordError }}
               </p>
+              <MidnightDustFeeRecovery v-if="passwordError && recoverDustFee && !submitting" />
 
               <div class="step-actions-row mt-3">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" block :disabled="sendDispatched" @click="editStep(3)">
@@ -440,6 +441,7 @@ import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTim
 import { provingDetail } from '@/shared/composables/useProvingElapsed';
 import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import MidnightDustFeeRecovery from '@/shared/components/MidnightDustFeeRecovery.vue';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import MidnightStationFeeNote from '@/shared/components/MidnightStationFeeNote.vue';
 import { useMidnightStationFee } from '@/shared/composables/useMidnightStationFee';
@@ -462,7 +464,7 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive, MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -517,6 +519,7 @@ const ledgerMismatch = ref(false);
 const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('miniGero.confirmSend')));
 /** Refused for a state the user can't fix here (midnightApiError.ts): a note, and the CTA is disabled. */
 const sendBlock = ref<MidnightSendBlock | null>(null);
+const recoverDustFee = ref(false);
 const sendBlockText = ref('');
 
 /** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
@@ -556,6 +559,7 @@ watch(busyPrompt, (prompt) => {
 
 /** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  recoverDustFee.value = e instanceof MidnightDustFeeShortfall && sponsorWalletId.value == null && feeSource.value !== 'station';
   // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
   if (isMidnightBusyCancelled(e)) {
     busyCancelled.value = true;
@@ -900,6 +904,7 @@ const approval = useApprovalFreshness(() => [
   midnightStore.proofServer,
 ], () => props.modelValue, () => {
   pendingPopups.forEach(cancel => cancel());
+  recoverDustFee.value = false;
   pendingPopups.clear();
   pendingCredentials.value?.prfSecret?.fill(0);
   pendingCredentials.value = null;

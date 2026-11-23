@@ -435,6 +435,7 @@
         <p v-if="errorMessage" role="alert" class="error--text t-caption mb-2 text-center px-3" data-test="midnight-send-error">
           {{ errorMessage }}
         </p>
+        <MidnightDustFeeRecovery v-if="errorMessage && recoverDustFee && !sending" />
 
         <div>
           <v-btn
@@ -495,6 +496,7 @@ import { computed, nextTick, onBeforeUnmount, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
+import MidnightDustFeeRecovery from '@/shared/components/MidnightDustFeeRecovery.vue';
 import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
 import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
@@ -536,7 +538,7 @@ import { midnightLedgerOrNewest } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive, MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -824,6 +826,7 @@ const amount = ref('');
 const password = ref('');
 const sending = ref(false);
 const errorMessage = ref<string | null>(null);
+const recoverDustFee = ref(false);
 /** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
 const busySeconds = ref<number | null>(null);
 /** Set while the send waits for Try again or Cancel after the automatic resubmits. */
@@ -889,6 +892,7 @@ const sendBlockText = ref('');
  * next open (even on another wallet or network) with a disabled CTA.
  */
 function clearSendOutcome() {
+  recoverDustFee.value = false;
   sendBlock.value = null;
   sendBlockText.value = '';
   ledgerMismatch.value = false;
@@ -1221,6 +1225,7 @@ function prevStep() {
 }
 
 function preflight(): boolean {
+  recoverDustFee.value = false;
   errorMessage.value = null;
   ledgerMismatch.value = false;
   busyCancelled.value = false;
@@ -1243,6 +1248,7 @@ async function submitWithPassword() {
 
 /** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  recoverDustFee.value = e instanceof MidnightDustFeeShortfall && sponsorWalletId.value == null && feeSource.value !== 'station';
   // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
   if (isMidnightBusyCancelled(e)) {
     busyCancelled.value = true;

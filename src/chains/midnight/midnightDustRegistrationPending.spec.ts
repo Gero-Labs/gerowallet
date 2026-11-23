@@ -64,7 +64,7 @@ describe('the registration dialog', () => {
     expect(dialog).toMatch(/<GButton\s+v-if="registrationPending === 'unconfirmed'"\s+tier="tertiary"\s+compact/);
   });
 
-  it('clears the record once the chain shows the registration', () => {
-    expect(dialog).toContain("if (status === 'Registered' || status === 'Pending') clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');");
+  it('clears a confirmed record while preserving a recovery submission if the dialog still has the old Registered status', () => {
+    expect(dialog).toContain("if (status === 'Pending' || (status === 'Registered' && !props.recoverFee)) clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');");
   });
 });
