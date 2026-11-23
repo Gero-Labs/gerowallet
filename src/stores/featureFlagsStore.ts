@@ -114,6 +114,11 @@ export interface FeatureFlags {
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
   isCip113Enabled: boolean;
+  // Gero pays the DUST fee of a Midnight send for a wallet whose Cardano twin stakes ADA
+  // (fee station, midnightStation.ts). Default OFF, ships dark. Gates the UI ONLY: the
+  // "Gero covers this fee" row on the send screens. The worker is held by the build-time
+  // network list (midnightStationConfig.ts) and the server by its own switch.
+  isMidnightSponsoredFeesEnabled: boolean;
   // NFT rescue (cancelling listings and offers stuck at a closed marketplace's contracts,
   // Cardano mainnet). Default OFF, ships dark. Gates the UI ONLY: the card that finds them
   // and the cancel action. The background still verifies every transaction it signs.
@@ -190,6 +195,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isGeroProverEnabled: false,
     isMidnightThreadedProvingEnabled: false,
     isCip113Enabled: false,
+    isMidnightSponsoredFeesEnabled: false,
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
     isCardholderDetailsEnabled: true,
@@ -290,6 +296,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isMidnightThreadedProvingEnabled = featureFlagService.getFlag('isMidnightThreadedProvingEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
+    // Station-paid Midnight fees ship DARK (default false); UI-only gate.
+    featureFlagsState.flags.isMidnightSponsoredFeesEnabled = featureFlagService.getFlag('isMidnightSponsoredFeesEnabled', false);
     // NFT rescue ships DARK (default false); UI-only gate for the stuck-listings card.
     featureFlagsState.flags.isNftMarketEnabled = featureFlagService.getFlag('isNftMarketEnabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
@@ -412,6 +420,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isMidnightSponsoredFeesEnabled', (newValue) => {
+      featureFlagsState.flags['isMidnightSponsoredFeesEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isNftMarketEnabled', (newValue) => {
       featureFlagsState.flags['isNftMarketEnabled'] = newValue === true;
@@ -718,6 +729,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Whether the send screens offer Gero's fee station (Gero pays the DUST fee
+   * for an ADA staker). Ships DARK (default false). Gates the UI only; the
+   * offer also needs a network in MIDNIGHT_STATION_NETWORKS.
+   */
+  isMidnightSponsoredFeesEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightSponsoredFeesEnabled;
+  },
+
+  /**
    * Check if the NFT rescue is offered: finding listings and offers stuck at a closed
    * marketplace's contracts and cancelling them (Cardano mainnet only).
    * Ships DARK (default false). Gates the UI only; the background verifies every
@@ -781,6 +801,7 @@ export const featureFlagsStore = {
     isGeroProverEnabled: false,
     isMidnightThreadedProvingEnabled: false,
       isCip113Enabled: false,
+      isMidnightSponsoredFeesEnabled: false,
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
       isCardholderDetailsEnabled: true,

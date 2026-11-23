@@ -49,6 +49,7 @@
     "@cardano-sdk/key-management": "^0.29.19",
     "@cardano-sdk/tx-construction": "^0.29.1",
     "@cardano-sdk/util": "^0.17.2",
+    "@cloudflare/blindrsa-ts": "0.4.6",
     "@contentful/rich-text-html-renderer": "^17.2.3",
     "@contentful/rich-text-types": "^17.2.7",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",

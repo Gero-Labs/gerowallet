@@ -74,6 +74,11 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'SET_SUBMIT_API',
   'TEST_SUBMIT_API',
   'CLEAR_SUBMIT_API',
+  // Gero's fee station: seals a send with the wallet's key and spends a voucher of the user's
+  // daily allowance. A web page must not be able to do either.
+  'MIDNIGHT_STATION_STATUS',
+  'MIDNIGHT_STATION_SEAL',
+  'MIDNIGHT_STATION_REDEEM',
 ]);
 
 /**
