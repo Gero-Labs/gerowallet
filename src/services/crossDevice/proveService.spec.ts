@@ -207,7 +207,7 @@ describe('createProveService — happy path', () => {
     t.deliver(phone.init);
     phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     for (const c of phone.chunks()) t.deliver(c);
-    await settle();
+    await t.waitUntilSent('PROVE_RESULT');
 
     expect(calls).toBe(1);
     // Multi-chunk payload reassembled byte-for-byte, in order.

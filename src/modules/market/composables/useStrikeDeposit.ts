@@ -347,11 +347,12 @@ export function useStrikeDeposit() {
           addresses: keys,
           mergeWitnesses: false,
         },
-      })) as { data: { witnesses?: string; error?: string } };
+      })) as { data?: { witnesses?: string; error?: string } } | null | undefined;
 
       if (!current()) return false;
-      if (signResult.data.error || !signResult.data.witnesses) {
-        throw new Error(signResult.data.error || 'Failed to sign deposit transaction.');
+      const witnesses = signResult?.data?.witnesses;
+      if (signResult?.data?.error || !witnesses) {
+        throw new Error(signResult?.data?.error || 'Failed to sign deposit transaction.');
       }
 
       // ── 3. Submit to chain ──
@@ -361,17 +362,18 @@ export function useStrikeDeposit() {
         method: MessageTypes.SUBMIT_TX,
         data: {
           txCbor,
-          witnessHex: signResult.data.witnesses,
+          witnessHex: witnesses,
           utxos,
         },
-      })) as { data: { txId?: string; error?: string } };
+      })) as { data?: { txId?: string; error?: string } } | null | undefined;
 
-      if (submitResult.data.error || !submitResult.data.txId) {
-        throw new Error(submitResult.data.error || 'Failed to submit deposit transaction.');
+      if (submitResult?.data?.error) throw new Error(submitResult.data.error);
+      const finalTxHash = submitResult?.data?.txId;
+      // A lost runtime reply can follow a successful broadcast. Only the worker can acknowledge it,
+      // and without its txId there is nothing to confirm with Strike.
+      if (typeof finalTxHash !== 'string' || !finalTxHash.trim()) {
+        throw new Error(String(i18n.t('errors.submitUnconfirmed')));
       }
-
-      // The on-chain txId returned by the submitter (validated non-empty above).
-      const finalTxHash = submitResult.data.txId;
       if (current()) {
         txHash.value = finalTxHash;
         status.value = 'confirming';

@@ -155,6 +155,37 @@ describe('a Strike-built deposit is signed only when it fits the confirmed quote
     expect(deposit.status.value).toBe('confirmed');
   });
 
+  it.each([
+    ['disconnected message port', { error: 'The message port closed before a response was received.' }],
+    ['absent reply', undefined],
+    ['missing transaction ID', { data: {} }],
+    ['blank transaction ID', { data: { txId: ' ' } }],
+  ] as const)('reports an unconfirmed submission after a %s and confirms nothing with Strike', async (_name, reply) => {
+    const deposit = await quoted(later());
+    calls.build.mockResolvedValue({ unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    calls.send.mockImplementation(async ({ method }: { method: string }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'a1' } };
+      return reply;
+    });
+    expect(await deposit.buildAndSign('test-password')).toBe(false);
+    expect(sentMethods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD, MessageTypes.SIGN_TX, MessageTypes.SUBMIT_TX]);
+    expect(deposit.error.value).toBe('errors.submitUnconfirmed');
+    expect(deposit.status.value).toBe('error');
+    expect(deposit.txHash.value).toBeNull();
+    expect(calls.confirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps a lost signing reply from reaching the network', async () => {
+    const deposit = await quoted(later());
+    calls.build.mockResolvedValue({ unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    calls.send.mockImplementation(async ({ method }: { method: string }) =>
+      method === MessageTypes.VERIFY_SPENDING_PASSWORD ? { data: { success: true } } : { error: 'The message port closed before a response was received.' });
+    expect(await deposit.buildAndSign('test-password')).toBe(false);
+    expect(sentMethods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD, MessageTypes.SIGN_TX]);
+    expect(deposit.error.value).toBe('Failed to sign deposit transaction.');
+  });
+
   it('accepts a change key of the wallet as a required signer, but no one else', async () => {
     const deposit = await quoted(later());
     const own = body([[EXCHANGER, AMOUNT], [OWN_CHANGE, 9_899_800_000n]], 200_000n, ['c'.repeat(56)]);

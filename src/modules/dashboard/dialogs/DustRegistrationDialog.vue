@@ -18,6 +18,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <MidnightDustUpgradeNotice
+        v-if="isOpen && dustLive.nativeRegistrationCleared.value && loggedWallet?.baseAddress"
+        network="preprod"
+        :address="loggedWallet.baseAddress"
+      />
       <!-- Midnight data is paused: the relay can't show a registration yet. Its own
            line, not the pill's short help slot. -->
       <p v-if="pausedNoteShown" class="paused-note t-body-sm" data-test="dust-paused-note">
@@ -150,7 +155,7 @@
          The CTA changes per status so the user always sees the right next step. -->
     <v-card-actions class="px-0 pt-0" style="display: block">
       <!-- Unregistered / Invalid: Midnight-native register (Path A) flow -->
-      <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid'">
+      <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid' || (recoverFee && registrationStatus === 'Registered')">
         <!-- Stage 1: pre-build CTA. For PRF wallets `startRegistration` skips
              straight to the PassKey gesture; password wallets get the input. -->
         <template v-if="registrationPending || !inSigningPhase">
@@ -298,6 +303,7 @@ import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import GNote from '@/shared/components/GNote.vue';
+import MidnightDustUpgradeNotice from '@/shared/components/MidnightDustUpgradeNotice.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { geroStore } from '@/stores/geroStore';
 import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
@@ -318,7 +324,7 @@ import {
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
-const props = defineProps<{ isOpen: boolean }>();
+const props = defineProps<{ isOpen: boolean; recoverFee?: boolean }>();
 defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
@@ -404,7 +410,8 @@ const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 
 );
 // Seen on chain: the submitted registration's record has done its job.
 watch(registrationStatus, (status) => {
-  if (status === 'Registered' || status === 'Pending') clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');
+  // When recovering a fee failure, a cached Registered status can predate the new submission.
+  if (status === 'Pending' || (status === 'Registered' && !props.recoverFee)) clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');
 }, { immediate: true });
 
 // Live DUST balance + cap — composable handles polling + 1s tick. Fall back
