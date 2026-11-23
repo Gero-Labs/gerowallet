@@ -48,11 +48,11 @@ updates:
       # Coupled WASM pin, and it fails QUIETLY. Four sibling packages —
       # wallet-sdk-address-format, -dust-wallet, -shielded and
       # -unshielded-wallet, aliased here as midnight-v9-* — depend on
-      # `@midnightntwrk/ledger-v9`. The aliased releases accept `^1.0.0`, but
-      # wallet SDK 2.0.1's releases of them pin it EXACTLY (`1.0.2`), so the
-      # root and the aliases must move in one change. Where the versions
-      # disagree, npm nests a second copy, and ledger-v9 ships a wasm-bindgen
-      # module. Two
+      # `@midnightntwrk/ledger-v9`. The releases installed now accept
+      # `^1.0.0`, but their wallet SDK 2.0.1 releases (not installed yet) pin
+      # it EXACTLY (`1.0.2`), so once the aliases move to those, the root and
+      # the aliases must move in one change. Where the versions disagree, npm
+      # nests a second copy, and ledger-v9 ships a wasm-bindgen module. Two
       # instances means two linear memories and two sets of generated classes,
       # so objects minted by one fail `instanceof` inside the other:
       # midnightLedger9.ts and midnightPrivateSync.ts import both sides, and
