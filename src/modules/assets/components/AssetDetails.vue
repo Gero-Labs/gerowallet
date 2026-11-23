@@ -176,9 +176,11 @@ const files = computed(() => assetFilesOf(props.asset?.onchain_metadata));
 
 function openInNewTab() {
   const src = files.value[selectedFile.value]?.src
-  // An inline image is already shown in full; opened as a page, an SVG's scripts would run.
-  if (!src || src.startsWith('data:')) return
-  window.open(assets.resolveIcon(src), '_blank')
+  if (!src) return
+  const url = assets.resolveIcon(src)
+  // Some wallets' metadata stores raw base64. The resolver turns it into an inline image too.
+  if (/^data:/i.test(url)) return
+  window.open(url, '_blank')
 }
 
 function forceReRender() {
