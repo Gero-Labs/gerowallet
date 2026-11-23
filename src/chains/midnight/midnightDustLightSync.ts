@@ -151,6 +151,14 @@ export interface DustSpendCheckpoint {
   checkedThrough: number;
   /** Per generation (`generationKey`), the newest coin of its chain created at or below `checkedThrough`. */
   heads: Record<string, DustCoinWire>;
+  /**
+   * Generations that are not as far as `checkedThrough` yet: one found after
+   * the checkpoint was taken, still being scanned from its first block. How
+   * far each is, and its newest coin there. A generation is in `heads` or
+   * here, never both, so a build that does not know this field scans these
+   * from their first block.
+   */
+  behind?: Record<string, { checkedThrough: number; head: DustCoinWire }>;
 }
 
 export interface ReconstructDustOptions {
@@ -174,10 +182,12 @@ export interface ReconstructDustOptions {
   /**
    * Called during the spend scan, each time more of it is settled, with a
    * checkpoint the next attempt can resume from: after each stage of a long
-   * scan, and after each pass inside a stage. A long scan is minutes for a
-   * wallet with many coins, longer than a build may take (it ends at the
-   * transaction's expiry), so a build that fails or runs out of time must not
-   * send the next one back to the first block. The checkpoint is not yet
+   * scan, and inside a stage when a whole week of it is settled. A long scan
+   * is minutes for a wallet with many coins, longer than a build may take (it
+   * ends at the transaction's expiry), so a build that fails or runs out of
+   * time must not send the next one back to the first block. A checkpoint
+   * taken during a scan never stands on one of the wallet's own spends
+   * (`dustScanStages`). The checkpoint is not yet
    * checked against the commitment root: like any stored one it is a hint, and
    * a head the chain does not have is dropped by `reconstructDustState`'s cold
    * attempts. Must not throw or block.
@@ -254,22 +264,40 @@ export const DUST_SCAN_MIN_STAGE_BLOCKS = 7 * DUST_SCAN_ALIGN_BLOCKS;
  * (2026-11-23), longer than a fee build may take, so it never finished and
  * kept nothing.
  *
- * Like the slices, the stages depend on the range alone. What they add for
- * the server: it sees in which stage a chain moves to its next coin, a week
- * of blocks or more. A warm scan already tells it that to within a day or two
- * (`DUST_SCAN_ALIGN_BLOCKS`), and a successor is still asked for from the
- * first block of its stage's scan, never from the block it was created in.
+ * What the stages add for the server: it sees in which stage a chain moves to
+ * its next coin. That must stay a week of blocks or more, also over several
+ * attempts, so nothing the wallet asks for or stores during a scan may depend
+ * on where its own spends are:
+ * - A stage ends on a fixed grid, the block before a multiple of `minBlocks`
+ *   (only the last one ends at `to`), and no stage is shorter than
+ *   `minBlocks`. Two attempts cut their ranges differently, but always on the
+ *   same grid, so what they show together is still whole weeks.
+ * - A checkpoint taken during a scan stands on that grid too
+ *   (`dustStageBoundaryAtOrBelow`), never one block below a spend: the next
+ *   attempt starts from a day boundary before its checkpoint, which would
+ *   name that spend's day.
+ * - A successor is asked for from the first block of its stage's scan, never
+ *   from the block it was created in.
+ * The tip of each attempt is the one thing not on the grid: like any
+ * synchronization, an attempt shows that what it found happened before it.
  */
 export function dustScanStages(from: number, to: number, minBlocks: number = DUST_SCAN_MIN_STAGE_BLOCKS): number[] {
   const span = to - from + 1;
   if (!Number.isSafeInteger(span) || span < 1) throw new Error('Invalid DUST scan range');
   if (!Number.isSafeInteger(minBlocks) || minBlocks < 1) throw new Error('Invalid DUST scan stage');
-  const count = Math.max(1, Math.min(DUST_SCAN_MAX_STAGES, Math.floor(span / minBlocks)));
-  const size = Math.ceil(span / count);
   const ends: number[] = [];
-  for (let end = from + size - 1; end < to; end += size) ends.push(end);
+  for (let width = Math.max(1, Math.ceil(span / (minBlocks * DUST_SCAN_MAX_STAGES))) * minBlocks; ; width += minBlocks) {
+    ends.length = 0;
+    for (let end = Math.ceil((from + minBlocks) / width) * width - 1; end <= to - minBlocks; end += width) ends.push(end);
+    if (ends.length < DUST_SCAN_MAX_STAGES) break;
+  }
   ends.push(to);
   return ends;
+}
+
+/** The highest block at or below `height` that ends a `minBlocks` cell of the stage grid; -1 when there is none. */
+export function dustStageBoundaryAtOrBelow(height: number, minBlocks: number = DUST_SCAN_MIN_STAGE_BLOCKS): number {
+  return Math.floor((height + 1) / minBlocks) * minBlocks - 1;
 }
 
 /** Runs at most `max` tasks at once; a finished task hands its slot to the next waiting one. */
@@ -403,6 +431,8 @@ async function reconstructDustStateOnce<State, Key>(
     scanFrom: number;
     /** Never scanned below this block: the ledger's first block, or 0. */
     floor: number;
+    /** How far this chain is settled: where it was resumed from, then each stage end it reached; -1 before any. */
+    through: number;
     /** The coin this attempt started the chain from: its first coin, or the checkpoint's head. */
     base: QualifiedDustOutput;
     /** Each successor found since, in chain order, with the height of the spend that created it. */
@@ -449,8 +479,17 @@ async function reconstructDustStateOnce<State, Key>(
     state = ledger.insertGeneration(state, cursor, generation);
     if (live.has(ledger.nullifier(coin, key))) throw new Error('Duplicate DUST generation');
     const chainKey = generationKey(item.generationMtIndex, item.backingNight);
-    const head = resume && Object.hasOwn(resume.heads, chainKey)
+    let head = resume && Object.hasOwn(resume.heads, chainKey)
       ? dustCoinFromWire(resume.heads[chainKey], coin, commitmentEnd) : null;
+    let through = head && resume ? resume.checkedThrough : -1;
+    // A generation the checkpoint has, but not as far as its other chains.
+    const lagging = resume && !Object.hasOwn(resume.heads, chainKey) && resume.behind && typeof resume.behind === 'object'
+      && Object.hasOwn(resume.behind, chainKey) ? resume.behind[chainKey] : null;
+    if (lagging && typeof lagging === 'object' && Number.isSafeInteger(lagging.checkedThrough)
+      && lagging.checkedThrough >= 0 && lagging.checkedThrough < resume!.checkedThrough) {
+      head = dustCoinFromWire(lagging.head, coin, commitmentEnd);
+      if (head) through = lagging.checkedThrough;
+    }
     const start = head ?? coin;
     const nullifier = ledger.nullifier(start, key);
     if (live.has(nullifier)) throw new Error('Duplicate DUST generation');
@@ -461,7 +500,7 @@ async function reconstructDustStateOnce<State, Key>(
     const fromFirst = first && Number.isSafeInteger(first.height) && first.height >= 0 && first.height <= block.height
       && coin.ctime.getTime() >= first.timestamp ? first.height : 0;
     live.set(nullifier, { coin: start, generation, generationKey: chainKey,
-      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, floor: fromFirst,
+      scanFrom: through >= 0 ? dustWarmScanStart(through, align, fromFirst) : fromFirst, floor: fromFirst, through,
       base: start, links: [] });
     cursor++;
   }
@@ -481,23 +520,55 @@ async function reconstructDustStateOnce<State, Key>(
   const seen = new Set<bigint>();
   let discovered = 0;
   const limit = concurrencyLimit(DUST_SPEND_CONCURRENCY);
-  // How far the scan is settled for every chain at once, in the stage that
-  // ends at `stageEnd`. A chain whose newest coin is still to be looked up is
-  // settled only below the block that coin was created in: its own spend
-  // cannot be earlier. A chain whose newest coin was looked up to the end of
-  // the stage is settled to it, and so is a chain whose scan starts after the
-  // stage (a head resumed from a later checkpoint). Resuming from it scans
-  // from a shared day boundary before that height, as after any checkpoint.
-  let settled = resume ? resume.checkedThrough : -1;
+  // How far each chain is settled in the stage that ends at `stageEnd`, and
+  // the checkpoint that says so.
+  // - A chain whose newest coin was looked up to the end of the stage is
+  //   settled to it.
+  // - A chain whose newest coin is still to be looked up is settled below the
+  //   block that coin was created in, but said to be settled only to the stage
+  //   grid below that: a checkpoint one block under a spend would have the
+  //   next attempt start from that spend's day (`dustScanStages`).
+  // - A chain whose scan starts after the stage (resumed from a later
+  //   checkpoint) is where it was resumed from.
+  // The checkpoint stands where every chain is settled, or, while a chain is
+  // still behind the checkpoint this build resumed from (a generation found
+  // since), at that checkpoint with the chain's own progress in `behind`: its
+  // scan from the first block is long, and must not start again each attempt.
+  const resumedAt = resume ? resume.checkedThrough : -1;
+  /** Per generation, how far the last reported checkpoint said it was. */
+  const reported = new Map<string, number>([...live.values()].map(entry => [entry.generationKey, entry.through]));
   const reportSettled = (stageEnd: number) => {
-    let through = Math.min(stageEnd, checkedThrough);
+    const target = Math.min(stageEnd, checkedThrough);
+    const at = new Map<LiveCoin, number>();
     for (const [nullifier, entry] of live) {
-      if (checked.has(nullifier) || entry.scanFrom > stageEnd) continue;
-      through = Math.min(through, entry.links.length ? entry.links[entry.links.length - 1].height - 1 : -1);
+      let through = entry.through;
+      if (entry.scanFrom <= stageEnd) {
+        if (checked.has(nullifier)) through = Math.max(through, target);
+        else if (entry.links.length) {
+          const below = entry.links[entry.links.length - 1].height - 1;
+          through = Math.max(through, below >= target ? target : dustStageBoundaryAtOrBelow(below, stageBlocks));
+        }
+      }
+      at.set(entry, through);
     }
-    if (through <= settled) return;
-    settled = through;
-    try { options.onCheckpoint?.(checkpointAt(through)); } catch { /* advisory */ }
+    if (!at.size) return;
+    const everyChain = Math.min(...at.values());
+    const stands = Math.max(everyChain, resumedAt);
+    let further = false;
+    for (const [entry, through] of at) {
+      if (Math.min(through, stands) > reported.get(entry.generationKey)!) further = true;
+    }
+    if (!further) return;
+    const heads: Record<string, DustCoinWire> = {};
+    const behind: NonNullable<DustSpendCheckpoint['behind']> = {};
+    for (const [entry, through] of at) {
+      reported.set(entry.generationKey, Math.min(through, stands));
+      if (through >= stands) heads[entry.generationKey] = dustCoinToWire(headAt(entry, stands));
+      else if (through >= 0) behind[entry.generationKey] = { checkedThrough: through, head: dustCoinToWire(headAt(entry, through)) };
+    }
+    const checkpoint: DustSpendCheckpoint = Object.keys(behind).length
+      ? { checkedThrough: stands, heads, behind } : { checkedThrough: stands, heads };
+    try { options.onCheckpoint?.(checkpoint); } catch { /* advisory */ }
   };
   const stages = live.size
     ? dustScanStages(Math.min(...[...live.values()].map(entry => entry.scanFrom)), block.height, stageBlocks) : [block.height];
@@ -604,7 +675,11 @@ async function reconstructDustStateOnce<State, Key>(
     // shared day boundary before this stage's end: what a build resumed from
     // the checkpoint just reported would ask for.
     checked.clear();
-    for (const entry of live.values()) entry.scanFrom = Math.max(entry.scanFrom, dustWarmScanStart(stageEnd, align, entry.floor));
+    for (const entry of live.values()) {
+      if (entry.scanFrom > stageEnd) continue;
+      entry.through = Math.max(entry.through, Math.min(stageEnd, checkedThrough));
+      entry.scanFrom = Math.max(entry.scanFrom, dustWarmScanStart(stageEnd, align, entry.floor));
+    }
     report(30 + Math.floor(40 * ++stage / stages.length), '');
   }
   report(70, '');

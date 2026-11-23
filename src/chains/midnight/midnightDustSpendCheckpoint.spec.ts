@@ -139,6 +139,17 @@ describe('DUST spend checkpoint writer: the saves of one build', () => {
     expect(await loadDustSpendCheckpoint('mainnet', wiped, identity)).toBeNull();
   });
 
+  it('keep what a checkpoint says of a generation that is behind the others', async () => {
+    const held = heldStore();
+    const [[chain, head]] = Object.entries(checkpoint.heads);
+    const lagging: DustSpendCheckpoint = { checkedThrough: 300, heads: {}, behind: { [chain]: { checkedThrough: 100, head } } };
+    const saving = dustSpendCheckpointWriter('mainnet', seed, identity)(lagging);
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    held.shift()!.finish();
+    await saving;
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(lagging);
+  });
+
   it('go on after a write the store refuses', async () => {
     const held = heldStore();
     const save = dustSpendCheckpointWriter('mainnet', seed, identity);

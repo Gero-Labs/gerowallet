@@ -5,7 +5,7 @@ import { ScaleBigInt } from 'midnight-v9-address-format';
 import { balanceLightDust9, dustLedger9 } from './midnightDustLightLedger9';
 import {
   DUST_SCAN_ALIGN_BLOCKS, DUST_SCAN_MAX_SLICES, DUST_SCAN_MAX_STAGES, DUST_SCAN_MIN_SLICE_BLOCKS, DUST_SCAN_MIN_STAGE_BLOCKS,
-  DUST_SPEND_CONCURRENCY, dustScanSlices, dustScanStages, dustWarmScanStart, reconstructDustState,
+  DUST_SPEND_CONCURRENCY, dustScanSlices, dustScanStages, dustStageBoundaryAtOrBelow, dustWarmScanStart, reconstructDustState,
   littleEndianHex, type CollapsedDustTree, type DustLightTransport, type DustSnapshot, type DustSpendCheckpoint, type DustSpendTransaction,
 } from './midnightDustLightSync';
 
@@ -526,7 +526,8 @@ describe('DUST synchronization that survives a failed attempt', () => {
       spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
         starts.push(fromBlock);
         const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
-        return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
+        return { nextBlock: toBlock < f.snapshot.block.height ? toBlock + 1 : null,
+          transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
       }),
     };
     return { transport, starts };
@@ -534,37 +535,40 @@ describe('DUST synchronization that survives a failed attempt', () => {
   const wire = (checkpoint: DustSpendCheckpoint): DustSpendCheckpoint => JSON.parse(JSON.stringify(checkpoint));
   const unavailable = 'DUST synchronization is temporarily unavailable. Please try again shortly.';
 
-  it('reports a checkpoint after each pass of the spend scan, each one further along', async () => {
+  it('reports no checkpoint that stands on one of the wallet\'s own spends: a short scan reports only where it ends', async () => {
     const f = fundedFixture();
     try {
       const reported: DustSpendCheckpoint[] = [];
-      // The fixture's chain is spent at heights 3, 4 and 5 (the snapshot block): four passes.
+      // The fixture's chain is spent at heights 3, 4 and 5 (the snapshot block): four passes, and after each of the
+      // first three the scan is settled only below a spend. A checkpoint there would have the next attempt start
+      // from that spend's day, so none is reported.
       const { checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined,
         { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) });
-      // After a pass the newest coin is not looked up yet, so the scan is settled only below the block it was created in.
-      expect(reported.map(partial => partial.checkedThrough)).toEqual([2, 3, 4]);
-      expect(reported.map(partial => Object.values(partial.heads).map(head => head.seq))).toEqual([[0], [1], [2]]);
-      expect(reported[2]).toEqual(wire(checkpoint!));
+      expect(reported.map(partial => partial.checkedThrough)).toEqual([4]);
+      expect(reported[0]).toEqual(wire(checkpoint!));
     } finally { f.key.clear(); }
   });
 
-  it.each([1, 2, 3])('an attempt that fails after pass %i leaves a checkpoint the next attempt resumes from', async completedPasses => {
+  it.each([1, 2])('an attempt that fails after stage %i leaves a checkpoint the next attempt resumes from', async settledStages => {
     const f = fundedFixture({ chains: 2 });
     try {
+      // Stages of two blocks. The spends are in the last one, so the first two are settled with every chain at its first coin.
+      const ends = dustScanStages(0, f.snapshot.block.height, 2);
+      expect(ends.length).toBeGreaterThan(2);
       const reported: DustSpendCheckpoint[] = [];
       const failing = ranged(f);
       const spends = failing.transport.spends;
       failing.transport.spends = vi.fn(async (block, prefixes, fromBlock, toBlock) => {
-        // A pass ends by reporting where the scan stands, so the next request after it belongs to the next pass.
-        if (reported.length >= completedPasses) throw new Error(unavailable);
+        // A stage ends by reporting where the scan stands, so the next request after it belongs to the next stage.
+        if (reported.length >= settledStages) throw new Error(unavailable);
         return spends(block, prefixes, fromBlock, toBlock);
       });
       await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
-        { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('temporarily unavailable');
-      expect(reported).toHaveLength(completedPasses);
+        { checkpointMarginBlocks: 1, scanAlignBlocks: 0, scanStageBlocks: 2, onCheckpoint: partial => reported.push(wire(partial)) }))
+        .rejects.toThrow('temporarily unavailable');
+      expect(reported.map(partial => partial.checkedThrough)).toEqual(ends.slice(0, settledStages));
       const left = reported[reported.length - 1];
-      // Both chains are in it: the spent one at its head so far, the unspent one at its only coin.
-      expect(Object.values(left.heads).map(head => head.seq).sort()).toEqual([0, completedPasses - 1]);
+      expect(Object.values(left.heads).map(head => head.seq)).toEqual([0, 0]);
 
       const { transport, starts } = ranged(f);
       const next = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
@@ -675,45 +679,64 @@ describe('long DUST spend scans are settled in stages', () => {
     return { transport, ranges };
   }
 
-  it('cuts a long range into stages that depend on the range alone, and leaves a short one whole', () => {
+  it('cuts a long range into stages on a fixed grid of weeks, and leaves a short one whole', () => {
+    const week = DUST_SCAN_MIN_STAGE_BLOCKS;
     expect(dustScanStages(0, 5)).toEqual([5]);
     expect(dustScanStages(0, 40_000)).toEqual([40_000]);
     // A warm scan of a wallet used in the last days: a day or two before the checkpoint, to the tip.
     expect(dustScanStages(3_484_800, 3_520_000)).toEqual([3_520_000]);
-    expect(dustScanStages(0, 2 * DUST_SCAN_MIN_STAGE_BLOCKS - 2)).toEqual([2 * DUST_SCAN_MIN_STAGE_BLOCKS - 2]);
-    expect(dustScanStages(0, 2 * DUST_SCAN_MIN_STAGE_BLOCKS - 1)).toEqual([DUST_SCAN_MIN_STAGE_BLOCKS - 1, 2 * DUST_SCAN_MIN_STAGE_BLOCKS - 1]);
-    for (const [from, to] of [[0, 1_000_000], [0, 3_542_728], [3_346_139, 3_700_000], [475_200, 1_000_000]]) {
+    expect(dustScanStages(0, 2 * week - 2)).toEqual([2 * week - 2]);
+    expect(dustScanStages(0, 2 * week - 1)).toEqual([week - 1, 2 * week - 1]);
+    expect(dustScanStages(0, 1_000_000)).toEqual([2 * week - 1, 4 * week - 1, 6 * week - 1, 8 * week - 1, 1_000_000]);
+    for (const [from, to] of [[0, 1_000_000], [0, 3_542_728], [3_346_139, 3_700_000], [590_400, 1_000_000], [7, 5_000_000], [1, 99_999_999]]) {
       const ends = dustScanStages(from, to);
       expect(ends.length).toBeGreaterThan(1);
       expect(ends.length).toBeLessThanOrEqual(DUST_SCAN_MAX_STAGES);
       expect(ends.at(-1)).toBe(to);
-      ends.forEach((end, i) => expect(end - (i ? ends[i - 1] : from - 1)).toBeGreaterThanOrEqual(i < ends.length - 1 ? DUST_SCAN_MIN_STAGE_BLOCKS : 1));
+      ends.forEach((end, i) => {
+        // No stage shorter than a week, the first and the last included.
+        expect(end - (i ? ends[i - 1] : from - 1)).toBeGreaterThanOrEqual(week);
+        // Every end but the tip is the block before a multiple of a week, whatever the range.
+        if (i < ends.length - 1) expect((end + 1) % week).toBe(0);
+      });
     }
-    expect(dustScanStages(0, 3_542_728)).toHaveLength(DUST_SCAN_MAX_STAGES);
     expect(dustScanStages(0, 5, 2)).toEqual([1, 3, 5]);
     expect(() => dustScanStages(10, 9)).toThrow('Invalid DUST scan range');
     expect(() => dustScanStages(0, 9, 0)).toThrow('Invalid DUST scan stage');
+    expect([0, 1, 2, 3, 4].map(height => dustStageBoundaryAtOrBelow(height, 2))).toEqual([-1, 1, 1, 3, 3]);
+    expect(dustStageBoundaryAtOrBelow(week - 2)).toBe(-1);
+    expect(dustStageBoundaryAtOrBelow(3 * week + 5)).toBe(3 * week - 1);
   });
 
   it('a build that runs out of time inside a long scan has stored every stage it settled, and the next build resumes there', async () => {
     const f = fundedFixture({ chains: 2 });
     try {
+      const week = DUST_SCAN_MIN_STAGE_BLOCKS;
       const height = 1_000_000;
       const ends = dustScanStages(0, height);
-      expect(ends).toHaveLength(DUST_SCAN_MAX_STAGES);
+      expect(ends).toHaveLength(5);
       const [first, second, third] = await spendHeights(f);
-      // One chain is spent early in stage 2, again on that stage's last block, and on the first block of stage 6.
-      const moved = new Map([[first, ends[0] + 1_000], [second, ends[1]], [third, ends[4] + 1]]);
-      // The build's time is up while it scans stage 5. A scan that asked for the whole range first
+      // One chain is spent early in stage 2, again on that stage's last block, and on the first block of stage 4.
+      const moved = new Map([[first, ends[0] + 1_000], [second, ends[1]], [third, ends[2] + 1]]);
+      // The build's time is up while it scans stage 4. A scan that asked for the whole range first
       // would have nothing to show for it: no pass over the whole range ever finishes.
-      const failing = tall(f, height, moved, ends[3]);
+      const failing = tall(f, height, moved, ends[2]);
       const reported: DustSpendCheckpoint[] = [];
       await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
         { onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('timed out');
-      // Stage 1, the two spends inside stage 2 (settled only below the block each successor was created in), then stages 2 to 4.
-      expect(reported.map(partial => partial.checkedThrough)).toEqual([ends[0], ends[0] + 999, ends[1] - 1, ends[1], ends[2], ends[3]]);
+      // Stage 1; inside stage 2 the week below the second spend (nothing for the first: no whole week is settled
+      // under it); then stages 2 and 3.
+      expect(reported.map(partial => partial.checkedThrough)).toEqual([ends[0], ends[0] + week, ends[1], ends[2]]);
+      // Never one block under a spend: every checkpoint stands on the week grid, so the day boundary the next
+      // attempt starts from says nothing about where the wallet's spends are.
+      const own = [...moved.values()];
+      for (const partial of reported) {
+        expect((partial.checkedThrough + 1) % week).toBe(0);
+        expect(own.includes(partial.checkedThrough + 1)).toBe(partial.checkedThrough === ends[2]);
+      }
       const left = reported[reported.length - 1];
       expect(Object.values(left.heads).map(head => head.seq).sort()).toEqual([0, 2]);
+      expect(left.behind).toBeUndefined();
 
       const next = tall(f, height, moved);
       const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined, { checkpoint: left });
@@ -721,13 +744,43 @@ describe('long DUST spend scans are settled in stages', () => {
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       // Nothing below the day boundary before the checkpoint is asked for again.
       const resumedFrom = dustWarmScanStart(left.checkedThrough, DUST_SCAN_ALIGN_BLOCKS, 0);
-      expect(resumedFrom).toBeGreaterThan(ends[3] - 2 * DUST_SCAN_ALIGN_BLOCKS);
+      expect(resumedFrom).toBeGreaterThan(ends[2] - 2 * DUST_SCAN_ALIGN_BLOCKS);
       expect(next.ranges.length).toBeGreaterThan(0);
       expect(next.ranges.every(([from]) => from >= resumedFrom)).toBe(true);
       expect(Object.values(checkpoint!.heads).map(head => head.seq).sort()).toEqual([0, 3]);
       // No scan starts at, or right after, the block of one of the wallet's own spends.
-      const own = [...moved.values()];
       expect([...failing.ranges, ...next.ranges].some(([from]) => own.includes(from) || own.includes(from - 1))).toBe(false);
+    } finally { f.key.clear(); }
+  });
+
+  it('two attempts cut their ranges on the same grid, so together they show no less than a week', async () => {
+    const f = fundedFixture();
+    try {
+      const week = DUST_SCAN_MIN_STAGE_BLOCKS;
+      const height = 1_000_000;
+      const [first, second, third] = await spendHeights(f);
+      const moved = new Map([[first, 250_000], [second, 460_000], [third, 700_000]]);
+      // The first attempt stops in its third stage; the second resumes and finishes, on a later, taller chain.
+      const failing = tall(f, height, moved, dustScanStages(0, height)[1]);
+      const reported: DustSpendCheckpoint[] = [];
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+        { onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('timed out');
+      const next = tall(f, height + 123_457, moved);
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+        { checkpoint: reported[reported.length - 1], onCheckpoint: partial => reported.push(wire(partial)) });
+      expect(state.utxos).toEqual(f.local.utxos);
+      // Whatever either attempt stored, and every block a stage of either attempt ended on below its tip,
+      // is the block before a multiple of a week.
+      const tips = [height, height + 123_457];
+      const onGrid = (block: number) => (block + 1) % week === 0;
+      expect(reported.filter(partial => !tips.some(tip => partial.checkedThrough === tip - 300)).every(partial => onGrid(partial.checkedThrough))).toBe(true);
+      // A request ends on a slice inside its stage or on the stage's end; the stage ends are the largest per scan.
+      for (const [attempt, tip] of [[failing, tips[0]], [next, tips[1]]] as const) {
+        const starts = [...new Set(attempt.ranges.map(([from]) => from))];
+        const ends = [...new Set(attempt.ranges.map(([, to]) => to))].filter(to => !starts.includes(to + 1));
+        expect(ends.length).toBeGreaterThan(0);
+        expect(ends.every(to => to === tip || onGrid(to))).toBe(true);
+      }
     } finally { f.key.clear(); }
   });
 
@@ -737,7 +790,7 @@ describe('long DUST spend scans are settled in stages', () => {
       const height = 1_000_000;
       const ends = dustScanStages(0, height);
       const [first, second, third] = await spendHeights(f);
-      const moved = new Map([[first, 10], [second, ends[5]], [third, ends[5] + 1]]);
+      const moved = new Map([[first, 10], [second, ends[2]], [third, ends[2] + 1]]);
       const { transport, ranges } = tall(f, height, moved);
       const reported: number[] = [];
       const steps: number[] = [];
@@ -761,7 +814,8 @@ describe('long DUST spend scans are settled in stages', () => {
       expect(reported).toEqual(expect.arrayContaining(ends.slice(0, -1)));
       expect(reported.at(-1)).toBe(height - 300);
       // No request covers more than its stage and the day or two before it.
-      expect(Math.max(...ranges.map(([from, to]) => to - from + 1))).toBeLessThanOrEqual(Math.ceil((height + 1) / ends.length) + 2 * DUST_SCAN_ALIGN_BLOCKS);
+      const widest = Math.max(...ends.map((end, i) => end - (i ? ends[i - 1] : -1)));
+      expect(Math.max(...ranges.map(([from, to]) => to - from + 1))).toBeLessThanOrEqual(widest + 2 * DUST_SCAN_ALIGN_BLOCKS);
       expect(peak).toBeLessThanOrEqual(DUST_SPEND_CONCURRENCY);
       // Progress moves with the stages and never back.
       expect(steps).toEqual([...steps].sort((a, b) => a - b));
@@ -787,43 +841,125 @@ describe('long DUST spend scans are settled in stages', () => {
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       // One coin in stage 1, the coin and its successor in stage 2, three coins in stage 3. Whole-range passes would be [0, 5] four times.
       expect(ranges).toEqual([[0, 1], [2, 3], [2, 3], [4, 5], [4, 5], [4, 5]]);
-      expect(reported).toEqual([1, 2, 3, 4, 5]);
+      // Only the stage ends: the blocks under the spends at 3, 4 and 5 are never a checkpoint.
+      expect(reported).toEqual([1, 3, 5]);
       expect(checkpoint!.checkedThrough).toBe(5);
       expect(Object.values(checkpoint!.heads).map(head => head.seq)).toEqual([3]);
     } finally { f.key.clear(); }
   });
 
-  it('leaves a chain resumed from a later checkpoint alone until the stage its scan starts in', async () => {
+  it('a generation found after the checkpoint keeps its own progress while it catches up', async () => {
     const f = fundedFixture({ chains: 2 });
     try {
       const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const heads = cold.checkpoint!.heads;
       const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
-      // Only the spent chain is in the checkpoint; the other one is scanned from the first block, in stages.
-      const partial = { checkedThrough: cold.checkpoint!.checkedThrough, heads: { [spent]: heads[spent] } };
+      const added = Object.keys(heads).find(chain => chain !== spent)!;
+      // Only the spent chain is in the checkpoint. The other generation is new to it: scanned from the first block, in stages of two.
+      const partial: DustSpendCheckpoint = { checkedThrough: cold.checkpoint!.checkedThrough, heads: { [spent]: heads[spent] } };
       const height = f.snapshot.block.height;
-      const resumedFrom = partial.checkedThrough + 1;
-      const asked: { from: number; to: number }[] = [];
-      const transport: DustLightTransport = { ...f.transport, spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
-        asked.push({ from: fromBlock, to: toBlock });
-        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
-        return { nextBlock: toBlock < height ? toBlock + 1 : null,
-          transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
-      }) };
-      const onCheckpoint = vi.fn();
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
-        { checkpoint: partial, checkpointMarginBlocks: 1, scanAlignBlocks: 0, scanStageBlocks: 2, onCheckpoint });
+      const ends = dustScanStages(0, height, 2);
+      expect(ends.length).toBeGreaterThan(2);
+      expect(ends[1]).toBeLessThan(partial.checkedThrough);
+      const options = { checkpointMarginBlocks: 1, scanAlignBlocks: 0, scanStageBlocks: 2 };
+
+      // The first attempt settles two stages of the new generation, both below the checkpoint, and fails in the third.
+      const failing = tall(f, height, new Map(), ends[1]);
+      const reported: DustSpendCheckpoint[] = [];
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+        { ...options, checkpoint: partial, onCheckpoint: stored => reported.push(wire(stored)) })).rejects.toThrow('timed out');
+      // The checkpoint stays where the resumed chain is, with the new generation's own progress beside it.
+      expect(reported.map(stored => stored.checkedThrough)).toEqual([partial.checkedThrough, partial.checkedThrough]);
+      expect(reported.map(stored => stored.behind?.[added]?.checkedThrough)).toEqual([ends[0], ends[1]]);
+      for (const stored of reported) {
+        expect(stored.heads).toEqual({ [spent]: heads[spent] });
+        expect(stored.behind![added].head).toEqual(heads[added]);
+      }
+
+      // The second attempt takes the new generation up from there, not from the first block.
+      const next = tall(f, height, new Map());
+      const again: DustSpendCheckpoint[] = [];
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+        { ...options, checkpoint: reported[1], onCheckpoint: stored => again.push(wire(stored)) });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
+      expect(next.ranges.length).toBeGreaterThan(0);
+      expect(next.ranges.every(([from]) => from > ends[1])).toBe(true);
+      // Once it has caught up it is a head like the others.
       expect(warm.checkpoint).toEqual(cold.checkpoint);
-      const ends = dustScanStages(0, height, 2);
-      expect(ends.length).toBeGreaterThan(1);
-      // Before the resumed chain's stage there is one scan per stage (the new chain's); nothing of it is asked for below its checkpoint.
-      const early = asked.filter(scan => scan.to < resumedFrom);
-      expect(early.map(scan => scan.to)).toEqual(ends.filter(end => end < resumedFrom));
-      expect(asked.filter(scan => scan.to >= resumedFrom).every(scan => scan.from <= resumedFrom)).toBe(true);
-      // Nothing is settled past the checkpoint it resumed from.
-      expect(onCheckpoint).not.toHaveBeenCalled();
+      expect(again.at(-1)).toEqual(wire(cold.checkpoint!));
+    } finally { f.key.clear(); }
+  });
+
+  it('a new generation on a long chain: an attempt that settles four stages stores them, and the next one starts there', async () => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      const height = 1_000_000;
+      const ends = dustScanStages(0, height);
+      const [first, second, third] = await spendHeights(f);
+      const moved = new Map([[first, 10], [second, 20], [third, 30]]);
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', tall(f, height, moved).transport);
+      const heads = cold.checkpoint!.heads;
+      const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
+      const added = Object.keys(heads).find(chain => chain !== spent)!;
+      const partial: DustSpendCheckpoint = { checkedThrough: cold.checkpoint!.checkedThrough, heads: { [spent]: heads[spent] } };
+      expect(partial.checkedThrough).toBe(height - 300);
+
+      const failing = tall(f, height, moved, ends[3]);
+      const reported: DustSpendCheckpoint[] = [];
+      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+        { checkpoint: partial, onCheckpoint: stored => reported.push(wire(stored)) })).rejects.toThrow('timed out');
+      expect(failing.ranges.some(([from]) => from === 0)).toBe(true);
+      expect(reported.map(stored => stored.behind?.[added]?.checkedThrough)).toEqual(ends.slice(0, 4));
+      expect(reported.every(stored => stored.checkedThrough === partial.checkedThrough && Object.keys(stored.heads).join() === spent)).toBe(true);
+
+      const next = tall(f, height, moved);
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined, { checkpoint: reported.at(-1) });
+      expect(state.utxos).toEqual(f.local.utxos);
+      expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
+      expect(checkpoint).toEqual(cold.checkpoint);
+      // Nothing below the day boundary before the fourth stage's end is asked for again.
+      const resumedFrom = dustWarmScanStart(ends[3], DUST_SCAN_ALIGN_BLOCKS, 0);
+      expect(next.ranges.length).toBeGreaterThan(0);
+      expect(next.ranges.every(([from]) => from >= resumedFrom)).toBe(true);
+    } finally { f.key.clear(); }
+  });
+
+  it.each([
+    ['as far as the checkpoint itself', (entry: { checkedThrough: number; head: unknown }, checkedThrough: number) => ({ ...entry, checkedThrough })],
+    ['at a height that is no block', (entry: { checkedThrough: number; head: unknown }) => ({ ...entry, checkedThrough: -1 })],
+    ['with a head of another key', (entry: { checkedThrough: number; head: object }) => ({ ...entry, head: { ...entry.head, owner: '1' } })],
+    ['that is no record', () => 7],
+  ])('ignores a generation said to be behind %s and scans it from the first block', async (_name, corrupt) => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const heads = cold.checkpoint!.heads;
+      const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
+      const added = Object.keys(heads).find(chain => chain !== spent)!;
+      const checkedThrough = cold.checkpoint!.checkedThrough;
+      const checkpoint = { checkedThrough, heads: { [spent]: heads[spent] },
+        behind: { [added]: corrupt({ checkedThrough: 3, head: heads[added] }, checkedThrough) } } as never;
+      const next = tall(f, f.snapshot.block.height, new Map());
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+        { checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(warm.checkpoint).toEqual(cold.checkpoint);
+      expect(new Set(next.ranges.map(([from]) => from))).toEqual(new Set([0, checkedThrough + 1]));
+    } finally { f.key.clear(); }
+  });
+
+  it('a generation in the checkpoint\'s heads is taken from there, whatever is said of it being behind', async () => {
+    const f = fundedFixture({ chains: 2 });
+    try {
+      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const [chain] = Object.keys(cold.checkpoint!.heads);
+      const checkpoint: DustSpendCheckpoint = { ...cold.checkpoint!, behind: { [chain]: { checkedThrough: 0, head: cold.checkpoint!.heads[chain] } } };
+      const next = tall(f, f.snapshot.block.height, new Map());
+      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+        { checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
+      expect(warm.state.utxos).toEqual(f.local.utxos);
+      expect(next.ranges.every(([from]) => from === cold.checkpoint!.checkedThrough + 1)).toBe(true);
     } finally { f.key.clear(); }
   });
 });
