@@ -1,4 +1,5 @@
 import { Cardano } from '@cardano-sdk/core';
+import { formatLovelace } from './lovelace';
 import { decodeListingDatum, sellerShare, type ListingFeeParams, type Payee } from '@/chrome/nftMarket/listingDatum';
 import { paymentScriptHash } from '@/chrome/nftMarket/marketGuard';
 import { reviveOwnListings, singleNftUnit, verifyOwnListing, type OwnListing } from '@/chrome/nftMarket/ownListings';
@@ -332,15 +333,7 @@ export interface TxApprovalSummary {
   isInternal: boolean;
 }
 
-/** 6 decimals, trailing zeros trimmed but at least 2 kept (bigint, no float math). */
-export function formatLovelace(lovelace: bigint): string {
-  const negative = lovelace < 0n;
-  const abs = negative ? -lovelace : lovelace;
-  const whole = abs / 1_000_000n;
-  let frac = (abs % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
-  if (frac.length < 2) frac = frac.padEnd(2, '0');
-  return `${negative ? '-' : ''}${whole.toString()}.${frac}`;
-}
+export { formatLovelace };
 
 export function formatTokenQuantity(rawQuantity: string, decimals: number): string {
   if (!rawQuantity) return '0';

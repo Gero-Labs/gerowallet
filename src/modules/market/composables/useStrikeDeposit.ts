@@ -14,6 +14,7 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
+import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
 import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '@/modules/market/utils/strikeDepositGuard';
 import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
 import { backendSource, historySource, proveOwnInputs } from '@/shared/utils/provenInputs';
@@ -141,20 +142,18 @@ export function useStrikeDeposit() {
       return;
     }
 
-    const numeric = typeof amountAda === 'string' ? parseFloat(amountAda) : amountAda;
-    if (!numeric || isNaN(numeric) || numeric <= 0) {
+    const lovelace = toBaseUnits(amountAda, 6);
+    if (lovelace == null || lovelace <= 0n) {
       error.value = 'Invalid deposit amount.';
       status.value = 'error';
       return;
     }
 
-    const lovelaceStr = String(Math.floor(numeric * 1_000_000));
-
     try {
       const response = await strikeUserApi.getDepositQuote({
         blockchain: 'cardano',
         asset_symbol: 'ADA',
-        asset_amount: lovelaceStr,
+        asset_amount: lovelace.toString(),
       });
 
       // Defensive shape check — bail out if the API drifts from the typed

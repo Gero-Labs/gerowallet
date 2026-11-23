@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { strikeUserApi } from '@/api/strike-v2.user';
@@ -44,6 +44,7 @@ const quote = ref<WithdrawQuote | null>(null);
 const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
 const requestId = ref<string | null>(null);
+let quoteVersion = 0;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -249,6 +250,7 @@ export function useStrikeWithdraw() {
    *   ADA example and `/auth/account-requirements` are both misleading.
    */
   async function requestQuote(amountUsd: string, asset = 'USDM'): Promise<void> {
+    const version = ++quoteVersion;
     error.value = null;
     quote.value = null;
     requestId.value = null;
@@ -282,6 +284,7 @@ export function useStrikeWithdraw() {
         amount_received?: string;
       };
 
+      if (version !== quoteVersion) return;
       quote.value = {
         ...raw,
         fee: raw.fee,
@@ -292,6 +295,7 @@ export function useStrikeWithdraw() {
       };
       status.value = 'quoted';
     } catch (e) {
+      if (version !== quoteVersion) return;
       // Surface Strike's real rejection reason (e.g. a minimum-withdrawal or an
       // unknown-field message) instead of the opaque "Request failed with status
       // code 400". Log the raw body too so the exact reason is visible.
@@ -307,36 +311,45 @@ export function useStrikeWithdraw() {
    * `signing → submitting → pending → settled`.
    */
   async function signAndSubmit(password: string, pkBytes?: Uint8Array): Promise<boolean> {
-    if (!quote.value) {
+    if (isWithdrawing.value || status.value === 'settled') return false;
+    const approved = quote.value;
+    if (!approved) {
       error.value = 'No active withdrawal quote.';
       status.value = 'error';
       return false;
     }
-    if (quote.value.expiresAtMs && Date.now() > quote.value.expiresAtMs) {
-      error.value = 'Quote expired. Request a new one.';
-      status.value = 'error';
-      return false;
-    }
+    const stillApproved = () => {
+      if (quote.value !== approved) return false;
+      if (approved.expiresAtMs && Date.now() >= approved.expiresAtMs) {
+        throw new Error(String(i18n.t('perpetuals.deposit.quoteExpired')));
+      }
+      return true;
+    };
 
     try {
+      if (!stillApproved()) return false;
       status.value = 'signing';
-      const walletSignature = await signCip8(quote.value.message_to_sign, password, pkBytes);
+      const walletSignature = await signCip8(approved.message_to_sign, password, pkBytes);
+      if (!stillApproved()) return false;
 
       // Cardano quotes may include a validator min-UTxO funding tx the USER
       // pays for (`tx_cbor` + `validator_address`). When present, sign it and
       // hand the SIGNED cbor back to Strike — Strike submits it server-side.
       let signedTxCbor: string | undefined;
-      if (quote.value.tx_cbor) {
-        signedTxCbor = await signWithdrawTx(quote.value.tx_cbor, quote.value.validator_address, password, pkBytes);
+      if (approved.tx_cbor) {
+        signedTxCbor = await signWithdrawTx(approved.tx_cbor, approved.validator_address, password, pkBytes);
+        if (!stillApproved()) return false;
       }
 
       status.value = 'submitting';
       const submitRes = await strikeUserApi.executeWithdraw(
-        quote.value.withdraw_id,
+        approved.withdraw_id,
         walletSignature,
         signedTxCbor,
       );
-      requestId.value = submitRes.request_id ?? quote.value.withdraw_id;
+      // Strike accepted this request even if the user has since opened a new review.
+      if (quote.value !== approved) return true;
+      requestId.value = submitRes.request_id ?? approved.withdraw_id;
 
       // Submitting the signed quote is the terminal step. Strike accepts the
       // withdrawal and settles it on-chain to the account's registered address;
@@ -349,6 +362,7 @@ export function useStrikeWithdraw() {
       status.value = 'settled';
       return true;
     } catch (e) {
+      if (quote.value !== approved) return false;
       const dbg = strikeErrorDebugInfo(e);
       debugLog('[strike-withdraw] signAndSubmit failed:', dbg.status, dbg.body);
       error.value = extractStrikeError(e, 'Failed to submit the withdrawal.');
@@ -358,11 +372,18 @@ export function useStrikeWithdraw() {
   }
 
   function reset(): void {
+    ++quoteVersion;
     quote.value = null;
     status.value = 'idle';
     error.value = null;
     requestId.value = null;
   }
+
+  watch([
+    () => walletStore.loggedWallet?.id, () => walletStore.loggedWallet?.accountIndex,
+    () => walletStore.loggedWallet?.network, () => walletStore.loggedWallet?.chain,
+    () => walletStore.loggedWallet?.baseAddress, () => walletStore.isLocked,
+  ], reset, { flush: 'sync' });
 
   // Backwards-compatible aliases used by existing call-sites (e.g. WithdrawSheet).
   const withdrawStatus = status;

@@ -14,6 +14,16 @@
 
 export type LovelaceLike = string | number | bigint | null | undefined;
 
+/** 6 decimals, trailing zeros trimmed but at least 2 kept (bigint, no float math). */
+export function formatLovelace(lovelace: bigint): string {
+  const negative = lovelace < 0n;
+  const abs = negative ? -lovelace : lovelace;
+  const whole = abs / 1_000_000n;
+  let frac = (abs % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
+  if (frac.length < 2) frac = frac.padEnd(2, '0');
+  return `${negative ? '-' : ''}${whole.toString()}.${frac}`;
+}
+
 /**
  * Parse any lovelace-ish value to BigInt. Never throws: unparseable input
  * yields 0n, because a governance table must render even if one row is junk.
