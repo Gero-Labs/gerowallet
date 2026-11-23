@@ -57,7 +57,11 @@ const { rows, run, running, fastest, slowestMs, measured, plannedThreads } = use
 );
 
 function rowLabel(row: SpeedRow): string {
-  if (row.id === 'helper') return t('midnight.prover.engineHelper');
+  if (row.id === 'helper') {
+    // Named only once a test proof says so: whether the card is used depends on the card, its driver and the switch.
+    const onGpu = row.state.status === 'done' && row.state.accelerated === true;
+    return t(onGpu ? 'midnight.prover.speedHelperGpu' : 'midnight.prover.engineHelper');
+  }
   if (row.id === 'standard') return t('midnight.prover.speedStandard');
   const threads = row.state.status === 'done' && row.state.threads ? row.state.threads : plannedThreads.value;
   return threads > 1 ? t('midnight.prover.speedThreaded', { n: threads }) : t('midnight.prover.engineBrowser');

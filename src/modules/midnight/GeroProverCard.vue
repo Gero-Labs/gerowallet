@@ -193,6 +193,8 @@ const processorHint = computed(() => {
     case 'active': return device ? t('midnight.prover.gpuHintNamed', { device }) : t('midnight.prover.gpuHint');
     case 'off': return t('midnight.prover.gpuOffHint');
     case 'tripped': return t('midnight.prover.gpuPausedHint');
+    // `no-device` (no NVIDIA card it can use) and `unsupported` (no graphics-processor
+    // backend for this computer, such as a Mac today) share one text that covers both.
     default: return t('midnight.prover.cpuOnlyHint');
   }
 });

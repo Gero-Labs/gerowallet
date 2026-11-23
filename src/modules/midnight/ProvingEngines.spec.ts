@@ -145,4 +145,25 @@ describe('ProverSpeedCompare', () => {
     await w.find('[data-testid="prover-speed-run"]').trigger('click');
     expect(fake.run).toHaveBeenCalledTimes(1);
   });
+
+  it('names the graphics processor on the Gero Prover row only when its test proof used it', () => {
+    fake.rows = [
+      { id: 'standard', state: { status: 'done', ms: 7900, threads: 1 } },
+      { id: 'helper', state: { status: 'done', ms: 190, accelerated: true } },
+    ];
+    fake.fastest = 'helper';
+    let w = mount(ProverSpeedCompare, { props: { browserOffered: false, helperOffered: true }, global: { stubs } });
+    let helper = w.find('[data-testid="prover-speed-helper"]').text();
+    expect(helper).toContain('midnight.prover.speedHelperGpu');
+    expect(helper).toContain('midnight.send.provingElapsed:{"n":"0.2"}');
+
+    fake.rows = [
+      { id: 'standard', state: { status: 'done', ms: 7900, threads: 1 } },
+      { id: 'helper', state: { status: 'done', ms: 260 } },
+    ];
+    w = mount(ProverSpeedCompare, { props: { browserOffered: false, helperOffered: true }, global: { stubs } });
+    helper = w.find('[data-testid="prover-speed-helper"]').text();
+    expect(helper).toContain('midnight.prover.engineHelper');
+    expect(helper).not.toContain('midnight.prover.speedHelperGpu');
+  });
 });
