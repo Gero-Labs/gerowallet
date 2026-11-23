@@ -18,6 +18,11 @@
         <v-spacer />
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
+      <MidnightDustUpgradeNotice
+        v-if="isOpen && dustLive.nativeRegistrationCleared.value && loggedWallet?.baseAddress"
+        network="preprod"
+        :address="loggedWallet.baseAddress"
+      />
       <!-- Midnight data is paused: the relay can't show a registration yet. Its own
            line, not the pill's short help slot. -->
       <p v-if="pausedNoteShown" class="paused-note t-body-sm" data-test="dust-paused-note">
@@ -298,6 +303,7 @@ import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import GNote from '@/shared/components/GNote.vue';
+import MidnightDustUpgradeNotice from '@/shared/components/MidnightDustUpgradeNotice.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { geroStore } from '@/stores/geroStore';
 import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';

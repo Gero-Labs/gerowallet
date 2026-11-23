@@ -5524,6 +5524,8 @@ export default {
 
   // Midnight DUST-Registrierung
   'midnight.registerForDust': 'Für DUST-Generierung registrieren',
+  'midnight.dustUpgrade.nativeCleared': 'Beim Preprod-Upgrade wurden native tNIGHT-Registrierungen aufgehoben. Registriere dich erneut, um mit dem tNIGHT in dieser Wallet DUST zu erzeugen.',
+  'midnight.dustUpgrade.cnightRefill': 'Beim Upgrade auf Ledger 9 hat Midnight den DUST-Vorrat bereits aktiver cNIGHT-Registrierungen aufgefüllt.',
   'midnight.registerForDustSubtitle': 'Signieren Sie mit Ihrer Wallet, um aus Ihrem NIGHT DUST zu generieren',
   'midnight.dustRecipientAddress': 'Ihre DUST-Empfangsadresse (Midnight)',
   'midnight.nightRegistered': 'Registriertes NIGHT',

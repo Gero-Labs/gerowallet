@@ -5631,6 +5631,8 @@ export default {
   // tx (signed via Gero's Cardano wallet or the official portal) with the
   // wallet's Midnight DUST address as the DUST recipient.
   'midnight.registerForDust': 'Register for DUST generation',
+  'midnight.dustUpgrade.nativeCleared': 'The preprod upgrade cleared native tNIGHT registrations. Register again to generate DUST from the tNIGHT in this wallet.',
+  'midnight.dustUpgrade.cnightRefill': 'At the ledger 9 upgrade, Midnight refilled DUST for cNIGHT registrations that were already active.',
   'midnight.registerForDustSubtitle': 'Sign with your wallet to start generating DUST from your NIGHT',
   'midnight.dustRecipientAddress': 'Your DUST recipient address (Midnight)',
   'midnight.nightRegistered': 'NIGHT registered',

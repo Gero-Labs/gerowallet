@@ -23,7 +23,7 @@ vi.mock('@/shared/composables/useMidnightDustLive', async () => {
   const { ref } = await import('vue');
   return { useMidnightDustLive: () => ({
     dustBalance: ref(0n), dustCap: ref(0n), settled: ref(true), hasData: ref(true),
-    nightRegistered: ref(0n), dustGenerating: ref(0n), registrationStatus: ref('Registered'),
+    nightRegistered: ref(0n), dustGenerating: ref(0n), registrationStatus: ref('Registered'), nativeRegistrationCleared: ref(false),
   }) };
 });
 vi.mock('@/shared/composables/useMidnightSendTimeline', async () => ({ useMidnightSendTimeline: () => [] }));
