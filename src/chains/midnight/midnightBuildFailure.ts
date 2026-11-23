@@ -11,7 +11,7 @@
  * reply; the error's message is kept, so the page still turns a ledger or
  * refusal code in it into the user's language.
  */
-import { IntentInsufficientFundsError, isSdkInsufficientFunds } from './midnightConnectorIntent';
+import { IntentInsufficientFundsError, isSdkInsufficientFunds, MIDNIGHT_DUST_COINS_SHORT } from './midnightConnectorIntent';
 
 /** The connector error codes a build failure answers with (values of `MidnightErrorCode`). */
 export type MidnightBuildFailure = 'InsufficientFunds' | 'InternalError';
@@ -33,6 +33,8 @@ export function buildFailureOf(error: unknown): MidnightBuildFailure {
   if (error instanceof MidnightBuildFailedError) return error.buildFailure;
   if (error instanceof IntentInsufficientFundsError || isSdkInsufficientFunds(error)) return 'InsufficientFunds';
   if ((error as { errorCode?: unknown } | null)?.errorCode === NEXUS_INSUFFICIENT_FUNDS) return 'InsufficientFunds';
+  // Too few DUST coins to pay within the validation-time limit (midnightDustSpread9.ts): the wallet lacks the DUST.
+  if (error instanceof Error && error.message === MIDNIGHT_DUST_COINS_SHORT) return 'InsufficientFunds';
   return 'InternalError';
 }
 

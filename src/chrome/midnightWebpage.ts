@@ -254,4 +254,21 @@ export const midnightMakeIntent = async (
   return result.data;
 };
 
-// Not implemented yet: balanceSealedTransaction.
+/**
+ * Hand a SEALED (`signature / proof / binding`) transaction to the wallet to
+ * complete: typically a swap offer another wallet made with `makeIntent`. The
+ * wallet prompts in its side panel with what it gives and receives, adds its
+ * own signed intent and the DUST fee, and returns the sealed result for
+ * `submitTransaction`. Ledger 9 networks only; `payFees:false`, shielded value
+ * and a fallible-section imbalance reject with InvalidRequest.
+ */
+export const midnightBalanceSealedTransaction = async (
+  tx: string,
+  options?: { payFees?: boolean },
+): Promise<{ tx: string }> => {
+  const result = (await Messaging.sendToContent({
+    method: MIDNIGHT_METHOD.balanceSealedTransaction,
+    data: { tx, options, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<{ tx: string }>;
+  return result.data;
+};

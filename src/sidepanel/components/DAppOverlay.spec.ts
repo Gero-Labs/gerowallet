@@ -68,6 +68,8 @@ vi.mock('./BottomSheet.vue', () => ({ default: { template: '<section><slot /><sl
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import DAppOverlay from './DAppOverlay.vue';
 import WalletStore from '@/stores/walletStore';
 import { deriveBitcoinAccountXpub, deriveBitcoinRootKey } from '@/chains/bitcoin/bitcoinKeyManager';
@@ -404,6 +406,53 @@ describe('Midnight balanceUnsealedTransaction: the approval names who gets paid'
     expect(payments).toHaveLength(1);
     expect(payments[0].text()).toContain(recipient);
     expect(wrapper.text()).toContain('midnight.balanceReview.paymentsHeading');
+  });
+});
+
+describe('Midnight balanceSealedTransaction: the approval shows both sides of the swap', () => {
+  const request = (sealed: boolean) => ({
+    requestId: 'sealed-1', method: 'midnight_balanceUnsealedTransaction',
+    payload: { website: 'https://dapp.example', data: {
+      tx: 'abcd', ...(sealed ? { sealed: true } : {}),
+      contributions: [{ token: 'ab'.repeat(32), amount: '5000' }],
+      receives: sealed ? [{ token: '0'.repeat(64), amount: '10000000' }] : undefined,
+      payments: [],
+    } },
+  });
+
+  it('lists what the wallet gives and receives under the swap copy', () => {
+    overlay.currentRequest.value = request(true) as never;
+    const wrapper = render();
+
+    expect(wrapper.text()).toContain('midnight.connector.sealedTitle');
+    expect(wrapper.text()).toContain('midnight.connector.sealedBody');
+    expect(wrapper.text()).toContain('midnight.connector.intentGive');
+    const receives = wrapper.findAll('[data-testid="midnight-balance-receive"]');
+    expect(receives).toHaveLength(1);
+    expect(receives[0].text()).toContain('copilot.swap.youReceive');
+  });
+
+  it('keeps the funding copy and shows no receive row for an unsealed request', () => {
+    overlay.currentRequest.value = request(false) as never;
+    const wrapper = render();
+
+    expect(wrapper.text()).toContain('midnight.connector.balanceTitle');
+    expect(wrapper.text()).not.toContain('midnight.connector.sealedTitle');
+    expect(wrapper.findAll('[data-testid="midnight-balance-receive"]')).toHaveLength(0);
+  });
+
+  // The flag is the only thing that tells the worker the transaction is sealed:
+  // a panel that dropped it would ask the worker to balance it as unsealed.
+  // Line endings normalized: a Windows checkout (core.autocrlf) has CRLF files.
+  it('forwards the sealed flag, read from the request, to the balance service', () => {
+    const source = readFileSync(join(__dirname, 'DAppOverlay.vue'), 'utf8').replace(/\r\n/g, '\n');
+    const build = source.slice(source.indexOf('async function buildMidnightBalanceTx('));
+    const body = build.slice(0, build.indexOf('\n}\n'));
+
+    expect(body).toContain('const sealed = data.sealed === true;');
+    expect(body).toContain(
+      "balanceConnectorTransaction(loggedWallet.value?.network ?? '', data.tx, credentials, approvalCurrent, sealed)",
+    );
   });
 });
 

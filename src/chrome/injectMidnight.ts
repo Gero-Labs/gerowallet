@@ -39,14 +39,6 @@ function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
     && typeof candidate['getVerifierKey'] === 'function';
 }
 
-/** Methods whose server-side implementation is still Phase 3 (see build plan §4). */
-function notYetImplemented(methodName: string): () => Promise<never> {
-  return () => Promise.reject(midnightConnectorError(
-    MidnightErrorCode.InternalError,
-    `${methodName} is not yet implemented by GeroWallet's connector (planned)`,
-  ));
-}
-
 function buildConnectedAPI(): ConnectedAPI {
   const api: ConnectedAPI = {
     getShieldedBalances: () => bridge.midnightGetShieldedBalances(),
@@ -97,13 +89,17 @@ function buildConnectedAPI(): ConnectedAPI {
       }
       return bridge.midnightMakeIntent(desiredInputs, desiredOutputs, options);
     },
-    // Sealed-tx balancing. Present (so the object stays structurally
-    // assignable to the real ConnectedAPI type real dapps import) but rejects
-    // until implemented. Spec prose: "The connected API consists of a couple
-    // of parts, each always present" — omitting it would both break that
-    // contract and TypeScript structural compatibility for dapps typed
-    // against the SDK.
-    balanceSealedTransaction: notYetImplemented('balanceSealedTransaction'),
+    // Sealed-tx balancing: complete another party's sealed transaction (a swap
+    // offer made with makeIntent) on ledger 9 networks. The background rejects
+    // payFees:false, shielded value and a fallible-section imbalance with
+    // InvalidRequest before any prompt, and a give the wallet cannot cover
+    // with InsufficientFunds.
+    balanceSealedTransaction: (tx, options) => {
+      if (typeof tx !== 'string' || tx.length === 0) {
+        return Promise.reject(midnightConnectorError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
+      }
+      return bridge.midnightBalanceSealedTransaction(tx, options);
+    },
   };
   return Object.freeze(api);
 }

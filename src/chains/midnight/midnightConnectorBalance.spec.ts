@@ -58,6 +58,12 @@ describe('validateConnectorBalanceRequest', () => {
     // A chain whose ledger hasn't been read is refused, naming it.
     expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Could not read which ledger Midnight Preview runs/) });
   });
+
+  it('marks only the unread ledger as the wallet\'s failure, never a malformed request', () => {
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, internal: true });
+    expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod')).not.toHaveProperty('internal');
+    expect(validateConnectorBalanceRequest(null, 'Preview')).not.toHaveProperty('internal');
+  });
 });
 
 describe('summarizeContributions', () => {
