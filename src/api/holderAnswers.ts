@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 import { KOIOS_URLS } from './spo-api';
 import { Network } from '@/models/types';
-import { SLOTS_PER_EPOCH } from '@/shared/utils/transaction';
+import { DEFAULT_TX_TTL_SLOTS, SLOTS_PER_EPOCH } from '@/shared/utils/transaction';
 import { toDisplayGovActionId, type GovActionId } from '@/shared/utils/govActionId';
 
 interface StakeUpdate {
@@ -37,6 +37,7 @@ interface Tip {
   abs_slot: number;
   epoch_slot: number;
   epoch_no: number;
+  block_time: number;
 }
 
 function natural(value: number): number {
@@ -94,12 +95,19 @@ export async function checkHolderAnswers(stakeAddress: string, network: string, 
   if (network !== Network.MAINNET && network !== Network.PREPROD) throw new Error('Unsupported governance network');
   const client = axios.create({ baseURL: KOIOS_URLS[network], timeout: 15000 });
   const hashes = [...new Set(ids.map(id => id.txHash))];
-  const [tipResponse, proposalsResponse, accountResponse] = await Promise.all([
-    client.get<Tip[]>('/tip', { params: { select: 'abs_slot,epoch_slot,epoch_no' } }),
-    client.get<Proposal[]>('/proposal_list', { params: {
-      proposal_tx_hash: `in.(${hashes.join(',')})`,
+  // Selections can span many UI pages. Bound each URL even when all hashes differ.
+  const proposalPages = [];
+  const hashesPerRequest = 50;
+  for (let start = 0; start < hashes.length; start += hashesPerRequest) {
+    const page = hashes.slice(start, start + hashesPerRequest);
+    proposalPages.push(client.get<Proposal[]>('/proposal_list', { params: {
+      proposal_tx_hash: `in.(${page.join(',')})`,
       select: 'proposal_tx_hash,proposal_index,block_time,expiration,ratified_epoch,enacted_epoch,dropped_epoch,expired_epoch',
-    } }),
+    } }));
+  }
+  const [tipResponse, pages, accountResponse] = await Promise.all([
+    client.get<Tip[]>('/tip', { params: { select: 'abs_slot,epoch_slot,epoch_no,block_time' } }),
+    Promise.all(proposalPages),
     client.post<AccountUpdates[]>('/account_updates', { _stake_addresses: [stakeAddress] }),
   ]);
   const [tip] = tipResponse.data;
@@ -107,7 +115,7 @@ export async function checkHolderAnswers(stakeAddress: string, network: string, 
   const epoch = natural(tip.epoch_no);
   const epochSlot = natural(tip.epoch_slot);
   if (epochSlot >= SLOTS_PER_EPOCH || slot < epochSlot) throw new Error('Invalid epoch position');
-  const proposals = proposalsResponse.data;
+  const proposals = pages.flatMap(response => response.data);
   const registeredBefore = await registrationBefore(accountResponse.data, stakeAddress, proposals, async txHashes =>
     (await client.post<TxInfo[]>('/tx_info', { _tx_hashes: txHashes, _certs: true },
       { params: { select: 'tx_hash,tx_block_index,certificates' } })).data);
@@ -124,5 +132,10 @@ export async function checkHolderAnswers(stakeAddress: string, network: string, 
   }
   // Any still-live action can close at the next epoch transition. Never allow
   // a reviewed answer past that boundary, even if early enactment is not yet indexed.
-  return { blocked, slot, invalidHereafter: Cardano.Slot(slot - epochSlot + SLOTS_PER_EPOCH) };
+  const slotsLeft = Math.min(SLOTS_PER_EPOCH - epochSlot, DEFAULT_TX_TTL_SLOTS);
+  const invalidHereafter = Cardano.Slot(slot + slotsLeft);
+  // Mainnet and preprod have one-second slots. The last block's timestamp
+  // accounts for time already spent waiting for a new block or the provider.
+  const expiresAt = (natural(tip.block_time) + slotsLeft) * 1000;
+  return { blocked, slot, invalidHereafter, expiresAt };
 }

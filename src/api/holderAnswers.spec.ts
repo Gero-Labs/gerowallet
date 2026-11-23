@@ -11,7 +11,7 @@ const reg = 'bb'.repeat(32);
 const action = { txHash: hash, index: 1 };
 const proposal = { proposal_tx_hash: hash, proposal_index: 1, block_time: 100, expiration: 12,
   ratified_epoch: null, enacted_epoch: null, dropped_epoch: null, expired_epoch: null };
-const tip = { abs_slot: 4_751_990, epoch_slot: 431_990, epoch_no: 10 };
+const tip = { abs_slot: 4_751_990, epoch_slot: 431_990, epoch_no: 10, block_time: 1_798_000_000 };
 const change = (action_type: string, block_time: number, tx_hash = reg) => ({ action_type, block_time, tx_hash });
 const read = () => checkHolderAnswers(stake, 'Preprod', [action]);
 const account = (updates: ReturnType<typeof change>[]) => [{ stake_address: stake, updates }];
@@ -24,9 +24,15 @@ beforeEach(() => { vi.clearAllMocks(); replies(); });
 describe('holder answer eligibility at review', () => {
   it('accepts a continuously registered key with no delegation and caps validity at the next epoch', async () => {
     const result = await read();
-    expect(result).toEqual({ blocked: [], slot: tip.abs_slot, invalidHereafter: tip.abs_slot + 10 });
+    expect(result).toEqual({ blocked: [], slot: tip.abs_slot, invalidHereafter: tip.abs_slot + 10,
+      expiresAt: (tip.block_time + 10) * 1000 });
     expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({ baseURL: 'https://preprod.koios.rest/api/v1' }));
     expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses one hour from the block timestamp when the next epoch is more than an hour away', async () => {
+    get.mockImplementation(async (url: string) => ({ data: url === '/tip' ? [{ ...tip, epoch_slot: 50 }] : [proposal] }));
+    expect(await read()).toMatchObject({ invalidHereafter: tip.abs_slot + 3600, expiresAt: (tip.block_time + 3600) * 1000 });
   });
 
   it.each([
@@ -79,6 +85,21 @@ describe('holder answer eligibility at review', () => {
     const second = { ...action, index: 2 };
     const result = await checkHolderAnswers(stake, 'Preprod', [action, second]);
     expect(result.blocked).toEqual([{ id: `${hash}#2`, reason: 'governance.holderClosed' }]);
+  });
+
+  it('checks selections from multiple pages using bounded URLs and one stake history', async () => {
+    const ids = Array.from({ length: 105 }, (_, n) => ({ txHash: n.toString(16).padStart(64, '0'), index: 1 }));
+    const requests: string[][] = [];
+    get.mockImplementation(async (url: string, { params }) => {
+      if (url === '/tip') return { data: [tip] };
+      const hashes = params.proposal_tx_hash.slice(4, -1).split(',');
+      requests.push(hashes);
+      return { data: hashes.map((proposal_tx_hash: string) => ({ ...proposal, proposal_tx_hash })) };
+    });
+    expect((await checkHolderAnswers(stake, 'Preprod', ids)).blocked).toEqual([]);
+    expect(requests.map(page => page.length)).toEqual([50, 50, 5]);
+    expect(requests.flat()).toEqual(ids.map(id => id.txHash));
+    expect(post).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed on an unsupported network, indeterminate history or malformed lifecycle data', async () => {

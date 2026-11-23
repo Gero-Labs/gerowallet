@@ -62,7 +62,7 @@
           <span class="t-body-2 g-num cast-vote__meta-value">{{ votingPowerDisplay }}</span>
         </div>
 
-        <div v-if="buildError" class="cast-vote__banner cast-vote__banner--blocked">
+        <div v-if="buildError" role="alert" class="cast-vote__banner cast-vote__banner--blocked">
           <v-icon size="small" class="mr-2" color="var(--g-error)">mdi-alert-circle-outline</v-icon>
           <span class="t-caption">{{ buildError }}</span>
         </div>
@@ -107,7 +107,11 @@
         </div>
 
         <v-form ref="form" v-model="valid" class="cast-vote__auth">
+          <p v-if="remoteRequired && !isSubmit" class="t-caption cast-vote__hint">
+            {{ t('crossDevice.settings.policyRequireHint') }}
+          </p>
           <TransactionAuthSection
+            v-else
             :wallet-type="loggedWallet.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="isSubmit"
@@ -135,7 +139,7 @@
           <!-- PRF wallets sign through the auth section above; everything else
                gets the explicit action button, mirroring DRepDelegateDialog. -->
           <GButton
-            v-if="!isPrfWallet"
+            v-if="!isPrfWallet && (!remoteRequired || isSubmit)"
             tier="primary"
             @click="signAndSubmitVoteTx"
             :disabled="loading || !canSign"
@@ -143,6 +147,15 @@
             class="mx-2"
           >
             {{ t(isSubmit ? 'governance.submitTransaction' : isAnswer ? 'wallet.signTransaction' : 'governance.signAndVote') }}
+          </GButton>
+          <GButton
+            v-if="isAnswer && canSignOnAnotherDevice && !isSubmit"
+            :tier="remoteRequired ? 'primary' : 'secondary'"
+            :disabled="loading || !canSign"
+            :loading="loading"
+            @click="signOnAnotherDevice()"
+          >
+            {{ t('crossDevice.signOnAnotherDevice') }}
           </GButton>
         </v-form>
       </template>
@@ -218,6 +231,7 @@ const phase = ref<'choose' | 'sign'>('choose');
 const building = ref(false);
 const buildError = ref('');
 const builtTx = shallowRef<Cardano.Tx>();
+const reviewExpiresAt = ref<number | null>(null);
 const intents = ref<VoteIntent[]>([]);
 /** Translated liveness-check drop notices — who fell out of the batch, and why. */
 const droppedNotices = ref<string[]>([]);
@@ -334,14 +348,17 @@ const {
   handlePassKeyAuthSuccess,
   handlePassKeyAuthError,
   setPasswordFieldRef,
+  requiresRemoteForSend, canSignOnAnotherDevice, signOnAnotherDevice,
   overlay, keystoneType, keystoneCbor, onKeystoneScan, onKeystoneError, onKeystoneProgress,
 } = useTransactionSigning({
-  active: () => props.isOpen && canSign.value,
+  active: () => props.isOpen && phase.value === 'sign' && canSign.value &&
+    (reviewExpiresAt.value === null || Date.now() < reviewExpiresAt.value),
   tx: txRef,
   get successMessageKey() { return isAnswer.value ? 'governance.holderSubmitted' : 'governance.voteTxSubmitted'; },
   onSuccess: (txId: string) => emit('submitted', txId),
   onClose: () => emit('close'),
 });
+const remoteRequired = computed(() => isAnswer.value && requiresRemoteForSend.value);
 
 const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
@@ -373,9 +390,12 @@ async function proceed(): Promise<void> {
       govActionId: displayId(action),
       choice: choices.value[action.govActionId] as VoteChoice,
     }));
-    const tx = isAnswer.value ? await prepareAnswers(nextIntents, intentTitle) : await castVotes(nextIntents);
+    const review = isAnswer.value
+      ? await prepareAnswers(nextIntents, intentTitle)
+      : { tx: await castVotes(nextIntents), expiresAt: null };
     if (revision !== reviewRevision) return;
-    builtTx.value = tx;
+    builtTx.value = review.tx;
+    reviewExpiresAt.value = review.expiresAt;
     intents.value = nextIntents;
     phase.value = 'sign';
   } catch (error) {
@@ -389,10 +409,22 @@ async function proceed(): Promise<void> {
 
 function backToChoices(): void {
   phase.value = 'choose';
+  reviewExpiresAt.value = null;
   builtTx.value = undefined;
   intents.value = [];
   resetState();
 }
+
+// A backgrounded tab can wake after this timer. The signer's active check
+// also checks the deadline before accepting a password, device reply or submit.
+watch(reviewExpiresAt, (expiresAt, _, onCleanup) => {
+  if (expiresAt === null) return;
+  const timer = setTimeout(() => {
+    backToChoices();
+    buildError.value = t('governance.holderReviewExpired');
+  }, Math.max(0, expiresAt - Date.now()));
+  onCleanup(() => clearTimeout(timer));
+}, { flush: 'sync' });
 
 const signAndSubmitVoteTx = async (): Promise<void> => {
   if (canSign.value) await handleSign(form.value || undefined);
@@ -406,6 +438,7 @@ watch(
     resetState();
     building.value = false;
     builtTx.value = undefined;
+    reviewExpiresAt.value = null;
     phase.value = 'choose';
     buildError.value = '';
     intents.value = [];

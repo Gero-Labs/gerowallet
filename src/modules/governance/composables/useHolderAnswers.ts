@@ -32,7 +32,7 @@ export function useHolderAnswers() {
     return software || (hardware && wallet.network === Network.MAINNET);
   });
 
-  async function prepareAnswers(answers: VoteIntent[], titleFor: (id: string) => string): Promise<Cardano.Tx> {
+  async function prepareAnswers(answers: VoteIntent[], titleFor: (id: string) => string) {
     const { loggedWallet: wallet, keys } = walletStore;
     if (!canAnswer.value || !keys?.payment?.[0]?.address) throw new Error(t('staking.noStakeAddress'));
     const identity = { id: wallet.id, network: wallet.network, stakeAddress: wallet.stakeAddress };
@@ -54,7 +54,9 @@ export function useHolderAnswers() {
       changeAddress: keys.payment[0].address, walletContext: { keys },
     });
     assertStakeWalletUnchanged(identity, t);
-    return tx;
+    // Leave time for the holder to read the fee and authorize a new review.
+    if (check.expiresAt - Date.now() < 30_000) throw new Error(t('governance.holderWindowTooShort'));
+    return { tx, expiresAt: check.expiresAt };
   }
   return { canAnswer, prepareAnswers };
 }

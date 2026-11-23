@@ -1,12 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { computed, ref } from 'vue';
-import type { Cardano } from '@cardano-sdk/core';
 import type { GovProposal } from '@/api/governance.types';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import CastVoteDialog from './CastVoteDialog.vue';
 
-const { prepare, cast, handleSign } = vi.hoisted(() => ({ prepare: vi.fn(), cast: vi.fn(), handleSign: vi.fn() }));
+const { prepare, cast, handleSign, remoteSign, remote } = vi.hoisted(() => ({
+  prepare: vi.fn(), cast: vi.fn(), handleSign: vi.fn(), remoteSign: vi.fn(), remote: { required: false, paired: false },
+}));
 vi.mock('@/modules/governance/composables/useHolderAnswers', () => ({
   useHolderAnswers: () => ({ canAnswer: computed(() => true), prepareAnswers: prepare }),
 }));
@@ -22,6 +23,8 @@ vi.mock('@/shared/composables/useTransactionSigning', () => ({
   useTransactionSigning: () => ({
     resetState: vi.fn(), handleSign, loading: ref(false), isPrfWallet: ref(false), isSubmit: ref(false),
     spendingPassword: ref(''), valid: ref(true), isBT: ref(false),
+    requiresRemoteForSend: computed(() => remote.required), canSignOnAnotherDevice: computed(() => remote.paired),
+    signOnAnotherDevice: remoteSign,
   }),
 }));
 
@@ -40,8 +43,13 @@ function open() {
   } });
 }
 describe('holder answer review', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    remote.required = remote.paired = false;
+    prepare.mockResolvedValue({ tx: { body: { fee: 184321n } }, expiresAt: Date.now() + 60_000 });
+  });
+
   it('requires an explicit choice for each action and shows the fee before authorizing', async () => {
-    prepare.mockResolvedValue({ body: { fee: 184321n } });
     const page = open();
     const review = page.get('.cast-vote__cta button');
     expect(review.attributes('disabled')).toBeDefined();
@@ -65,8 +73,47 @@ describe('holder answer review', () => {
     page.unmount();
   });
 
+  it('only offers the paired device when remote approval is required', async () => {
+    remote.required = remote.paired = true;
+    const page = open();
+    for (const group of page.findAll('[role="group"]')) await group.get('button').trigger('click');
+    await page.get('.cast-vote__cta button').trigger('click');
+    await flushPromises();
+    expect(page.findComponent({ name: 'TransactionAuthSection' }).exists()).toBe(false);
+    const buttons = page.findAll('.cast-vote__auth button');
+    expect(buttons.map(b => b.text())).toEqual(['crossDevice.signOnAnotherDevice']);
+    await buttons[0].trigger('click');
+    expect(remoteSign).toHaveBeenCalledOnce();
+    expect(handleSign).not.toHaveBeenCalled();
+    page.unmount();
+  });
+
+  it('expires an open review and preserves the choices for a fresh fee and authorization', async () => {
+    vi.useFakeTimers();
+    const page = open();
+    try {
+      prepare.mockResolvedValueOnce({ tx: { body: { fee: 184321n } }, expiresAt: Date.now() + 32_000 });
+      for (const group of page.findAll('[role="group"]')) await group.get('button').trigger('click');
+      await page.get('.cast-vote__cta button').trigger('click');
+      await flushPromises();
+      expect(page.find('.cast-vote__auth').exists()).toBe(true);
+      await vi.advanceTimersByTimeAsync(32_000);
+      expect(page.get('[role="alert"]').text()).toContain('governance.holderReviewExpired');
+      expect(page.find('.cast-vote__auth').exists()).toBe(false);
+      expect(page.get('.cast-vote__cta button').attributes('disabled')).toBeUndefined();
+      prepare.mockResolvedValueOnce({ tx: { body: { fee: 212345n } }, expiresAt: Date.now() + 60_000 });
+      await page.get('.cast-vote__cta button').trigger('click');
+      await flushPromises();
+      expect(page.text()).toContain('0.212345');
+      expect(handleSign).not.toHaveBeenCalled();
+    } finally {
+      page.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('discards an old review result after closing and reopening', async () => {
-    let resolve!: (tx: Partial<Cardano.Tx>) => void;
+    let resolve!: (review: unknown) => void;
     prepare.mockReturnValueOnce(new Promise(r => { resolve = r; }));
     const page = open();
     for (const group of page.findAll('[role="group"]')) await group.get('button').trigger('click');

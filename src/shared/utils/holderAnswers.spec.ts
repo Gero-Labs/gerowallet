@@ -1,9 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
 import { bech32 } from 'bech32';
-import { Ed25519PublicKey, Ed25519Signature } from '@cardano-sdk/crypto';
+import { Ed25519PublicKey, Ed25519Signature, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { minAdaRequired } from '@cardano-sdk/tx-construction';
 import { WalletBg } from '@/chrome/walletBg';
 import { getPaymentKeyExternal, getStakeKey } from '@/chrome/serialization';
 import { Blockchain, CoinTypes, HARDENED, Network, WalletType, WalletTypePurpose } from '@/models/types';
@@ -23,6 +24,20 @@ const hashes = [
   '418df5986f50547ec4a709f1a5bce6b850753ad6614c873386b7c953fee84a9f',
 ];
 const answers: VoteIntent[] = hashes.map((hash, i) => ({ govActionId: `${hash}#0`, choice: i ? 'No' : 'Yes' }));
+const epochParams = { minFeeCoefficient: 44, minFeeConstant: 155381, coinsPerUtxoByte: 4310, maxValueSize: 5000,
+  maxTxSize: 16384, prices: { memory: 0.0577, steps: 0.0000721 } };
+
+// Each input fits, but combining both token bundles yields a 6,581-byte value.
+function tokenInputs(address: Cardano.PaymentAddress): Cardano.Utxo[] {
+  return [4, 8].map(n => {
+    const policy = n.toString(16).padStart(56, '0');
+    const assets = new Map(Array.from({ length: 93 }, (_, i) =>
+      [Cardano.AssetId(policy + i.toString(16).padStart(64, '0')), 1n] as const));
+    const minimum = minAdaRequired({ address, value: { coins: 30_000_000n, assets } }, 4310n);
+    return [{ txId: Cardano.TransactionId(n.toString(16).padStart(64, '0')), index: 0, address },
+      { address, value: { coins: minimum + 305_000n, assets } }];
+  });
+}
 
 describe('CIP-0204 holder answers', () => {
   it('reproduces all 156 bytes of the published metadata and requires the named stake key', () => {
@@ -43,7 +58,7 @@ describe('CIP-0204 holder answers', () => {
     expect(() => holderAnswerFields(stake, [{ ...one, choice: 'Maybe' } as unknown as VoteIntent])).toThrow();
   });
 
-  it('funds one fee and signs the complete reviewed body with payment and stake keys', async () => {
+  it.each([false, true])('funds and signs the reviewed body, including split token change when needed (tokens: %s)', async tokens => {
     // Public test vector, disconnected wallet and synthetic input.
     const root = resolvePrivateKey(`${'abandon '.repeat(23)}art`);
     const account = root.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED]).toPublic();
@@ -52,21 +67,28 @@ describe('CIP-0204 holder answers', () => {
       name: 'holder test', type: WalletType.Normal, publicKey } as ConstructorParameters<typeof WalletBg>[0]);
     const keys = wallet.resolvePathsForMissingAddresses([]);
     const address = Cardano.PaymentAddress(keys.payment[0].address);
-    const utxos: Cardano.Utxo[] = [[
+    const utxos: Cardano.Utxo[] = tokens ? tokenInputs(address) : [[
       { txId: Cardano.TransactionId('11'.repeat(32)), index: 0, address }, { address, value: { coins: 8_000_000n } },
     ]];
-    const tx = await buildCardanoTransaction({
+    const buildOptions = {
       ...holderAnswerFields(keys.stake[0].cred, answers), utxos, changeAddress: address, walletContext: { keys },
       tip: { slot: 1000 }, invalidHereafter: Cardano.Slot(1010),
-      epochParams: { minFeeCoefficient: 44, minFeeConstant: 155381, coinsPerUtxoByte: 4310, maxValueSize: 5000,
-        maxTxSize: 16384, prices: { memory: 0.0577, steps: 0.0000721 } },
-    });
+      epochParams,
+    };
+    const tx = await buildCardanoTransaction(buildOptions);
     expect(tx.body.validityInterval.invalidHereafter).toBe(1010);
     expect(tx.body.votingProcedures).toBeUndefined();
     expect(tx.body.certificates).toBeUndefined();
-    expect(tx.body.outputs).toHaveLength(1);
-    expect(tx.body.outputs[0].address).toBe(address);
-    expect(tx.body.outputs[0].value.coins + tx.body.fee).toBe(8_000_000n);
+    expect(tx.body.outputs).toHaveLength(tokens ? 2 : 1);
+    for (const output of tx.body.outputs) {
+      expect(output.address).toBe(address);
+      expect(Serialization.Value.fromCore(output.value).toCbor().length / 2).toBeLessThanOrEqual(epochParams.maxValueSize);
+      expect(output.value.coins).toBeGreaterThanOrEqual(minAdaRequired(output, 4310n));
+    }
+    expect(tx.body.outputs.reduce((sum, out) => sum + out.value.coins, tx.body.fee))
+      .toBe(utxos.reduce((sum, [, out]) => sum + out.value.coins, 0n));
+    expect(tx.body.outputs.flatMap(o => [...(o.value.assets ?? [])]).sort())
+      .toEqual(utxos.flatMap(([, o]) => [...(o.value.assets ?? [])]).sort());
     const serialized = Serialization.Transaction.fromCore(tx);
     const { witnesses } = await wallet.signTx(serialized.toCbor(), '', utxos, keys, root.bytes());
     const signed = Serialization.TransactionWitnessSet.fromCbor(Serialization.TxCBOR(witnesses));
@@ -80,6 +102,26 @@ describe('CIP-0204 holder answers', () => {
     const submitted = Serialization.Transaction.fromCbor(serialized.toCbor()).toCore();
     expect(submitted.body.requiredExtraSignatures).toEqual([keys.stake[0].cred]);
     expect(submitted.body.auxiliaryDataHash).toBe(Cardano.computeAuxiliaryDataHash(submitted.auxiliaryData));
-    expect(tx.body.fee).toBeGreaterThanOrEqual(155381n + 44n * BigInt(serialized.toCbor().length / 2));
+    const signedSize = serialized.toCbor().length / 2;
+    expect(tx.body.fee).toBeGreaterThanOrEqual(155381n + 44n * BigInt(signedSize));
+    await expect(buildCardanoTransaction({
+      ...buildOptions, epochParams: { ...epochParams, maxTxSize: signedSize - 1 },
+    })).rejects.toThrow('Maximum Input Count Exceeded');
+  });
+
+  it.each([2_000_000n, -2_000_000n])('balances withdrawals, a deposit or refund, and an explicit output (%s)', async deposit => {
+    const address = Cardano.PaymentAddress('addr_test1qqydn46r6mhge0kfpqmt36m6q43knzsd9ga32n96m89px3nuzcjqw982pcftgx53fu5527z2cj2tkx2h8ux2vxsg475qypp3m9');
+    const stakeCredential = Cardano.Address.fromBech32(address).asBase()!.getStakeCredential();
+    const reward = Cardano.RewardAccount.fromCredential(stakeCredential, Cardano.NetworkId.Testnet);
+    const tx = await buildCardanoTransaction({ epochParams, changeAddress: address, tip: { slot: 1000 }, implicitCoin: deposit,
+      certificates: [deposit > 0n
+        ? { __typename: Cardano.CertificateType.Registration, stakeCredential: { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(stake) }, deposit }
+        : { __typename: Cardano.CertificateType.Unregistration, stakeCredential, deposit: -deposit }],
+      withdrawals: [{ stakeAddress: reward, quantity: 3_000_000n }],
+      outputs: [{ address, value: { coins: 2_000_000n } }],
+      utxos: [[{ txId: Cardano.TransactionId('11'.repeat(32)), index: 0, address }, { address, value: { coins: 8_000_000n } }]],
+    });
+    expect(tx.body.outputs[0].value.coins).toBe(2_000_000n);
+    expect(tx.body.outputs.reduce((n, o) => n + o.value.coins, tx.body.fee)).toBe(11_000_000n - deposit);
   });
 });

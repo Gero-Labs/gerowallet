@@ -93,7 +93,10 @@ function mountPage(): VueWrapper {
       'v-chip': true,
       'v-chip-group': true,
       'v-skeleton-loader': true,
-      'v-pagination': true,
+      'v-pagination': {
+        props: ['modelValue'],
+        template: '<button class="test-page" @click="$emit(\'update:modelValue\', modelValue === 1 ? 2 : 1)">Change page</button>',
+      },
       AsOf: true,
       'v-btn': {
         inheritAttrs: false,
@@ -130,7 +133,7 @@ afterEach(() => {
 });
 
 describe('ActionList holder answers', () => {
-  it('opens a batch of holder answers for an undelegated wallet without a DRep', async () => {
+  beforeEach(() => {
     vi.spyOn(featureFlagsStore, 'isGovernanceVotingEnabled').mockReturnValue(true);
     const cred = { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16('ab'.repeat(28)) };
     const stakeAddress = Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Mainnet, cred).toAddress().toBech32();
@@ -140,6 +143,9 @@ describe('ActionList holder answers', () => {
       payment: [{ address: 'fixture-change-address' }],
     } as never;
     walletStore.account = null;
+  });
+
+  it('opens a batch of holder answers for an undelegated wallet without a DRep', async () => {
     const actions = [proposal('aa#0'), proposal('bb#0', { status: 'ratified' }), proposal('cc#0', { status: 'enacted' })];
     listProposals.mockResolvedValue({ items: actions, page: 1, pageSize: 50, total: 3 });
 
@@ -155,7 +161,7 @@ describe('ActionList holder answers', () => {
     // remove it without losing the rest of the batch.
     governanceActionsStore.state.actions[1].status = 'enacted';
     await Vue.nextTick();
-    expect(bar.find('button').exists()).toBe(false);
+    expect(bar.text()).not.toContain('governance.answerSelected');
     await boxes[1].setValue(false);
     expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(1);
     governanceActionsStore.state.actions[1].status = 'ratified';
@@ -164,6 +170,29 @@ describe('ActionList holder answers', () => {
     await bar.get('button').trigger('click');
     const dialog = wrapper.getComponent({ name: 'CastVoteDialog' });
     expect(dialog.props()).toMatchObject({ isOpen: true, mode: 'answer', actions: actions.slice(0, 2) });
+  });
+
+  it('keeps both pages in one review and clears the batch on a wallet switch', async () => {
+    const first = proposal('aa#0');
+    const second = proposal('bb#0');
+    listProposals.mockImplementation(({ page }) => Promise.resolve({ items: [page === 1 ? first : second], page, total: 51 }));
+    wrapper = mountPage();
+    await settle();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get('.test-page').trigger('click');
+    await settle();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get('.action-list__batch-bar button').trigger('click');
+    const dialog = wrapper.getComponent({ name: 'CastVoteDialog' });
+    expect(dialog.props('actions')).toEqual([first, second]);
+    dialog.vm.$emit('close');
+    await Vue.nextTick();
+    await wrapper.get('.test-page').trigger('click');
+    await settle();
+    expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 42 };
+    await Vue.nextTick();
+    expect(wrapper.find('.action-list__batch-bar').exists()).toBe(false);
   });
 });
 
