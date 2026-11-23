@@ -53,7 +53,7 @@
         <!-- Withdrawable balance (click to fill max) -->
         <button type="button" class="balance-row" @click="setMax()">
           <span class="balance-row__label">{{ $t('perpetuals.withdrawableBalance') }}</span>
-          <span class="balance-row__value">${{ formatUsd(maxWithdrawable) }}</span>
+          <span class="balance-row__value">${{ formatStrikeUsd(maxWithdrawableCents) }}</span>
         </button>
 
         <!-- USDM estimate — withdrawals settle 1:1 in USDM, minus the quote fee -->
@@ -115,7 +115,7 @@
         <div class="review-card mt-3">
           <div class="review-row">
             <span class="review-label">{{ $t('perpetuals.amount') }}</span>
-            <span class="review-value">${{ formatUsd(amountNum) }}</span>
+            <span class="review-value">${{ formatStrikeUsd(amountCents) }}</span>
           </div>
           <div v-if="quote?.fee" class="review-row">
             <span class="review-label">{{ $t('perpetuals.fee') }}</span>
@@ -271,6 +271,8 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStrikeWithdraw, decodeWithdrawMessageForDisplay } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { formatStrikeUsd, parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
+import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
@@ -336,15 +338,10 @@ const stepNum = computed<1 | 2 | 3>(() => {
   }
 });
 
-const amountNum = computed(() => {
-  const n = parseFloat(amount.value);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-});
-
-const maxWithdrawable = computed(() => {
-  const v = parseFloat(account.value?.available_balance ?? '0');
-  return Number.isFinite(v) ? v : 0;
-});
+const amountCents = computed(() => parseStrikeAmount(amount.value, 2) ?? 0n);
+const amountNum = computed(() => Number(amountCents.value) / 100);
+// A balance can include a fraction of a cent. Strike's withdrawal UI quotes whole cents.
+const maxWithdrawableCents = computed(() => toBaseUnits(account.value?.available_balance, 2) ?? 0n);
 
 /** Decoded (human-readable) quote message — Cardano quotes return it hex-encoded. */
 const messagePreview = computed(() =>
@@ -358,8 +355,8 @@ const showMarginWarning = computed(() => {
 });
 
 const canQuote = computed(() =>
-  amountNum.value > 0 &&
-  amountNum.value <= maxWithdrawable.value + 1e-6 &&
+  amountCents.value > 0n &&
+  amountCents.value <= maxWithdrawableCents.value &&
   withdrawStatus.value !== 'quoting',
 );
 
@@ -445,8 +442,8 @@ function formatUsd(n: number | null | undefined): string {
 
 // ── Methods ─────────────────────────────────────────────────────────────────
 function setMax() {
-  if (maxWithdrawable.value > 0) {
-    amount.value = maxWithdrawable.value.toFixed(2);
+  if (maxWithdrawableCents.value > 0n) {
+    amount.value = formatStrikeUsd(maxWithdrawableCents.value);
   }
 }
 
@@ -456,7 +453,7 @@ async function requestQuoteClick() {
   // No asset arg: requestQuote defaults to USDM — the only asset Strike's
   // withdraw endpoint accepts on Cardano (everything else, including an
   // omitted asset, is rejected with "unsupported asset").
-  await requestQuote(amountNum.value.toFixed(2));
+  await requestQuote(amount.value);
   if (withdrawStatus.value === 'error') {
     // Capture error and reset to step 1 so user can fix the input.
     quoteError.value = withdrawError.value;

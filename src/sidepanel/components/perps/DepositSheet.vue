@@ -282,7 +282,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { formatLovelace } from '@/shared/utils/lovelace';
-import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
+import { parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
@@ -390,7 +390,7 @@ const { explorerUrl: explorerLink } = useExplorer();
 const explorerUrl = computed(() => explorerLink('tx', txHash.value, { chain: Blockchain.CARDANO }) || '#');
 
 const canQuote = computed(() => {
-  const lovelace = toBaseUnits(amount.value, 6);
+  const lovelace = parseStrikeAmount(amount.value, 6);
   return lovelace != null && lovelace > 0n && lovelace <= availableLovelace.value;
 });
 
