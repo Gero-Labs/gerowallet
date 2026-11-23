@@ -1,4 +1,4 @@
-import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { SUBMIT_API_ENDPOINT_PREFIX, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 
 export class UnconfirmedTxSubmission extends Error {
   constructor() {
@@ -22,7 +22,10 @@ export async function submittedTxId(reply: Promise<unknown>): Promise<string> {
   if (received?.error) throw new UnconfirmedTxSubmission();
   const error = received?.data?.error;
   if (error) {
-    if (typeof error !== 'string' || error.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE)) throw new UnconfirmedTxSubmission();
+    if (typeof error !== 'string' || error.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE) ||
+        error.startsWith(SUBMIT_API_ENDPOINT_PREFIX + TX_SUBMIT_UNCONFIRMED_MESSAGE)) {
+      throw new UnconfirmedTxSubmission();
+    }
     throw new Error(error);
   }
   const id = received?.data?.txId;
