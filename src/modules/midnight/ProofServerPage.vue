@@ -74,12 +74,12 @@
                 <div class="ps-mode-icon"><v-icon size="22">mdi-laptop</v-icon></div>
                 <div class="ps-mode-body">
                   <div class="ps-mode-title-row">
-                    <span class="t-body-lg">{{ t('midnight.proofServerPage.compareLocalTitle') }}</span>
+                    <span class="t-body-lg">{{ t(engineChoice ? 'midnight.prover.thisComputerTitle' : 'midnight.proofServerPage.compareLocalTitle') }}</span>
                     <span v-if="proofServerMode === 'local'" class="ps-active-badge">
                       <v-icon size="12">mdi-check</v-icon>{{ t('midnight.proofServerPage.activeBadge') }}
                     </span>
                   </div>
-                  <p class="t-caption ps-mode-hint">{{ t('midnight.proofServerPage.localCardBody') }}</p>
+                  <p class="t-caption ps-mode-hint">{{ t(engineChoice ? 'midnight.prover.thisComputerBody' : 'midnight.proofServerPage.localCardBody') }}</p>
                 </div>
               </button>
             </div>
@@ -110,8 +110,34 @@
               @accepted="consentOpen = false"
             />
 
+            <!-- This computer, without Docker: the prover inside the browser
+                 (isMidnightThreadedProvingEnabled) or the Gero Prover app
+                 (isGeroProverEnabled). With neither flag on, none of this
+                 renders and the page is the Docker guide it always was. -->
+            <template v-if="proofServerMode === 'local' && engineChoice">
+              <ProvingEngineChooser
+                :model-value="localEngine"
+                :browser-offered="browserOffered"
+                :helper-offered="helperOffered"
+                :disabled="proofServerSaving"
+                @update:model-value="setLocalEngine($event)"
+              />
+              <GeroProverCard v-if="usesHelper" @use-docker="setLocalEngine('docker')" />
+              <BrowserProverCard v-else-if="usesBrowser" />
+              <!-- A chain still on ledger 8 is proved by the Docker server whatever
+                   was chosen, so its guide shows below instead. -->
+              <GNote v-else-if="localEngine !== 'docker'" icon="mdi-information-outline" role="status" class="mb-4" data-testid="ps-engine-ledger8">
+                {{ t('midnight.prover.ledger8Note', activeServer) }}
+              </GNote>
+              <ProverSpeedCompare
+                v-if="usesHelper || usesBrowser"
+                :browser-offered="browserOffered"
+                :helper-offered="helperOffered"
+              />
+            </template>
+
             <!-- Local setup guide -->
-            <div v-if="proofServerMode === 'local'" class="ps-card">
+            <div v-if="proofServerMode === 'local' && !usesHelper && !usesBrowser" class="ps-card">
               <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.setupTitle') }}</h2>
               <!-- No profile to choose: the active wallet's network picks the
                    server. Say which one so the steps below make sense. -->
@@ -373,8 +399,12 @@
                       ? t('midnight.proofServerPage.provedIn', { seconds: (entry.durationMs / 1000).toFixed(1) })
                       : t('midnight.proofServerPage.provingFailed') }}
                   </div>
-                  <p v-if="!entry.success && entry.error" class="t-caption ps-proving-error">{{ entry.error }}</p>
+                  <p v-if="!entry.success && entry.error" class="t-caption ps-proving-error">{{ provingErrorText(entry.error) }}</p>
                 </div>
+                <!-- Gero Prover says which processor made the proofs. -->
+                <span v-if="entry.processor" class="t-caption ps-proving-chip" :class="{ 'ps-proving-chip--gpu': entry.processor === 'gpu' }">
+                  {{ t(entry.processor === 'gpu' ? 'midnight.prover.gpu' : 'midnight.prover.cpu') }}
+                </span>
                 <span class="t-caption ps-proving-time">{{ formatRelativeTime(entry.timestamp) }}</span>
               </div>
             </div>
@@ -437,6 +467,11 @@ import CommandBlock from '@/shared/components/CommandBlock.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 import ProofServerLedger9Notice from '@/modules/midnight/ProofServerLedger9Notice.vue';
+import GeroProverCard from '@/modules/midnight/GeroProverCard.vue';
+import BrowserProverCard from '@/modules/midnight/BrowserProverCard.vue';
+import ProvingEngineChooser from '@/modules/midnight/ProvingEngineChooser.vue';
+import ProverSpeedCompare from '@/modules/midnight/ProverSpeedCompare.vue';
+import { helperErrorCopyKey } from '@/chains/midnight/geroProverState';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -449,6 +484,12 @@ const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNI
 const {
   proofServerMode,
   proofServerSaving,
+  helperOffered,
+  browserOffered,
+  localEngine,
+  setLocalEngine,
+  usesHelper,
+  usesBrowser,
   localUrlDraft,
   localUrlError,
   onLocalUrlBlur,
@@ -488,6 +529,15 @@ const remoteProverName = computed(() => t(remoteProver.value === 'zkpaas'
 const remoteProverConsented = computed(() => !!remoteProver.value
   && hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, remoteProver.value));
 const consentOpen = ref(false);
+
+/** There is a choice of how this computer proves: at least one no-Docker way is on offer. */
+const engineChoice = computed(() => !!helperOffered?.value || !!browserOffered?.value);
+
+/** A history row's error: Gero Prover records a code, said here in the user's language. */
+function provingErrorText(error: string): string {
+  const key = helperErrorCopyKey(error);
+  return key ? t(key) : error;
+}
 
 const showZkpaasKey = ref(false);
 const showZkpaasSecret = ref(false);
@@ -767,6 +817,21 @@ const faqs = computed(() => ([
   flex: none;
   white-space: nowrap;
 }
+
+/* Which processor proved it: a chip is a justified solid (a control-sized label). */
+.ps-proving-chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--g-r-chip);
+  background: var(--g-raised);
+  color: var(--g-text-2);
+  white-space: nowrap;
+}
+
+.ps-proving-chip--gpu {
+  color: var(--g-accent);
+}
+
 
 .ps-advanced {
   margin-top: var(--g-s-2);

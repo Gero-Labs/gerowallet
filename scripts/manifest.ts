@@ -259,6 +259,15 @@ async function getManifest() {
       // document (src/chains/midnight/midnightDeviceProver.ts).
       'offscreen',
     ],
+    // Gero Prover, the desktop helper that makes Midnight proofs natively on this
+    // computer (src/chains/midnight/midnightHelperProver.ts), is reached over Chrome
+    // native messaging. OPTIONAL on purpose: adding a required permission that has a
+    // warning disables the extension for every installed user until they accept it,
+    // while an optional one changes nothing until the user asks for it. It is
+    // requested from the Proof server page (a click), only with the default-off
+    // isGeroProverEnabled flag on. The helper's own host manifest names this
+    // extension's id as its only allowed caller.
+    optional_permissions: ['nativeMessaging'],
     // The MoonPay frame-header rule is a SESSION rule scoped to frames this
     // extension initiates (src/chrome/moonpayFrameRule.ts), not a static ruleset:
     // a static rule can't name the runtime extension id, and without that

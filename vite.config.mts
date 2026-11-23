@@ -10,6 +10,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 import { existsSync, createReadStream, readFileSync } from 'node:fs';
 import { forbidRemoteCode } from './scripts/remote-code-guard.mjs';
+import { OFFSCREEN_PROVER_PAGE, offscreenProverStandsAlone } from './scripts/offscreen-prover-guard.mjs';
 import { localeMessagesPlugin } from './scripts/i18n-compiler.mjs';
 import { bringSdkPatch } from './scripts/bring-sdk-patch.mjs';
 import { envDefaults } from './scripts/env-defaults.mjs';
@@ -149,6 +150,8 @@ export const sharedConfig: UserConfig = {
     // Bring origins. Fails the build if the SDK no longer matches the reviewed one.
     bringSdkPatch,
     forbidRemoteCode,
+    // Fails the build if the offscreen Midnight prover page imports any app chunk.
+    offscreenProverStandsAlone,
     localeMessagesPlugin(),
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
@@ -364,6 +367,16 @@ export default defineConfig(({ command }) => {
       reportCompressedSize: false,
       assetsInlineLimit: 0, // Don't inline any assets
       copyPublicDir: false, // Skip copying public directory
+      // No modulepreload polyfill. Chrome has <link rel="modulepreload"> natively,
+      // so the polyfill returns at once there, and it did harm: it is one small
+      // module shared by every HTML entry, which experimentalMinChunkSize (below)
+      // merged into a chunk that imports the wallet's stores. The offscreen prover
+      // page then loaded the stores first, and they throw there (an offscreen
+      // document has chrome.runtime and no chrome.storage), so the page never opened
+      // its port and every on-device proof failed with "The Midnight prover did not
+      // start". offscreenProverStandsAlone fails the build if that page ever imports
+      // a chunk again.
+      modulePreload: { polyfill: false },
       rollupOptions: {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
@@ -375,7 +388,7 @@ export default defineConfig(({ command }) => {
           options: r('src/options/index.html'),
           sidepanel: r('src/sidepanel/index.html'),
           // Offscreen document that hosts the on-device Midnight prover worker.
-          offscreen: r('src/offscreen/midnight-prover.html'),
+          offscreen: r(OFFSCREEN_PROVER_PAGE),
         },
         onwarn(warning, warn) {
           // Suppress window/window warnings - harmless artifacts from terser minification
@@ -430,6 +443,11 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public', flatten: true },
               // Pinned Midnight DUST-fee proving keys (midnightZkKeys.ts), read by the prover worker.
               { src: 'src/assets/midnight-zk/*', dest: 'extension/midnight-zk', flatten: true },
+              // The multi-threaded prover build (midnightZkirThreads.ts), when it has been made
+              // (scripts/midnight-zkir-mt.mjs): the folder copied whole, because its glue
+              // starts its own worker threads from a script beside it. Absent, nothing is copied
+              // and the prover proves on one thread.
+              { src: 'src/assets/midnight-zkir-mt', dest: 'extension' },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|bg-dapp).*',

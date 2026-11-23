@@ -17,6 +17,19 @@ describe('isMidnightWalletEmpty', () => {
     expect(isMidnightWalletEmpty({ ...zero, shieldedTokens: { abc: 7n } })).toBe(false);
   });
 
+  it('is not empty with an unshielded token such as USDM', () => {
+    const usdm = { tokenType: 'ab'.repeat(32), value: 9_990_000n };
+    expect(isMidnightWalletEmpty(zero, [usdm])).toBe(false);
+    expect(isMidnightWalletEmpty(null, [usdm])).toBe(false);
+    expect(isMidnightWalletEmpty(zero, [{ ...usdm, value: '9990000' as never }])).toBe(false);
+  });
+
+  it('ignores NIGHT and zero-value UTxOs, which the balance fields already cover', () => {
+    expect(isMidnightWalletEmpty(zero, [{ tokenType: '0'.repeat(64), value: 5n }])).toBe(true);
+    expect(isMidnightWalletEmpty(zero, [{ tokenType: '', value: 5n }])).toBe(true);
+    expect(isMidnightWalletEmpty(zero, [{ tokenType: 'ab'.repeat(32), value: 0n }])).toBe(true);
+  });
+
   it('reads broadcast decimal strings', () => {
     expect(isMidnightWalletEmpty({ nightShielded: '0', nightUnshielded: '12', dust: '0' } as never)).toBe(false);
   });

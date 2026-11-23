@@ -193,6 +193,7 @@ import GeroStore, { geroStore } from '@/stores/geroStore';
 import { childAccounts, isHardwareWallet, parentWallet, walletDisplayName } from '@/shared/utils/walletAccount';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { geroProverOfferedHere, threadedProvingOfferedHere } from '@/chains/midnight/geroProverFlag';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import cardStore from '@/stores/modules/card';
 import { clearCachedValues } from '@/services/walletLibrary/walletValues';
@@ -415,7 +416,11 @@ const { proofServer } = toRefs(midnightStore);
 
 const proofServerModeDisplay = computed(() => {
   switch (proofServer.value.mode) {
-    case 'local': return t('midnight.proofServer.localLabel');
+    // "This computer" is Gero Prover or the browser when the user chose that and it is on offer (walletProverFor's rule).
+    case 'local':
+      if (proofServer.value.localEngine === 'helper' && geroProverOfferedHere()) return t('midnight.prover.name');
+      if (proofServer.value.localEngine === 'browser' && threadedProvingOfferedHere()) return t('midnight.prover.engineBrowser');
+      return t('midnight.proofServer.localLabel');
     case 'zkpaas': return t('midnight.proofServer.zkpaasLabel');
     default: return t('midnight.proofServer.remoteLabel');
   }

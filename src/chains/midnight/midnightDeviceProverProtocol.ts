@@ -29,13 +29,25 @@ export type MidnightProverRequest =
     overwriteBindingInput?: string;
     /** Allow the Zswap circuits for this request (the shielded flag). */
     shielded: boolean;
+    /**
+     * Prove with the multi-threaded build when this browser can run it
+     * (midnightZkirThreads.ts). The worker falls back to the standard build by
+     * itself; the reply's `threads` says which one made the proof.
+     */
+    threaded?: boolean;
   }
-  | { type: 'check'; id: number; keyLocation: string; preimage: string; shielded: boolean }
+  | { type: 'check'; id: number; keyLocation: string; preimage: string; shielded: boolean; threaded?: boolean }
   /** Stop the worker and give its memory back. */
   | { type: 'release' };
 
 export type MidnightProverReply =
-  | { type: 'result'; id: number; ok: true; proof?: string; check?: (string | null)[]; proveMs?: number }
+  | {
+    type: 'result'; id: number; ok: true; proof?: string; check?: (string | null)[]; proveMs?: number;
+    /** Processor threads the prover used: 1 for the standard build. */
+    threads?: number;
+    /** Why the threaded build was asked for and not used (midnightZkirThreads.ts `ThreadedProvingUnavailable`). */
+    threadsUnavailable?: string;
+  }
   | { type: 'result'; id: number; ok: false; error: string }
   /** Sent while a proof runs, so the background's service worker counts as busy. */
   | { type: 'busy' };

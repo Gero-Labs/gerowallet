@@ -603,7 +603,7 @@ function openMoveToGero(ref: string) {
 const dustRegistrationOpen = ref(false);
 // Midnight data is being rebuilt: the value containers show the last values the wallet knew, greyed.
 const { refreshing: midnightRefreshing } = useMidnightRefresh();
-const isMidnightEmpty = computed(() => isMidnightWalletEmpty(midnightStore.balances));
+const isMidnightEmpty = computed(() => isMidnightWalletEmpty(midnightStore.balances, midnightStore.utxos));
 
 // Midnight "reset sync cache" recovery action state. Forces a full re-sync from
 // block 0 in BG (clears WS cursor + store snapshot + persisted SDK wallet-state

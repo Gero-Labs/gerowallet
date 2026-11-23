@@ -2,7 +2,9 @@
  * The on-device Midnight prover: a module Worker started by the offscreen
  * prover document (src/offscreen/midnightProverOffscreen.ts). It runs zkir-v2,
  * the same single-threaded WASM prover Gero Cloud's sidecar uses, against the
- * pinned keys of midnightZkKeys.ts.
+ * pinned keys of midnightZkKeys.ts. A request may ask for the multi-threaded
+ * build of the same prover (midnightZkirThreads.ts): it is used when this
+ * browser can run it and its files match their pins, else the standard one is.
  *
  * zkir is imported lazily so `onmessage` is registered before any await: a
  * module worker with top-level await in its graph drops messages posted while
@@ -23,6 +25,13 @@ import {
 } from './midnightDeviceProverProtocol';
 import { makePinnedKeyMaterial, MidnightZkKeyError, readVerifiedZkFile, type PinnedKeyMaterial } from './midnightZkKeyMaterial';
 import { MIDNIGHT_ZK_BUNDLED_PATH, MIDNIGHT_ZK_KEY_VERSION, type MidnightZkFile } from './midnightZkKeys';
+import {
+  MIDNIGHT_ZKIR_MT,
+  MIDNIGHT_ZKIR_MT_PATH,
+  threadedProvingPlan,
+  type ThreadedProvingUnavailable,
+} from './midnightZkirThreads';
+import { startThreadedZkir, type ThreadedZkirModule } from './midnightZkirThreadsLoader';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -37,6 +46,37 @@ function loadZkir(): Promise<Zkir> {
     });
   }
   return zkirModule;
+}
+
+/** `zkir` and `threads` when the threaded build started; else `reason`. */
+interface ThreadedLoad {
+  zkir?: Zkir;
+  threads?: number;
+  reason?: ThreadedProvingUnavailable;
+}
+
+let threadedLoad: Promise<ThreadedLoad> | undefined;
+
+/**
+ * The multi-threaded prover, started once per worker, or why it cannot be
+ * used (midnightZkirThreadsLoader.ts: every file of the package is hashed
+ * against its pin before any of it runs). It never throws, so a browser or a
+ * build without it simply proves with the standard one.
+ */
+function loadThreadedZkir(): Promise<ThreadedLoad> {
+  threadedLoad ??= (async (): Promise<ThreadedLoad> => {
+    const base = new URL(MIDNIGHT_ZKIR_MT_PATH, self.location.origin);
+    const loaded = await startThreadedZkir<Zkir & ThreadedZkirModule>({
+      pkg: MIDNIGHT_ZKIR_MT,
+      plan: threadedProvingPlan(self.navigator?.hardwareConcurrency),
+      readFile: (name) => fetchBytes(new URL(name, base).toString()),
+      // Its own origin, a path fixed at build time: the glue runs unbundled so that
+      // the thread helper beside it resolves as upstream wrote it.
+      importGlue: (name) => import(/* @vite-ignore */ new URL(name, base).toString()),
+    });
+    return loaded.ok === true ? { zkir: loaded.zkir, threads: loaded.threads } : { reason: loaded.reason };
+  })();
+  return threadedLoad;
 }
 
 const HOSTED_CACHE = `gero-midnight-zk-${MIDNIGHT_ZK_KEY_VERSION}`;
@@ -78,16 +118,29 @@ function fetchZkFile(file: MidnightZkFile): Promise<Uint8Array> {
   return fetchHosted(file);
 }
 
-/** One provider per scope, so verified key bytes are reused across proofs. */
-const materials = new Map<boolean, PinnedKeyMaterial>();
-async function keyMaterial(shielded: boolean): Promise<{ zkir: Zkir; km: PinnedKeyMaterial }> {
-  const zkir = await loadZkir();
-  let km = materials.get(shielded);
+/** One provider per prover build and scope, so verified key bytes are reused across proofs. */
+const materials = new Map<string, PinnedKeyMaterial>();
+
+interface Prover {
+  zkir: Zkir;
+  km: PinnedKeyMaterial;
+  /** 1 for the standard build. */
+  threads: number;
+  /** Set when the threaded build was asked for and the standard one is used. */
+  threadsUnavailable?: ThreadedProvingUnavailable;
+}
+
+async function proverFor(shielded: boolean, threaded: boolean): Promise<Prover> {
+  const mt = threaded ? await loadThreadedZkir() : undefined;
+  const zkir = mt?.zkir ?? await loadZkir();
+  const threads = mt?.zkir ? mt.threads ?? 1 : 1;
+  const key = `${threads > 1 ? 'mt' : 'st'}:${shielded}`;
+  let km = materials.get(key);
   if (!km) {
     km = makePinnedKeyMaterial(fetchZkFile, zkir, { shielded });
-    materials.set(shielded, km);
+    materials.set(key, km);
   }
-  return { zkir, km };
+  return { zkir, km, threads, ...(mt && !mt.zkir && mt.reason ? { threadsUnavailable: mt.reason } : {}) };
 }
 
 function reply(message: MidnightProverReply): void {
@@ -98,7 +151,7 @@ self.onmessage = async (event: MessageEvent<MidnightProverRequest>) => {
   const request = event.data;
   if (!request || (request.type !== 'prove' && request.type !== 'check')) return;
   try {
-    const { zkir, km } = await keyMaterial(request.shielded);
+    const { zkir, km, threads, threadsUnavailable } = await proverFor(request.shielded, request.threaded === true);
     // Every key file is verified before the witness reaches zkir.
     await km.preload(request.keyLocation);
     const provider = zkir.provingProvider(km);
@@ -112,7 +165,15 @@ self.onmessage = async (event: MessageEvent<MidnightProverRequest>) => {
     const overwrite = request.overwriteBindingInput === undefined ? undefined : BigInt(request.overwriteBindingInput);
     const proof = await provider.prove(preimage, request.keyLocation, overwrite);
     preimage.fill(0);
-    reply({ type: 'result', id: request.id, ok: true, proof: bytesToBase64(proof), proveMs: Math.round(performance.now() - started) });
+    reply({
+      type: 'result',
+      id: request.id,
+      ok: true,
+      proof: bytesToBase64(proof),
+      proveMs: Math.round(performance.now() - started),
+      threads,
+      ...(threadsUnavailable ? { threadsUnavailable } : {}),
+    });
   } catch (error) {
     reply({ type: 'result', id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) });
   }

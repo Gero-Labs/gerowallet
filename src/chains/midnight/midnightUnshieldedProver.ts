@@ -209,9 +209,11 @@ export async function proveUnshieldedTransfer(
     ledgerTxHash = finalizedLedgerTxHash(bound);
   } catch (err) {
     const durationMs = Date.now() - proveStartMs;
-    // On-device failures carry a message written for the user (no payload);
-    // a proof server's error text stays out of it.
-    const message = (err as Error)?.name === 'DeviceProvingError' ? (err as Error).message : 'Midnight local proving failed';
+    // On-device failures carry a message written for the user, and the
+    // helper's a code the pages translate (neither has a payload); a proof
+    // server's error text stays out of it.
+    const name = (err as Error)?.name;
+    const message = name === 'DeviceProvingError' || name === 'HelperProvingError' ? (err as Error).message : 'Midnight local proving failed';
     debugLog(`🌙 unshielded prove: failed after ${durationMs}ms`, message);
     throw new LocalProvingError(message, durationMs);
   }

@@ -45,6 +45,7 @@ export const STAGE_RANK: Record<string, number> = {
   building: 2,
   working: 3,
   provingDevice: 3,
+  provingHelper: 3,
   provingLocal: 3,
   provingZkpaas: 3,
   submitting: 4,
@@ -60,6 +61,8 @@ export interface SendTimelineLabels {
   sign: string;
   submit: string;
   provingDevice: string;
+  /** Gero Prover, the desktop helper. Optional: a surface that never offers it needs no label. */
+  provingHelper?: string;
   provingLocal: string;
   provingZkpaas: string;
   /** The submit node while Gero Cloud proves inside the submit request. */
@@ -121,10 +124,12 @@ export function useMidnightSendTimeline(
     // A wallet-side proof ends the same BG call, after the DUST sync and the
     // signing, so the sign node carries it. It has no percent signal, so the
     // node gets an indeterminate bar rather than a fake number.
-    const provingActive = s === 'provingDevice' || s === 'provingLocal' || s === 'provingZkpaas';
+    const provingActive = s === 'provingDevice' || s === 'provingHelper' || s === 'provingLocal' || s === 'provingZkpaas';
     const signProving = feeProving || provingActive;
     const signProvingLabel = s === 'provingZkpaas' ? labels.value.provingZkpaas
-      : s === 'provingLocal' ? labels.value.provingLocal : labels.value.provingDevice;
+      : s === 'provingLocal' ? labels.value.provingLocal
+        : s === 'provingHelper' ? labels.value.provingHelper ?? labels.value.provingLocal
+          : labels.value.provingDevice;
 
     return [
       {

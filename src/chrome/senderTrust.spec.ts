@@ -69,6 +69,12 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('TREZOR')).toBe(true);
   });
 
+  it('keeps the fee station messages to extension pages', () => {
+    for (const method of ['MIDNIGHT_STATION_STATUS', 'MIDNIGHT_STATION_SEAL', 'MIDNIGHT_STATION_REDEEM']) {
+      expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);
+    }
+  });
+
   it('gates the CIP-113 transfer prepare (it grants the one signing allowance)', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_PREPARE_TRANSFER')).toBe(true);
   });
