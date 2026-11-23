@@ -1,4 +1,4 @@
-const SLOTS_PER_EPOCH = 432000;
+export const SLOTS_PER_EPOCH = 432000;
 
 export function getTransactionEpoch(txInfo: { epoch?: number | null; slot?: number | null; block_height?: number | null }): number | null {
     const epochLengthInSlots = SLOTS_PER_EPOCH;

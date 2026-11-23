@@ -89,6 +89,8 @@ export async function buildCardanoTransaction({
   implicitCoin = BigInt(0),
   walletContext,
   auxiliaryData,
+  requiredExtraSignatures,
+  invalidHereafter,
   excludeCollateral = true
 }: {
   certificates?: Cardano.Certificate[];
@@ -111,12 +113,23 @@ export async function buildCardanoTransaction({
     keys: Keys | null;
   };
   auxiliaryData?: Cardano.AuxiliaryData;
+  requiredExtraSignatures?: Cardano.TxBody['requiredExtraSignatures'];
+  /** Optional cap on the usual one-hour validity window. */
+  invalidHereafter?: Cardano.Slot;
   excludeCollateral?: boolean;
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
   if (!epochParams) {
     throw new Error('Epoch parameters not available');
   }
+
+  // Fee estimation and the body handed to the signer must commit to the same
+  // metadata, witness requirements and validity interval.
+  const bodyFields = {
+    validityInterval: { invalidHereafter: Cardano.Slot(Math.min(Number(tip.slot) + 3600, invalidHereafter ?? Infinity)) },
+    ...(auxiliaryData && { auxiliaryDataHash: Cardano.computeAuxiliaryDataHash(auxiliaryData) }),
+    ...(requiredExtraSignatures?.length && { requiredExtraSignatures }),
+  };
 
   // Calculate total withdrawals amount
   let totalWithdrawals = BigInt(0);
@@ -166,39 +179,12 @@ export async function buildCardanoTransaction({
       }
 
 
-      // CRITICAL FIX: For transactions with certificates or withdrawals (and no explicit outputs),
-      // we ALWAYS need a change output to return the remaining balance to the wallet.
-      // The issue is that during fee estimation, the fee might be underestimated, causing
-      // changeAmount to appear negative or zero. But we still need to create the change output
-      // so the actual fee calculation (with witness overhead) includes its size.
-      // Vote-only transactions have no certificates, no withdrawals and no
-      // outputs, so they need the same forced change output — without it the
-      // changeAmount <= 0 branch returns [] and serializeCardanoJsSdkTx throws
-      // on empty outputs.
-      const hasVotes = !!votingProcedures && votingProcedures.length > 0;
-      const isCertificateOrWithdrawalOnly =
-        (certificates.length > 0 || withdrawals.length > 0 || hasVotes) && selectionSkeleton.outputs.size === 0;
-
-      // Only skip change output if:
-      // 1. There's definitely no change (negative or zero)
-      // 2. AND there are no remaining assets
-      // 3. AND this is NOT a certificate/withdrawal-only transaction
-      if (changeAmount <= BigInt(0) && changeAssets.size === 0 && !isCertificateOrWithdrawalOnly) {
-        return []; // No change needed
-      }
-
-      // Ensure we have at least minimum ADA for the change output
-      // For certificate/withdrawal transactions, use a reasonable minimum even if calculated change is low
-      let finalChangeAmount: bigint;
-      if (changeAmount > BigInt(0)) {
-        finalChangeAmount = changeAmount;
-      } else if (isCertificateOrWithdrawalOnly) {
-        // For certificate/withdrawal transactions, ensure minimum change
-        // This will be refined during input selection iterations
-        finalChangeAmount = BigInt(1000000); // 1 ADA minimum
-      } else {
-        finalChangeAmount = BigInt(1000000); // 1 ADA minimum
-      }
+      // A fee-only transaction still needs a change output while its inputs
+      // and fee are being estimated. Coin selection replaces the placeholder.
+      const needsChangeOutput = selectionSkeleton.outputs.size === 0 &&
+        (certificates.length > 0 || withdrawals.length > 0 || !!votingProcedures?.length || !!auxiliaryData);
+      if (changeAmount <= 0n && changeAssets.size === 0 && !needsChangeOutput) return [];
+      const finalChangeAmount = changeAmount > 0n ? changeAmount : 1_000_000n;
 
       // Create change output to a specified address
       const changeOutput: Cardano.TxOut = {
@@ -236,9 +222,7 @@ export async function buildCardanoTransaction({
       inputs: Array.from(selectionSkeleton.inputs).map(utxo => utxo[0]),
       outputs: Array.from(selectionSkeleton.outputs),
       fee: selectionSkeleton.fee,
-      validityInterval: {
-        invalidHereafter: Cardano.Slot(Number(tip.slot) + 3600) // 1 hour from now
-      }
+      ...bodyFields
     };
 
     // Add certificates if provided
@@ -256,11 +240,6 @@ export async function buildCardanoTransaction({
     // Add withdrawals if provided
     if (withdrawals.length > 0) {
       txBody.withdrawals = withdrawals;
-    }
-
-    // Compute auxiliaryDataHash if metadata is provided
-    if (auxiliaryData) {
-      txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
     }
 
     // Return the complete transaction
@@ -410,9 +389,7 @@ export async function buildCardanoTransaction({
     inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
     outputs: finalOutputs,
     fee: selectionResult.selection.fee,
-    validityInterval: {
-      invalidHereafter: Cardano.Slot(Number(tip.slot) + 3600) // 1 hour from now
-    }
+    ...bodyFields
   };
 
   // Add certificates if provided
@@ -428,11 +405,6 @@ export async function buildCardanoTransaction({
   // Add withdrawals if provided
   if (withdrawals.length > 0) {
     txBody.withdrawals = withdrawals;
-  }
-
-  // Compute auxiliaryDataHash if metadata is provided
-  if (auxiliaryData) {
-    txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
   }
 
   // Create a final transaction

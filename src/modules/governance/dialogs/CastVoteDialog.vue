@@ -2,27 +2,28 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="resetState(); $emit('close')"
-    :title="t('governance.castVote')"
+    :title="t(isAnswer ? 'governance.holderTitle' : 'governance.castVote')"
     icon="mdi-vote-outline"
     :loading="loading || building"
     :min-height="360"
     :width="560"
-    :subtitle="t('governance.castVoteSubtitle')"
+    :subtitle="t(isAnswer ? 'governance.holderSubtitle' : 'governance.castVoteSubtitle')"
     :persistent="false"
   >
     <v-card-text class="px-4 pt-2 pb-3 cast-vote" style="z-index: 1">
       <!-- A vote for one of these actions is already in flight. Scan ALL
            pending txs (currentDrepTxIsPending pattern), never just the first. -->
-      <div v-if="voteTxIsPending" class="cast-vote__banner cast-vote__banner--pending">
+      <p v-if="isAnswer" class="t-caption cast-vote__hint">{{ t('governance.holderDisclosure') }}</p>
+      <div v-if="!isAnswer && voteTxIsPending" class="cast-vote__banner cast-vote__banner--pending">
         <v-progress-circular indeterminate size="14" width="2" class="mr-2" />
         <span class="t-caption">{{ t('governance.votePending') }}</span>
       </div>
 
       <!-- Capability gate: when this wallet type cannot complete the flow, say
            why and disable confirm — never let the signing layer throw. -->
-      <div v-if="!capability.canVote" class="cast-vote__banner cast-vote__banner--blocked">
+      <div v-if="!canSign" class="cast-vote__banner cast-vote__banner--blocked">
         <v-icon size="small" class="mr-2" color="var(--g-warning)">mdi-alert-circle-outline</v-icon>
-        <span class="t-caption">{{ t(capability.reasonKey || 'governance.watchWalletReadOnly') }}</span>
+        <span class="t-caption">{{ t(isAnswer ? 'staking.noStakeAddress' : capability.reasonKey || 'governance.watchWalletReadOnly') }}</span>
       </div>
 
       <!-- Which selected actions the liveness pre-check dropped, and why. The
@@ -34,17 +35,18 @@
 
       <!-- Phase 1: pick a choice PER ACTION (one blanket choice for a batch is a footgun). -->
       <template v-if="phase === 'choose'">
-        <p v-if="actions.length > 1" class="t-caption cast-vote__hint">{{ t('governance.chooseVoteForEachAction') }}</p>
+        <p v-if="actions.length > 1 && !isAnswer" class="t-caption cast-vote__hint">{{ t('governance.chooseVoteForEachAction') }}</p>
         <div v-for="action in actions" :key="action.govActionId" class="cast-vote__action">
           <div class="cast-vote__action-info">
             <span class="t-label cast-vote__action-type">{{ typeLabel(action.type) }}</span>
             <span class="t-body-2 cast-vote__action-title">{{ actionTitle(action) }}</span>
             <span class="g-mono t-caption cast-vote__action-id">{{ truncate(displayId(action)) }}</span>
           </div>
-          <div class="cast-vote__choices" role="group">
+          <div class="cast-vote__choices" role="group" :aria-label="actionTitle(action)">
             <GButton
               v-for="choice in CHOICES"
               :key="choice"
+              :disabled="building"
               compact
               :class="{ 'cast-vote__choice--selected': choices[action.govActionId] === choice }"
               :aria-pressed="choices[action.govActionId] === choice ? 'true' : 'false'"
@@ -55,7 +57,7 @@
           </div>
         </div>
 
-        <div class="cast-vote__meta">
+        <div v-if="!isAnswer" class="cast-vote__meta">
           <span class="t-caption cast-vote__meta-label">{{ t('governance.votingPower') }}</span>
           <span class="t-body-2 g-num cast-vote__meta-value">{{ votingPowerDisplay }}</span>
         </div>
@@ -68,11 +70,11 @@
         <div class="cast-vote__cta">
           <GButton
             tier="primary"
-            :disabled="!allChosen || !capability.canVote || building"
+            :disabled="!allChosen || !canSign || building"
             :loading="building"
             @click="proceed()"
           >
-            {{ t('governance.reviewVote') }}
+            {{ t(isAnswer ? 'governance.reviewAnswers' : 'governance.reviewVote') }}
           </GButton>
         </div>
         <p v-if="building" class="t-caption cast-vote__hint cast-vote__hint--center">{{ t('governance.checkingActions') }}</p>
@@ -85,7 +87,7 @@
             <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
             {{ t('governance.back') }}
           </GButton>
-          <span class="t-heading">{{ actions.length > 1 ? t('governance.yourVotes') : t('governance.yourVote') }}</span>
+          <span class="t-heading">{{ isAnswer ? t('governance.holderTitle') : actions.length > 1 ? t('governance.yourVotes') : t('governance.yourVote') }}</span>
         </div>
 
         <div v-for="intent in intents" :key="intent.govActionId" class="cast-vote__summary-row">
@@ -95,7 +97,7 @@
           </span>
         </div>
 
-        <div class="cast-vote__meta">
+        <div v-if="!isAnswer" class="cast-vote__meta">
           <span class="t-caption cast-vote__meta-label">{{ t('governance.votingPower') }}</span>
           <span class="t-body-2 g-num cast-vote__meta-value">{{ votingPowerDisplay }}</span>
         </div>
@@ -132,36 +134,43 @@
           />
           <!-- PRF wallets sign through the auth section above; everything else
                gets the explicit action button, mirroring DRepDelegateDialog. -->
-          <v-btn
+          <GButton
             v-if="!isPrfWallet"
-            color="primary"
-            elevation="0"
+            tier="primary"
             @click="signAndSubmitVoteTx"
-            height="40"
-            :disabled="loading || !capability.canVote"
+            :disabled="loading || !canSign"
             :loading="loading"
             class="mx-2"
           >
-            {{ isSubmit ? t('governance.submitTransaction') : t('governance.signAndVote') }}
-          </v-btn>
+            {{ t(isSubmit ? 'governance.submitTransaction' : isAnswer ? 'wallet.signTransaction' : 'governance.signAndVote') }}
+          </GButton>
         </v-form>
       </template>
     </v-card-text>
-    <!-- No KeystoneSignDialog here on purpose: the capability matrix reports
-         canVote: false for Keystone (the extra-signer scan misses
-         dRepCredential), so the flow is blocked before signing is reachable. -->
+    <KeystoneSignDialog
+      v-if="isAnswer && overlay"
+      :is-open="overlay"
+      :keystone-type="keystoneType"
+      :keystone-cbor="keystoneCbor"
+      @close="resetState()"
+      @scan="onKeystoneScan"
+      @error="onKeystoneError"
+      @progress="onKeystoneProgress"
+    />
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, watch } from 'vue';
+import { ref, shallowRef, computed, toRefs, watch, type PropType } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import { useVoting } from '@/shared/composables/useVoting';
+import { useHolderAnswers } from '@/modules/governance/composables/useHolderAnswers';
 import { checkActionsStillOpen } from '@/modules/governance/dialogs/voteLiveness';
 import type { VoteChoice, VoteIntent } from '@/shared/utils/voteBuilder';
 import { toLovelace } from '@/shared/utils/lovelace';
@@ -179,6 +188,7 @@ const { toCurrency, truncate } = filters;
 const CHOICES: VoteChoice[] = ['Yes', 'No', 'Abstain'];
 
 const props = defineProps({
+  mode: { type: String as PropType<'vote' | 'answer'>, default: 'vote' },
   isOpen: {
     type: Boolean,
     default: false,
@@ -195,6 +205,9 @@ const emit = defineEmits(['close', 'submitted']);
 const { loggedWallet, transactions: txs, keys } = toRefs(walletStore);
 
 const { capability, castVotes } = useVoting();
+const { canAnswer, prepareAnswers } = useHolderAnswers();
+const isAnswer = computed(() => props.mode === 'answer');
+const canSign = computed(() => isAnswer.value ? canAnswer.value : capability.value.canVote);
 
 // ---------------------------------------------------------------------------
 // Per-action choices
@@ -204,7 +217,7 @@ const choices = ref<Record<string, VoteChoice | null>>({});
 const phase = ref<'choose' | 'sign'>('choose');
 const building = ref(false);
 const buildError = ref('');
-const builtTx = ref<Cardano.Tx | undefined>(undefined);
+const builtTx = shallowRef<Cardano.Tx>();
 const intents = ref<VoteIntent[]>([]);
 /** Translated liveness-check drop notices — who fell out of the batch, and why. */
 const droppedNotices = ref<string[]>([]);
@@ -262,7 +275,7 @@ const votingPowerDisplay = computed(() => {
 });
 
 const feeDisplay = computed(() =>
-  toCurrency(builtTx.value?.body?.fee?.toString() || '0', false, 0, currencySymbol.value),
+  toCurrency(builtTx.value?.body?.fee?.toString() || '0', false, isAnswer.value ? 6 : 0, currencySymbol.value),
 );
 
 async function loadVotingPower(): Promise<void> {
@@ -321,10 +334,11 @@ const {
   handlePassKeyAuthSuccess,
   handlePassKeyAuthError,
   setPasswordFieldRef,
+  overlay, keystoneType, keystoneCbor, onKeystoneScan, onKeystoneError, onKeystoneProgress,
 } = useTransactionSigning({
-  active: () => props.isOpen,
+  active: () => props.isOpen && canSign.value,
   tx: txRef,
-  successMessageKey: 'governance.voteTxSubmitted',
+  get successMessageKey() { return isAnswer.value ? 'governance.holderSubmitted' : 'governance.voteTxSubmitted'; },
   onSuccess: (txId: string) => emit('submitted', txId),
   onClose: () => emit('close'),
 });
@@ -337,51 +351,39 @@ function statusLabel(status: string | undefined): string {
   return translated === key ? String(status ?? '') : translated;
 }
 
+let reviewRevision = 0;
 async function proceed(): Promise<void> {
-  if (!allChosen.value || !capability.value.canVote || building.value) return;
+  if (!allChosen.value || !canSign.value || building.value) return;
+  const revision = reviewRevision;
   building.value = true;
   buildError.value = '';
   droppedNotices.value = [];
   try {
-    // LIVENESS PRE-CHECK: a multi-vote tx is all-or-nothing, so re-fetch every
-    // selected action IMMEDIATELY before building and drop any no longer open
-    // — telling the user exactly which were dropped and why — rather than
-    // letting one expired action take the whole batch down on chain.
-    let open;
-    try {
-      const result = await checkActionsStillOpen(props.actions, String(loggedWallet.value?.network ?? ''));
-      open = result.open;
+    let actions = props.actions;
+    if (!isAnswer.value) {
+      const result = await checkActionsStillOpen(actions, String(loggedWallet.value?.network ?? ''))
+        .catch(() => { throw new Error(t('governance.livenessCheckFailed')); });
+      if (revision !== reviewRevision) return;
       droppedNotices.value = result.dropped.map(item =>
-        String(
-          item.reasonKey === 'governance.actionDroppedNotOpen'
-            ? t(item.reasonKey, { title: actionTitle(item.action), status: statusLabel(item.status) })
-            : t(item.reasonKey, { title: actionTitle(item.action) }),
-        ),
-      );
-    } catch (error) {
-      debugLog('CastVoteDialog: liveness pre-check failed', error);
-      buildError.value = String(t('governance.livenessCheckFailed'));
-      return;
+        t(item.reasonKey, { title: actionTitle(item.action), status: statusLabel(item.status) }));
+      actions = result.open;
+      if (!actions.length) throw new Error(t('governance.allActionsDropped'));
     }
-
-    if (!open.length) {
-      buildError.value = String(t('governance.allActionsDropped'));
-      return;
-    }
-
-    const nextIntents = open.map(action => ({
+    const nextIntents = actions.map(action => ({
       govActionId: displayId(action),
       choice: choices.value[action.govActionId] as VoteChoice,
     }));
-    builtTx.value = await castVotes(nextIntents);
+    const tx = isAnswer.value ? await prepareAnswers(nextIntents, intentTitle) : await castVotes(nextIntents);
+    if (revision !== reviewRevision) return;
+    builtTx.value = tx;
     intents.value = nextIntents;
     phase.value = 'sign';
   } catch (error) {
-    debugLog('CastVoteDialog: vote build failed', error);
+    if (revision !== reviewRevision) return;
     buildError.value =
       error instanceof Error && error.message ? error.message : String(t('governance.errorBuildingTransaction'));
   } finally {
-    building.value = false;
+    if (revision === reviewRevision) building.value = false;
   }
 }
 
@@ -393,29 +395,28 @@ function backToChoices(): void {
 }
 
 const signAndSubmitVoteTx = async (): Promise<void> => {
-  // The capability gate disables every path to this handler for wallets that
-  // cannot vote; this guard is the belt to that suspenders.
-  if (!capability.value.canVote) return;
-  await handleSign(form.value || undefined);
+  if (canSign.value) await handleSign(form.value || undefined);
 };
 
 watch(
-  () => props.isOpen,
-  open => {
-    if (open) {
-      resetState();
-      phase.value = 'choose';
-      buildError.value = '';
-      builtTx.value = undefined;
-      intents.value = [];
-      droppedNotices.value = [];
-      choices.value = Object.fromEntries(props.actions.map(action => [action.govActionId, null]));
-      void loadVotingPower();
-      if (form.value) {
-        form.value.resetValidation();
-      }
+  [() => props.isOpen, () => props.mode, () => props.actions.map(a => a.govActionId).join('|'),
+    () => loggedWallet.value?.id, () => loggedWallet.value?.network, () => loggedWallet.value?.stakeAddress],
+  () => {
+    reviewRevision++;
+    resetState();
+    building.value = false;
+    builtTx.value = undefined;
+    phase.value = 'choose';
+    buildError.value = '';
+    intents.value = [];
+    droppedNotices.value = [];
+    choices.value = {};
+    if (props.isOpen) {
+      if (!isAnswer.value) void loadVotingPower();
+      form.value?.resetValidation();
     }
   },
+  { immediate: true, flush: 'sync' },
 );
 </script>
 
