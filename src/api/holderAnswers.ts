@@ -1,9 +1,12 @@
 import axios from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 import { KOIOS_URLS } from './spo-api';
-import { Network } from '@/models/types';
-import { DEFAULT_TX_TTL_SLOTS, SLOTS_PER_EPOCH } from '@/shared/utils/transaction';
+import { Blockchain, Network } from '@/models/types';
+import networks from '@/utils/networks';
+import { DEFAULT_TX_TTL_SLOTS } from '@/shared/utils/transaction';
 import { toDisplayGovActionId, type GovActionId } from '@/shared/utils/govActionId';
+
+const MAX_HOLDER_VALIDITY_MS = 60 * 60 * 1_000;
 
 interface StakeUpdate {
   action_type: string;
@@ -66,8 +69,8 @@ async function registrationBefore(
   if (accounts.length !== 1 || accounts[0].stake_address !== stakeAddress) throw new Error('Unexpected stake history');
   const changes = accounts[0].updates.filter(u => u.action_type === 'registration' || u.action_type === 'deregistration');
   if (!changes.length) return () => false;
-  // Both supported networks have one-second slots. Equal block times need the
-  // transaction position; a registration in the proposal transaction is too late.
+  // For events in the same block, compare transaction positions. A registration
+  // in the proposal transaction itself is too late.
   const time = changes.reduce((max, u) => Math.max(max, natural(u.block_time)), 0);
   const latest = changes.filter(update => update.block_time === time);
   const tied = proposals.filter(proposal => proposal.block_time === time);
@@ -93,6 +96,10 @@ async function registrationBefore(
 /** Read only on review. The wallet's current delegation cannot prove continuous registration. */
 export async function checkHolderAnswers(stakeAddress: string, network: string, ids: GovActionId[]) {
   if (network !== Network.MAINNET && network !== Network.PREPROD) throw new Error('Unsupported governance network');
+  const timing = networks.resolveNetwork(Blockchain.CARDANO, network)?.networkParams.slotTiming;
+  if (!timing || ![timing.slotLengthMs, timing.slotsPerEpoch].every(n => Number.isSafeInteger(n) && n > 0)) {
+    throw new Error('Invalid network slot timing');
+  }
   const client = axios.create({ baseURL: KOIOS_URLS[network], timeout: 15000 });
   const hashes = [...new Set(ids.map(id => id.txHash))];
   // Selections can span many UI pages. Bound each URL even when all hashes differ.
@@ -114,7 +121,7 @@ export async function checkHolderAnswers(stakeAddress: string, network: string, 
   const slot = natural(tip.abs_slot);
   const epoch = natural(tip.epoch_no);
   const epochSlot = natural(tip.epoch_slot);
-  if (epochSlot >= SLOTS_PER_EPOCH || slot < epochSlot) throw new Error('Invalid epoch position');
+  if (epochSlot >= timing.slotsPerEpoch || slot < epochSlot) throw new Error('Invalid epoch position');
   const proposals = pages.flatMap(response => response.data);
   const registeredBefore = await registrationBefore(accountResponse.data, stakeAddress, proposals, async txHashes =>
     (await client.post<TxInfo[]>('/tx_info', { _tx_hashes: txHashes, _certs: true },
@@ -132,10 +139,11 @@ export async function checkHolderAnswers(stakeAddress: string, network: string, 
   }
   // Any still-live action can close at the next epoch transition. Never allow
   // a reviewed answer past that boundary, even if early enactment is not yet indexed.
-  const slotsLeft = Math.min(SLOTS_PER_EPOCH - epochSlot, DEFAULT_TX_TTL_SLOTS);
+  const slotsPerHour = Math.floor(MAX_HOLDER_VALIDITY_MS / timing.slotLengthMs);
+  const slotsLeft = Math.min(timing.slotsPerEpoch - epochSlot, DEFAULT_TX_TTL_SLOTS, slotsPerHour);
   const invalidHereafter = Cardano.Slot(slot + slotsLeft);
-  // Mainnet and preprod have one-second slots. The last block's timestamp
-  // accounts for time already spent waiting for a new block or the provider.
-  const expiresAt = (natural(tip.block_time) + slotsLeft) * 1000;
+  // Koios reports Unix seconds. Anchor the review to the last block so provider
+  // lag consumes the same validity window as the transaction sent to the signer.
+  const expiresAt = natural(tip.block_time) * 1_000 + slotsLeft * timing.slotLengthMs;
   return { blocked, slot, invalidHereafter, expiresAt };
 }

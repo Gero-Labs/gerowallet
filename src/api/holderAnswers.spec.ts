@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
+import { Blockchain, Network } from '@/models/types';
+import networks from '@/utils/networks';
 import { checkHolderAnswers } from './holderAnswers';
 
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -13,26 +15,53 @@ const proposal = { proposal_tx_hash: hash, proposal_index: 1, block_time: 100, e
   ratified_epoch: null, enacted_epoch: null, dropped_epoch: null, expired_epoch: null };
 const tip = { abs_slot: 4_751_990, epoch_slot: 431_990, epoch_no: 10, block_time: 1_798_000_000 };
 const change = (action_type: string, block_time: number, tx_hash = reg) => ({ action_type, block_time, tx_hash });
-const read = () => checkHolderAnswers(stake, 'Preprod', [action]);
+const read = (network = Network.PREPROD) => checkHolderAnswers(stake, network, [action]);
 const account = (updates: ReturnType<typeof change>[]) => [{ stake_address: stake, updates }];
-function replies(proposals = [proposal], accounts = account([change('registration', 90)])) {
-  get.mockImplementation(async (url: string) => ({ data: url === '/tip' ? [tip] : proposals }));
+function replies(proposals = [proposal], accounts = account([change('registration', 90)]), chainTip = tip) {
+  get.mockImplementation(async (url: string) => ({ data: url === '/tip' ? [chainTip] : proposals }));
   post.mockResolvedValue({ data: accounts });
 }
+function mockSlotTiming(slotTiming?: { slotLengthMs: number; slotsPerEpoch: number }) {
+  const preprod = networks.resolveNetwork(Blockchain.CARDANO, Network.PREPROD);
+  vi.spyOn(networks, 'resolveNetwork').mockReturnValueOnce({
+    ...preprod, networkParams: { ...preprod.networkParams, slotTiming },
+  });
+}
 beforeEach(() => { vi.clearAllMocks(); replies(); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('holder answer eligibility at review', () => {
-  it('accepts a continuously registered key with no delegation and caps validity at the next epoch', async () => {
-    const result = await read();
+  it.each([
+    [Network.MAINNET, 'https://api.koios.rest/api/v1'],
+    [Network.PREPROD, 'https://preprod.koios.rest/api/v1'],
+  ])('accepts a continuously registered key and caps validity at the next epoch on %s', async (network, baseURL) => {
+    const result = await read(network);
     expect(result).toEqual({ blocked: [], slot: tip.abs_slot, invalidHereafter: tip.abs_slot + 10,
       expiresAt: (tip.block_time + 10) * 1000 });
-    expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({ baseURL: 'https://preprod.koios.rest/api/v1' }));
+    expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({ baseURL }));
     expect(post).toHaveBeenCalledTimes(1);
   });
 
   it('uses one hour from the block timestamp when the next epoch is more than an hour away', async () => {
     get.mockImplementation(async (url: string) => ({ data: url === '/tip' ? [{ ...tip, epoch_slot: 50 }] : [proposal] }));
     expect(await read()).toMatchObject({ invalidHereafter: tip.abs_slot + 3600, expiresAt: (tip.block_time + 3600) * 1000 });
+  });
+
+  it.each([
+    { slotLengthMs: 2_000, slotsPerEpoch: 100, epochSlot: 98, expectedSlots: 2, expectedMs: 4_000 },
+    { slotLengthMs: 7_000, slotsPerEpoch: 10_000, epochSlot: 1, expectedSlots: 514, expectedMs: 3_598_000 },
+    { slotLengthMs: 500, slotsPerEpoch: 10_000, epochSlot: 1, expectedSlots: 3_600, expectedMs: 1_800_000 },
+  ])('uses the configured $slotLengthMs ms slots for both ledger and review expiry', async config => {
+    mockSlotTiming({ slotLengthMs: config.slotLengthMs, slotsPerEpoch: config.slotsPerEpoch });
+    replies(undefined, undefined, { ...tip, epoch_slot: config.epochSlot });
+    expect(await read()).toMatchObject({ invalidHereafter: tip.abs_slot + config.expectedSlots,
+      expiresAt: tip.block_time * 1_000 + config.expectedMs });
+  });
+
+  it.each([undefined, { slotLengthMs: 0, slotsPerEpoch: 432_000 }])('refuses missing or invalid timing', async timing => {
+    mockSlotTiming(timing);
+    await expect(read()).rejects.toThrow('Invalid network slot timing');
+    expect(axios.create).not.toHaveBeenCalled();
   });
 
   it.each([
