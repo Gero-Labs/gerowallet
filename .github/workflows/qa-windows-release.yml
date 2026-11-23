@@ -1,0 +1,24 @@
+name: Windows release qualification
+on:
+  push:
+    branches: ['qa/2.8-windows-20261123']
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: windows-2025
+    timeout-minutes: 55
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
+    steps:
+      - name: Exercise a CRLF checkout
+        run: git config --global core.autocrlf true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.19.0'
+      - run: npm ci
+      - name: Run the full suite on Windows
+        run: npm test -- --maxWorkers=2
