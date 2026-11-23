@@ -161,7 +161,19 @@ function minswapV1Order(d: Data, own: OwnKeys): boolean {
     && isAssetClass(step[0]) && isInt(step[1]) && isInt(f[4]) && isInt(f[5]);
 }
 
-/** Minswap V2 step: SwapExactIn Constr 0 (market and limit), StopLoss Constr 1, OCO Constr 2. */
+/** `Constr 0 [lpAsset, aToB]`: one pool of a Minswap V2 routing, and its direction. */
+const isMinswapV2Routing = (d: Data) => {
+  const f = fieldsOf(d, 0, 2);
+  return !!f && isAssetClass(f[0]) && isDirection(f[1]);
+};
+
+/**
+ * Minswap V2 step: SwapExactIn Constr 0 (market and limit), StopLoss Constr 1, OCO Constr 2,
+ * and the two-hop market order, SwapRouting Constr 9 [routings, swapAmount, minimumReceive]
+ * with exactly two routings (cardano-market-data two-hop builder, live since v1.0.547; layout
+ * read from the filled mainnet order 9fdd918e…#0). Only the two-pool route the aggregator
+ * builds is accepted, not routings of any other length.
+ */
 function isMinswapV2Step(d: Data): boolean {
   const amount = (f: Data[]) => {
     const swapAmount = fieldsOf(f[1], 0, 1);
@@ -172,7 +184,11 @@ function isMinswapV2Step(d: Data): boolean {
   const stopLoss = fieldsOf(d, 1, 3);
   if (stopLoss) return amount(stopLoss);
   const oco = fieldsOf(d, 2, 4);
-  return !!oco && amount(oco) && isInt(oco[3]);
+  if (oco) return amount(oco) && isInt(oco[3]);
+  const routing = fieldsOf(d, 9, 3);
+  const routings = routing && itemsOf(routing[0], 2);
+  const swapAmount = routing && fieldsOf(routing[1], 0, 1);
+  return !!routings && routings.every(isMinswapV2Routing) && !!swapAmount && isInt(swapAmount[0]) && isInt(routing[2]);
 }
 
 /**
@@ -330,8 +346,8 @@ interface OrderScript {
  * the widget builds with allowExperimental) and those with no verified builder
  * (CSwap, TeddySwap, VyFi, ShadowBook). Their datums were never byte-verified, and
  * a route the aggregator does not stand behind is not one the wallet signs. A
- * multi-hop Minswap route (SwapMultiRouting) is never built by the aggregator, so
- * its step is not accepted either.
+ * Minswap V2 routing step is accepted only as the two-pool route the aggregator
+ * builds for a two-hop swap (isMinswapV2Step).
  *
  * Mainnet only: the aggregator runs on mainnet alone and pins no preprod or
  * preview scripts, so on those networks no order script is recognised.

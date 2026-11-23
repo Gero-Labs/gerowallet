@@ -5,7 +5,8 @@ import { ORDER_SCRIPT_TABLES, verifyOrderRecipients, type OrderBuilder } from '.
 /*
  * Datums come from cardano-market-data (read-only), two ways:
  * - REAL on-chain bytes where the repo has them (Minswap V1, WingRiders V1 and V2,
- *   SundaeSwap V4, a RealFi stake request), checked against the wallet that owns them;
+ *   SundaeSwap V4, a RealFi stake request) or mainnet has them (the Minswap V2 two-hop
+ *   order), checked against the wallet that owns them;
  * - re-encoded field for field from each builder (src/main/java/io/gerowallet/cardano/
  *   service/txbuilder/*TxBuilder.java) for a test wallet, so every receiver, refund,
  *   owner and stake field can be swapped one at a time.
@@ -446,6 +447,43 @@ describe('real on-chain datums', () => {
       '6f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1ee', 'f536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad');
     expect(verify()).toEqual([]);
     expect(verify(OWN)).toEqual(REFUSED);
+  });
+
+  // The filled two-hop order 9fdd918e…#0 (600 MIN to SNEK through ADA, nexus two-hop client
+  // contract): Minswap V2 SwapRouting, Constr 9 [[MIN/ADA pool, ADA/SNEK pool], 600 MIN, minimum].
+  const TWO_HOP_ORDER = 'd8799fd8799f581c03c3056b54157a6bd26479272b1678dc4ea46c6312ad44e90e955b77ffd8799fd8799f581c03c3056b54157a6bd26479272b1678dc4ea46c6312ad44e90e955b77ffd8799fd8799fd8799f581c571ff575dd74200df230072fb9460b59bf4e5200ff441c10ee3ce7f3ffffffffd87980d8799fd8799f581c03c3056b54157a6bd26479272b1678dc4ea46c6312ad44e90e955b77ffd8799fd8799fd8799f581c571ff575dd74200df230072fb9460b59bf4e5200ff441c10ee3ce7f3ffffffffd87980d8799f581cf5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c582082e2b1fd27a7712a1a9cf750dfbea1a5778611b20e06dd6a611df7a643f8cb75ffd905029f9fd8799fd8799f581cf5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c582082e2b1fd27a7712a1a9cf750dfbea1a5778611b20e06dd6a611df7a643f8cb75ffd87980ffd8799fd8799f581cf5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c58202ffadbb87144e875749122e0bbb9f535eeaa7f5660c6c4a91bcc4121e477f08dffd87a80ffffd8799f1a23c34600ff190ce4ff1a001e8480d87a80ff';
+  const TWO_HOP_PAY = '03c3056b54157a6bd26479272b1678dc4ea46c6312ad44e90e955b77';
+  const TWO_HOP_STAKE = '571ff575dd74200df230072fb9460b59bf4e5200ff441c10ee3ce7f3';
+
+  it('Minswap V2 two-hop order 9fdd918e…#0, a SwapRouting step through two pools', () => {
+    const verify = realOrder(byName('Minswap V2'), TWO_HOP_ORDER, TWO_HOP_PAY, TWO_HOP_STAKE);
+    expect(verify()).toEqual([]);
+    expect(verify(OWN)).toEqual(REFUSED);
+  });
+
+  it('refuses a SwapRouting step that is not the two-pool route the aggregator builds', () => {
+    const v2 = byName('Minswap V2');
+    const genuine = fromHex(TWO_HOP_ORDER) as Cardano.ConstrPlutusData;
+    const step = genuine.fields.items[6] as Cardano.ConstrPlutusData;
+    const [routings, swapAmount, minimum] = step.fields.items;
+    const pools = (routings as Cardano.PlutusList).items;
+    const withStep = (s: Data) => {
+      const items = [...genuine.fields.items];
+      items[6] = s;
+      return Serialization.PlutusData.fromCore(C(0, ...items)).toCbor();
+    };
+    const verify = (s: Data) => realOrder(v2, withStep(s), TWO_HOP_PAY, TWO_HOP_STAKE)();
+    expect(verify(C(9, L(...pools), swapAmount, minimum))).toEqual([]);
+    // One pool, or three.
+    expect(verify(C(9, L(pools[0]), swapAmount, minimum))).toEqual(REFUSED);
+    expect(verify(C(9, L(pools[0], pools[1], pools[0]), swapAmount, minimum))).toEqual(REFUSED);
+    // A routing that is not [lpAsset, direction].
+    expect(verify(C(9, L(pools[0], C(0, B(TOKEN_POLICY), C(1))), swapAmount, minimum))).toEqual(REFUSED);
+    // The swap amount as anything but SpecificAmount, or no minimum.
+    expect(verify(C(9, L(...pools), C(1, I(600_000_000)), minimum))).toEqual(REFUSED);
+    expect(verify(C(9, L(...pools), swapAmount))).toEqual(REFUSED);
+    // The same fields under another constructor.
+    expect(verify(C(8, L(...pools), swapAmount, minimum))).toEqual(REFUSED);
   });
 
   it('refuses a RealFi unstake request: its timelock destination cannot be verified (RealFiConversionsTest UNSTAKE_DATUM)', () => {
