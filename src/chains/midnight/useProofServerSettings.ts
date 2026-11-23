@@ -251,7 +251,16 @@ export function useMidnightProofServer() {
   /** The releases the active wallet's chain needs: `9.0.x`. */
   const requiredVersion = computed(() => midnightProofServerVersionLine(midnightLedgerOrNewest(walletNetwork.value)));
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
-  let healthCheckInFlight = false;
+  /**
+   * Each (re)start of polling is a new generation. A check reports only if no
+   * restart came while it ran, and a check of an older generation never holds
+   * back a new one. Otherwise a Docker probe started before the flag store
+   * loaded (or before the user switched engine) could finish after the switch
+   * to Gero Prover and leave "Not detected" until the next poll, minutes later.
+   */
+  let healthCheckGeneration = 0;
+  /** The generation of the check now running, or null. */
+  let inFlightGeneration: number | null = null;
 
   /**
    * The health-check target for the CURRENT mode, or null when there is
@@ -272,25 +281,28 @@ export function useMidnightProofServer() {
     return null;
   }
 
-  async function runHelperCheck() {
-    healthCheckInFlight = true;
+  async function runHelperCheck(generation: number) {
+    inFlightGeneration = generation;
     const startedAt = Date.now();
     try {
       const snapshot = await refreshGeroProver();
+      if (generation !== healthCheckGeneration) return;
       serverVersion.value = snapshot.connection === 'wrong-version' ? snapshot.version ?? null : null;
       healthStatus.value = snapshot.connection === 'connected' ? 'detected'
         : snapshot.connection === 'wrong-version' ? 'wrongVersion' : 'notDetected';
       lastCheckedAt.value = Date.now();
       lastCheckLatencyMs.value = lastCheckedAt.value - startedAt;
     } finally {
-      healthCheckInFlight = false;
+      if (inFlightGeneration === generation) inFlightGeneration = null;
     }
   }
 
   async function runHealthCheck() {
-    if (healthCheckInFlight) return;
+    // A check of this generation is already running; an older one is not waited for.
+    if (inFlightGeneration === healthCheckGeneration) return;
+    const generation = healthCheckGeneration;
     if (usesHelper.value) {
-      await runHelperCheck();
+      await runHelperCheck(generation);
       return;
     }
     if (usesBrowser.value) {
@@ -306,7 +318,7 @@ export function useMidnightProofServer() {
       healthStatus.value = proofServer.value.mode === 'zkpaas' ? 'notConfigured' : 'notDetected';
       return;
     }
-    healthCheckInFlight = true;
+    inFlightGeneration = generation;
     const startedAt = Date.now();
     try {
       const { checkProofServerHealth, checkProofServerVersion } = await import('@/chains/midnight/midnightLocalProver');
@@ -320,6 +332,7 @@ export function useMidnightProofServer() {
       const version = healthy && proofServer.value.mode === 'local'
         ? await checkProofServerVersion(target.url, midnightLedgerOrNewest(walletNetwork.value))
         : null;
+      if (generation !== healthCheckGeneration) return;
       serverVersion.value = version && version.status !== 'unknown' ? version.version : null;
       // Already on a ledger 9 release: the update notice has nothing left to say.
       if (version?.status === 'match' && midnightLedgerOrNewest(walletNetwork.value) === 9) markProofServerLedger9NoticeDone();
@@ -327,7 +340,7 @@ export function useMidnightProofServer() {
       lastCheckedAt.value = Date.now();
       lastCheckLatencyMs.value = lastCheckedAt.value - startedAt;
     } finally {
-      healthCheckInFlight = false;
+      if (inFlightGeneration === generation) inFlightGeneration = null;
     }
   }
 
@@ -340,6 +353,7 @@ export function useMidnightProofServer() {
 
   function startHealthPolling() {
     stopHealthPolling();
+    healthCheckGeneration += 1;
     healthStatus.value = 'checking';
     void runHealthCheck();
     const mode = proofServer.value.mode;
