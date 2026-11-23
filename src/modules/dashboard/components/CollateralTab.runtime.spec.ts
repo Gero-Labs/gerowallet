@@ -83,17 +83,34 @@ describe('Set Collateral review', () => {
     expect(api.error).toHaveBeenCalledWith('settings.failedToBuildCollateral');
   });
 
+  const shortfall = 'Insufficient ADA to cover minimum UTXO for change output containing native tokens.';
   it.each([
-    [400, 'settings.insufficientAdaForCollateral'],
-    [429, 'settings.failedToBuildCollateral'],
-  ])('shows the correct build error for HTTP %i and keeps the signing dialog closed', async (status, expected) => {
-    const message = 'Insufficient ADA to cover minimum UTXO for change output containing native tokens.';
-    api.build.mockRejectedValue({ message, response: { status, data: { error: 'Transaction Build Failed', message } } });
+    [400, shortfall, 'Transaction Build Failed', 'Request failed', 'settings.insufficientAdaForCollateral'],
+    [400, 'Transaction Build Failed', shortfall, 'Request failed', 'settings.insufficientAdaForCollateral'],
+    [400, 'Transaction Build Failed', 'Invalid request', shortfall, 'settings.insufficientAdaForCollateral'],
+    [400, 'Transaction Build Failed', 'Invalid request', 'Request failed', 'settings.failedToBuildCollateral'],
+    [429, shortfall, 'Transaction Build Failed', 'Request failed', 'settings.failedToBuildCollateral'],
+  ] as const)('handles HTTP %i with separate message, error and client text', async (status, message, error, client, expected) => {
+    api.build.mockRejectedValue({ message: client, response: { status, data: { error, message } } });
     const wrapper = mountTab();
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(wrapper.find('.review').exists()).toBe(false);
     expect(api.error).toHaveBeenCalledWith(expected);
+  });
+
+  it('aborts the pending build on unmount and ignores a late server failure', async () => {
+    let reject!: (err: Error) => void;
+    api.build.mockImplementation(() => new Promise((_, no) => { reject = no; }));
+    const wrapper = mountTab();
+    await wrapper.get('button').trigger('click');
+    const signal = api.build.mock.calls[0][2].signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    wrapper.unmount();
+    expect(signal.aborted).toBe(true);
+    reject(new Error('late response'));
+    await flushPromises();
+    expect(api.error).not.toHaveBeenCalled();
   });
 
   it('discards an old wallet build even after switching back, and allows a fresh review after cancellation', async () => {
