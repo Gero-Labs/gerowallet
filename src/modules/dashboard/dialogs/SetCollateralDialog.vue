@@ -6,7 +6,7 @@
         <v-row no-gutters>
           <v-col cols="6">
             <h4>{{ $t('settings.collateralAmount') }}</h4>
-            <h4><strong>{{ toCurrency(collateralLovelace) }}</strong></h4>
+            <h4><strong>{{ toCurrency(collateralOutput?.value.coins.toString() ?? '0') }}</strong></h4>
           </v-col>
           <v-col cols="6">
             <h4>{{ $t('send.fee') }}</h4>
@@ -97,6 +97,10 @@ const props = defineProps({
     required: false,
     default: undefined,
   },
+  collateralOutput: {
+    type: Object as () => Cardano.TxOut,
+    default: undefined,
+  },
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -107,13 +111,6 @@ const { loggedWallet } = toRefs(walletStore);
 
 const txRef = computed(() => props.tx);
 
-// The collateral is the output paying the wallet's own base address, read from the
-// transaction being signed rather than assumed.
-const collateralLovelace = computed(() => {
-  const outputs = props.tx?.body?.outputs ?? [];
-  const own = outputs.find((output) => String(output.address) === loggedWallet.value?.baseAddress) ?? outputs[0];
-  return own?.value?.coins?.toString() ?? '0';
-});
 const {
   loading,
   spendingPassword,

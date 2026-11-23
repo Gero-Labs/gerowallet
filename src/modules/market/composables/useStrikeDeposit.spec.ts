@@ -198,6 +198,76 @@ describe('a Strike-built deposit is signed only when it fits the confirmed quote
     expect(calls.send).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [MessageTypes.VERIFY_SPENDING_PASSWORD, false],
+    [MessageTypes.SIGN_TX, true],
+  ] as const)('stops if the quote expires during %s, then accepts a fresh quote', async (method, passkey) => {
+    const now = vi.spyOn(Date, 'now');
+    try {
+      const expiry = later();
+      const deposit = await quoted(expiry);
+      calls.build.mockResolvedValue({ unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+      calls.send.mockImplementationOnce(async () => {
+        now.mockReturnValue((expiry + 1) * 1000);
+        return { data: method === MessageTypes.SIGN_TX ? { witnesses: 'a1' } : { success: true } };
+      });
+      expect(await deposit.buildAndSign(passkey ? '' : 'test-password', undefined, passkey ? new Uint8Array(32) : undefined)).toBe(false);
+      expect(deposit.error.value).toBe('perpetuals.deposit.quoteExpired');
+      expect(sentMethods()).toEqual([method]);
+      expect(calls.confirm).not.toHaveBeenCalled();
+
+      calls.quote.mockResolvedValue({ ...deposit.quote.value, request_id: 'fresh', quote: { ...deposit.quote.value!.quote, expiration_at: later() } });
+      await deposit.requestQuote(100);
+      expect(await deposit.buildAndSign('test-password')).toBe(true);
+      expect(calls.confirm).toHaveBeenCalledWith('fresh', 'ab'.repeat(32));
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('keeps a cancelled build from signing and releases the next quote to build normally', async () => {
+    const deposit = await quoted(later());
+    let finish!: (value: { unsigned_tx: string }) => void;
+    calls.build.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = deposit.buildAndSign('test-password');
+    deposit.reset();
+    finish({ unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    expect(await first).toBe(false);
+    expect(sentMethods()).toEqual([]);
+    expect(deposit.status.value).toBe('idle');
+  });
+
+  it('keeps the newest quote when an earlier quote arrives last', async () => {
+    const deposit = await quoted(later());
+    const original = deposit.quote.value!;
+    let finish!: (value: typeof original) => void;
+    calls.quote.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = deposit.requestQuote(100);
+    calls.quote.mockResolvedValueOnce({ ...original, request_id: 'new' });
+    await deposit.requestQuote(100);
+    finish(original);
+    await first;
+    expect(deposit.quote.value?.request_id).toBe('new');
+    expect(deposit.status.value).toBe('quoted');
+  });
+
+  it('confirms a transaction already broadcast with its original request when a fresh quote arrives', async () => {
+    const deposit = await quoted(later());
+    const original = deposit.quote.value!;
+    calls.build.mockResolvedValue({ unsigned_tx: body([[EXCHANGER, AMOUNT], [OWN, 9_899_800_000n]]) });
+    calls.send.mockImplementation(async ({ method }: { method: string }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'a1' } };
+      calls.quote.mockResolvedValue({ ...original, request_id: 'next' });
+      await deposit.requestQuote(100);
+      return { data: { txId: 'ab'.repeat(32) } };
+    });
+    expect(await deposit.buildAndSign('test-password')).toBe(true);
+    expect(calls.confirm).toHaveBeenCalledWith('req-1', 'ab'.repeat(32));
+    expect(deposit.quote.value?.request_id).toBe('next');
+    expect(deposit.status.value).toBe('quoted');
+  });
+
   it('refuses a build whose own expiry has passed', async () => {
     const deposit = await quoted(later());
     calls.build.mockResolvedValue({

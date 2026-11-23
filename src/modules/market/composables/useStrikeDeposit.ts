@@ -51,7 +51,7 @@ const quote = ref<DepositQuoteResponse | null>(null);
 const status = ref<DepositStatus>('idle');
 const txHash = ref<string | null>(null);
 const error = ref<string | null>(null);
-const requestId = ref<string | null>(null);
+let quoteRequestVersion = 0;
 const quoteCountdown = ref<number>(0);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -128,9 +128,12 @@ export function useStrikeDeposit() {
    * @param amountAda - amount the user wants to deposit, in ADA (whole units).
    */
   async function requestQuote(amountAda: number | string): Promise<void> {
+    const version = ++quoteRequestVersion;
+    clearCountdown();
+    quoteCountdown.value = 0;
+    quote.value = null;
     error.value = null;
     txHash.value = null;
-    requestId.value = null;
     status.value = 'quoting';
 
     // Authenticated endpoint — without a loaded API-wallet key this would be sent
@@ -156,21 +159,22 @@ export function useStrikeDeposit() {
         asset_symbol: 'ADA',
         asset_amount: lovelaceStr,
       });
+      if (version !== quoteRequestVersion) return;
 
       // Defensive shape check — bail out if the API drifts from the typed
       // contract instead of crashing later in the build step.
-      if (!response?.deposit_address || !response?.quote?.asset_amount) {
+      if (!response?.request_id || !response.deposit_address || !response.quote?.asset_amount) {
         debugLog('[strike-deposit] quote response missing required fields:', response);
         throw new Error('Strike quote response missing deposit_address / asset_amount.');
       }
 
       quote.value = response;
-      requestId.value = response.request_id;
       status.value = 'quoted';
       if (response.quote.expiration_at) {
         startCountdown(Number(response.quote.expiration_at));
       }
     } catch (e) {
+      if (version !== quoteRequestVersion) return;
       // Surface Strike's real rejection reason (e.g. a minimum-deposit message)
       // instead of the opaque "Request failed with status code 400". Log the raw
       // body too so the exact server text (and any minimum threshold) is visible.
@@ -210,12 +214,14 @@ export function useStrikeDeposit() {
     // these as privateKeyBytes to SIGN_TX (mirrors useTransactionSigning).
     pkBytes?: Uint8Array,
   ): Promise<boolean> {
+    if (isDepositing.value || status.value === 'confirmed') return false;
     if (vaultId !== undefined) {
       error.value = i18n.t('vaults.transfersUnavailable');
       status.value = 'error';
       return false;
     }
-    if (!quote.value || !requestId.value) {
+    const confirmedQuote = quote.value;
+    if (!confirmedQuote) {
       error.value = 'No active deposit quote. Call requestQuote() first.';
       status.value = 'error';
       return false;
@@ -242,7 +248,7 @@ export function useStrikeDeposit() {
       return false;
     }
 
-    const confirmedQuote = quote.value;
+    const current = () => quote.value === confirmedQuote;
     if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at)) {
       error.value = String(i18n.t('perpetuals.deposit.quoteExpired'));
       status.value = 'error';
@@ -261,10 +267,11 @@ export function useStrikeDeposit() {
       status.value = 'building';
       const cip30Utxos = utxos.map(utxoToCip30Hex);
       const buildResp = await strikeUserApi.buildDepositTx({
-        request_id: requestId.value,
+        request_id: confirmedQuote.request_id,
         user_address: wallet.baseAddress,
         utxos: cip30Utxos,
       });
+      if (!current()) return false;
       if (!buildResp?.unsigned_tx) {
         throw new Error('Strike did not return an unsigned deposit transaction.');
       }
@@ -276,9 +283,12 @@ export function useStrikeDeposit() {
       // Strike built this transaction from every UTxO the wallet holds: sign it
       // only if what leaves the wallet fits the deposit the user confirmed (see
       // strikeDepositGuard.ts). The bytes checked are the bytes signed and submitted.
-      if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at) || isStrikeQuoteExpired(buildResp.expires_at)) {
-        throw new Error(String(i18n.t('perpetuals.deposit.quoteExpired')));
-      }
+      const requireUnexpired = () => {
+        if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at) || isStrikeQuoteExpired(buildResp.expires_at)) {
+          throw new Error(String(i18n.t('perpetuals.deposit.quoteExpired')));
+        }
+      };
+      requireUnexpired();
       const signedTx = Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
       // Derived addresses only: the UTxO list comes from gero-sync (ownAddresses.ts),
       // and so do its values, so each input is valued from its creating transaction.
@@ -288,6 +298,7 @@ export function useStrikeDeposit() {
         claimed: utxos,
         sources: [historySource(walletStore.transactions as unknown[]), backendSource(wallet.network)],
       });
+      if (!current()) return false;
       const violations = inputs.violation
         ? [inputs.violation]
         : verifyStrikeDepositTx(signedTx, {
@@ -324,6 +335,8 @@ export function useStrikeDeposit() {
         }
       }
 
+      if (!current()) return false;
+      requireUnexpired();
       const signResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: {
@@ -337,11 +350,13 @@ export function useStrikeDeposit() {
         },
       })) as { data: { witnesses?: string; error?: string } };
 
+      if (!current()) return false;
       if (signResult.data.error || !signResult.data.witnesses) {
         throw new Error(signResult.data.error || 'Failed to sign deposit transaction.');
       }
 
       // ── 3. Submit to chain ──
+      requireUnexpired();
       status.value = 'submitting';
       const submitResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
@@ -358,7 +373,10 @@ export function useStrikeDeposit() {
 
       // The on-chain txId returned by the submitter (validated non-empty above).
       const finalTxHash = submitResult.data.txId;
-      txHash.value = finalTxHash;
+      if (current()) {
+        txHash.value = finalTxHash;
+        status.value = 'confirming';
+      }
 
       // ── 4. Confirm with Strike so they associate this tx with the quote ──
       // This is the FINAL step. Strike's deposit API is quote → build-tx →
@@ -368,9 +386,8 @@ export function useStrikeDeposit() {
       // `/v2/transaction/status` poll hit a route that doesn't exist, so every
       // tick 401'd, which tripped the auth interceptor into wiping the keys and
       // showing a "reconnect" prompt on an otherwise-successful deposit.
-      status.value = 'confirming';
       try {
-        await strikeUserApi.confirmDeposit(requestId.value, finalTxHash);
+        await strikeUserApi.confirmDeposit(confirmedQuote.request_id, finalTxHash);
       } catch (confirmErr) {
         // Soft-fail: the unsigned tx Strike built carries the request_id in its
         // vault datum, so Strike credits the deposit from the on-chain tx even
@@ -384,9 +401,10 @@ export function useStrikeDeposit() {
       // PerpsAccountSection) listen for 'confirmed'; the
       // side-panel sheet treats 'credited' and 'confirmed' as equivalent. The
       // balance updates on Strike once on-chain confirmations land.
-      status.value = 'confirmed';
+      if (current()) status.value = 'confirmed';
       return true;
     } catch (e) {
+      if (!current()) return false;
       const anyErr = e as { response?: { status?: number; data?: unknown } };
       debugLog(
         '[strike-deposit] buildAndSign failed:',
@@ -401,11 +419,11 @@ export function useStrikeDeposit() {
 
   /** Reset all state back to idle. Safe to call at any point. */
   function reset(): void {
+    ++quoteRequestVersion;
     quote.value = null;
     status.value = 'idle';
     txHash.value = null;
     error.value = null;
-    requestId.value = null;
     quoteCountdown.value = 0;
     clearCountdown();
   }
