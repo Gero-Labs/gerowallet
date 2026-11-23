@@ -35,6 +35,27 @@ function setup(overrides: Partial<BalanceUnsealedDeps> = {}, recordActivity = vi
 const internalError = { error: apiError(MidnightErrorCode.InternalError, FAILED) };
 
 describe('balanceUnsealedTransaction always answers the dapp, exactly once', () => {
+  it('returns a fixed internal error for a synchronous parking failure', async () => {
+    const { sent, run } = setup({ park: () => { throw new Error('private diagnostic'); } });
+    await run();
+    expect(sent).toEqual([internalError]);
+  });
+
+  it.each([false, true])('discards a parked result after a wallet switch, including a refusal (%s)', async declined => {
+    let current = true;
+    const { run, sent, recordActivity } = setup({
+      sameWalletStill: () => current,
+      park: async () => {
+        current = false;
+        if (declined) throw new Error('User declined');
+        return { data: { tx: 'bb' } };
+      },
+    });
+    await run();
+    expect(sent).toEqual([{ error: expect.objectContaining({ code: MidnightErrorCode.Disconnected }) }]);
+    expect(recordActivity.mock.calls.map(([event]) => event.type)).toEqual(['funding']);
+  });
+
   it('a throwing prompt (e.g. the address codec) is one InternalError', async () => {
     const { sent, run } = setup({ prompt: vi.fn(async () => { throw new Error('codec failed'); }) });
     await run();

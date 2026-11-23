@@ -61,6 +61,11 @@ export async function answerBalanceUnsealedTransaction(
   reply: (opts: ConnectorReply) => void,
   deps: BalanceUnsealedDeps,
 ): Promise<void> {
+  const disconnected = () => {
+    if (deps.sameWalletStill()) return false;
+    reply({ error: deps.apiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') });
+    return true;
+  };
   try {
     await deps.resolveLedger().catch(() => { /* the check below names it */ });
     const validation = deps.validate(data);
@@ -78,19 +83,20 @@ export async function answerBalanceUnsealedTransaction(
       return;
     }
     // No await between this check and parking: nothing can switch the wallet in between.
-    if (!deps.sameWalletStill()) {
-      reply({ error: deps.apiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') });
-      return;
-    }
+    if (disconnected()) return;
     // The dapp calls this after its (async) proving, so there is no user
     // gesture left to open the panel with. Park the request instead of
     // failing it (badge; delivered when the user opens the panel; immediate
     // when it is already open), as the private-balance and proof-server prompts.
     wallet.recordActivity({ type: 'funding' });
+    // A synchronous failure creating the prompt belongs to the outer internal-error
+    // handler. Only a rejection from the parked request can carry the panel's answer.
+    const pending = deps.park({ tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments });
     let response: { data?: unknown };
     try {
-      response = await deps.park({ tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments });
+      response = await pending;
     } catch (err) {
+      if (disconnected()) return;
       const error = deps.parseParkError(err, MidnightErrorCode.InternalError, FAILED);
       // Answer first: recording the activity must not change or block the dapp's answer.
       reply({ error });
@@ -101,6 +107,7 @@ export async function answerBalanceUnsealedTransaction(
       return;
     }
     // Answer first: a failure to record the activity must not turn a built transaction into an error.
+    if (disconnected()) return;
     reply({ data: response.data }); // response.data === { tx }
     wallet.recordActivity({ type: 'funding-done' });
   } catch {
