@@ -14,6 +14,9 @@ import { assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAcc
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { GovProposal } from '@/api/governance.types';
 
+/** Time to read the fee and authorize after the transaction has been built. */
+const MIN_HOLDER_REVIEW_WINDOW_MS = 30_000;
+
 export function mayAnswerAction(action: GovProposal, epoch: number | null): boolean {
   return !!action && (action.status === 'active' || action.status === 'ratified') &&
     (action.expiresEpoch == null || epoch == null || epoch < action.expiresEpoch);
@@ -54,8 +57,7 @@ export function useHolderAnswers() {
       changeAddress: keys.payment[0].address, walletContext: { keys },
     });
     assertStakeWalletUnchanged(identity, t);
-    // Leave time for the holder to read the fee and authorize a new review.
-    if (check.expiresAt - Date.now() < 30_000) throw new Error(t('governance.holderWindowTooShort'));
+    if (check.expiresAt - Date.now() < MIN_HOLDER_REVIEW_WINDOW_MS) throw new Error(t('governance.holderWindowTooShort'));
     return { tx, expiresAt: check.expiresAt };
   }
   return { canAnswer, prepareAnswers };
