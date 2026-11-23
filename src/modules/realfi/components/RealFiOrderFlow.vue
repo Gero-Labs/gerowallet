@@ -304,6 +304,7 @@ const ERROR_KEYS: Record<string, string> = {
   'wrong-password': 'errors.wrongPassword',
   'sign-failed': 'realfi.order.errors.signFailed',
   'submit-failed': 'realfi.order.errors.submitFailed',
+  'submit-unconfirmed': 'errors.submitUnconfirmed',
 };
 
 const errorBody = computed(() =>

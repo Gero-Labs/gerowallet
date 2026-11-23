@@ -33,6 +33,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { MidnightApiError } from '@/api/midnightApiError';
 import { noteMidnightNetworkUpgrading, resetMidnightWriteGateForTests } from '@/chains/midnight/midnightWriteGate';
 import { resetMidnightWriteStatusForTests } from '@/chains/midnight/midnightWriteStatus';
+import { MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { backgroundError, balanceConnectorTransaction, buildAndSignUnshieldedTransfer, buildConnectorIntent, checkWalletProvingPreflight, ProofServerUnreachableError, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight, walletProvingPreflight } from './midnight-tx.service';
 
 function deferred<T>() {
@@ -464,10 +465,12 @@ describe('Midnight ledger-specific orchestration', () => {
   });
 
   it('maps only the DUST shortfall: a token or NIGHT shortfall keeps its own message', () => {
+    expect(backgroundError(DUST_SHORTFALL, 'fallback')).toBeInstanceOf(MidnightDustFeeShortfall);
     expect(backgroundError(DUST_SHORTFALL, 'fallback').message).toBe('midnight.errors.dustInsufficient');
     expect(backgroundError(`  ${DUST_SHORTFALL}\n`, 'fallback').message).toBe('midnight.errors.dustInsufficient');
     // The SDK names any other token by its type.
     const token = `Insufficient Funds: could not balance ${'12'.repeat(32)}`;
+    expect(backgroundError(token, 'fallback')).not.toBeInstanceOf(MidnightDustFeeShortfall);
     expect(backgroundError(token, 'fallback').message).toBe(token);
     for (const other of ['Not enough NIGHT', 'Insufficient Funds', 'Insufficient Funds: could not balance dust and more',
       'The wallet does not hold enough of a token this intent gives']) {

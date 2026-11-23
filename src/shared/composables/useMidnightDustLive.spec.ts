@@ -1,12 +1,17 @@
 import * as Vue from 'vue';
 import { nextTick, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { noteMidnightProtocolVersion } from '@/chains/midnight/midnightLedger';
+import { Network } from '@/models/types';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(), log: vi.fn(),
   pathBAsOfMs: { value: 0 } as { value: number },
   pathBBatchAsOfMs: { value: 0 } as { value: number },
   pathBBalance: { value: 0n } as { value: bigint },
+  pathBRegistered: { value: false },
+  pathBIsDestinationWide: { value: false },
+  pathBIncomingStakes: { value: [] as string[] },
 }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getDustAccountState: mocks.get }) }));
 vi.mock('@/utils/debug', () => ({ debugLog: mocks.log }));
@@ -23,12 +28,17 @@ vi.mock('@/shared/composables/useDustPathB', () => {
   mocks.pathBAsOfMs = pathBAsOfMs;
   mocks.pathBBatchAsOfMs = pathBBatchAsOfMs;
   mocks.pathBBalance = pathBBalance;
+  const pathBRegistered = ref(false);
+  const pathBIsDestinationWide = ref(false);
+  const pathBIncomingStakes = ref<string[]>([]);
+  Object.assign(mocks, { pathBRegistered, pathBIsDestinationWide, pathBIncomingStakes });
   return { useDustPathB: () => ({
     pathBBalance, pathBCap: ref(0n), pathBRate: ref(0n), pathBNight: ref(0n),
-    pathBRegistered: ref(false), pathBAsOfMs, pathBBatchAsOfMs,
+    pathBRegistered, pathBIsDestinationWide, pathBIncomingStakes, pathBAsOfMs, pathBBatchAsOfMs,
   }) };
 });
 import { midnightStore } from '@/stores/midnightStore';
+import { walletStore } from '@/stores/walletStore';
 import { useMidnightDustLive, type MidnightDustLive } from './useMidnightDustLive';
 
 const state = (balance = '42') => ({ dust_balance: balance, dust_generating: '0',
@@ -47,6 +57,11 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.get.mockReset().mockResolvedValue(state());
   mocks.log.mockClear();
+  walletStore.loggedWallet.network = Network.STAGENET;
+  Object.assign(midnightStore, { balances: {}, dustState: null, networkStatus: 'disconnected', refreshing: null, tip: null });
+  mocks.pathBRegistered.value = false;
+  mocks.pathBIsDestinationWide.value = false;
+  mocks.pathBIncomingStakes.value = [];
   midnightStore.addresses.unshielded = '';
   midnightStore.addresses.unshielded = 'wallet-a';
 });
@@ -57,6 +72,72 @@ afterEach(() => {
 });
 
 describe('DUST account-state polling', () => {
+  const empty = { dust_balance: '0', dust_generating: '0', dust_cap: '0', night_registered: '0',
+    dust_registration_status: 'Unregistered', dust_generation_status: 'empty' };
+  function tip(height: number, age = 0) {
+    return { hash: String(height), height, timestamp: Date.now() - age, observedAt: Date.now() };
+  }
+  function formerNativeRegistration(network = Network.PREPROD, protocol = 2_000_000) {
+    walletStore.loggedWallet.network = network;
+    noteMidnightProtocolVersion(network, protocol);
+    Object.assign(midnightStore, { balances: { nightRegistered: 1n }, dustState: { current: 45n, registrationStatus: 'Registered' },
+      networkStatus: 'connected', tip: tip(50) });
+    mocks.pathBIsDestinationWide.value = true;
+    mocks.get.mockResolvedValue(empty);
+  }
+
+  it('settles a cleared preprod registration at two advancing tips and a subsequent destination read, preserving saved DUST', async () => {
+    formerNativeRegistration();
+    const live = mount();
+    await settle();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(live.registrationStatus.value).toBe('Registered');
+    Object.assign(midnightStore, { tip: tip(51) });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+    mocks.pathBBatchAsOfMs.value = Date.now();
+    expect(live.registrationStatus.value).toBe('Unregistered');
+    expect(live.dustBalance.value).toBe(45n);
+    mocks.pathBIncomingStakes.value = ['stake'];
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+    mocks.pathBIncomingStakes.value = [];
+    mocks.pathBRegistered.value = true;
+    expect(live.registrationStatus.value).toBe('Registered');
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+  });
+
+  it.each(['mainnet', 'ledger8', 'paused', 'offline', 'refreshing', 'missing fields', 'fallback'])(
+    'keeps the registered snapshot on %s evidence', async scenario => {
+      formerNativeRegistration(scenario === 'mainnet' ? Network.MAINNET : Network.PREPROD, scenario === 'ledger8' ? 1 : 2_000_000);
+      const live = mount();
+      await settle();
+      Object.assign(midnightStore, { tip: tip(51, scenario === 'paused' ? 700_000 : 0),
+        networkStatus: scenario === 'offline' ? 'disconnected' : 'connected', refreshing: scenario === 'refreshing' ? {} : null });
+      if (scenario === 'missing fields') mocks.get.mockResolvedValue({ dust_registration_status: 'Unregistered' });
+      if (scenario === 'fallback') mocks.pathBIsDestinationWide.value = false;
+      await vi.advanceTimersByTimeAsync(5_000);
+      mocks.pathBBatchAsOfMs.value = Date.now();
+      expect(live.registrationStatus.value).toBe('Registered');
+      expect(live.dustBalance.value).toBe(45n);
+    },
+  );
+
+  it('requires two fresh reads after a timeout and forgets the old wallet on a switch', async () => {
+    formerNativeRegistration();
+    const live = mount();
+    await settle();
+    mocks.get.mockRejectedValueOnce(new Error('timeout'));
+    await vi.advanceTimersByTimeAsync(5_000);
+    Object.assign(midnightStore, { tip: tip(52) });
+    await vi.advanceTimersByTimeAsync(5_000);
+    mocks.pathBBatchAsOfMs.value = Date.now();
+    expect(live.registrationStatus.value).toBe('Registered');
+    midnightStore.addresses.unshielded = 'another-wallet';
+    Object.assign(midnightStore, { tip: tip(53) });
+    await settle();
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+  });
+
   it.each([JSON.stringify({ status: 501 }), { response: { status: 501 } }])(
     'pauses unavailable reads, logs once and retries when the view is reopened: %j', async error => {
       mocks.get.mockRejectedValue(error);

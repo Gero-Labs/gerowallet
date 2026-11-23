@@ -5,6 +5,7 @@ import { nextTick } from 'vue';
 import { deferred, dialogControls } from '@test/helpers/dialogControls';
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { Network, WalletType } from '@/models/types';
+import { MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), pending: vi.fn(), success: vi.fn(), consent: vi.fn() }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive({ loggedWallet: {}, isLocked: false }) }));
@@ -20,7 +21,10 @@ vi.mock('@/chains/midnight/midnightSponsorLinks', () => ({
 }));
 vi.mock('@/shared/composables/useMidnightDustLive', async () => {
   const { ref } = await import('vue');
-  return { useMidnightDustLive: () => ({ dustBalance: ref(0n), dustCap: ref(0n), settled: ref(true) }) };
+  return { useMidnightDustLive: () => ({
+    dustBalance: ref(0n), dustCap: ref(0n), settled: ref(true), hasData: ref(true),
+    nightRegistered: ref(0n), dustGenerating: ref(0n), registrationStatus: ref('Registered'), nativeRegistrationCleared: ref(false),
+  }) };
 });
 vi.mock('@/shared/composables/useMidnightSendTimeline', async () => ({ useMidnightSendTimeline: () => [] }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -80,7 +84,7 @@ function render(modelValue = true) {
       'v-text-field': { props: ['modelValue', 'placeholder', 'disabled'], emits: ['update:modelValue'],
         template: '<input :placeholder="placeholder" :disabled="disabled" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
       'v-expand-transition': { template: '<div><slot /></div>' }, 'v-avatar': true,
-      TransactionDetailsCard: true, MidnightSendTimeline: true, QRAddressScannerDialog: true,
+      TransactionDetailsCard: true, MidnightSendTimeline: true, QRAddressScannerDialog: true, CnightDustSourcesDialog: true,
     },
   } });
 }
@@ -122,6 +126,29 @@ async function invalidate(wrapper: View, change: Change) {
 }
 
 describe('Midnight sidepanel authorization freshness', () => {
+  it('opens native registration in one click after the sender runs out of DUST, despite a cached Registered status', async () => {
+    midnightStore.addresses = { dust: 'dust-test-receiver' } as never;
+    mocks.send.mockRejectedValueOnce(new MidnightDustFeeShortfall('fee unavailable'));
+    const wrapper = await ready();
+    await confirm(wrapper).trigger('click');
+    await vi.waitFor(() => expect(window.open).toHaveBeenCalledTimes(1));
+    await authenticate();
+    await wrapper.get('[data-test="dust-fee-recovery"]').trigger('click');
+    await vi.waitFor(() => expect(wrapper.get('[data-test="dust-register"]').isVisible()).toBe(true));
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['sponsor', 'unrelated'] as const)('keeps sender registration out of a %s failure', async reason => {
+    if (reason === 'sponsor') walletStore.loggedWallet = { ...walletStore.loggedWallet, webAuthnCredentialId: undefined };
+    mocks.send.mockRejectedValueOnce(reason === 'sponsor' ? new MidnightDustFeeShortfall('fee unavailable') : new Error('fee unavailable'));
+    const wrapper = await ready(reason === 'sponsor');
+    await confirm(wrapper).trigger('click');
+    await vi.waitFor(() => expect(window.open).toHaveBeenCalledTimes(1));
+    await authenticate();
+    await vi.waitFor(() => expect(wrapper.get('[role="alert"]').text()).toBe('fee unavailable'));
+    expect(wrapper.find('[data-test="dust-fee-recovery"]').exists()).toBe(false);
+  });
+
   it.each(['sender', 'sponsor'] as const)('%s popup accepts only its own window and extension origin; submits once', async role => {
     if (role === 'sponsor') walletStore.loggedWallet = { ...walletStore.loggedWallet, webAuthnCredentialId: undefined };
     const wrapper = await ready(role === 'sponsor');

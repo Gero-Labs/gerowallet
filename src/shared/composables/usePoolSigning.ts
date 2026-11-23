@@ -4,6 +4,7 @@ import { minFee as minFeeSDK } from '@cardano-sdk/tx-construction';
 import type { Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { submittedTxId, UnconfirmedTxSubmission } from '@/shared/utils/submitTxReceipt';
 import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -669,11 +670,11 @@ export function usePoolSigning(options: {
         data: signingData,
       })) as { data: { witnesses?: string; coldKeyWitness?: { vkey: string; signature: string }; error?: string } };
 
-      if (result.data.error) {
-        throw new Error(result.data.error);
+      if (result?.data?.error) throw new Error(result.data.error);
+      if (typeof result?.data?.witnesses !== 'string' || !result.data.witnesses.trim()) {
+        throw new Error(t('errors.unknownError'));
       }
-
-      txWitnesses.value = result.data.witnesses || null;
+      txWitnesses.value = result.data.witnesses;
       coldKeyWitness.value = result.data.coldKeyWitness || null;
       return true;
     } catch (e: unknown) {
@@ -692,7 +693,7 @@ export function usePoolSigning(options: {
     loading.value = true;
     try {
       // Submit via background
-      const result = (await Messaging.sendToBackgroundFromOptions({
+      const txId = await submittedTxId(Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
         data: {
           txCbor: txCbor.value,
@@ -700,21 +701,15 @@ export function usePoolSigning(options: {
           coldKeyWitness: coldKeyWitness.value,
           utxos: utxos.value,
         },
-      })) as { data: { txId?: string; error?: string } };
-
-      if (result.data.error) {
-        throw new Error(result.data.error);
-      }
+      }));
 
       isSubmit.value = true;
       snackbar.fireSuccess(t(options.successMessageKey));
 
-      if (options.onSuccess && result.data.txId) {
-        options.onSuccess(result.data.txId);
-      }
+      options.onSuccess?.(txId);
     } catch (e: unknown) {
       console.error('Error submitting pool operator transaction:', e);
-      snackbar.setError(getErrorMessage(e, t('errors.unknownError') as string));
+      snackbar.setError(e instanceof UnconfirmedTxSubmission ? t('errors.submitUnconfirmed') : getErrorMessage(e, t('errors.unknownError') as string));
     } finally {
       loading.value = false;
     }

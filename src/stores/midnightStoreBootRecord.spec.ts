@@ -210,7 +210,7 @@ describe('the previous worker\'s record across restarts', () => {
   it('a wallet of another chain lets the record go when it starts', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
-    const manager = readFileSync(join(__dirname, '../services/walletManager.service.ts'), 'utf8');
+    const manager = readFileSync(join(__dirname, '../services/walletManager.service.ts'), 'utf8').replace(/\r\n/g, '\n');
     expect(manager).toMatch(/if \(walletBg\.chain !== Blockchain\.MIDNIGHT\) \{\n\s+void import\('@\/stores\/midnightStore'\)\.then\(\(\{ midnightActions \}\) => midnightActions\.releaseBootRecord\(\)\)/);
   });
 

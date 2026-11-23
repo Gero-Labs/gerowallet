@@ -143,7 +143,7 @@ describe('one reason Send and Register are held', () => {
 
 describe('Refreshing wiring', () => {
   const src = join(__dirname, '../../..');
-  const read = (path: string) => readFileSync(join(src, path), 'utf8');
+  const read = (path: string) => readFileSync(join(src, path), 'utf8').replace(/\r\n/g, '\n');
 
   it('greys value containers with the one .g-stale utility, never the controls', () => {
     const page = read('modules/portfolio/PortfolioPage.vue');
