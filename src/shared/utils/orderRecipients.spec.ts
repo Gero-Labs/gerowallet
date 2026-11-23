@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import mainnetSwapOrders from './fixtures/mainnet-swap-orders.json';
 import { ORDER_SCRIPT_TABLES, verifyOrderRecipients, type OrderBuilder } from './orderRecipients';
 
 /*
  * Datums come from cardano-market-data (read-only), two ways:
- * - REAL on-chain bytes where the repo has them (Minswap V1, WingRiders V1 and V2,
- *   SundaeSwap V4, a RealFi stake request), checked against the wallet that owns them;
+ * - recorded mainnet order outputs from Minswap, SundaeSwap, Splash, WingRiders and RealFi,
+ *   checked against their recorded recipients;
  * - re-encoded field for field from each builder (src/main/java/io/gerowallet/cardano/
  *   service/txbuilder/*TxBuilder.java) for a test wallet, so every receiver, refund,
  *   owner and stake field can be swapped one at a time.
@@ -400,6 +401,32 @@ describe('real on-chain datums', () => {
     return (ownAddresses: string[] = own) => verifyOrderRecipients(tx, { ...policy(o.builder), ownAddresses });
   };
   const byName = (name: string) => ORDERS.find((o) => o.name === name)!;
+
+  it('covers each captured venue and direction even if a fixture is removed', () => {
+    expect(mainnetSwapOrders.map(order => [order.venue, order.direction])).toEqual(expect.arrayContaining([
+      ['Minswap V2', 'ADA to SNEK'], ['Minswap V2', 'SNEK to ADA'],
+      ['SundaeSwap V3', 'NIGHT to ADA'], ['Splash', 'ADA to SONGMARKETCAP limit order'],
+    ]));
+    expect(new Set(mainnetSwapOrders.map(order => order.output)).size).toBe(mainnetSwapOrders.length);
+  });
+
+  it.each(mainnetSwapOrders)('$venue, $direction, output $output', (order) => {
+    const tx = decodedTx([{
+      address: order.orderAddress,
+      coins: BigInt(order.lovelace),
+      assets: new Map(order.assets.map(({ unit, quantity }) => [unit, BigInt(quantity)])),
+      datum: fromHex(order.datum),
+    }]);
+
+    expect(verifyOrderRecipients(tx, policy('swapAggregator', { ownAddresses: [order.walletAddress] }))).toEqual([]);
+    expect(verifyOrderRecipients(tx, policy('swapAggregator'))).toEqual(REFUSED);
+    // On staked order addresses the address gate checks the stake key first. Use
+    // the recorded stake key with a different payment key to exercise the datum.
+    const recordedStake = Cardano.Address.fromString(order.walletAddress)?.getProps().delegationPart?.hash;
+    expect(recordedStake).toBeDefined();
+    const otherPayment = base(THIEF, String(recordedStake));
+    expect(verifyOrderRecipients(tx, policy('swapAggregator', { ownAddresses: [otherPayment] }))).toEqual(REFUSED);
+  });
 
   it('Minswap V1 order 739f7c0e…, an enterprise sender (cardano-market-data CancelTransactionServiceTest V1_DATUM)', () => {
     const verify = realOrder(byName('Minswap V1'),
