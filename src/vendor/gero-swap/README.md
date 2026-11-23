@@ -2,9 +2,9 @@
 
 Built IIFE bundle of the Gero DEX aggregator widget. Self-registers `<gero-swap>` on load.
 
-- Source repo: gero-dex-widget (packages/widget), branch `vendor/gerowallet-2.8.0-two-hop` at `9aadc24` = `vendor/gerowallet-2.8.0-i18n` at `8391d4a` plus two-hop swaps. `8391d4a` is English/German/Spanish via the `locale` attribute, on `1af3fbe` (Vuetify scope stopped on unmount, so no `resize` listener leaks per mount), on `11cd09157d1106d63b550039ea331d9a7480cec3` ([theme isolation fix](https://github.com/Gero-Labs/gero-dex-widget/pull/19)), based on `af575a2`. Main's widget PRs #18 to #30 are deliberately not in this bundle: they are features for Nexus partners, not for the wallet. The same two fixes are on main in [gero-dex-widget#32](https://github.com/Gero-Labs/gero-dex-widget/pull/32).
+- Source repo: gero-dex-widget (packages/widget), branch `vendor/gerowallet-2.8.0-two-hop` at `3ce8b97` = `vendor/gerowallet-2.8.0-i18n` at `8391d4a` plus two-hop swaps. `8391d4a` is English/German/Spanish via the `locale` attribute, on `1af3fbe` (Vuetify scope stopped on unmount, so no `resize` listener leaks per mount), on `11cd09157d1106d63b550039ea331d9a7480cec3` ([theme isolation fix](https://github.com/Gero-Labs/gero-dex-widget/pull/19)), based on `af575a2`. Main's widget PRs #18 to #30 are deliberately not in this bundle: they are features for Nexus partners, not for the wallet. The same two fixes are on main in [gero-dex-widget#32](https://github.com/Gero-Labs/gero-dex-widget/pull/32).
 - Files, byte for byte from the build (check with `openssl dgst -sha384 -binary <file> | openssl base64 -A`):
-  - `gero-swap.js`: 892741 bytes, `sha384-dIPm6NHIeV/ssRoKvPWbIDUBfp41ZVYUc0YZ/UYw16tUSn88/MOImlSgW0jTl/1M`
+  - `gero-swap.js`: 892894 bytes, `sha384-HFW2+kwqEvusVni5YO5KYfqpyug78QF84gA+kT4jAQDQua0IvFYqe/f6Rl4mkpWU`
   - `gero-swap.css` (`dist/style.css`): 626752 bytes, `sha384-AyP1kV8DitXWK7ZZJupjCFfc+hUAWAqIeupIRp/0Q3a4GC4CVKcY4aNCh0rdTxf0`
 - Two-hop swaps (a pair with no pool of its own, swapped as one Minswap V2 order through ADA):
   - On by default when the widget uses its own History, which is how the wallet embeds it. `max-hops="1"` turns it off. With `history-mode="host"` it is offered only with an explicit `max-hops="2"`, and never with `history-mode="off"`.
