@@ -4,7 +4,11 @@ import './backgroundLocales';
 import '@/api/signedFetchInstall';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances, transferOutputTotals } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
-import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
+import { acceptMidnightProverPort, runDeviceSelfTest } from '@/chains/midnight/midnightDeviceProver';
+// Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
+import {
+  helperProofProcessor, helperStatus, removeHelperKeys, runHelperSelfTest, setHelperAccelerator,
+} from '@/chains/midnight/midnightHelperProver';
 import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
 import { midnightTimer } from '@/chains/midnight/midnightTiming';
 import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
@@ -6511,6 +6515,19 @@ app.addToOptions(
           }));
           signedTxHex = result.provenTxHex;
           ledgerTxHash = result.ledgerTxHash;
+          // The helper says which processor made the proof; the Proof server page shows it.
+          if ('helper' in provingArg) {
+            midnightActions.recordLocalProvingAttempt({ durationMs: result.proveDurationMs, success: true, ...helperProofProcessor() });
+          }
+        } catch (error) {
+          if ('helper' in provingArg) {
+            // Read (and so cleared) even for a failure: the next transaction's row is its own.
+            helperProofProcessor();
+            midnightActions.recordLocalProvingAttempt({
+              durationMs: (error as { durationMs?: number })?.durationMs ?? 0, success: false, error: getErrorMessage(error),
+            });
+          }
+          throw error;
         } finally {
           midnightActions.setSendProgress(null);
         }
@@ -6814,6 +6831,13 @@ function parseProvingRequest(value: unknown): WalletProvingRequest | undefined {
     }
     return { device: true };
   }
+  // Gero Prover, the desktop helper on this computer (midnightHelperProver.ts): exactly `{ helper: true }`.
+  if ('helper' in value) {
+    if ((value as { helper?: unknown }).helper !== true || Object.keys(value).length !== 1) {
+      throw new Error('proving.helper must be exactly { helper: true }');
+    }
+    return { helper: true };
+  }
   const url = (value as { url?: unknown }).url;
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error('proving.url is required and must be a non-empty string');
@@ -7077,7 +7101,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret, localEngine,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -7114,6 +7138,12 @@ app.addToOptions(
         ? current.zkpaasApiKey : validateZkpaasCredential('zkpaasApiKey', zkpaasApiKey);
       const zkpaasApiSecretValue = zkpaasApiSecret === undefined || zkpaasApiSecret === null
         ? current.zkpaasApiSecret : validateZkpaasCredential('zkpaasApiSecret', zkpaasApiSecret);
+      // Optional like the fields above: absent keeps what "local" proves with
+      // (a Docker proof server unless the user chose Gero Prover).
+      const localEngineValue = localEngine === undefined || localEngine === null ? current.localEngine : localEngine;
+      if (localEngineValue !== undefined && localEngineValue !== 'docker' && localEngineValue !== 'helper' && localEngineValue !== 'browser') {
+        throw new Error('localEngine must be "docker", "helper" or "browser"');
+      }
       midnightActions.setProofServer({
         mode,
         localUrl,
@@ -7121,11 +7151,67 @@ app.addToOptions(
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,
+        ...(localEngineValue ? { localEngine: localEngineValue } : {}),
       });
       await walletManager.refreshCrossDeviceProver();
       sendResponse({
         id: request.id,
         data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Gero Prover (the desktop helper that makes Midnight proofs on this computer):
+ * its status and its controls, for the Proof server page and the send dialogs.
+ * Extension pages only. The background owns the one connection to the helper,
+ * so a status read and a proof never start two copies of it.
+ *
+ * Request: `{ action: 'status' | 'setAccelerator' | 'selfTest' | 'removeKeys', enabled?: boolean }`.
+ * Response: `{ success: true, result: { snapshot, selfTest? } }`. A helper that is
+ * missing or cannot be used is a successful answer (its `connection` says why);
+ * only a failed test proof or a malformed request is an error.
+ *
+ * `{ action: 'browserSelfTest', threaded: boolean }` proves the same bundled test
+ * preimage (a throwaway key, no wallet data) with the prover inside the browser,
+ * standard or multi-threaded, for the speed comparison on that page. Response:
+ * `{ success: true, result: { browserSelfTest: { proveMs, threads, threadsUnavailable? } } }`.
+ */
+app.addToOptions(
+  MessageTypes.GERO_PROVER,
+  async (request, sendResponse) => {
+    try {
+      const { action, enabled, threaded } = request.data || {};
+      let result: { snapshot?: unknown; selfTest?: unknown; browserSelfTest?: unknown };
+      if (action === 'browserSelfTest') {
+        if (typeof threaded !== 'boolean') throw new Error('threaded must be a boolean');
+        result = { browserSelfTest: await runDeviceSelfTest(threaded) };
+      } else if (action === 'status') {
+        result = { snapshot: await helperStatus() };
+      } else if (action === 'setAccelerator') {
+        if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean');
+        result = { snapshot: await setHelperAccelerator(enabled) };
+      } else if (action === 'removeKeys') {
+        result = { snapshot: await removeHelperKeys() };
+      } else if (action === 'selfTest') {
+        const selfTest = await runHelperSelfTest();
+        result = { snapshot: await helperStatus(), selfTest };
+      } else {
+        throw new Error('action must be "status", "setAccelerator", "selfTest", "removeKeys" or "browserSelfTest"');
+      }
+      sendResponse({
+        id: request.id,
+        data: { success: true, result },
         target: TARGET,
         sender: SENDER.extension,
       });

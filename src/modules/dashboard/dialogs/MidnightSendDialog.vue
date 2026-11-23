@@ -67,6 +67,12 @@
           </div>
 
           <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
+          <!-- While the proof is made on this computer (the browser, Gero Prover or a
+               local proof server): what that means for the proof inputs. -->
+          <p v-if="provingOnThisComputer" class="t-caption mpv-local-note" data-test="midnight-send-local-note">
+            <v-icon size="14" aria-hidden="true">mdi-lock-outline</v-icon>
+            <span>{{ t('midnight.send.provingLocalNote') }}</span>
+          </p>
         </div>
         <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
              signed and kept in memory; Try again resends the same bytes, no password.
@@ -388,8 +394,9 @@
           />
         </div>
 
-        <!-- Local mode after the ledger 9 upgrade: the server to update to (issue 1475). -->
-        <ProofServerLedger9Notice v-if="!localProverUnavailable" :network="loggedWallet?.network" class="mb-2" />
+        <!-- Local mode after the ledger 9 upgrade: the server to update to (issue 1475).
+             Not when Gero Prover proves the send: there is no Docker server to update. -->
+        <ProofServerLedger9Notice v-if="!localProverUnavailable && !provesWithHelper" :network="loggedWallet?.network" class="mb-2" />
 
         <!-- Local proof server didn't answer its health check (WP-P5): offer
              the two-action fallback instead of a generic error string. The
@@ -401,10 +408,10 @@
             <span>{{ proverFallbackText }}</span>
             <div class="midnight-prover-fallback-actions">
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="openProofServerSettings">
-                {{ t('midnight.proofServer.openSettings') }}
+                {{ helperFallback ? t('midnight.prover.setUpAgain') : t('midnight.proofServer.openSettings') }}
               </v-btn>
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
-                {{ fallbackOnDevice ? t('midnight.proofServer.useDeviceOnce') : t('midnight.proofServer.useCloudOnce') }}
+                {{ fallbackOnceLabel }}
               </v-btn>
             </div>
           </div>
@@ -518,6 +525,10 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
+import {
+  HELPER_UNAVAILABLE_COPY, helperProcessorLabel, isHelperUnavailableReason, type HelperUnavailableReason,
+} from '@/chains/midnight/geroProverState';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { isLedger9Network, midnightProofServerVersionLine } from '@/chains/midnight/midnightConfig';
@@ -908,12 +919,16 @@ const timelineLabels = computed<SendTimelineLabels>(() => ({
   sign: String(t('midnight.send.stageSign')),
   submit: String(feeSource.value === 'station' ? t('midnight.station.stageSubmit') : t('midnight.send.stageSubmit')),
   provingDevice: String(t('midnight.send.stageProvingDevice')),
+  provingHelper: String(t('midnight.send.stageProvingHelper')),
   provingLocal: String(t('midnight.send.stageProvingLocal')),
   provingZkpaas: String(t('midnight.send.stageProvingZkpaas')),
   provingCloud: String(t('midnight.send.stageProvingCloud')),
 }));
 const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels, {
-  provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params))),
+  provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
+    helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
+    deviceThreads: browserThreadsLabel((key, params) => String(t(key, params))),
+  }),
   announce,
   // Gero Cloud is busy: counting down to the automatic resubmit.
   submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),
@@ -972,6 +987,8 @@ const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // the ledger-8 server running on stagenet is told to start something that
 // is already up. Gero Cloud stays on offer: the sidecar proves both lines.
 const proverFallbackText = computed(() => {
+  // Gero Prover is missing, not allowed or another release: nothing was sent.
+  if (helperFallback.value) return t(HELPER_UNAVAILABLE_COPY[proverFallbackReason.value as HelperUnavailableReason]);
   if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
   if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
   if (proverFallbackReason.value === 'local-url-not-loopback') return t('midnight.proofServer.localUrlNotLoopbackSend');
@@ -1009,13 +1026,32 @@ let pendingAuthorization: (() => boolean) | null = null;
 function sendProver(forceRemote = false): WalletProver {
   return walletProverFor(
     loggedWallet.value?.network ?? '',
-    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode },
+    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode, localEngine: midnightStore.proofServer.localEngine },
     isShielded.value ? 'shielded' : 'unshielded',
-    { shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled() },
+    {
+      shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled(),
+      ...localProvingOffersHere(),
+    },
   );
 }
 // The one-off fallback proves on this device rather than on Gero Cloud.
 const fallbackOnDevice = computed(() => sendProver(true) === 'device');
+// The proof is being made on this computer right now: in the browser, by Gero
+// Prover or by a local proof server. `working` + the background's own report is
+// the fee proof the browser makes.
+const provingOnThisComputer = computed(() => (
+  sendStage.value === 'provingDevice' || sendStage.value === 'provingHelper' || sendStage.value === 'provingLocal'
+  || (sendStage.value === 'working' && midnightStore.sendProgress?.phase === 'proving')
+));
+// This send would be proved by Gero Prover (the desktop helper).
+const provesWithHelper = computed(() => sendProver() === 'helper');
+// The fallback is from Gero Prover (the desktop helper), not from a proof server.
+const helperFallback = computed(() => isHelperUnavailableReason(proverFallbackReason.value));
+// After Gero Prover, "this device" would be ambiguous: the other prover on it is the browser's.
+const fallbackOnceLabel = computed(() => {
+  if (!fallbackOnDevice.value) return t('midnight.proofServer.useCloudOnce');
+  return t(helperFallback.value ? 'midnight.prover.useBrowserOnce' : 'midnight.proofServer.useDeviceOnce');
+});
 const approval = useApprovalFreshness(
   () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked,
     recipient.value, amount.value, selectedToken.value, activeTab.value, sponsorWalletId.value, midnightStore.proofServer],
@@ -1246,7 +1282,8 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await dispatchSend(credentials, current);
     return;
   }
-  if (prover === 'local') {
+  // Gero Prover is on this computer too: no consent, and a preflight that starts it.
+  if (prover === 'local' || prover === 'helper') {
     await routeWalletProvedShielded(credentials, current);
     return;
   }
@@ -1965,6 +2002,14 @@ function shortToken(colour: string): string {
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
+}
+
+.mpv-local-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-1);
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 
 /* Local proof-server fallback (WP-P5) — reuses .midnight-info-note's tone,
