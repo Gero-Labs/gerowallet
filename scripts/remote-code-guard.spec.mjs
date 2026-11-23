@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build } from 'vite';
@@ -95,7 +95,7 @@ describe('isScannable', () => {
 
 /** Runs a real Vite build of one page with only the guard plugin installed. */
 async function buildPage(html, mainJs = 'document.title = "fixture";\n') {
-  const root = mkdtempSync(join(tmpdir(), 'remote-code-guard-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'remote-code-guard-')));
   writeFileSync(join(root, 'index.html'), html);
   writeFileSync(join(root, 'main.js'), mainJs);
   try {
