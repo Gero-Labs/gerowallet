@@ -14,7 +14,7 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { utxoToCip30Hex } from '@/modules/swap/composables/utxoToCip30Hex';
-import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
+import { parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
 import { isStrikeQuoteExpired, verifyStrikeDepositTx } from '@/modules/market/utils/strikeDepositGuard';
 import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
 import { backendSource, historySource, proveOwnInputs } from '@/shared/utils/provenInputs';
@@ -142,7 +142,7 @@ export function useStrikeDeposit() {
       return;
     }
 
-    const lovelace = toBaseUnits(amountAda, 6);
+    const lovelace = parseStrikeAmount(amountAda, 6);
     if (lovelace == null || lovelace <= 0n) {
       error.value = 'Invalid deposit amount.';
       status.value = 'error';

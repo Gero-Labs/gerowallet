@@ -12,6 +12,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { verifyStrikeWithdrawTx } from '@/modules/market/utils/strikeWithdrawGuard';
+import { formatStrikeUsd, parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
 import { derivedOwnAddresses, derivedOwnKeyHashes } from '@/shared/utils/ownAddresses';
 
 /**
@@ -269,13 +270,13 @@ export function useStrikeWithdraw() {
       if (!recipient) {
         throw new Error('No active Cardano wallet.');
       }
-      const amt = parseFloat(amountUsd);
-      if (!Number.isFinite(amt) || amt <= 0) {
+      const cents = parseStrikeAmount(amountUsd, 2);
+      if (cents == null || cents <= 0n) {
         throw new Error('Invalid withdrawal amount.');
       }
 
       const raw = await strikeUserApi.getWithdrawQuote({
-        usd_value: amountUsd,
+        usd_value: formatStrikeUsd(cents),
         blockchain: 'cardano',
         asset,
       }) as WithdrawQuoteResponse & {
