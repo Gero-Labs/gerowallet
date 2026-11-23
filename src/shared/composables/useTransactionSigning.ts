@@ -3,7 +3,7 @@ import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
 import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
@@ -607,11 +607,17 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     }
   };
 
-  const submitSigned = async (cbor: string, witnessHex: string | null | undefined) =>
-    (await Messaging.sendToBackgroundFromOptions({
+  const submitSigned = async (cbor: string, witnessHex: string | null | undefined): Promise<{ txId: string } | { error: string }> => {
+    const reply = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: { txCbor: cbor, witnessHex, utxos: utxos.value },
-    })) as { data: { txId?: string; error?: string } };
+    }) as { data?: { txId?: string; error?: string } } | null | undefined;
+    if (reply?.data?.error) return { error: reply.data.error };
+    const txId = reply?.data?.txId;
+    // A lost runtime reply can follow a successful broadcast. Only the worker can acknowledge it.
+    if (typeof txId !== 'string' || !txId.trim()) throw new Error(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+    return { txId };
+  };
 
   /** Wait until every merge output of the attempt is in the wallet's UTxO set, i.e. the merges are in a block. */
   const waitForMergeOutputs = async (attempt: SigningAttempt): Promise<boolean> => {
@@ -640,7 +646,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         options.onProgress?.({ phase: 'sending', step, total });
         const result = await submitSigned(prerequisite.cbor, prerequisiteWitnesses[index]);
         if (!attempt.current()) return;
-        if (result.data.error) throw new Error(result.data.error);
+        if ('error' in result) throw new Error(result.error);
         submittedPrerequisites.add(prerequisite.id);
       }
 
@@ -648,7 +654,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       if (total > 1) options.onProgress?.({ phase: 'sending', step, total });
       let submitResult = await submitSigned(attempt.cbor, txWitnesses.value);
       if (!attempt.current()) return;
-      if (submitResult.data.error && total > 1 && isMissingInputError(submitResult.data.error)) {
+      if ('error' in submitResult && total > 1 && isMissingInputError(submitResult.error)) {
         // The node this reached has not seen the merges yet. Once they are in a block,
         // the same signed payment is valid everywhere: send it again.
         options.onProgress?.({ phase: 'waiting', step, total });
@@ -657,12 +663,12 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
           if (!attempt.current()) return;
         }
       }
-      if (submitResult.data.error) {
-        throw new Error(submitResult.data.error);
+      if ('error' in submitResult) {
+        throw new Error(submitResult.error);
       }
 
-      snackbar.fireSuccess(t(options.successMessageKey, { txId: submitResult.data.txId }));
-      options.onSuccess?.(submitResult.data.txId || '');
+      snackbar.fireSuccess(t(options.successMessageKey, { txId: submitResult.txId }));
+      options.onSuccess?.(submitResult.txId);
       if (options.closeOnSuccess?.() ?? true) options.onClose?.();
     } catch (e) {
       if (!attempt.current()) return;

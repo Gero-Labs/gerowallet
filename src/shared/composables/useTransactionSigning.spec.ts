@@ -327,6 +327,44 @@ describe('sweep prerequisites', () => {
     expect(mocks.error).toHaveBeenCalledWith('Could not serialize message.');
   });
 
+  it.each([
+    ['disconnected message port', { error: 'The message port closed before a response was received.' }],
+    ['absent reply', undefined],
+    ['missing transaction ID', { data: {} }],
+    ['blank transaction ID', { data: { txId: ' ' } }],
+  ])('keeps a payment open with an unconfirmed outcome after a %s', async (_name, reply) => {
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockResolvedValueOnce(reply);
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const { signing } = sweeper([], [], merge, { onSuccess, onClose });
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['payment']);
+    expect(mocks.error).toHaveBeenCalledWith(i18n.t('errors.submitUnconfirmed'));
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(signing.loading.value).toBe(false);
+  });
+
+  it('stops a sweep at a missing receipt and counts only acknowledged merges', async () => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'm2') return { data: {} };
+      return { data: { txId: 'submitted' } };
+    });
+    const onInterrupted = vi.fn();
+    const { signing } = sweeper(['m1', 'm2'], ['m1', 'm2'], merge, { onInterrupted });
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2']);
+    expect(onInterrupted).toHaveBeenCalledWith({ step: 2, total: 3, mergesSent: 1, reason: i18n.t('errors.submitUnconfirmed') });
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
   it('refuses a merge the payment does not spend, before asking for the password', async () => {
     const { signing } = sweeper(['m1', 'm2'], ['m1']);
     await signing.handleSign();
