@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { passwordCheckFailure } from '@/shared/utils/passwordCheck';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -52,6 +52,36 @@ const status = ref<DepositStatus>('idle');
 const txHash = ref<string | null>(null);
 const error = ref<string | null>(null);
 let quoteRequestVersion = 0;
+
+/**
+ * What became of a deposit once its transaction was handed to the network.
+ *
+ * From the SUBMIT_TX send onwards the ADA may have moved, so the result no longer
+ * belongs to the review on screen: `reset()`, closing the sheet, a new quote and a
+ * wallet switch all leave it alone. It is kept under the wallet it was sent from
+ * (`strikeWalletKey()`), shown only while that wallet is the logged one, and
+ * dropped by `acknowledgeSubmission()` once it is final and has been seen.
+ */
+export interface StrikeDepositSubmission {
+  walletKey: string;
+  requestId: string;
+  /** The quoted deposit, in lovelace. */
+  lovelace: string;
+  status: 'submitting' | 'confirming' | 'confirmed' | 'error';
+  txHash: string | null;
+  error: string | null;
+}
+const submissions = ref<Record<string, StrikeDepositSubmission>>({});
+
+/** Identifies the logged wallet account: one record per account, and its base address. */
+export function strikeWalletKey(): string {
+  const wallet = walletStore.loggedWallet;
+  return wallet ? `${wallet.id ?? ''}|${wallet.baseAddress ?? ''}` : '';
+}
+
+function isPendingSubmission(submission: StrikeDepositSubmission | null | undefined): boolean {
+  return submission?.status === 'submitting' || submission?.status === 'confirming';
+}
 const quoteCountdown = ref<number>(0);
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -121,6 +151,21 @@ export function useStrikeDeposit() {
   // the original stub. Keeping them avoids a wave of consumer changes.
   const depositStatus = status;
   const depositError = error;
+
+  /** The submitted deposit of the logged wallet, if it has one that was not acknowledged. */
+  const submission = computed<StrikeDepositSubmission | null>(
+    () => submissions.value[strikeWalletKey()] ?? null,
+  );
+
+  /** Drop the logged wallet's result once it is final. A pending one stays. */
+  function acknowledgeSubmission(): void {
+    const key = strikeWalletKey();
+    const current = submissions.value[key];
+    if (!current || isPendingSubmission(current)) return;
+    const rest = { ...submissions.value };
+    delete rest[key];
+    submissions.value = rest;
+  }
 
   /**
    * Step 1 — request a deposit quote from Strike.
@@ -215,6 +260,8 @@ export function useStrikeDeposit() {
     pkBytes?: Uint8Array,
   ): Promise<boolean> {
     if (isDepositing.value || status.value === 'confirmed') return false;
+    // A deposit of this wallet is still on its way: its outcome comes first.
+    if (isPendingSubmission(submissions.value[strikeWalletKey()])) return false;
     if (vaultId !== undefined) {
       error.value = i18n.t('vaults.transfersUnavailable');
       status.value = 'error';
@@ -249,6 +296,22 @@ export function useStrikeDeposit() {
     }
 
     const current = () => quote.value === confirmedQuote;
+    // The result belongs to the wallet whose UTxOs fund the deposit, whatever is logged later.
+    const submittedFrom = strikeWalletKey();
+    let submitted: StrikeDepositSubmission | null = null;
+    const record = (patch: Partial<StrikeDepositSubmission>): void => {
+      const before: StrikeDepositSubmission = submitted ?? {
+        walletKey: submittedFrom,
+        requestId: confirmedQuote.request_id,
+        lovelace: confirmedQuote.quote.asset_amount,
+        status: 'submitting',
+        txHash: null,
+        error: null,
+      };
+      submitted = { ...before, ...patch };
+      submissions.value = { ...submissions.value, [submittedFrom]: submitted };
+    };
+    const wasSubmitted = () => submitted !== null;
     if (isStrikeQuoteExpired(confirmedQuote.quote.expiration_at)) {
       error.value = String(i18n.t('perpetuals.deposit.quoteExpired'));
       status.value = 'error';
@@ -358,6 +421,8 @@ export function useStrikeDeposit() {
 
       // ── 3. Submit to chain ──
       requireUnexpired();
+      // Submission starts here. Whatever happens next is recorded, even if the review is gone.
+      record({ status: 'submitting' });
       status.value = 'submitting';
       const submitResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
@@ -375,6 +440,7 @@ export function useStrikeDeposit() {
       if (typeof finalTxHash !== 'string' || !finalTxHash.trim()) {
         throw new Error(String(i18n.t('errors.submitUnconfirmed')));
       }
+      record({ status: 'confirming', txHash: finalTxHash });
       if (current()) {
         txHash.value = finalTxHash;
         status.value = 'confirming';
@@ -403,9 +469,13 @@ export function useStrikeDeposit() {
       // PerpsAccountSection) listen for 'confirmed'; the
       // side-panel sheet treats 'credited' and 'confirmed' as equivalent. The
       // balance updates on Strike once on-chain confirmations land.
+      record({ status: 'confirmed' });
       if (current()) status.value = 'confirmed';
       return true;
     } catch (e) {
+      if (wasSubmitted()) {
+        record({ status: 'error', error: extractStrikeError(e, 'Failed to build or submit the deposit transaction.') });
+      }
       if (!current()) return false;
       const anyErr = e as { response?: { status?: number; data?: unknown } };
       debugLog(
@@ -430,6 +500,10 @@ export function useStrikeDeposit() {
     clearCountdown();
   }
 
+  // Another wallet must not see or sign this wallet's review. A submitted deposit is
+  // kept under its own wallet (see `submissions`), so only the review is dropped.
+  watch(strikeWalletKey, reset, { flush: 'sync' });
+
   // Tear down the countdown timer if the last consumer unmounts.
   onUnmounted(() => {
     clearCountdown();
@@ -451,10 +525,12 @@ export function useStrikeDeposit() {
     isDepositing,
     depositStatus,
     depositError,
+    submission,
     // Methods
     requestQuote,
     buildAndSign,
     reset,
+    acknowledgeSubmission,
     // Backwards-compat alias used by existing components
     resetDeposit: reset,
   };
