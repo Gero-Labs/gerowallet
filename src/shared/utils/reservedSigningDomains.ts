@@ -5,7 +5,8 @@
  * device, and over `gero-support/v1|…` it logs into the user's support chat; a
  * site that obtained either through an ordinary sign-message prompt could use it
  * as the user. `gero-signing/v1|…` is how Gero's root keys approve the keys that
- * sign its server answers.
+ * sign its server answers. `gero-station/v1|…` asks Gero's fee station for a day
+ * of paid Midnight fees.
  *
  * Every Gero subject has the shape `gero-<name>/v<N>` followed by `|` or the end,
  * so the pattern covers subjects added later; the list names the current ones
@@ -20,6 +21,8 @@ export const RESERVED_SIGNING_DOMAINS = [
   'gero-support/',
   // Root approvals of Gero's response-signing keys (signedResponseRoots.ts).
   'gero-signing/',
+  // The stake-key proof that asks Gero's fee station for vouchers (midnightStationChallenge.ts).
+  'gero-station/',
 ] as const;
 
 const GERO_SUBJECT = /^gero-[a-z0-9-]+\/v\d+(?:\||$)/;

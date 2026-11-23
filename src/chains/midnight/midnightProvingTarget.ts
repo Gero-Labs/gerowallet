@@ -44,7 +44,18 @@ export interface ProofServerPreference extends ZkpaasSettings {
    * existed; callers fall back to the ledger-9 default.
    */
   localUrlLedger9?: string;
+  /**
+   * What "local" proves with: a Docker proof server at the URLs above
+   * (`docker`, and what an absent value means), Gero Prover, the desktop
+   * helper (`helper`, midnightHelperProver.ts), or the prover inside the
+   * browser for every proof of a send (`browser`, midnightDeviceProver.ts).
+   * All three keep proof inputs on this computer, so none needs a remote
+   * prover's consent.
+   */
+  localEngine?: LocalProvingEngine;
 }
+
+export type LocalProvingEngine = 'docker' | 'helper' | 'browser';
 
 /**
  * The local proof-server URL for the circuit family of `network`'s chain
@@ -100,14 +111,30 @@ export type ProvingTarget =
  */
 export type WalletProvingRequest =
   | { url: string; headers?: Record<string, string> }
-  | { device: true };
+  | { device: true }
+  /** Gero Prover, the desktop helper on this computer (midnightHelperProver.ts). */
+  | { helper: true };
 
 export function isDeviceProving(request: WalletProvingRequest): request is { device: true } {
   return 'device' in request && request.device === true;
 }
 
-/** Who proves a wallet-built transaction, and so who sees its proof inputs. */
-export type WalletProver = 'device' | 'local' | 'zkpaas' | 'cloud';
+export function isHelperProving(request: WalletProvingRequest): request is { helper: true } {
+  return 'helper' in request && request.helper === true;
+}
+
+/**
+ * Who proves a wallet-built transaction, and so who sees its proof inputs.
+ * `device` is the WASM prover in the browser; `helper` is Gero Prover, the
+ * desktop app; `local` is the user's Docker proof server. All three are on
+ * this computer.
+ */
+export type WalletProver = 'device' | 'helper' | 'local' | 'zkpaas' | 'cloud';
+
+/** The provers that receive nothing over the network: no consent notice, no remote-prover gate. */
+export function isOnThisComputer(prover: WalletProver): boolean {
+  return prover === 'device' || prover === 'helper' || prover === 'local';
+}
 
 /**
  * Networks whose built-in circuits this device can prove: the ledger 9 key
@@ -130,15 +157,38 @@ export function canProveOnDevice(network: string): boolean {
  * so no secret reaches Gero. A private (shielded) send also needs Zswap
  * proofs, which take 30-70 s on a fast laptop; it stays on Gero Cloud unless
  * `shieldedOnDevice` (the `isMidnightShieldedDeviceProvingEnabled` flag) moves
- * it here too. Local and zkPaaS mean what the user chose, for both kinds.
+ * it here too. Local and zkPaaS mean what the user chose, for both kinds;
+ * local is Gero Prover, or this device for both kinds, when the user chose
+ * that (`localEngine`) and it is offered.
  */
 export function walletProverFor(
   network: string,
-  ps: Pick<ProofServerPreference, 'mode'>,
+  ps: Pick<ProofServerPreference, 'mode' | 'localEngine'>,
   kind: 'unshielded' | 'shielded',
-  options: { shieldedOnDevice?: boolean } = {},
+  options: {
+    shieldedOnDevice?: boolean;
+    /**
+     * Gero Prover is offered (the `isGeroProverEnabled` flag). Without it a
+     * stored `localEngine: 'helper'` reads as the Docker server, which is what
+     * "local" meant before the helper existed.
+     */
+    helper?: boolean;
+    /**
+     * "In this browser" is offered (the `isMidnightThreadedProvingEnabled`
+     * flag). Without it a stored `localEngine: 'browser'` reads as the Docker
+     * server too.
+     */
+    browser?: boolean;
+  } = {},
 ): WalletProver {
-  if (ps.mode === 'local') return 'local';
+  if (ps.mode === 'local') {
+    // The helper and the browser prover hold the same pinned ledger 9 keys, so
+    // they prove the same chains; a chain still on ledger 8 keeps the Docker server.
+    if (options.helper && ps.localEngine === 'helper' && canProveOnDevice(network)) return 'helper';
+    // The user chose the browser for every proof, private sends included.
+    if (options.browser && ps.localEngine === 'browser' && canProveOnDevice(network)) return 'device';
+    return 'local';
+  }
   if (ps.mode === 'zkpaas') return 'zkpaas';
   if (canProveOnDevice(network) && (kind === 'unshielded' || options.shieldedOnDevice)) return 'device';
   return 'cloud';

@@ -40,6 +40,7 @@ import {
   type WalletProvingRequest,
 } from '@/chains/midnight/midnightProvingTarget';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type {
   BuildMidnightTxRequest,
@@ -57,6 +58,14 @@ import {
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
 import { markBuildStep, withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
+import {
+  helperPreflightReason,
+  HELPER_ERROR_COPY,
+  HELPER_UNAVAILABLE_COPY,
+  HELPER_UNAVAILABLE_REASON,
+  isHelperUnavailableReason,
+  type HelperUnavailableReason,
+} from '@/chains/midnight/geroProverState';
 import { isMidnightApiError, type MidnightApiErrorKind } from '@/api/midnightApiError';
 import { assertMidnightWritesOpen } from '@/chains/midnight/midnightWriteStatus';
 import { midnightTimer } from '@/chains/midnight/midnightTiming';
@@ -123,6 +132,15 @@ export function backgroundError(error: string | undefined, fallback: string): Er
   if (error && Object.prototype.hasOwnProperty.call(LEDGER_REFUSAL_COPY, error)) {
     return new Error(String(i18n.t(LEDGER_REFUSAL_COPY[error])));
   }
+  // Gero Prover could not be used at all (missing, not allowed, another release):
+  // the dialogs offer the other ways to prove, as for a proof server that did not answer.
+  if (error && Object.prototype.hasOwnProperty.call(HELPER_UNAVAILABLE_REASON, error)) {
+    return new ProofServerUnreachableError('', HELPER_UNAVAILABLE_REASON[error]);
+  }
+  // It was used and the proof failed: one message, and nothing else is tried.
+  if (error && Object.prototype.hasOwnProperty.call(HELPER_ERROR_COPY, error)) {
+    return new Error(String(i18n.t(HELPER_ERROR_COPY[error])));
+  }
   // Whichever wallet pays the fee, the sender's own or a sponsor: the copy names neither.
   if (error && DUST_SHORTFALL.test(error.trim())) {
     return new Error(String(i18n.t('midnight.errors.dustInsufficient')));
@@ -150,6 +168,8 @@ export type MidnightSendStage =
   | 'building'
   | 'working'
   | 'provingDevice'
+  // Gero Prover, the desktop helper on this computer (midnightHelperProver.ts).
+  | 'provingHelper'
   | 'provingLocal'
   | 'provingZkpaas'
   | 'submitting'
@@ -609,7 +629,7 @@ async function buildAndSignShieldedInBg(
  * resolver outcome, or `local-wrong-version` (a local server that answers
  * but carries the other ledger's circuits, such as 8.1.0 on a ledger 9 chain).
  */
-export type ProofServerFallbackReason = ProvingUnconfiguredTarget['reason'] | 'local-wrong-version';
+export type ProofServerFallbackReason = ProvingUnconfiguredTarget['reason'] | 'local-wrong-version' | HelperUnavailableReason;
 
 export class ProofServerUnreachableError extends Error {
   /**
@@ -632,7 +652,10 @@ export class ProofServerUnreachableError extends Error {
     /** The release a `local-wrong-version` server reported (`8.1.0`). */
     public readonly serverVersion?: string,
   ) {
-    super('Proof server not reachable or incompatible with the selected network');
+    // Gero Prover's reasons are said in full: a surface without the fallback actions shows this text.
+    super(isHelperUnavailableReason(reason)
+      ? String(i18n.t(HELPER_UNAVAILABLE_COPY[reason]))
+      : 'Proof server not reachable or incompatible with the selected network');
     this.name = 'ProofServerUnreachableError';
   }
 }
@@ -640,6 +663,7 @@ export class ProofServerUnreachableError extends Error {
 /** A resolved wallet-side prover: what the background is asked to prove with. */
 type WalletProvingTarget =
   | { prover: 'device'; request: { device: true }; stage: 'provingDevice' }
+  | { prover: 'helper'; request: { helper: true }; stage: 'provingHelper' }
   | {
     prover: 'local' | 'zkpaas';
     request: { url: string; headers?: Record<string, string> };
@@ -667,7 +691,10 @@ export function shieldedOnDevice(): boolean {
  */
 export function walletProverForSend(network: string, kind: 'unshielded' | 'shielded', forceRemote = false): WalletProver {
   const mode = forceRemote ? 'remote' : midnightStore.proofServer.mode;
-  return walletProverFor(network, { mode }, kind, { shieldedOnDevice: shieldedOnDevice() });
+  return walletProverFor(network, { mode, localEngine: midnightStore.proofServer.localEngine }, kind, {
+    shieldedOnDevice: shieldedOnDevice(),
+    ...localProvingOffersHere(),
+  });
 }
 
 /**
@@ -691,6 +718,7 @@ function resolveWalletProvingTarget(
 ): WalletProvingTarget | null {
   const prover = walletProverForSend(network, kind, forceRemote);
   if (prover === 'device') return { prover, request: { device: true }, stage: 'provingDevice' };
+  if (prover === 'helper') return { prover, request: { helper: true }, stage: 'provingHelper' };
   if (prover === 'cloud') return null;
   // `unconfigured` covers both zkPaaS-without-a-key and a local server whose
   // circuit family doesn't match the network (see resolveProvingTarget).
@@ -743,7 +771,9 @@ function whenBackgroundProves(onProving: () => void): () => void {
 async function assertProverReachable(target: WalletProvingTarget | null, current: () => boolean): Promise<void> {
   if (!target || target.prover === 'device') return;
   const failure = await proverPreflightFailure(target, current);
-  if (failure) throw new ProofServerUnreachableError(target.request.url, failure.reason, failure.serverVersion);
+  if (failure) {
+    throw new ProofServerUnreachableError(target.prover === 'helper' ? '' : target.request.url, failure.reason, failure.serverVersion);
+  }
 }
 
 /**
@@ -755,9 +785,17 @@ async function assertProverReachable(target: WalletProvingTarget | null, current
  * take the send.
  */
 async function proverPreflightFailure(
-  target: Extract<WalletProvingTarget, { prover: 'local' | 'zkpaas' }>,
+  target: Extract<WalletProvingTarget, { prover: 'helper' | 'local' | 'zkpaas' }>,
   current: () => boolean = () => true,
 ): Promise<{ reason?: ProofServerFallbackReason; serverVersion?: string } | undefined> {
+  if (target.prover === 'helper') {
+    // Gero Prover: the background starts it and reads its release, before
+    // anything is built. Missing, not allowed or another release is a reason
+    // the dialog names; the send never moves to another prover by itself.
+    const reason = await helperPreflightReason();
+    assertCurrentApproval(current);
+    return reason ? { reason } : undefined;
+  }
   const { checkProofServerHealth, checkProofServerVersion } = await import('@/chains/midnight/midnightLocalProver');
   assertCurrentApproval(current);
   const healthy = await checkProofServerHealth(target.request.url, {

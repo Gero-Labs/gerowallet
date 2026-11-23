@@ -67,6 +67,12 @@
           </div>
 
           <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
+          <!-- While the proof is made on this computer (the browser, Gero Prover or a
+               local proof server): what that means for the proof inputs. -->
+          <p v-if="provingOnThisComputer" class="t-caption mpv-local-note" data-test="midnight-send-local-note">
+            <v-icon size="14" aria-hidden="true">mdi-lock-outline</v-icon>
+            <span>{{ t('midnight.send.provingLocalNote') }}</span>
+          </p>
         </div>
         <!-- Gero Cloud stayed busy after the automatic resubmits: the transaction is
              signed and kept in memory; Try again resends the same bytes, no password.
@@ -233,6 +239,13 @@
                         :network="loggedWallet.network"
                         @update:model-value="sponsorWalletId = $event"
                       />
+                      <!-- Gero's fee station: offered only when no fee wallet is chosen. -->
+                      <MidnightStationFeeNote
+                        v-if="stationShown"
+                        :status="stationStatus"
+                        :use-station="!stationOptedOut"
+                        @update:use-station="stationOptedOut = !$event"
+                      />
                       <!-- Unlock block for the chosen sponsor. Both branches name
                            BOTH wallets: the single likeliest mistake here is
                            entering the sending wallet's credential. -->
@@ -319,6 +332,11 @@
                 <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-link-variant</v-icon>
                 <span>{{ t('midnight.sponsor.disclosureLinkability') }}</span>
               </div>
+              <!-- Gero's fee station pays: say so where the fee is reviewed. -->
+              <div v-if="feeSource === 'station'" class="midnight-info-note mt-2" data-test="station-review">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-gift-outline</v-icon>
+                <span>{{ t('midnight.station.feeLine') }}</span>
+              </div>
               <!-- Who is unlocked for this send, with a way back to the picker. -->
               <div v-if="sponsorWallet" class="sponsor-review mt-2">
                 <span class="sponsor-review__av">{{ initialsOf(sponsorWallet.name) }}</span>
@@ -376,8 +394,9 @@
           />
         </div>
 
-        <!-- Local mode after the ledger 9 upgrade: the server to update to (issue 1475). -->
-        <ProofServerLedger9Notice v-if="!localProverUnavailable" :network="loggedWallet?.network" class="mb-2" />
+        <!-- Local mode after the ledger 9 upgrade: the server to update to (issue 1475).
+             Not when Gero Prover proves the send: there is no Docker server to update. -->
+        <ProofServerLedger9Notice v-if="!localProverUnavailable && !provesWithHelper" :network="loggedWallet?.network" class="mb-2" />
 
         <!-- Local proof server didn't answer its health check (WP-P5): offer
              the two-action fallback instead of a generic error string. The
@@ -389,10 +408,10 @@
             <span>{{ proverFallbackText }}</span>
             <div class="midnight-prover-fallback-actions">
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="openProofServerSettings">
-                {{ t('midnight.proofServer.openSettings') }}
+                {{ helperFallback ? t('midnight.prover.setUpAgain') : t('midnight.proofServer.openSettings') }}
               </v-btn>
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
-                {{ fallbackOnDevice ? t('midnight.proofServer.useDeviceOnce') : t('midnight.proofServer.useCloudOnce') }}
+                {{ fallbackOnceLabel }}
               </v-btn>
             </div>
           </div>
@@ -489,6 +508,8 @@ import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScanner
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
+import MidnightStationFeeNote from '@/shared/components/MidnightStationFeeNote.vue';
+import { useMidnightStationFee } from '@/shared/composables/useMidnightStationFee';
 import { geroStore } from '@/stores/geroStore';
 import { secretsWallet } from '@/shared/utils/walletAccount';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
@@ -504,6 +525,10 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
 import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
+import {
+  HELPER_UNAVAILABLE_COPY, helperProcessorLabel, isHelperUnavailableReason, type HelperUnavailableReason,
+} from '@/chains/midnight/geroProverState';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { isLedger9Network, midnightProofServerVersionLine } from '@/chains/midnight/midnightConfig';
@@ -649,12 +674,27 @@ const noFeeCapacity = computed(() => blocksMidnightSendLive(dustFeeInputs.value)
 const sponsorWalletId = ref<number | null>(null);
 
 /**
- * A verified missing DUST balance only blocks the send when nothing else will pay for
- * it. With a sponsor chosen the fee comes from that wallet, so the step-1 guard
- * must stand down — otherwise the feature is unreachable from the one screen
- * that needs it. An unverified zero never reaches this: it warns but does not block.
+ * Gero's fee station: the third fee source, considered only while this wallet
+ * may lack DUST and no fee wallet is chosen (useMidnightStationFee.ts). Not the
+ * "sponsor" above, which is another wallet the user owns.
  */
-const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
+const {
+  status: stationStatus, optedOut: stationOptedOut, shown: stationShown, source: feeSource, refresh: refreshStation,
+} = useMidnightStationFee({
+  mayLackDust,
+  feeWalletChosen: computed(() => sponsorWalletId.value != null),
+  shielded: computed(() => isShielded.value),
+  network: computed(() => loggedWallet.value?.network),
+});
+
+/**
+ * A verified missing DUST balance only blocks the send when nothing else will pay for
+ * it. With a sponsor chosen, or Gero's fee station paying, the fee comes from
+ * elsewhere, so the step-1 guard must stand down — otherwise the feature is
+ * unreachable from the one screen that needs it. An unverified zero never reaches
+ * this: it warns but does not block.
+ */
+const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null && feeSource.value !== 'station');
 
 /** The chosen sponsor's stored record, for deciding how to unlock it. */
 const sponsorWallet = computed(() => (
@@ -870,18 +910,25 @@ const { message: liveMessage, announce } = usePoliteAnnouncer();
 const timelineLabels = computed<SendTimelineLabels>(() => ({
   authorize: String(t('midnight.send.stageAuthorize')),
   build: String(t('midnight.send.stageBuild')),
-  sync: String(sponsorWallet.value
-    ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
-    : t('midnight.send.stageSync')),
+  // A station-paid send has no DUST sync: that step is getting the fee covered.
+  sync: String(feeSource.value === 'station'
+    ? t('midnight.station.stageVoucher')
+    : sponsorWallet.value
+      ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+      : t('midnight.send.stageSync')),
   sign: String(t('midnight.send.stageSign')),
-  submit: String(t('midnight.send.stageSubmit')),
+  submit: String(feeSource.value === 'station' ? t('midnight.station.stageSubmit') : t('midnight.send.stageSubmit')),
   provingDevice: String(t('midnight.send.stageProvingDevice')),
+  provingHelper: String(t('midnight.send.stageProvingHelper')),
   provingLocal: String(t('midnight.send.stageProvingLocal')),
   provingZkpaas: String(t('midnight.send.stageProvingZkpaas')),
   provingCloud: String(t('midnight.send.stageProvingCloud')),
 }));
 const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels, {
-  provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params))),
+  provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
+    helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
+    deviceThreads: browserThreadsLabel((key, params) => String(t(key, params))),
+  }),
   announce,
   // Gero Cloud is busy: counting down to the automatic resubmit.
   submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),
@@ -940,6 +987,8 @@ const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // the ledger-8 server running on stagenet is told to start something that
 // is already up. Gero Cloud stays on offer: the sidecar proves both lines.
 const proverFallbackText = computed(() => {
+  // Gero Prover is missing, not allowed or another release: nothing was sent.
+  if (helperFallback.value) return t(HELPER_UNAVAILABLE_COPY[proverFallbackReason.value as HelperUnavailableReason]);
   if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
   if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
   if (proverFallbackReason.value === 'local-url-not-loopback') return t('midnight.proofServer.localUrlNotLoopbackSend');
@@ -977,13 +1026,32 @@ let pendingAuthorization: (() => boolean) | null = null;
 function sendProver(forceRemote = false): WalletProver {
   return walletProverFor(
     loggedWallet.value?.network ?? '',
-    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode },
+    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode, localEngine: midnightStore.proofServer.localEngine },
     isShielded.value ? 'shielded' : 'unshielded',
-    { shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled() },
+    {
+      shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled(),
+      ...localProvingOffersHere(),
+    },
   );
 }
 // The one-off fallback proves on this device rather than on Gero Cloud.
 const fallbackOnDevice = computed(() => sendProver(true) === 'device');
+// The proof is being made on this computer right now: in the browser, by Gero
+// Prover or by a local proof server. `working` + the background's own report is
+// the fee proof the browser makes.
+const provingOnThisComputer = computed(() => (
+  sendStage.value === 'provingDevice' || sendStage.value === 'provingHelper' || sendStage.value === 'provingLocal'
+  || (sendStage.value === 'working' && midnightStore.sendProgress?.phase === 'proving')
+));
+// This send would be proved by Gero Prover (the desktop helper).
+const provesWithHelper = computed(() => sendProver() === 'helper');
+// The fallback is from Gero Prover (the desktop helper), not from a proof server.
+const helperFallback = computed(() => isHelperUnavailableReason(proverFallbackReason.value));
+// After Gero Prover, "this device" would be ambiguous: the other prover on it is the browser's.
+const fallbackOnceLabel = computed(() => {
+  if (!fallbackOnDevice.value) return t('midnight.proofServer.useCloudOnce');
+  return t(helperFallback.value ? 'midnight.prover.useBrowserOnce' : 'midnight.proofServer.useDeviceOnce');
+});
 const approval = useApprovalFreshness(
   () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked,
     recipient.value, amount.value, selectedToken.value, activeTab.value, sponsorWalletId.value, midnightStore.proofServer],
@@ -1214,7 +1282,8 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await dispatchSend(credentials, current);
     return;
   }
-  if (prover === 'local') {
+  // Gero Prover is on this computer too: no consent, and a preflight that starts it.
+  if (prover === 'local' || prover === 'helper') {
     await routeWalletProvedShielded(credentials, current);
     return;
   }
@@ -1346,33 +1415,40 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
   // submit is accepted, even if the dialog has been reset or closed by then.
   const draft = sendDraft();
   const paying = sponsorWallet.value;
+  // Who pays is fixed when the send starts: a status that changes mid-send changes nothing.
+  const viaStation = feeSource.value === 'station';
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    const { sendUnshieldedViaStation } = await awaitFreshApproval(() => import('@/services/midnightStationSend.service'), current);
     sponsor = await buildSponsorArg(current);
     if (!current()) { sponsor?.prfSecret?.fill(0); return; }
-    const result = await sendUnshieldedNight(
-      wallet.network,
-      {
-        fromAddress: wallet.baseAddress,
-        outputs: [{
-          address: draft.to,
-          amount: draft.amount.toString(),
-          token: draft.token,
-        }],
-        ttlMs: Date.now() + 5 * 60_000,
-      },
-      credentials,
-      (stage) => {
-        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
-        if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
-        if (current()) sendStage.value = stage;
-      },
-      sponsor,
-      forceRemote,
-      current,
-      busyHandlers(current),
-    );
+    const request = {
+      fromAddress: wallet.baseAddress,
+      outputs: [{
+        address: draft.to,
+        amount: draft.amount.toString(),
+        token: draft.token,
+      }],
+      ttlMs: Date.now() + 5 * 60_000,
+    };
+    const onStage = (stage: MidnightSendStage) => {
+      // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+      if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
+      if (current()) sendStage.value = stage;
+    };
+    const result = viaStation
+      ? await sendUnshieldedViaStation(wallet.network, request, credentials, onStage, current)
+      : await sendUnshieldedNight(
+        wallet.network,
+        request,
+        credentials,
+        onStage,
+        sponsor,
+        forceRemote,
+        current,
+        busyHandlers(current),
+      );
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
       'status:', result.status, 'sponsor:', paying?.id ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
@@ -1423,6 +1499,8 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     if (!current()) return;
     showSendError(e);
   } finally {
+    // A voucher was spent, held or refused: what the note says may no longer be true.
+    if (viaStation) void refreshStation();
     sponsor?.prfSecret?.fill(0);
     busySeconds.value = null;
     answerBusy('cancel');
@@ -1924,6 +2002,14 @@ function shortToken(colour: string): string {
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
+}
+
+.mpv-local-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-1);
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 
 /* Local proof-server fallback (WP-P5) — reuses .midnight-info-note's tone,

@@ -28,6 +28,11 @@ import type * as ledger from '@midnightntwrk/ledger-v9';
 import { debugLog } from '@/utils/debug';
 import { allowedMidnightZkCircuits } from './midnightZkKeys';
 import {
+  DEVICE_SELF_TEST_BINDING_INPUT,
+  DEVICE_SELF_TEST_KEY_LOCATION,
+  DEVICE_SELF_TEST_PREIMAGE,
+} from './midnightProverSelfTestFixture';
+import {
   base64ToBytes,
   bytesToBase64,
   decodeCheckResult,
@@ -189,7 +194,7 @@ function scheduleIdleClose(): void {
 type ProofRequest = Extract<MidnightProverRequest, { type: 'prove' } | { type: 'check' }>;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-/** One request at a time: zkir is single-threaded, and so is the worker. */
+/** One request at a time: one proof already uses every thread the prover has, and the worker has one prover. */
 function send(request: DistributiveOmit<ProofRequest, 'id'>): Promise<Extract<MidnightProverReply, { type: 'result'; ok: true }>> {
   const run = async () => {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = undefined; }
@@ -229,14 +234,23 @@ function assertAllowed(keyLocation: string, shielded: boolean): void {
  * that needs any proof other than its DUST fee fails here, before any
  * preimage is sent anywhere.
  */
-export function makeDeviceProvingProvider(options: { shielded: boolean }): ledger.ProvingProvider {
+export function makeDeviceProvingProvider(options: {
+  shielded: boolean;
+  /**
+   * Ask for the multi-threaded build of the prover (midnightZkirThreads.ts).
+   * The same prover and keys; the worker uses it when this browser can run it
+   * and proves with the standard build otherwise.
+   */
+  threaded?: boolean;
+}): ledger.ProvingProvider {
+  const threaded = options.threaded === true;
   return {
     // The built-in keys are loaded and verified in the worker (midnightZkKeyMaterial.ts).
     lookupKey: async () => undefined,
     async check(serializedPreimage, keyLocation) {
       assertAllowed(keyLocation, options.shielded);
       const reply = await send({
-        type: 'check', keyLocation, shielded: options.shielded, preimage: bytesToBase64(serializedPreimage),
+        type: 'check', keyLocation, shielded: options.shielded, threaded, preimage: bytesToBase64(serializedPreimage),
       });
       if (!reply.check) throw new DeviceProvingError('On-device proving returned no check result');
       return decodeCheckResult(reply.check);
@@ -248,14 +262,48 @@ export function makeDeviceProvingProvider(options: { shielded: boolean }): ledge
         type: 'prove',
         keyLocation,
         shielded: options.shielded,
+        threaded,
         preimage: bytesToBase64(serializedPreimage),
         overwriteBindingInput: overwriteBindingInput === undefined ? undefined : overwriteBindingInput.toString(),
       });
       if (!reply.proof) throw new DeviceProvingError('On-device proving returned no proof');
       const proof = base64ToBytes(reply.proof);
-      debugLog(`🌙 device prove ${keyLocation}: ${proof.length}B in ${Date.now() - started}ms (worker ${reply.proveMs ?? '?'}ms)`);
+      debugLog(`🌙 device prove ${keyLocation}: ${proof.length}B in ${Date.now() - started}ms (worker ${reply.proveMs ?? '?'}ms, ${reply.threads ?? 1} thread(s))`);
       return proof;
     },
+  };
+}
+
+/** What a test proof in the browser prover found. */
+export interface DeviceSelfTest {
+  /** Time the prover took for the proof, key loading excluded once the keys are in memory. */
+  proveMs: number;
+  /** Processor threads it used: 1 for the standard build. */
+  threads: number;
+  /** Why the threaded build was asked for and not used. */
+  threadsUnavailable?: string;
+}
+
+/**
+ * Proves the bundled DUST test preimage (midnightProverSelfTestFixture.ts: a
+ * throwaway key, no wallet data) with the standard or the multi-threaded
+ * build, and says how long it took and on how many threads. For "Run a test
+ * proof" and the speed comparison on the Proof server page.
+ */
+export async function runDeviceSelfTest(threaded: boolean): Promise<DeviceSelfTest> {
+  const reply = await send({
+    type: 'prove',
+    keyLocation: DEVICE_SELF_TEST_KEY_LOCATION,
+    shielded: false,
+    threaded,
+    preimage: DEVICE_SELF_TEST_PREIMAGE,
+    overwriteBindingInput: DEVICE_SELF_TEST_BINDING_INPUT,
+  });
+  if (!reply.proof || typeof reply.proveMs !== 'number') throw new DeviceProvingError('On-device proving returned no proof');
+  return {
+    proveMs: reply.proveMs,
+    threads: reply.threads ?? 1,
+    ...(reply.threadsUnavailable ? { threadsUnavailable: reply.threadsUnavailable } : {}),
   };
 }
 
