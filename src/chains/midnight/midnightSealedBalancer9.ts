@@ -177,6 +177,27 @@ function spentBySealed(tx: SealedTransaction9): Set<string> {
   return spent;
 }
 
+type UtxoRef = Pick<MidnightUnshieldedUtxo, 'intentHash' | 'outputIndex'>;
+
+/**
+ * The wallet's coins it may select to complete the sealed part: every one but
+ * those the sealed part already spends (the wallet's own earlier offer), which
+ * the node would refuse as a double spend.
+ */
+function selectableGiven<U extends UtxoRef>(spent: ReadonlySet<string>, utxos: readonly U[]): U[] {
+  return utxos.filter(utxo => !spent.has(`${utxo.intentHash.toLowerCase()}#${utxo.outputIndex}`));
+}
+
+/**
+ * {@link selectableGiven} for the funds check before the prompt: the same
+ * coins the builder selects from, so the user is never asked for a credential
+ * the build then cannot fund. `txHex` must already have passed
+ * `sealedBalancePrompt` (it throws on a transaction that does not decode).
+ */
+export function sealedSelectableUtxos<U extends UtxoRef>(txHex: string, sdkNetworkId: string, utxos: readonly U[]): U[] {
+  return selectableGiven(spentBySealed(decodeSealedTransaction9(txHex, sdkNetworkId)), utxos);
+}
+
 export async function balanceSealedTransaction9(
   args: BalanceSealedTransaction9Args,
   deps: BalanceSealedTransaction9Deps = defaultDeps,
@@ -205,8 +226,7 @@ export async function balanceSealedTransaction9(
     }));
     // A coin the sealed part already spends (the wallet's own earlier offer)
     // is not the wallet's to select again: the node would refuse the double spend.
-    const spent = spentBySealed(tx);
-    const selectable = args.utxos.filter(utxo => !spent.has(`${utxo.intentHash.toLowerCase()}#${utxo.outputIndex}`));
+    const selectable = selectableGiven(spentBySealed(tx), args.utxos);
     const result = capability.balanceFinalizedTransaction(ledger9WalletState(network, keystore, selectable), tx);
     if (result._tag === 'Left') throw result.left;
     // `undefined` = the guaranteed section is already balanced: the wallet only pays the fee.
@@ -261,10 +281,14 @@ export type SealedBalancePrompt =
  * asked: what the wallet gives, what it receives, and whom the sealed
  * transaction pays (recipients as bech32m). `ownAddress` is the wallet's
  * unshielded bech32m address; when it is unknown every output is listed.
- * What the sealed part's guaranteed section pays straight to `ownAddress` is
- * not a payment to someone else, so it is counted in `receives` beside the
- * surplus the wallet takes (otherwise the approval could show a give with
- * nothing received), unless the sealed part spends the wallet's own coins.
+ *
+ * `receives` is ONLY the guaranteed surplus the wallet's own intent takes:
+ * the outputs of that intent are all its signature enforces. Intents are
+ * signed and bound one by one and can be recombined, so the wallet's signed
+ * intent can be merged with a different counterparty intent that leaves the
+ * same imbalance but drops a payment the sealed part made straight to the
+ * wallet. Such a payment is therefore never promised (and, being to the
+ * wallet, never listed as a payment to someone else).
  */
 export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, ownAddress: string): Promise<SealedBalancePrompt> {
   const name = midnightNetworkName(sdkNetworkId);
@@ -297,26 +321,5 @@ export async function sealedBalancePrompt(txHex: string, sdkNetworkId: string, o
       return payment;
     }
   });
-  const receives = new Map(summary.receives.map(({ token, amount }) => [token, BigInt(amount)]));
-  const own = ownHex.toLowerCase();
-  const intents = [...(tx.intents?.values() ?? [])];
-  // When the sealed part spends the wallet's own coins (its own earlier
-  // offer), an output to the wallet is that offer's change, not something
-  // received: show the imbalances only.
-  const spendsOwn = intents.some(intent => [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]
-    .some(offer => offer?.inputs.some(input => ledger.addressFromKey(input.owner).toLowerCase() === own)));
-  if (own && !spendsOwn) {
-    // GUARANTEED outputs only: that section is all-or-nothing with the
-    // wallet's give, while a fallible section can fail (an input missing)
-    // after the give went through, so its payment may never arrive.
-    for (const intent of intents) {
-      for (const output of intent.guaranteedUnshieldedOffer?.outputs ?? []) {
-        if (output.owner.toLowerCase() === own) receives.set(output.type, (receives.get(output.type) ?? 0n) + output.value);
-      }
-    }
-  }
-  return {
-    ok: true, gives: summary.gives, payments,
-    receives: [...receives].map(([token, amount]) => ({ token, amount: amount.toString() })),
-  };
+  return { ok: true, gives: summary.gives, receives: summary.receives, payments };
 }

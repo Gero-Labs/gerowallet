@@ -190,6 +190,35 @@ describe('balanceSealedTransaction: checked before prompting, shown in the balan
     expect(body).toContain('reply({ error: midnightApiError(code, prompt.reason) });');
   });
 
+  it('a wallet switch, lock or revoked permission during the checks answers Disconnected instead of prompting another wallet', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    // Captured synchronously, before the first await.
+    const captured = body.indexOf('const { id: walletId, network: walletNetwork } = currentWallet;');
+    expect(captured).toBeGreaterThan(-1);
+    expect(captured).toBeLessThan(body.indexOf('void (async () => {'));
+    expect(body).toContain('return now?.id === walletId && now.network === walletNetwork && !walletStore.isLocked && WalletStore.isWhitelisted(origin);');
+    // Rechecked after the last await, right before the prompt is parked.
+    const recheck = body.indexOf('if (!sameWalletStill()) {');
+    expect(recheck).toBeGreaterThan(body.indexOf('const prompt = await sealedBalancePrompt('));
+    expect(recheck).toBeGreaterThan(body.indexOf('if (uncoveredIntentInput(prompt.gives.map('));
+    expect(body.indexOf('MidnightErrorCode.Disconnected', recheck)).toBeGreaterThan(recheck);
+    expect(body.indexOf('await parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, ')).toBeGreaterThan(recheck);
+    expect(body.slice(recheck, body.indexOf('await parkMidnightRequest(')).match(/\bawait\b/g)).toBeNull();
+  });
+
+  it('the funds check counts only the coins the builder may select', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    const view = body.indexOf('utxos: sealedSelectableUtxos(validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.utxos),');
+    expect(view).toBeGreaterThan(body.indexOf('const prompt = await sealedBalancePrompt('));
+    expect(body.indexOf('value: give.amount })), fundable)) {', view)).toBeGreaterThan(view);
+  });
+
+  it('an unread ledger at validation is InternalError too', () => {
+    const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
+    expect(body).toContain('const code = validation.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;');
+    expect(body).toContain('reply({ error: midnightApiError(code, validation.reason) });');
+  });
+
   it('the page API calls the wallet instead of the stub', () => {
     const inject = read('chrome/injectMidnight.ts');
     expect(inject).toContain('return bridge.midnightBalanceSealedTransaction(tx, options);');

@@ -135,7 +135,7 @@ import {
   otherLedgerSubmissionReason,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
-import { sealedBalancePrompt } from '@/chains/midnight/midnightSealedBalancer9';
+import { sealedBalancePrompt, sealedSelectableUtxos } from '@/chains/midnight/midnightSealedBalancer9';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
   CONNECTOR_INTENT_TTL_MS,
@@ -8111,12 +8111,23 @@ app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  // The wallet the site's permission was checked against. The checks below
+  // await, and the prompt is stamped with whichever wallet is active when it
+  // is parked (sendToMiniGero), so a switch in between would show another
+  // wallet a prompt this site was never allowed to send it.
+  const { id: walletId, network: walletNetwork } = currentWallet;
+  const sameWalletStill = () => {
+    const now = walletManager.getWallet();
+    return now?.id === walletId && now.network === walletNetwork && !walletStore.isLocked && WalletStore.isWhitelisted(origin);
+  };
   void (async () => {
     try {
       await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
       const validation = validateConnectorBalanceRequest(data, currentWallet.network);
       if (validation.ok === false) {
-        reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+        // A ledger the wallet could not read is its own failure, not a bad request.
+        const code = validation.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+        reply({ error: midnightApiError(code, validation.reason) });
         return;
       }
       const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
@@ -8134,8 +8145,17 @@ app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
         reply({ error: midnightApiError(code, prompt.reason) });
         return;
       }
-      if (uncoveredIntentInput(prompt.gives.map((give) => ({ type: give.token.toLowerCase(), value: give.amount })), midnightStore)) {
+      // Against the coins the builder may select: never those the sealed part already spends.
+      const fundable = {
+        lastSync: midnightStore.lastSync,
+        utxos: sealedSelectableUtxos(validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.utxos),
+      };
+      if (uncoveredIntentInput(prompt.gives.map((give) => ({ type: give.token.toLowerCase(), value: give.amount })), fundable)) {
         reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this transaction asks for') });
+        return;
+      }
+      if (!sameWalletStill()) {
+        reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') });
         return;
       }
       const payload = {

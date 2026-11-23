@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
 import { MidnightBech32m, UnshieldedAddress } from 'midnight-v9-address-format';
 import {
-  balanceSealedTransaction9, chooseLargestCoin9, decodeSealedTransaction9, sealedBalancePrompt, SEALED_BALANCE_REFUSALS, summarizeSealed9,
+  balanceSealedTransaction9, chooseLargestCoin9, decodeSealedTransaction9, sealedBalancePrompt, SEALED_BALANCE_REFUSALS,
+  sealedSelectableUtxos, summarizeSealed9,
 } from './midnightSealedBalancer9';
 import { buildConnectorIntent9, type BuildConnectorIntent9Deps } from './midnightIntentBuilder9';
-import { CONNECTOR_INTENT_TTL_MS, MIDNIGHT_WALLET_NOT_SYNCED } from './midnightConnectorIntent';
+import { CONNECTOR_INTENT_TTL_MS, MIDNIGHT_WALLET_NOT_SYNCED, uncoveredIntentInput } from './midnightConnectorIntent';
 import { ledger9Keystore, signLedger9Intents } from './midnightLedger9';
 import { getMidnightEndpoints } from './midnightConfig';
 import type { MidnightUnshieldedUtxo } from './midnightTypes';
@@ -215,14 +216,17 @@ describe('balanceSealedTransaction on a ledger 9 chain', () => {
     expect(balanceFees.mock.calls[0][0].ttl.getTime()).toBe(earliest);
   });
 
-  it('counts what the sealed part pays straight to the wallet as received, not as a payment', async () => {
+  it('promises only what the wallet\'s own intent takes, never what the sealed part pays it straight (intents can be recombined)', async () => {
     const txHex = await sealed([{ segment: 7, ttl: new Date(Date.now() + 600_000),
       inputs: [{ value: 18n, type: NIGHT, intentHash: '33'.repeat(32), outputNo: 0 }],
       outputs: [{ value: 5n, type: NIGHT, to: maker.getAddress() }, { value: 3n, type: NIGHT, to: own.getAddress() }, { value: 5_000n, type: TOKEN, to: maker.getAddress() }] }]);
     expect(await sealedBalancePrompt(txHex, 'preprod', ownAddress)).toEqual({
       ok: true, gives: [{ token: TOKEN, amount: '5000' }],
-      // 10 NIGHT of surplus the wallet takes, and 3 the sealed part pays it.
-      receives: [{ token: NIGHT, amount: '13' }],
+      // The 10 NIGHT of surplus the wallet's signed intent takes. The 3 the
+      // sealed part pays the wallet are not promised: the wallet's intent can
+      // be merged with another counterparty intent of the same imbalance
+      // that leaves them out.
+      receives: [{ token: NIGHT, amount: '10' }],
       payments: [
         { token: NIGHT, amount: '5', recipient: bech32('preprod', maker.getAddress()) },
         { token: TOKEN, amount: '5000', recipient: bech32('preprod', maker.getAddress()) },
@@ -259,6 +263,22 @@ describe('balanceSealedTransaction on a ledger 9 chain', () => {
     const result = await balanceSealedTransaction9(await args({ txHex, utxos: [utxo(TOKEN, 10_000n, 0), utxo(TOKEN, 6_000n, 1)] }), deps);
     const mine = read(result.txHex).intents!.get(1)!.guaranteedUnshieldedOffer!;
     expect(mine.inputs.map(input => [input.outputNo, input.value])).toEqual([[1, 6_000n]]);
+  });
+
+  it('the funds check before the prompt sees the coins the builder selects from, not those the sealed part spends', async () => {
+    // The wallet's own offer spends its 10,000 TOKEN coin #0 and asks 5,000 more.
+    const txHex = await sealed([{ segment: 7, ttl: new Date(Date.now() + 600_000),
+      inputs: [{ value: 10_000n, type: TOKEN, intentHash: '11'.repeat(32), outputNo: 0 }],
+      outputs: [{ value: 15_000n, type: TOKEN, to: maker.getAddress() }] }], own);
+    const coins = [utxo(TOKEN, 10_000n, 0), utxo(TOKEN, 4_000n, 1)];
+    const selectable = sealedSelectableUtxos(txHex, 'preprod', coins);
+    expect(selectable.map(coin => coin.outputIndex)).toEqual([1]);
+    // 14,000 held but only 4,000 selectable: the 5,000 asked is refused before any credential is asked for.
+    const gives = (await sealedBalancePrompt(txHex, 'preprod', ownAddress) as { gives: { token: string; amount: string }[] }).gives;
+    expect(gives).toEqual([{ token: TOKEN, amount: '5000' }]);
+    const asked = gives.map(give => ({ type: give.token.toLowerCase(), value: give.amount }));
+    expect(uncoveredIntentInput(asked, { lastSync: Date.now(), utxos: coins })).toBeUndefined();
+    expect(uncoveredIntentInput(asked, { lastSync: Date.now(), utxos: selectable })).toBeDefined();
   });
 
   it('a ledger it cannot read is the wallet\'s failure, marked so the dapp is not told its request was wrong', async () => {
