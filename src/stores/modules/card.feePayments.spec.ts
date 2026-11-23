@@ -62,11 +62,18 @@ describe('sent fee payments across devices', () => {
   });
 
   it('adopts a payment another device recorded', async () => {
-    const sentAt = new Date(Date.now() - 60_000).toISOString();
-    http.getResponse = () => ({ data: { tx_id: TX, sent_at: sentAt } });
-    await store.syncSentFeePayment('order-c');
-    expect(http.get).toEqual([url('order-c')]);
-    expect(sentFeePayment('order-c')).toEqual({ txId: TX, sentAt: Date.parse(sentAt) });
+    // A record is kept for 30 days (SENT_FEE_PAYMENT_TTL_MS), so pin the clock shortly after
+    // the payment: with the real clock this test failed once that window passed.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-22T11:00:00Z'));
+    try {
+      http.getResponse = () => ({ data: { tx_id: TX, sent_at: '2026-10-22T10:36:56Z' } });
+      await store.syncSentFeePayment('order-c');
+      expect(http.get).toEqual([url('order-c')]);
+      expect(sentFeePayment('order-c')).toEqual({ txId: TX, sentAt: Date.parse('2026-10-22T10:36:56Z') });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('leaves the pay button alone when no device recorded a payment', async () => {
