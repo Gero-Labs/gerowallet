@@ -13,7 +13,7 @@ const body = layout.match(/const emptyStateShowing = computed\(\(\) => \{([\s\S]
 describe('empty-home header quick actions', () => {
   it.each([
     ['Solana', 'if (isSolana.value) return isSolanaWalletEmpty(walletStore.solana);'],
-    ['Midnight', 'if (isMidnight.value) return isMidnightWalletEmpty(midnightStore.balances);'],
+    ['Midnight', 'if (isMidnight.value) return isMidnightWalletEmpty(midnightStore.balances, midnightStore.utxos);'],
   ])('judges a %s wallet by its own balance, before the Cardano account check', (_chain, line) => {
     const at = body.indexOf(line);
     expect(at).toBeGreaterThan(-1);
@@ -21,7 +21,7 @@ describe('empty-home header quick actions', () => {
   });
 
   it('gives an empty Midnight home the FundingCard, so Receive stays on the page', () => {
-    expect(portfolio).toContain('const isMidnightEmpty = computed(() => isMidnightWalletEmpty(midnightStore.balances));');
+    expect(portfolio).toContain('const isMidnightEmpty = computed(() => isMidnightWalletEmpty(midnightStore.balances, midnightStore.utxos));');
     expect(portfolio).toMatch(/<v-col v-if="isMidnightEmpty"[^>]*>\s*<FundingCard[^>]*@receive="openReceiveDialog\(\)"/);
     expect(portfolio).toMatch(/<v-col v-else [^>]*>\s*<MidnightTransactionsCard \/>/);
   });
