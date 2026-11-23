@@ -103,6 +103,9 @@ jobs:
       - name: Run the combined 2.8 software regression suite
         run: npm test -- --reporter=dot
 
+      - name: Swap order recipients against recorded mainnet outputs
+        run: npx vitest run src/shared/utils/orderRecipients.spec.ts
+
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
@@ -123,6 +126,9 @@ jobs:
 
       - name: Wallet restart and store subscription regressions
         run: npx vitest run src/chrome/storeMessagingBg.snapshot.spec.ts src/services/walletManager.login.spec.ts src/stores/storePersistence.integration.spec.ts
+
+      - name: Strike software wallet deposits and withdrawals
+        run: npx vitest run src/sidepanel/components/perps/DepositSheet.amount.spec.ts src/modules/market/composables/useStrikeDeposit.spec.ts src/modules/market/composables/useStrikeWithdraw.spec.ts src/modules/market/utils/__tests__/strikeWithdrawGuard.test.ts
 
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts

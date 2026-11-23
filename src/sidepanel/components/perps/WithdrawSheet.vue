@@ -382,7 +382,7 @@ const canSign = computed(() => {
 
 const quoteExpired = computed(() => {
   if (!quote.value?.expiresAtMs) return false;
-  return now.value > quote.value.expiresAtMs;
+  return now.value >= quote.value.expiresAtMs;
 });
 
 const countdownLabel = computed(() => {
@@ -518,13 +518,14 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   if (tickHandle !== null) window.clearInterval(tickHandle);
+  if (props.modelValue) resetWithdraw();
 });
 
 watch(() => props.modelValue, (val) => {
+  resetWithdraw();
+  password.value = '';
   if (val) {
-    resetWithdraw();
     amount.value = '';
-    password.value = '';
     showPassword.value = false;
     showFullMessage.value = false;
     quoteError.value = null;
@@ -540,7 +541,7 @@ watch(() => props.modelValue, (val) => {
     // `autofocus` race warning the dialog triggers).
     nextTick(() => { amountFieldRef.value?.focus(); });
   }
-});
+}, { flush: 'sync' });
 </script>
 
 <style scoped lang="scss">

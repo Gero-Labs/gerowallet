@@ -281,6 +281,8 @@ import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboa
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { useExplorer } from '@/shared/composables/useExplorer';
+import { formatLovelace } from '@/shared/utils/lovelace';
+import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
@@ -342,22 +344,20 @@ const amountNum = computed(() => {
  * — walletStore doesn't expose a precomputed `balances` map). We subtract a
  * 2 ADA buffer to leave room for the network fee + min-UTxO change output.
  */
-const availableAda = computed<number>(() => {
+const availableLovelace = computed(() => {
   const utxos = walletStore.utxos as Cardano.Utxo[] | undefined;
-  if (!utxos || utxos.length === 0) return 0;
-  let total = BigInt(0);
-  for (const utxo of utxos) {
+  let total = 0n;
+  for (const utxo of utxos ?? []) {
     try {
       total += BigInt(utxo[1]?.value?.coins ?? 0);
     } catch {
       // Skip malformed UTxOs rather than crash the UI.
     }
   }
-  const ada = Number(total) / 1_000_000;
-  return Math.max(0, ada - 2);
+  return total > 2_000_000n ? total - 2_000_000n : 0n;
 });
 
-const availableAdaDisplay = computed(() => availableAda.value.toFixed(2));
+const availableAdaDisplay = computed(() => formatLovelace(availableLovelace.value));
 
 const requiredAdaDisplay = computed(() => {
   const lovelace = quote.value?.quote.asset_amount;
@@ -389,7 +389,10 @@ const truncatedAddress = computed(() => {
 const { explorerUrl: explorerLink } = useExplorer();
 const explorerUrl = computed(() => explorerLink('tx', txHash.value, { chain: Blockchain.CARDANO }) || '#');
 
-const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availableAda.value);
+const canQuote = computed(() => {
+  const lovelace = toBaseUnits(amount.value, 6);
+  return lovelace != null && lovelace > 0n && lovelace <= availableLovelace.value;
+});
 
 // Hardware-wallet (Ledger/Trezor/Keystone) and PRF/PassKey wallets sign via
 // an interactive flow that the deposit composable doesn't yet drive (the
@@ -459,7 +462,7 @@ const statusSub = computed(() => {
 
 // ── Methods ───────────────────────────────────────────────────────────────────
 function setMax() {
-  amount.value = availableAda.value.toFixed(2);
+  amount.value = availableAdaDisplay.value;
 }
 
 function formatCountdown(s: number): string {
@@ -482,14 +485,14 @@ async function copyAddress() {
 
 async function goToReview() {
   if (!canQuote.value) return;
-  await requestQuote(amountNum.value);
+  await requestQuote(amount.value);
   if (depositStatus.value === 'quoted') {
     phase.value = 'review';
   }
 }
 
 async function refreshQuote() {
-  await requestQuote(amountNum.value);
+  await requestQuote(amount.value);
 }
 
 function goBackToAmount() {
