@@ -75,8 +75,9 @@
     </v-card>
 
     <SetCollateralDialog
-      :is-open="signDialogOpen"
-      :tx="collateralTx"
+      :is-open="!!review"
+      :tx="review?.tx"
+      :collateral-output="review?.output"
       @close="closeSignDialog"
       @success="onCollateralSubmitted"
     />
@@ -84,7 +85,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, toRefs, computed, onMounted } from 'vue';
+import { ref, shallowRef, toRefs, computed, onMounted, onScopeDispose, watch } from 'vue';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -108,8 +109,9 @@ const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
 const { t } = useTranslation();
 
 const isCreating = ref(false);
-const signDialogOpen = ref(false);
-const collateralTx = ref<Cardano.Tx | undefined>(undefined);
+const collateralAmount = 5_000_000n;
+const review = shallowRef<{ tx: Cardano.Tx; output: Cardano.TxOut }>();
+let pendingBuild: AbortController | undefined;
 
 const hasNewCollateralFeature = computed(() => isFeatureNew('settings.collateral.autoDetect'));
 
@@ -119,8 +121,31 @@ onMounted(() => {
   }
 });
 
-// Methods
+const closeSignDialog = () => {
+  pendingBuild?.abort();
+  pendingBuild = undefined;
+  isCreating.value = false;
+  review.value = undefined;
+};
+
+watch([
+  () => loggedWallet.value?.id, () => loggedWallet.value?.accountIndex,
+  () => loggedWallet.value?.chain, () => loggedWallet.value?.network,
+  () => loggedWallet.value?.baseAddress, () => walletStore.isLocked,
+], closeSignDialog, { flush: 'sync' });
+onScopeDispose(closeSignDialog);
+
 const setCollateral = async () => {
+  if (isCreating.value || review.value || walletStore.isLocked) return;
+  const wallet = loggedWallet.value;
+  const changeAddress = keys.value?.payment?.[0]?.address;
+  if (!wallet?.baseAddress || !changeAddress) {
+    snackbar.setError(t('settings.failedToBuildCollateral'));
+    return;
+  }
+  const address = wallet.baseAddress;
+  const build = new AbortController();
+  pendingBuild = build;
   isCreating.value = true;
   try {
     // Build the request for nexus's /api/tx/build endpoint.
@@ -129,29 +154,36 @@ const setCollateral = async () => {
     const request: BuildTxRequest = {
       outputs: [
         {
-          address: loggedWallet.value.baseAddress as string,
-          lovelace: '5000000', // 5 ADA collateral
+          address,
+          lovelace: collateralAmount.toString(),
         },
       ],
-      changeAddress: keys.value.payment[0].address,
+      changeAddress,
       utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], undefined, false),
       withdrawals: currentRewardWithdrawals(),
     };
 
     const { tx_cbor: txCborHex } = await nexusTxApi.buildTransferTx(
       request,
-      loggedWallet.value.network
+      wallet.network,
+      { signal: build.signal },
     );
 
+    if (build.signal.aborted) return;
     if (!txCborHex) throw new Error('Nexus returned an empty transaction CBOR');
 
     // Sign and submit in-wallet (SetCollateralDialog → useTransactionSigning), like the
     // staking and governance flows. The dApp CIP-30 signTx route refuses the wallet's own
     // pages (it only serves whitelisted dApp origins), which surfaced as
     // "The request was refused due to lack of access" (issue 1558).
-    collateralTx.value = Serialization.Transaction.fromCbor(HexBlob(txCborHex)).toCore();
-    signDialogOpen.value = true;
+    const tx = Serialization.Transaction.fromCbor(HexBlob(txCborHex)).toCore();
+    // The change output may come first and may use the very same address.
+    const output = tx.body.outputs.find(out =>
+      out.address === address && out.value.coins === collateralAmount && !out.value.assets?.size);
+    if (!output) throw new Error('The built transaction has no matching pure-ADA collateral output');
+    review.value = { tx, output };
   } catch (error) {
+    if (build.signal.aborted) return;
     console.error('Error building collateral transaction via nexus:', error);
     const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
     const status = err.response?.status;
@@ -166,13 +198,11 @@ const setCollateral = async () => {
       snackbar.setError(t('settings.failedToBuildCollateral'));
     }
   } finally {
-    isCreating.value = false;
+    if (pendingBuild === build) {
+      pendingBuild = undefined;
+      isCreating.value = false;
+    }
   }
-};
-
-const closeSignDialog = () => {
-  signDialogOpen.value = false;
-  collateralTx.value = undefined;
 };
 
 const onCollateralSubmitted = () => {
