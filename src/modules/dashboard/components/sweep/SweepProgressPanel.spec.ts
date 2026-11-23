@@ -19,6 +19,22 @@ function mountPanel(props: InstanceType<typeof SweepProgressPanel>['$props']) {
 }
 
 describe('SweepProgressPanel', () => {
+  it('shows the final payment as unconfirmed and asks the user to check history', () => {
+    const panel = mountPanel({ progress: null, stop: { step: 2, total: 2, mergesSent: 1, reason: 'Lost receipt', unconfirmedStep: 'payment' } });
+    expect(panel.get('[role="alert"]').text()).toContain('errors.submitUnconfirmed');
+    expect(panel.findAll('.sweep-progress__row').at(-1)!.text()).toContain('send.sweepUnconfirmed');
+    expect(panel.text()).not.toContain('send.sweepPaymentNotSent');
+    expect(panel.text()).not.toContain('send.sweepTryAgainNote');
+  });
+
+  it('distinguishes an uncertain merge from a payment that was never attempted', () => {
+    const panel = mountPanel({ progress: null, stop: { step: 1, total: 2, mergesSent: 0, reason: 'Lost receipt', unconfirmedStep: 'merge' } });
+    const rows = panel.findAll('.sweep-progress__row');
+    expect(rows[1].text()).toContain('send.sweepUnconfirmed');
+    expect(rows[2].text()).toContain('send.sweepPaymentNotSent');
+    expect(panel.text()).toContain('send.sweepMergeCheck');
+  });
+
   it('renders nothing without progress or a stop', () => {
     const wrapper = mountPanel({ progress: null, stop: null });
     expect(wrapper.find('.sweep-progress').exists()).toBe(false);

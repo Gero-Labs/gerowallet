@@ -24,7 +24,7 @@
       </template>
 
       <!-- ── Phase 1: Amount input ─────────────────────────────────────── -->
-      <template v-else-if="phase === 'amount'">
+      <template v-else-if="view === 'amount'">
         <div class="balance-row">
           <span class="balance-label">{{ $t('perpetuals.deposit.available') }}</span>
           <span class="balance-value" @click="setMax()">
@@ -68,7 +68,7 @@
       </template>
 
       <!-- ── Phase 2: Review & sign ────────────────────────────────────── -->
-      <template v-else-if="phase === 'review'">
+      <template v-else-if="view === 'review'">
         <div class="preview-card">
           <div class="preview-title">{{ $t('perpetuals.deposit.review') }}</div>
 
@@ -192,17 +192,17 @@
       </template>
 
       <!-- ── Phase 3: Status / progress ────────────────────────────────── -->
-      <template v-else-if="phase === 'status'">
+      <template v-else-if="view === 'status'">
         <div class="status-card">
           <div class="status-icon-wrap">
             <v-progress-circular
-              v-if="depositStatus !== 'credited' && depositStatus !== 'confirmed' && depositStatus !== 'error'"
+              v-if="shownStatus !== 'credited' && shownStatus !== 'confirmed' && shownStatus !== 'error'"
               indeterminate
               size="56"
               width="3"
               color="var(--g-accent)"
             />
-            <v-icon v-else-if="depositStatus === 'error'" size="56" color="error">
+            <v-icon v-else-if="shownStatus === 'error'" size="56" color="error">
               mdi-alert-circle
             </v-icon>
             <v-icon v-else size="56" color="success">
@@ -220,17 +220,17 @@
               :key="s.key"
               class="step-pill"
               :class="{
-                active: stepIndexFor(depositStatus) === idx,
-                done: stepIndexFor(depositStatus) > idx,
+                active: stepIndexFor(shownStatus) === idx,
+                done: stepIndexFor(shownStatus) > idx,
               }"
             >
-              <v-icon size="10" v-if="stepIndexFor(depositStatus) > idx" color="success">mdi-check</v-icon>
+              <v-icon size="10" v-if="stepIndexFor(shownStatus) > idx" color="success">mdi-check</v-icon>
               <span>{{ s.label }}</span>
             </div>
           </div>
 
           <transition name="fade-slide">
-            <div v-if="(depositStatus === 'credited' || depositStatus === 'confirmed') && txHash" class="tx-link-row mt-4">
+            <div v-if="(shownStatus === 'credited' || shownStatus === 'confirmed') && shownTxHash" class="tx-link-row mt-4">
               <a class="tx-link" :href="explorerUrl" target="_blank" rel="noopener noreferrer">
                 <v-icon size="13" class="mr-1">mdi-open-in-new</v-icon>
                 {{ $t('perpetuals.deposit.viewExplorer') }}
@@ -239,16 +239,16 @@
           </transition>
 
           <transition name="fade-slide">
-            <div v-if="depositError" class="error-banner mt-3">
+            <div v-if="shownError" class="error-banner mt-3">
               <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
-              <span>{{ depositError }}</span>
+              <span>{{ shownError }}</span>
             </div>
           </transition>
         </div>
 
-        <div class="action-row mt-4" v-if="depositStatus === 'credited' || depositStatus === 'confirmed' || depositStatus === 'error'">
+        <div class="action-row mt-4" v-if="shownStatus === 'credited' || shownStatus === 'confirmed' || shownStatus === 'error'">
           <v-btn
-            v-if="depositStatus === 'error'"
+            v-if="shownStatus === 'error'"
             variant="flat"
             class="action-btn flex-grow-1"
             @click="retryFromError()"
@@ -276,11 +276,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
+import { strikeWalletKey, useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { useExplorer } from '@/shared/composables/useExplorer';
+import { formatLovelace } from '@/shared/utils/lovelace';
+import { parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
@@ -311,6 +313,8 @@ const {
   requestQuote,
   buildAndSign,
   resetDeposit,
+  submission,
+  acknowledgeSubmission,
 } = useStrikeDeposit();
 
 // Gate the deposit form behind a Strike connection — opening this sheet while
@@ -342,22 +346,20 @@ const amountNum = computed(() => {
  * — walletStore doesn't expose a precomputed `balances` map). We subtract a
  * 2 ADA buffer to leave room for the network fee + min-UTxO change output.
  */
-const availableAda = computed<number>(() => {
+const availableLovelace = computed(() => {
   const utxos = walletStore.utxos as Cardano.Utxo[] | undefined;
-  if (!utxos || utxos.length === 0) return 0;
-  let total = BigInt(0);
-  for (const utxo of utxos) {
+  let total = 0n;
+  for (const utxo of utxos ?? []) {
     try {
       total += BigInt(utxo[1]?.value?.coins ?? 0);
     } catch {
       // Skip malformed UTxOs rather than crash the UI.
     }
   }
-  const ada = Number(total) / 1_000_000;
-  return Math.max(0, ada - 2);
+  return total > 2_000_000n ? total - 2_000_000n : 0n;
 });
 
-const availableAdaDisplay = computed(() => availableAda.value.toFixed(2));
+const availableAdaDisplay = computed(() => formatLovelace(availableLovelace.value));
 
 const requiredAdaDisplay = computed(() => {
   const lovelace = quote.value?.quote.asset_amount;
@@ -387,9 +389,12 @@ const truncatedAddress = computed(() => {
 
 // Previously hardcoded cexplorer and sent Preview wallets to mainnet.
 const { explorerUrl: explorerLink } = useExplorer();
-const explorerUrl = computed(() => explorerLink('tx', txHash.value, { chain: Blockchain.CARDANO }) || '#');
+const explorerUrl = computed(() => explorerLink('tx', shownTxHash.value, { chain: Blockchain.CARDANO }) || '#');
 
-const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availableAda.value);
+const canQuote = computed(() => {
+  const lovelace = parseStrikeAmount(amount.value, 6);
+  return lovelace != null && lovelace > 0n && lovelace <= availableLovelace.value;
+});
 
 // Hardware-wallet (Ledger/Trezor/Keystone) and PRF/PassKey wallets sign via
 // an interactive flow that the deposit composable doesn't yet drive (the
@@ -414,6 +419,15 @@ const isSigning = computed(() =>
   ['building', 'signing', 'submitting', 'confirming'].includes(depositStatus.value),
 );
 
+// ── Submitted deposit ─────────────────────────────────────────────────────────
+// Once the transaction is on its way the composable keeps its result for this
+// wallet, whatever happens to the review. While one is kept it is all the sheet
+// shows, so it survives a close and no second deposit starts on top of it.
+const view = computed<Phase>(() => (submission.value ? 'status' : phase.value));
+const shownStatus = computed(() => submission.value?.status ?? depositStatus.value);
+const shownTxHash = computed(() => (submission.value ? submission.value.txHash : txHash.value));
+const shownError = computed(() => (submission.value ? submission.value.error : depositError.value));
+
 // ── Status pill model ─────────────────────────────────────────────────────────
 const statusSteps = computed(() => [
   { key: 'building', label: t('perpetuals.deposit.statusBuilding') },
@@ -436,7 +450,7 @@ function stepIndexFor(s: string): number {
 }
 
 const statusLabel = computed(() => {
-  switch (depositStatus.value) {
+  switch (shownStatus.value) {
     case 'building': return t('perpetuals.deposit.statusBuilding');
     case 'signing': return t('perpetuals.deposit.statusSigning');
     case 'submitting': return t('perpetuals.deposit.statusSubmitting');
@@ -449,7 +463,7 @@ const statusLabel = computed(() => {
 });
 
 const statusSub = computed(() => {
-  switch (depositStatus.value) {
+  switch (shownStatus.value) {
     case 'confirming': return t('perpetuals.deposit.statusConfirmingSub');
     case 'credited':
     case 'confirmed': return t('perpetuals.deposit.statusCreditedSub');
@@ -459,7 +473,7 @@ const statusSub = computed(() => {
 
 // ── Methods ───────────────────────────────────────────────────────────────────
 function setMax() {
-  amount.value = availableAda.value.toFixed(2);
+  amount.value = availableAdaDisplay.value;
 }
 
 function formatCountdown(s: number): string {
@@ -482,14 +496,14 @@ async function copyAddress() {
 
 async function goToReview() {
   if (!canQuote.value) return;
-  await requestQuote(amountNum.value);
+  await requestQuote(amount.value);
   if (depositStatus.value === 'quoted') {
     phase.value = 'review';
   }
 }
 
 async function refreshQuote() {
-  await requestQuote(amountNum.value);
+  await requestQuote(amount.value);
 }
 
 function goBackToAmount() {
@@ -526,6 +540,7 @@ function onPassKeyError(err: Error) {
 function retryFromError() {
   // Send the user back to the amount step with a clean slate; the quote may
   // be stale, the password may have been wrong, or the build may have failed.
+  acknowledgeSubmission();
   resetDeposit();
   password.value = '';
   phase.value = 'amount';
@@ -543,11 +558,21 @@ watch(() => props.modelValue, (val) => {
     showPassword.value = false;
     addressCopied.value = false;
     phase.value = 'amount';
+    // A final result was on screen, so it has been seen. One still pending is kept.
+    acknowledgeSubmission();
     resetDeposit();
   } else {
     // Focus the amount field once the dialog has painted.
     nextTick(() => { amountFieldRef.value?.focus(); });
   }
+});
+
+// Another wallet starts from the amount form: the composable drops the review on a
+// wallet change, and progress of the previous wallet must not show under this one.
+watch(strikeWalletKey, () => {
+  password.value = '';
+  showPassword.value = false;
+  phase.value = 'amount';
 });
 </script>
 

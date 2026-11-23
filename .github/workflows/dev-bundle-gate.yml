@@ -100,6 +100,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Swap order recipients against recorded mainnet outputs
+        run: npx vitest run src/shared/utils/orderRecipients.spec.ts
+
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
@@ -109,6 +112,9 @@ jobs:
       - name: Pending transaction visibility regressions
         run: npx vitest run src/chrome/pendingTransactions.spec.ts src/chrome/injectCip30Extensions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
 
+      - name: Collateral review and software signing
+        run: npx vitest run src/modules/dashboard/components/CollateralTab.runtime.spec.ts src/modules/dashboard/components/CollateralTab.spec.ts src/shared/composables/useTransactionSigning.spec.ts
+
       - name: Submit API settings and routing
         run: npx vitest run src/shared/utils/submitApiConfig.spec.ts src/chrome/submitApiStore.spec.ts src/chrome/submitRouter.spec.ts src/shared/utils/txErrors.spec.ts src/db/loaders/walletLoader.spec.ts src/chrome/submitRouting.walletBg.spec.ts src/chrome/submitApiSettings.spec.ts src/stores/featureFlagsStore.spec.ts src/shared/composables/useFeatureNotifications.spec.ts src/modules/dashboard/composables/useSubmitApiForm.spec.ts
 
@@ -117,6 +123,9 @@ jobs:
 
       - name: Wallet restart and store subscription regressions
         run: npx vitest run src/chrome/storeMessagingBg.snapshot.spec.ts src/services/walletManager.login.spec.ts src/stores/storePersistence.integration.spec.ts
+
+      - name: Strike software wallet deposits and withdrawals
+        run: npx vitest run src/sidepanel/components/perps/DepositSheet.amount.spec.ts src/modules/market/composables/useStrikeDeposit.spec.ts src/modules/market/composables/useStrikeWithdraw.spec.ts src/modules/market/utils/__tests__/strikeWithdrawGuard.test.ts
 
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts

@@ -27,8 +27,8 @@
  * an inline currency label and a MAX chip. The accent colour is themeable via
  * the `accent` prop (a hex like #00c7f3 or a CSS var like var(--chain-primary)).
  *
- * v-model is the cleaned decimal string. Emits `max` when the chip is tapped
- * and `submit` on Enter. Call the exposed `focus()` to focus the field on open.
+ * Each sheet validates the typed text at its asset precision. Emits `max` when the
+ * chip is tapped and `submit` on Enter. Call `focus()` to focus the field on open.
  */
 import { ref } from 'vue';
 
@@ -53,15 +53,8 @@ const emit = defineEmits<{
 const focused = ref(false);
 const inputEl = ref<HTMLInputElement | null>(null);
 
-/** Keep digits + a single decimal point; strip everything else. */
 function onInput(e: Event): void {
-  const raw = (e.target as HTMLInputElement).value;
-  let cleaned = raw.replace(/[^0-9.]/g, '');
-  const dot = cleaned.indexOf('.');
-  if (dot !== -1) {
-    cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, '');
-  }
-  emit('update:modelValue', cleaned);
+  emit('update:modelValue', (e.target as HTMLInputElement).value);
 }
 
 function focus(): void {

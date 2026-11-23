@@ -4725,6 +4725,8 @@ export default {
   'send.sweepShowDetails': 'Mostrar detalles',
   'send.sweepMergesStopped': '{sent} de {merges} enviadas · se detuvo en la siguiente',
   'send.sweepPaymentNotSent': 'No se envió',
+  'send.sweepUnconfirmed': 'Envío sin confirmar',
+  'send.sweepMergeCheck': 'Es posible que esta combinación ya esté en camino. Revisa tu actividad y vuelve a intentarlo cuando su salida aparezca en tu billetera. El pago sigue en espera.',
   'send.sweepTryAgainNote': 'Reintentar continúa en la transacción {step} y omite lo que ya salió. Si se detiene otra vez, espera un minuto y toca Máx.: Gero planifica con lo que queda.',
   'send.sweepDoneTitle': 'Pago enviado',
   'send.sweepDoneTo': 'a {address}',

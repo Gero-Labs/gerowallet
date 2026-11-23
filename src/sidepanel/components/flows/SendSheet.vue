@@ -1397,9 +1397,12 @@ async function submitApproved(attempt: SendApproval, witnessHex: string) {
     const result = await awaitFreshApproval(() => Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: { txCbor: attempt.cbor, witnessHex, utxos: attempt.inputs },
-    }), attempt.current) as { data: { txId?: string; error?: string } };
-    if (result.data.error) throw new Error(result.data.error);
-    txId.value = result.data.txId || '';
+    }), attempt.current) as { data?: { txId?: string; error?: string } } | null | undefined;
+    if (result?.data?.error) throw new Error(result.data.error);
+    const submittedId = result?.data?.txId;
+    // A lost runtime reply can follow a successful broadcast. Only the worker can acknowledge it.
+    if (typeof submittedId !== 'string' || !submittedId.trim()) throw new Error(i18n.t('errors.submitUnconfirmed') as string);
+    txId.value = submittedId;
     txSuccess.value = true;
     snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
   } finally {

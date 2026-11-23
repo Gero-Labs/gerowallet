@@ -53,7 +53,7 @@
         <!-- Withdrawable balance (click to fill max) -->
         <button type="button" class="balance-row" @click="setMax()">
           <span class="balance-row__label">{{ $t('perpetuals.withdrawableBalance') }}</span>
-          <span class="balance-row__value">${{ formatUsd(maxWithdrawable) }}</span>
+          <span class="balance-row__value">${{ formatStrikeUsd(maxWithdrawableCents) }}</span>
         </button>
 
         <!-- USDM estimate — withdrawals settle 1:1 in USDM, minus the quote fee -->
@@ -115,7 +115,7 @@
         <div class="review-card mt-3">
           <div class="review-row">
             <span class="review-label">{{ $t('perpetuals.amount') }}</span>
-            <span class="review-value">${{ formatUsd(amountNum) }}</span>
+            <span class="review-value">${{ formatStrikeUsd(amountCents) }}</span>
           </div>
           <div v-if="quote?.fee" class="review-row">
             <span class="review-label">{{ $t('perpetuals.fee') }}</span>
@@ -215,16 +215,16 @@
       <div v-else-if="stepNum === 3" class="step-pane status-pane">
         <div class="status-icon-wrap">
           <v-progress-circular
-            v-if="withdrawStatus === 'pending' || withdrawStatus === 'submitting'"
+            v-if="shownStatus === 'pending' || shownStatus === 'submitting'"
             indeterminate
             size="56"
             width="3"
             color="var(--g-accent)"
           />
-          <v-icon v-else-if="withdrawStatus === 'settled'" size="56" color="success">
+          <v-icon v-else-if="shownStatus === 'settled'" size="56" color="success">
             mdi-check-circle-outline
           </v-icon>
-          <v-icon v-else-if="withdrawStatus === 'error'" size="56" color="error">
+          <v-icon v-else-if="shownStatus === 'error'" size="56" color="error">
             mdi-alert-circle-outline
           </v-icon>
         </div>
@@ -233,15 +233,15 @@
         <div class="status-sub">{{ statusSub }}</div>
 
         <transition name="fade-slide">
-          <div v-if="withdrawError && withdrawStatus === 'error'" class="error-banner mt-3" style="text-align:left;">
+          <div v-if="shownError && shownStatus === 'error'" class="error-banner mt-3" style="text-align:left;">
             <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
-            <span>{{ withdrawError }}</span>
+            <span>{{ shownError }}</span>
           </div>
         </transition>
 
         <div class="btn-row mt-5" style="width:100%;">
           <v-btn
-            v-if="withdrawStatus === 'settled'"
+            v-if="shownStatus === 'settled'"
             variant="flat"
             block
             class="action-btn"
@@ -249,7 +249,7 @@
           >
             {{ $t('perps.withdraw.done') }}
           </v-btn>
-          <template v-else-if="withdrawStatus === 'error'">
+          <template v-else-if="shownStatus === 'error'">
             <v-btn variant="flat" class="ghost-btn" @click="closeSheet()">
               {{ $t('perps.withdraw.close') }}
             </v-btn>
@@ -271,6 +271,8 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStrikeWithdraw, decodeWithdrawMessageForDisplay } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
+import { formatStrikeUsd, parseStrikeAmount } from '@/modules/market/utils/strikeFundingAmount';
+import { toBaseUnits } from '@/modules/swap/composables/orderSpendBound';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
 import i18n from '@/plugins/i18n';
@@ -296,7 +298,15 @@ const {
   requestQuote,
   signAndSubmit,
   resetWithdraw,
+  submission,
+  acknowledgeSubmission,
 } = useStrikeWithdraw();
+
+// Once a withdrawal has been sent to Strike the composable keeps its result for
+// this wallet, whatever happens to the review. While one is kept it is all the
+// sheet shows, so it survives a close and no second withdrawal starts on top of it.
+const shownStatus = computed(() => submission.value?.status ?? withdrawStatus.value);
+const shownError = computed(() => (submission.value ? submission.value.error : withdrawError.value));
 
 const { account, marginRatio, loadAccount } = useStrikeAccount();
 
@@ -316,6 +326,7 @@ let tickHandle: number | null = null;
 
 // ── Computed ────────────────────────────────────────────────────────────────
 const stepNum = computed<1 | 2 | 3>(() => {
+  if (submission.value) return 3;
   switch (withdrawStatus.value) {
     case 'idle':
     case 'quoting':
@@ -336,15 +347,10 @@ const stepNum = computed<1 | 2 | 3>(() => {
   }
 });
 
-const amountNum = computed(() => {
-  const n = parseFloat(amount.value);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-});
-
-const maxWithdrawable = computed(() => {
-  const v = parseFloat(account.value?.available_balance ?? '0');
-  return Number.isFinite(v) ? v : 0;
-});
+const amountCents = computed(() => parseStrikeAmount(amount.value, 2) ?? 0n);
+const amountNum = computed(() => Number(amountCents.value) / 100);
+// A balance can include a fraction of a cent. Strike's withdrawal UI quotes whole cents.
+const maxWithdrawableCents = computed(() => toBaseUnits(account.value?.available_balance, 2) ?? 0n);
 
 /** Decoded (human-readable) quote message — Cardano quotes return it hex-encoded. */
 const messagePreview = computed(() =>
@@ -358,8 +364,8 @@ const showMarginWarning = computed(() => {
 });
 
 const canQuote = computed(() =>
-  amountNum.value > 0 &&
-  amountNum.value <= maxWithdrawable.value + 1e-6 &&
+  amountCents.value > 0n &&
+  amountCents.value <= maxWithdrawableCents.value &&
   withdrawStatus.value !== 'quoting',
 );
 
@@ -382,7 +388,7 @@ const canSign = computed(() => {
 
 const quoteExpired = computed(() => {
   if (!quote.value?.expiresAtMs) return false;
-  return now.value > quote.value.expiresAtMs;
+  return now.value >= quote.value.expiresAtMs;
 });
 
 const countdownLabel = computed(() => {
@@ -415,7 +421,7 @@ const youReceiveLabel = computed(() => {
 });
 
 const statusTitle = computed(() => {
-  switch (withdrawStatus.value) {
+  switch (shownStatus.value) {
     case 'submitting':  return i18n.t('perps.withdraw.statusSubmitting') as string;
     case 'pending':     return i18n.t('perps.withdraw.statusPending') as string;
     case 'settled':     return i18n.t('perps.withdraw.statusSettled') as string;
@@ -426,7 +432,7 @@ const statusTitle = computed(() => {
 });
 
 const statusSub = computed(() => {
-  switch (withdrawStatus.value) {
+  switch (shownStatus.value) {
     case 'signing':     return i18n.t('perps.withdraw.statusSigningSub') as string;
     case 'submitting':  return i18n.t('perps.withdraw.statusSubmittingSub') as string;
     case 'pending':     return i18n.t('perps.withdraw.statusPendingSub') as string;
@@ -445,8 +451,8 @@ function formatUsd(n: number | null | undefined): string {
 
 // ── Methods ─────────────────────────────────────────────────────────────────
 function setMax() {
-  if (maxWithdrawable.value > 0) {
-    amount.value = maxWithdrawable.value.toFixed(2);
+  if (maxWithdrawableCents.value > 0n) {
+    amount.value = formatStrikeUsd(maxWithdrawableCents.value);
   }
 }
 
@@ -456,7 +462,7 @@ async function requestQuoteClick() {
   // No asset arg: requestQuote defaults to USDM — the only asset Strike's
   // withdraw endpoint accepts on Cardano (everything else, including an
   // omitted asset, is rejected with "unsupported asset").
-  await requestQuote(amountNum.value.toFixed(2));
+  await requestQuote(amount.value);
   if (withdrawStatus.value === 'error') {
     // Capture error and reset to step 1 so user can fix the input.
     quoteError.value = withdrawError.value;
@@ -498,6 +504,7 @@ function goBackToAmount() {
 }
 
 function retry() {
+  acknowledgeSubmission();
   resetWithdraw();
   password.value = '';
   showFullMessage.value = false;
@@ -518,13 +525,16 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   if (tickHandle !== null) window.clearInterval(tickHandle);
+  if (props.modelValue) resetWithdraw();
 });
 
 watch(() => props.modelValue, (val) => {
+  // A final result was on screen, so closing means it has been seen. One still pending is kept.
+  if (!val) acknowledgeSubmission();
+  resetWithdraw();
+  password.value = '';
   if (val) {
-    resetWithdraw();
     amount.value = '';
-    password.value = '';
     showPassword.value = false;
     showFullMessage.value = false;
     quoteError.value = null;
@@ -540,7 +550,7 @@ watch(() => props.modelValue, (val) => {
     // `autofocus` race warning the dialog triggers).
     nextTick(() => { amountFieldRef.value?.focus(); });
   }
-});
+}, { flush: 'sync' });
 </script>
 
 <style scoped lang="scss">

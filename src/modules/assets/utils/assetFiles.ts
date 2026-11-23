@@ -26,12 +26,14 @@ export function assetFilesOf(metadata: { image?: unknown; mediaType?: unknown; f
   return out;
 }
 
-const IMAGE_TYPES = new Set(['', 'image/svg+xml', 'image/png', 'image/webp', 'image/jpeg', 'image/gif']);
+const IMAGE_TYPES = new Set(['image/svg+xml', 'image/png', 'image/webp', 'image/jpeg', 'image/gif']);
 
 /**
  * Whether a file is shown as an image. An SVG is drawn through an <img>, where its scripts do not
  * run, so it is as safe to show as a PNG.
  */
 export function isImageMediaType(mediaType: string): boolean {
-  return IMAGE_TYPES.has(mediaType);
+  if (!mediaType) return true;
+  const [type] = mediaType.split(';', 1);
+  return IMAGE_TYPES.has(type.trim().toLowerCase());
 }

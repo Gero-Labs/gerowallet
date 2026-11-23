@@ -186,7 +186,8 @@ export async function unshieldedAddressCodec(sdkNetworkId: string): Promise<{
 
 export type ConnectorBalancePrompt =
   | { ok: true; contributions: ConnectorContribution[]; payments: ConnectorPayment[] }
-  | { ok: false; reason: string };
+  /** `internal`: as in {@link ConnectorBalanceValidation}. */
+  | { ok: false; reason: string; internal?: true };
 
 /**
  * What the `balanceUnsealedTransaction` approval shows, built before the user
@@ -207,7 +208,7 @@ export async function connectorBalancePrompt(
   try {
     version = await resolveMidnightLedger(sdkNetworkId);
   } catch {
-    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(sdkNetworkId)} runs` };
+    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(sdkNetworkId)} runs`, internal: true };
   }
   let tx: UnboundTransaction;
   try {
