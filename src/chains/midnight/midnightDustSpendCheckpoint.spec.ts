@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { clearDustSpendCheckpoints, loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearDustSpendCheckpoints, dustSpendCheckpointWriter, loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
 import { setMidnightWalletStateStore, type StoredWalletState } from './midnightWalletStatePersistence';
 import type { DustSpendCheckpoint } from './midnightDustLightSync';
 
@@ -76,5 +76,89 @@ describe('DUST spend checkpoint store', () => {
     const [key] = rows.keys();
     rows.set(key, { ...rows.get(key)!, serializedState: '{not json' });
     expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toBeNull();
+  });
+});
+
+/** A store whose writes finish only when the test lets them, in the order the test chooses. */
+function heldStore() {
+  const rows = new Map<string, StoredWalletState>();
+  const held: { row: StoredWalletState; finish: () => void; fail: () => void }[] = [];
+  setMidnightWalletStateStore({
+    get: async key => rows.get(key),
+    put: row => new Promise<void>((resolve, reject) => held.push({
+      row, finish: () => { rows.set(row.key, row); resolve(); }, fail: () => reject(new Error('quota')),
+    })),
+    delete: async key => { rows.delete(key); },
+    deleteByPrefixes: async () => {},
+  });
+  return held;
+}
+const at = (checkedThrough: number): DustSpendCheckpoint => ({ ...checkpoint, checkedThrough });
+
+describe('DUST spend checkpoint writer: the saves of one build', () => {
+  afterEach(() => setMidnightWalletStateStore(null));
+
+  it('are stored one at a time in the order made, so the last one stays', async () => {
+    const held = heldStore();
+    const save = dustSpendCheckpointWriter('mainnet', seed, identity);
+    const saves = [save(at(100)), save(at(200)), save(at(300))];
+    for (const through of [100, 200, 300]) {
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+      expect(JSON.parse(held[0].row.serializedState).checkpoint.checkedThrough).toBe(through);
+      held.shift()!.finish();
+    }
+    await Promise.all(saves);
+    expect(held).toHaveLength(0);
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(at(300));
+  });
+
+  it('keep the order asked, not the highest block: a lower checkpoint made later replaces a higher one', async () => {
+    const held = heldStore();
+    const save = dustSpendCheckpointWriter('mainnet', seed, identity);
+    const saves = [save(at(300)), save(at(100))];
+    for (let i = 0; i < 2; i++) {
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+      held.shift()!.finish();
+    }
+    await Promise.all(saves);
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(at(100));
+  });
+
+  it('key the row when the writer is made, so wiping the seed while saves are queued changes nothing', async () => {
+    const held = heldStore();
+    const wiped = seed.slice();
+    const save = dustSpendCheckpointWriter('mainnet', wiped, identity);
+    const saves = [save(at(100)), save(at(300))];
+    wiped.fill(0);
+    for (let i = 0; i < 2; i++) {
+      await vi.waitFor(() => expect(held).toHaveLength(1));
+      held.shift()!.finish();
+    }
+    await Promise.all(saves);
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(at(300));
+    expect(await loadDustSpendCheckpoint('mainnet', wiped, identity)).toBeNull();
+  });
+
+  it('keep what a checkpoint says of a generation that is behind the others', async () => {
+    const held = heldStore();
+    const [[chain, head]] = Object.entries(checkpoint.heads);
+    const lagging: DustSpendCheckpoint = { checkedThrough: 300, heads: {}, behind: { [chain]: { checkedThrough: 100, head } } };
+    const saving = dustSpendCheckpointWriter('mainnet', seed, identity)(lagging);
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    held.shift()!.finish();
+    await saving;
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(lagging);
+  });
+
+  it('go on after a write the store refuses', async () => {
+    const held = heldStore();
+    const save = dustSpendCheckpointWriter('mainnet', seed, identity);
+    const saves = [save(at(100)), save(at(300))];
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    held.shift()!.fail();
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    held.shift()!.finish();
+    await expect(Promise.all(saves)).resolves.toEqual([undefined, undefined]);
+    expect(await loadDustSpendCheckpoint('mainnet', seed, identity)).toEqual(at(300));
   });
 });

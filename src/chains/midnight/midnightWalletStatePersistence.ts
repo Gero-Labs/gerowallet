@@ -242,11 +242,37 @@ export async function saveWalletState(
   identitySeed: Uint8Array,
   serializedState: string,
 ): Promise<void> {
+  // Keyed before the first await: the caller may wipe the seed as soon as this returns.
+  await putWalletState(storageKey(network, kind, identitySeed), network, kind, serializedState);
+}
+
+/**
+ * A writer for one wallet's row whose writes are stored in the order they were
+ * asked for, one at a time. Separate `saveWalletState` calls promise no order: a
+ * slow earlier write could replace a later one. The seed is hashed here, once;
+ * the writer keeps the row key, never the seed, so the caller may wipe the seed
+ * while writes are still queued. As best-effort as `saveWalletState`: a write the
+ * store never finishes holds back this writer's later ones.
+ */
+export function walletStateWriter(
+  network: string,
+  kind: MidnightWalletKind,
+  identitySeed: Uint8Array,
+): (serializedState: string) => Promise<void> {
+  const key = storageKey(network, kind, identitySeed);
+  let tail: Promise<void> = Promise.resolve();
+  return (serializedState) => {
+    const write = () => putWalletState(key, network, kind, serializedState);
+    tail = tail.then(write, write);
+    return tail;
+  };
+}
+
+async function putWalletState(key: string, network: string, kind: MidnightWalletKind, serializedState: string): Promise<void> {
   const store = activeStore();
   if (!store) return;
   if (typeof serializedState !== 'string' || serializedState.length === 0) return;
   if (!injectedStore) void purgeLegacyChromeWalletState();
-  const key = storageKey(network, kind, identitySeed);
   try {
     await store.put({
       key,

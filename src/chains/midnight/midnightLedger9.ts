@@ -13,7 +13,7 @@ import { createDustLightTransport } from './midnightDustLightTransport';
 import { dustLedger9, balanceLightDust9, type DustBalanceable9 } from './midnightDustLightLedger9';
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 import { midnightTimer, timedDustTransport } from './midnightTiming';
-import { loadDustSpendCheckpoint, saveDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
+import { dustSpendCheckpointWriter, loadDustSpendCheckpoint } from './midnightDustSpendCheckpoint';
 
 const CHECKPOINT_LOAD_TIMEOUT_MS = 3_000;
 
@@ -152,10 +152,16 @@ export async function balanceLedger9Fees(
     // A hint: a store that does not answer in time costs a cold scan, not the build.
     const saved = await timer.time('checkpointLoad', () => withinMs(loadDustSpendCheckpoint(network, args.dustSecretSeed, identity),
       CHECKPOINT_LOAD_TIMEOUT_MS, null));
+    // One writer for all of this build's saves: they are stored in the order made, so the
+    // save at the end is the one that stays, however slow an earlier write was.
+    const saveCheckpoint = dustSpendCheckpointWriter(network, args.dustSecretSeed, identity);
     const reconstructStart = Date.now();
     const { state, block, checkpoint } = await reconstructDustState(dustLedger9, dustKey, network,
       timedDustTransport(createDustLightTransport(args.endpoints, controller.signal, reply), timer), progress,
-      { checkpoint: saved, ledgerFirstBlock: Object.hasOwn(MIDNIGHT_LEDGER9_FIRST_BLOCK, network) ? MIDNIGHT_LEDGER9_FIRST_BLOCK[network] : undefined });
+      { checkpoint: saved, ledgerFirstBlock: Object.hasOwn(MIDNIGHT_LEDGER9_FIRST_BLOCK, network) ? MIDNIGHT_LEDGER9_FIRST_BLOCK[network] : undefined,
+        // Kept as the scan goes, so a build that fails later (a timeout, a server error, the TTL)
+        // leaves the next one only the rest to scan. Not awaited, like the save below.
+        onCheckpoint: partial => { void saveCheckpoint(partial); } });
     timer.note({ reconstructMs: Date.now() - reconstructStart, resumedBlocks: saved ? block.height - saved.checkedThrough : undefined });
     controller.signal.throwIfAborted();
     timer.lap('reconstructLocal');
@@ -165,9 +171,9 @@ export async function balanceLedger9Fees(
     watchdog.activity();
     await timer.time('chainIdentityRecheck', () => assertMidnightChainIdentityUnchanged(args.endpoints, identity, controller.signal));
     // Not awaited: the fee is ready, and a stalled store must not hold it back. The
-    // save hashes the seed into its row key before its first await, so wiping the
-    // seed after this returns cannot change the row (midnightDustSpendCheckpoint.spec).
-    if (checkpoint) void saveDustSpendCheckpoint(network, args.dustSecretSeed, identity, checkpoint);
+    // writer hashed the seed into its row key when it was made, so wiping the seed
+    // after this returns cannot change the row (midnightDustSpendCheckpoint.spec).
+    if (checkpoint) void saveCheckpoint(checkpoint);
     outcome = 'ok';
     return fee;
   } catch (error) {
