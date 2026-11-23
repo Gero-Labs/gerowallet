@@ -69,15 +69,13 @@
 
     <div v-else class="action-list__rows">
       <div v-for="action in orderedActions" :key="action.govActionId" class="action-list__row">
-        <!-- Batch selection: only for actions still open to votes, and only when
-             this wallet is a registered DRep whose type can batch-sign. -->
-        <label v-if="selectable && isActionOpen(action)" class="action-list__select">
+        <label v-if="selected.has(action.govActionId) || (selectable && isOpen(action.status)) || (canAnswer && mayAnswerAction(action, currentEpoch))" class="action-list__select">
           <input
             type="checkbox"
             class="action-list__checkbox"
-            :checked="selected.includes(action.govActionId)"
-            :aria-label="$t('governance.selectForVoting')"
-            @change="toggleSelect(action.govActionId)"
+            :checked="selected.has(action.govActionId)"
+            :aria-label="$t('governance.selectAction', { title: action.title || action.govActionId })"
+            @change="toggleSelect(action)"
           />
         </label>
         <ActionRow
@@ -110,17 +108,23 @@
       ></v-pagination>
     </div>
 
-    <div v-if="selected.length" class="action-list__batch-bar">
-      <span class="t-body-2 g-num">{{ $t('governance.selectedCount', { n: selected.length }) }}</span>
-      <GButton tier="primary" compact @click="openBatchDialog()">
+    <div v-if="selectedActions.length" class="action-list__batch-bar flex-wrap">
+      <span class="t-body-2 g-num">{{ $t('governance.selectedCount', { n: selectedActions.length }) }}</span>
+      <GButton v-if="canAnswer && selectedActions.every(a => mayAnswerAction(a, currentEpoch))"
+        :tier="selectable ? 'secondary' : 'primary'" compact @click="dialogMode = 'answer'">
+        {{ $t('governance.answerSelected') }}
+      </GButton>
+      <GButton v-if="selectable && selectedActions.every(a => isOpen(a.status))" tier="primary" compact @click="dialogMode = 'vote'">
         {{ $t('governance.voteOnSelected') }}
       </GButton>
+      <GButton tier="tertiary" compact @click="clearSelection()">{{ $t('governance.clearSelection') }}</GButton>
     </div>
 
     <CastVoteDialog
-      :is-open="batchDialogOpen"
+      :is-open="dialogMode !== null"
+      :mode="dialogMode || 'vote'"
       :actions="selectedActions"
-      @close="batchDialogOpen = false"
+      @close="dialogMode = null"
       @submitted="clearSelection()"
     />
   </div>
@@ -128,7 +132,7 @@
 
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
@@ -143,6 +147,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { orderActions } from '@/modules/governance/components/actions/ordering';
 import ActionRow from '@/modules/governance/components/actions/ActionRow.vue';
 import AsOf from '@/modules/governance/components/actions/AsOf.vue';
+import { mayAnswerAction, useHolderAnswers } from '@/modules/governance/composables/useHolderAnswers';
 import CastVoteDialog from '@/modules/governance/dialogs/CastVoteDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
@@ -210,9 +215,7 @@ const selectable = computed(
     capability.value.canBatch,
 );
 
-function isActionOpen(action: GovProposal): boolean {
-  return isOpen(action.status);
-}
+const { canAnswer } = useHolderAnswers();
 
 // ---------------------------------------------------------------------------
 // Stat strip
@@ -294,27 +297,28 @@ function rowVoteStatus(action: GovProposal): RowVoteStatus {
   return votes.byAction[action.govActionId] ? 'voted' : 'awaiting';
 }
 
-const selected = ref<string[]>([]);
-const batchDialogOpen = ref(false);
+const selected = ref(new Map<string, GovProposal>());
+const dialogMode = ref<'vote' | 'answer' | null>(null);
 
-const selectedActions = computed(() =>
-  state.actions.filter(action => selected.value.includes(action.govActionId)),
-);
+const selectedActions = computed(() => [...selected.value.values()]);
 
-function toggleSelect(govActionId: string): void {
-  selected.value = selected.value.includes(govActionId)
-    ? selected.value.filter(id => id !== govActionId)
-    : [...selected.value, govActionId];
+function toggleSelect(action: GovProposal): void {
+  if (selected.value.has(action.govActionId)) selected.value.delete(action.govActionId);
+  else selected.value.set(action.govActionId, action);
 }
 
 function clearSelection(): void {
-  selected.value = [];
-  batchDialogOpen.value = false;
+  selected.value.clear();
+  dialogMode.value = null;
 }
 
-function openBatchDialog(): void {
-  if (selectedActions.value.length) batchDialogOpen.value = true;
-}
+// Keep off-page selections and refresh their status whenever they reappear.
+watch(() => state.actions, actions => {
+  for (const action of actions) {
+    if (selected.value.has(action.govActionId)) selected.value.set(action.govActionId, action);
+  }
+}, { flush: 'sync' });
+watch([() => walletStore.loggedWallet?.id, network, () => walletStore.loggedWallet?.stakeAddress], clearSelection, { flush: 'sync' });
 
 function typeLabel(type: string): string {
   const key = `governance.actionType.${type.toLowerCase()}`;
@@ -339,9 +343,6 @@ function goToDReps(): void {
 let registrationReady: Promise<unknown> = Promise.resolve();
 
 function reload(page = 1): void {
-  // A new page/filter means new rows — a selection kept across it would let
-  // "N selected" refer to actions the user can no longer see.
-  selected.value = [];
   void (async () => {
     // The list renders as soon as it lands; the per-action votes join follows,
     // since it is an N+1 and must never hold the page back.

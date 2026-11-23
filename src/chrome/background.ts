@@ -4,7 +4,11 @@ import './backgroundLocales';
 import '@/api/signedFetchInstall';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances, transferOutputTotals } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
-import { acceptMidnightProverPort } from '@/chains/midnight/midnightDeviceProver';
+import { acceptMidnightProverPort, runDeviceSelfTest } from '@/chains/midnight/midnightDeviceProver';
+// Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
+import {
+  helperProofProcessor, helperStatus, removeHelperKeys, runHelperSelfTest, setHelperAccelerator,
+} from '@/chains/midnight/midnightHelperProver';
 import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
 import { midnightTimer } from '@/chains/midnight/midnightTiming';
 import type { WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
@@ -136,6 +140,7 @@ import {
   otherLedgerSubmissionReason,
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
+import { sealedBalancePrompt, sealedSelectableUtxos } from '@/chains/midnight/midnightSealedBalancer9';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import {
   CONNECTOR_INTENT_TTL_MS,
@@ -648,7 +653,7 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
 /**
  * Park a Midnight connector prompt until this tab's panel connects. Every
  * Midnight prompt goes through here (connect, signData, makeTransfer,
- * makeIntent, balanceUnsealedTransaction), since any of them may arrive
+ * makeIntent, balanceUnsealedTransaction, balanceSealedTransaction), since any of them may arrive
  * without a user gesture or while the panel sits on the lock screen. A refused
  * `sidePanel.open()` is not a failure: the entry stays parked, the badge shows
  * it, and `redeliverParkedRequests` delivers it when the user opens the panel.
@@ -6512,6 +6517,19 @@ app.addToOptions(
           }));
           signedTxHex = result.provenTxHex;
           ledgerTxHash = result.ledgerTxHash;
+          // The helper says which processor made the proof; the Proof server page shows it.
+          if ('helper' in provingArg) {
+            midnightActions.recordLocalProvingAttempt({ durationMs: result.proveDurationMs, success: true, ...helperProofProcessor() });
+          }
+        } catch (error) {
+          if ('helper' in provingArg) {
+            // Read (and so cleared) even for a failure: the next transaction's row is its own.
+            helperProofProcessor();
+            midnightActions.recordLocalProvingAttempt({
+              durationMs: (error as { durationMs?: number })?.durationMs ?? 0, success: false, error: getErrorMessage(error),
+            });
+          }
+          throw error;
         } finally {
           midnightActions.setSendProgress(null);
         }
@@ -6681,8 +6699,9 @@ const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
 
 /**
  * Side panel → background for the DApp Connector's balanceUnsealedTransaction
- * (the panel has already shown the user what the wallet will add and taken
- * the credential). Returns the sealed tx hex.
+ * and, with `sealed`, balanceSealedTransaction (the panel has already shown
+ * the user what the wallet will add and taken the credential). Returns the
+ * sealed tx hex.
  */
 app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sendResponse) => {
   let prfBytes: Uint8Array | undefined;
@@ -6690,15 +6709,16 @@ app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sen
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
     if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BALANCE_MIDNIGHT_CONNECTOR_TX called on non-Midnight wallet');
-    const { tx, password, prfSecret } = request.data || {};
+    const { tx, password, prfSecret, sealed } = request.data || {};
     if (typeof tx !== 'string' || tx.length === 0) throw new Error('tx is required');
+    if (sealed !== undefined && typeof sealed !== 'boolean') throw new Error('Invalid sealed flag');
     if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
     if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
       || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
       throw new Error('Invalid PassKey authorization');
     }
     prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes);
+    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes, sealed === true);
     sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({
@@ -6814,6 +6834,13 @@ function parseProvingRequest(value: unknown): WalletProvingRequest | undefined {
       throw new Error('proving.device must be exactly { device: true }');
     }
     return { device: true };
+  }
+  // Gero Prover, the desktop helper on this computer (midnightHelperProver.ts): exactly `{ helper: true }`.
+  if ('helper' in value) {
+    if ((value as { helper?: unknown }).helper !== true || Object.keys(value).length !== 1) {
+      throw new Error('proving.helper must be exactly { helper: true }');
+    }
+    return { helper: true };
   }
   const url = (value as { url?: unknown }).url;
   if (typeof url !== 'string' || url.length === 0) {
@@ -7078,7 +7105,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret, localEngine,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -7115,6 +7142,12 @@ app.addToOptions(
         ? current.zkpaasApiKey : validateZkpaasCredential('zkpaasApiKey', zkpaasApiKey);
       const zkpaasApiSecretValue = zkpaasApiSecret === undefined || zkpaasApiSecret === null
         ? current.zkpaasApiSecret : validateZkpaasCredential('zkpaasApiSecret', zkpaasApiSecret);
+      // Optional like the fields above: absent keeps what "local" proves with
+      // (a Docker proof server unless the user chose Gero Prover).
+      const localEngineValue = localEngine === undefined || localEngine === null ? current.localEngine : localEngine;
+      if (localEngineValue !== undefined && localEngineValue !== 'docker' && localEngineValue !== 'helper' && localEngineValue !== 'browser') {
+        throw new Error('localEngine must be "docker", "helper" or "browser"');
+      }
       midnightActions.setProofServer({
         mode,
         localUrl,
@@ -7122,11 +7155,67 @@ app.addToOptions(
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,
+        ...(localEngineValue ? { localEngine: localEngineValue } : {}),
       });
       await walletManager.refreshCrossDeviceProver();
       sendResponse({
         id: request.id,
         data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Gero Prover (the desktop helper that makes Midnight proofs on this computer):
+ * its status and its controls, for the Proof server page and the send dialogs.
+ * Extension pages only. The background owns the one connection to the helper,
+ * so a status read and a proof never start two copies of it.
+ *
+ * Request: `{ action: 'status' | 'setAccelerator' | 'selfTest' | 'removeKeys', enabled?: boolean }`.
+ * Response: `{ success: true, result: { snapshot, selfTest? } }`. A helper that is
+ * missing or cannot be used is a successful answer (its `connection` says why);
+ * only a failed test proof or a malformed request is an error.
+ *
+ * `{ action: 'browserSelfTest', threaded: boolean }` proves the same bundled test
+ * preimage (a throwaway key, no wallet data) with the prover inside the browser,
+ * standard or multi-threaded, for the speed comparison on that page. Response:
+ * `{ success: true, result: { browserSelfTest: { proveMs, threads, threadsUnavailable? } } }`.
+ */
+app.addToOptions(
+  MessageTypes.GERO_PROVER,
+  async (request, sendResponse) => {
+    try {
+      const { action, enabled, threaded } = request.data || {};
+      let result: { snapshot?: unknown; selfTest?: unknown; browserSelfTest?: unknown };
+      if (action === 'browserSelfTest') {
+        if (typeof threaded !== 'boolean') throw new Error('threaded must be a boolean');
+        result = { browserSelfTest: await runDeviceSelfTest(threaded) };
+      } else if (action === 'status') {
+        result = { snapshot: await helperStatus() };
+      } else if (action === 'setAccelerator') {
+        if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean');
+        result = { snapshot: await setHelperAccelerator(enabled) };
+      } else if (action === 'removeKeys') {
+        result = { snapshot: await removeHelperKeys() };
+      } else if (action === 'selfTest') {
+        const selfTest = await runHelperSelfTest();
+        result = { snapshot: await helperStatus(), selfTest };
+      } else {
+        throw new Error('action must be "status", "setAccelerator", "selfTest", "removeKeys" or "browserSelfTest"');
+      }
+      sendResponse({
+        id: request.id,
+        data: { success: true, result },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -8186,6 +8275,118 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     apiError: midnightApiError,
     parseParkError: parseMidnightMiniGeroError,
   });
+  return true;
+});
+
+/**
+ * DApp Connector balanceSealedTransaction: the dapp hands over another
+ * party's SEALED transaction (a swap offer made with makeIntent); the wallet
+ * adds its own signed intent (what the offer asks for in, what it gives out),
+ * pays the DUST fee and returns the sealed result. Ledger 9 only. Validation,
+ * the give/receive summary and the funds check happen BEFORE the user is
+ * prompted. It is shown in the balance approval (`sealed: true`), so it is
+ * parked under that method; same side-panel-only routing as
+ * balanceUnsealedTransaction.
+ */
+app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  let replied = false;
+  const reply = (opts: ReplyOpts) => {
+    // Once only: the catch-all below must never answer a request already answered.
+    if (replied) return;
+    replied = true;
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  // The wallet the site's permission was checked against. The checks below
+  // await, and the prompt is stamped with whichever wallet is active when it
+  // is parked (sendToMiniGero), so a switch in between would show another
+  // wallet a prompt this site was never allowed to send it.
+  const { id: walletId, network: walletNetwork } = currentWallet;
+  const sameWalletStill = () => {
+    const now = walletManager.getWallet();
+    return now?.id === walletId && now.network === walletNetwork && !walletStore.isLocked && WalletStore.isWhitelisted(origin);
+  };
+  void (async () => {
+    try {
+      await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
+      const validation = validateConnectorBalanceRequest(data, currentWallet.network);
+      if (validation.ok === false) {
+        // A ledger the wallet could not read is its own failure, not a bad request.
+        const code = validation.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+        reply({ error: midnightApiError(code, validation.reason) });
+        return;
+      }
+      const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+      // Completed from the wallet's synced coins: no prompt before that sync (as makeIntent, review S1).
+      if (!connectorIntentSyncReady(midnightStore)) {
+        reply({ error: midnightApiError(MidnightErrorCode.InternalError, CONNECTOR_NOT_SYNCED_REASON) });
+        return;
+      }
+      const prompt = await sealedBalancePrompt(
+        validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
+      );
+      if (prompt.ok === false) {
+        // A ledger the wallet could not read is its own failure, not a bad request.
+        const code = prompt.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+        reply({ error: midnightApiError(code, prompt.reason) });
+        return;
+      }
+      // Against the coins the builder may select: never those the sealed part already spends.
+      const fundable = {
+        lastSync: midnightStore.lastSync,
+        utxos: sealedSelectableUtxos(validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.utxos),
+      };
+      if (uncoveredIntentInput(prompt.gives.map((give) => ({ type: give.token.toLowerCase(), value: give.amount })), fundable)) {
+        reply({ error: midnightApiError(MidnightErrorCode.InsufficientFunds, 'The wallet does not hold enough of a token this transaction asks for') });
+        return;
+      }
+      if (!sameWalletStill()) {
+        reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') });
+        return;
+      }
+      const payload = {
+        data: { tx: validation.tx, sealed: true, contributions: prompt.gives, receives: prompt.receives, payments: prompt.payments },
+        ...promptSite(origin, send),
+      };
+      // Usually called without a user gesture left (the dapp fetched the offer first): park it, as balanceUnsealedTransaction.
+      midnightActions.recordSiteActivity(origin, { type: 'funding' });
+      await parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+        .then((response: BackgroundResponse) => {
+          // Answer first: a failure to record the activity must not turn a built transaction into an error.
+          reply({ data: response.data }); // response.data === { tx }
+          midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
+        })
+        .catch(err => {
+          const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction');
+          midnightActions.recordSiteActivity(origin, {
+            type: 'funding-failed',
+            reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
+          });
+          reply({ error });
+        });
+    } catch {
+      // A failed import, prompt read or funds check still answers the dapp, which would otherwise wait forever.
+      reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'Failed to complete the sealed transaction') });
+    }
+  })();
   return true;
 });
 

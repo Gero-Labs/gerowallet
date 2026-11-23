@@ -23,7 +23,8 @@ export const CONNECTOR_BALANCE_MAX_BYTES = 2 * 1024 * 1024;
 
 export type ConnectorBalanceValidation =
   | { ok: true; tx: string; payFees: true }
-  | { ok: false; reason: string };
+  /** `internal`: the wallet could not check the request (its ledger read failed), not the dapp's mistake. */
+  | { ok: false; reason: string; internal?: true };
 
 /**
  * Shape-check a `balanceUnsealedTransaction` request BEFORE prompting the
@@ -41,7 +42,7 @@ export function validateConnectorBalanceRequest(data: unknown, network: string):
   }
   // The caller reads the chain's ledger first (resolveMidnightLedger); both ledgers balance.
   if (knownMidnightLedger(network) === undefined) {
-    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs` };
+    return { ok: false, reason: `Could not read which ledger Midnight ${midnightNetworkName(network)} runs`, internal: true };
   }
   return { ok: true, tx, payFees: true };
 }

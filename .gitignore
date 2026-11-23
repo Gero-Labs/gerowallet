@@ -89,6 +89,10 @@ email-templates/
 !.claude/skills/solana-dev/
 .superpowers/
 
+# The multi-threaded Midnight prover build: made by scripts/midnight-zkir-mt.mjs and checked
+# against the pins in src/chains/midnight/midnightZkirThreads.ts, never committed.
+/src/assets/midnight-zkir-mt/
+
 # Local planning and working documents stay on this machine.
 /docs/
 

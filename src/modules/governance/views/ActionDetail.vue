@@ -51,7 +51,12 @@
           </span>
           <ExplorerLink type="govAction" :id="govActionId" x-small />
         </div>
-        <VoteCta :action="action" @vote="voteDialogOpen = true" />
+        <div class="d-flex flex-wrap align-center ga-3">
+          <VoteCta :action="action" @vote="dialogMode = 'vote'" />
+          <GButton v-if="canAnswer && mayAnswerAction(action, currentEpoch)" @click="dialogMode = 'answer'">
+            {{ $t('governance.holderAnswer') }}
+          </GButton>
+        </div>
       </div>
 
       <div class="action-detail__tabs" role="tablist">
@@ -265,9 +270,10 @@
       </div>
 
       <CastVoteDialog
-        :is-open="voteDialogOpen"
+        :is-open="dialogMode !== null"
+        :mode="dialogMode || 'vote'"
         :actions="action ? [action] : []"
-        @close="voteDialogOpen = false"
+        @close="dialogMode = null"
       />
     </template>
   </div>
@@ -312,6 +318,7 @@ import {
 } from '@/modules/governance/components/actions/references';
 import { toLinkHref } from '@/modules/governance/utils/govAnchor';
 import { treasuryWithdrawalsOf } from '@/modules/governance/utils/treasuryWithdrawals';
+import { mayAnswerAction, useHolderAnswers } from '@/modules/governance/composables/useHolderAnswers';
 import CastVoteDialog from '@/modules/governance/dialogs/CastVoteDialog.vue';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
@@ -346,7 +353,8 @@ const action = computed(() => state.currentAction);
 const summary = computed(() => state.currentSummary);
 const isInfoAction = computed(() => action.value?.type === 'InfoAction');
 
-const voteDialogOpen = ref(false);
+const dialogMode = ref<'vote' | 'answer' | null>(null);
+const { canAnswer } = useHolderAnswers();
 
 const tab = computed(() => {
   const value = String(route.query['tab'] ?? 'overview');

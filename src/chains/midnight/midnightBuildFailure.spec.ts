@@ -3,7 +3,7 @@ import {
   asBuildStep, buildFailureOf, buildFailureReply, markBuildStep, MidnightBuildFailedError,
   NEXUS_INSUFFICIENT_FUNDS, readBuildFailure, withBuildFailure,
 } from './midnightBuildFailure';
-import { IntentInsufficientFundsError } from './midnightConnectorIntent';
+import { IntentInsufficientFundsError, MIDNIGHT_DUST_COINS_SHORT } from './midnightConnectorIntent';
 import { MidnightErrorCode } from '@/chrome/config';
 
 class FakeApiError extends Error {
@@ -16,6 +16,7 @@ describe('buildFailureOf', () => {
     ['the SDK\'s coin selection', Object.assign(new Error('x'), { _tag: 'Wallet.InsufficientFunds' })],
     ['the SDK\'s DUST shortfall', new Error('Insufficient Funds: could not balance dust')],
     ['Nexus\'s 422', new FakeApiError(NEXUS_INSUFFICIENT_FUNDS)],
+    ['too few DUST coins for the validation-time limit', new Error(MIDNIGHT_DUST_COINS_SHORT)],
   ])('%s is InsufficientFunds', (_name, error) => {
     expect(buildFailureOf(error)).toBe(MidnightErrorCode.InsufficientFunds);
   });
