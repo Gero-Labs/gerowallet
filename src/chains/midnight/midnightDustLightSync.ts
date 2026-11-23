@@ -169,14 +169,18 @@ export interface ReconstructDustOptions {
   checkpointMarginBlocks?: number;
   /** Warm scans start on a multiple of this many blocks (`dustWarmScanStart`); 0 starts right after the checkpoint. Default `DUST_SCAN_ALIGN_BLOCKS`. */
   scanAlignBlocks?: number;
+  /** A scan of at least two of these many blocks is settled in stages (`dustScanStages`). Default `DUST_SCAN_MIN_STAGE_BLOCKS`. */
+  scanStageBlocks?: number;
   /**
    * Called during the spend scan, each time more of it is settled, with a
-   * checkpoint the next attempt can resume from. A cold scan is one full pass
-   * per link of the longest spend chain (minutes with dozens of spends), so a
-   * failure near the end must not send the next attempt back to the first
-   * block. The checkpoint is not yet checked against the commitment root: like
-   * any stored one it is a hint, and a head the chain does not have is dropped
-   * by `reconstructDustState`'s cold attempts. Must not throw or block.
+   * checkpoint the next attempt can resume from: after each stage of a long
+   * scan, and after each pass inside a stage. A long scan is minutes for a
+   * wallet with many coins, longer than a build may take (it ends at the
+   * transaction's expiry), so a build that fails or runs out of time must not
+   * send the next one back to the first block. The checkpoint is not yet
+   * checked against the commitment root: like any stored one it is a hint, and
+   * a head the chain does not have is dropped by `reconstructDustState`'s cold
+   * attempts. Must not throw or block.
    */
   onCheckpoint?: (checkpoint: DustSpendCheckpoint) => void;
 }
@@ -221,14 +225,51 @@ export const DUST_SPEND_CONCURRENCY = 4;
  * depend on the range alone, never on an owned nullifier, so asking for the
  * slices tells the server nothing the whole range would not.
  */
-export function dustScanSlices(from: number, to: number): [number, number][] {
+export function dustScanSlices(from: number, to: number, max: number = DUST_SCAN_MAX_SLICES): [number, number][] {
   const span = to - from + 1;
   if (!Number.isSafeInteger(span) || span < 1) throw new Error('Invalid DUST scan range');
-  const count = Math.max(1, Math.min(DUST_SCAN_MAX_SLICES, Math.floor(span / DUST_SCAN_MIN_SLICE_BLOCKS)));
+  const count = Math.max(1, Math.min(max, Math.floor(span / DUST_SCAN_MIN_SLICE_BLOCKS)));
   const size = Math.ceil(span / count);
   const slices: [number, number][] = [];
   for (let start = from; start <= to; start += size) slices.push([start, Math.min(to, start + size - 1)]);
   return slices;
+}
+
+/** At most this many stages per scan. */
+export const DUST_SCAN_MAX_STAGES = 8;
+/**
+ * No stage shorter than this, about a week of Midnight blocks: a scan shorter
+ * than two of them (every warm scan of a wallet used in the last days) is one
+ * stage, scanned to the tip as before.
+ */
+export const DUST_SCAN_MIN_STAGE_BLOCKS = 7 * DUST_SCAN_ALIGN_BLOCKS;
+
+/**
+ * The last block of each stage of a scan of `from..to`, in order; the last one
+ * is `to`. A long scan (a new profile, a wallet unused for weeks) is settled
+ * stage by stage: every chain is followed to the end of a stage, successors
+ * included, before the next stage is asked for, and each settled stage is a
+ * checkpoint. Scanning the whole range for every link of a chain instead cost
+ * a wallet with ten coins more than five minutes per pass on preprod
+ * (2026-11-23), longer than a fee build may take, so it never finished and
+ * kept nothing.
+ *
+ * Like the slices, the stages depend on the range alone. What they add for
+ * the server: it sees in which stage a chain moves to its next coin, a week
+ * of blocks or more. A warm scan already tells it that to within a day or two
+ * (`DUST_SCAN_ALIGN_BLOCKS`), and a successor is still asked for from the
+ * first block of its stage's scan, never from the block it was created in.
+ */
+export function dustScanStages(from: number, to: number, minBlocks: number = DUST_SCAN_MIN_STAGE_BLOCKS): number[] {
+  const span = to - from + 1;
+  if (!Number.isSafeInteger(span) || span < 1) throw new Error('Invalid DUST scan range');
+  if (!Number.isSafeInteger(minBlocks) || minBlocks < 1) throw new Error('Invalid DUST scan stage');
+  const count = Math.max(1, Math.min(DUST_SCAN_MAX_STAGES, Math.floor(span / minBlocks)));
+  const size = Math.ceil(span / count);
+  const ends: number[] = [];
+  for (let end = from + size - 1; end < to; end += size) ends.push(end);
+  ends.push(to);
+  return ends;
 }
 
 /** Runs at most `max` tasks at once; a finished task hands its slot to the next waiting one. */
@@ -303,7 +344,9 @@ export async function reconstructDustState<State, Key>(
  * A chain is scanned from the first block, or from a shared day boundary before
  * a checkpoint's `checkedThrough` when the checkpoint has its head. A successor found on the
  * way is scanned from where its parent's scan started, never from the block it
- * was created in: that block would name the wallet's own spend to the server. */
+ * was created in: that block would name the wallet's own spend to the server.
+ * A long scan is settled in stages (`dustScanStages`), each stage resumed from
+ * the one before it exactly as a later build resumes from a checkpoint. */
 async function reconstructDustStateOnce<State, Key>(
   ledger: DustLightLedger<State, Key>, key: Key, network: string, transport: DustLightTransport,
   progress: (percent: number, detail: string) => void = () => {},
@@ -351,12 +394,15 @@ async function reconstructDustStateOnce<State, Key>(
   if (!Number.isSafeInteger(margin) || margin < 0) throw new Error('Invalid DUST checkpoint margin');
   const align = options.scanAlignBlocks ?? DUST_SCAN_ALIGN_BLOCKS;
   if (!Number.isSafeInteger(align) || align < 0) throw new Error('Invalid DUST scan alignment');
+  const stageBlocks = options.scanStageBlocks ?? DUST_SCAN_MIN_STAGE_BLOCKS;
   // What the returned checkpoint covers: never below the one resumed from.
   const checkedThrough = Math.max(block.height - margin, resume ? resume.checkedThrough : -1);
   interface LiveCoin {
     coin: QualifiedDustOutput; generation: DustGenerationInfo; generationKey: string;
-    /** First block this chain's spends are looked for in. */
+    /** First block this chain's spends are looked for in; moves up as stages of a long scan are settled. */
     scanFrom: number;
+    /** Never scanned below this block: the ledger's first block, or 0. */
+    floor: number;
     /** The coin this attempt started the chain from: its first coin, or the checkpoint's head. */
     base: QualifiedDustOutput;
     /** Each successor found since, in chain order, with the height of the spend that created it. */
@@ -415,7 +461,8 @@ async function reconstructDustStateOnce<State, Key>(
     const fromFirst = first && Number.isSafeInteger(first.height) && first.height >= 0 && first.height <= block.height
       && coin.ctime.getTime() >= first.timestamp ? first.height : 0;
     live.set(nullifier, { coin: start, generation, generationKey: chainKey,
-      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, base: start, links: [] });
+      scanFrom: head && resume ? dustWarmScanStart(resume.checkedThrough, align, fromFirst) : fromFirst, floor: fromFirst,
+      base: start, links: [] });
     cursor++;
   }
   if (cursor !== generationEnd) throw new Error('Incomplete DUST generation tree');
@@ -434,24 +481,30 @@ async function reconstructDustStateOnce<State, Key>(
   const seen = new Set<bigint>();
   let discovered = 0;
   const limit = concurrencyLimit(DUST_SPEND_CONCURRENCY);
-  // How far the scan is settled for every chain at once. A chain whose newest
-  // coin is still to be looked up is settled only below the block that coin
-  // was created in: its own spend cannot be earlier. A chain whose newest coin
-  // was looked up to the tip is settled to the tip. Resuming from it scans
+  // How far the scan is settled for every chain at once, in the stage that
+  // ends at `stageEnd`. A chain whose newest coin is still to be looked up is
+  // settled only below the block that coin was created in: its own spend
+  // cannot be earlier. A chain whose newest coin was looked up to the end of
+  // the stage is settled to it, and so is a chain whose scan starts after the
+  // stage (a head resumed from a later checkpoint). Resuming from it scans
   // from a shared day boundary before that height, as after any checkpoint.
   let settled = resume ? resume.checkedThrough : -1;
-  const reportSettled = () => {
-    let through = checkedThrough;
+  const reportSettled = (stageEnd: number) => {
+    let through = Math.min(stageEnd, checkedThrough);
     for (const [nullifier, entry] of live) {
-      if (checked.has(nullifier)) continue;
+      if (checked.has(nullifier) || entry.scanFrom > stageEnd) continue;
       through = Math.min(through, entry.links.length ? entry.links[entry.links.length - 1].height - 1 : -1);
     }
     if (through <= settled) return;
     settled = through;
     try { options.onCheckpoint?.(checkpointAt(through)); } catch { /* advisory */ }
   };
+  const stages = live.size
+    ? dustScanStages(Math.min(...[...live.values()].map(entry => entry.scanFrom)), block.height, stageBlocks) : [block.height];
+  let stage = 0;
   for (;;) {
-    const pending = [...live.keys()].filter(n => !checked.has(n));
+    const stageEnd = stages[stage];
+    const pending = [...live.keys()].filter(n => !checked.has(n) && live.get(n)!.scanFrom <= stageEnd);
     // One scan per prefix and start block, each in fixed block slices; a
     // round's scans and slices run side by side, under one request limit.
     const scans = new Map<string, { prefix: string; from: number; nullifiers: bigint[] }>();
@@ -463,8 +516,11 @@ async function reconstructDustStateOnce<State, Key>(
       scan.nullifiers.push(n);
       scans.set(id, scan);
     }
+    // A stage is already a part of the range: its scans share the request
+    // limit between them instead of each taking eight slices of it.
+    const slices = stages.length > 1 ? Math.max(1, Math.ceil(DUST_SPEND_CONCURRENCY / scans.size)) : DUST_SCAN_MAX_SLICES;
     await Promise.all([...scans.values()].map(async ({ prefix, from, nullifiers }) => {
-      await Promise.all(dustScanSlices(from, block.height).map(async ([sliceFrom, sliceTo]) => {
+      await Promise.all(dustScanSlices(from, stageEnd, slices).map(async ([sliceFrom, sliceTo]) => {
         let fromBlock = sliceFrom;
         let window = 250_000;
         for (;;) {
@@ -538,9 +594,18 @@ async function reconstructDustStateOnce<State, Key>(
       advanced = true;
       if (++discovered > commitmentEnd) throw new Error('Invalid DUST spend chain');
     }
-    reportSettled();
-    if (!advanced) break;
-    report(50, '');
+    reportSettled(stageEnd);
+    if (advanced) {
+      if (stages.length === 1) report(50, '');
+      continue;
+    }
+    if (stageEnd === block.height) break;
+    // The stage is settled. The next one asks for every chain again, from a
+    // shared day boundary before this stage's end: what a build resumed from
+    // the checkpoint just reported would ask for.
+    checked.clear();
+    for (const entry of live.values()) entry.scanFrom = Math.max(entry.scanFrom, dustWarmScanStart(stageEnd, align, entry.floor));
+    report(30 + Math.floor(40 * ++stage / stages.length), '');
   }
   report(70, '');
   const coins = [...live.values()].map(e => e.coin).sort((a, b) => a.mtIndex < b.mtIndex ? -1 : a.mtIndex > b.mtIndex ? 1 : 0);

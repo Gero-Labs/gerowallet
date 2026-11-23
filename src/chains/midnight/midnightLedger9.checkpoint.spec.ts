@@ -7,10 +7,12 @@ import type { DustSpendCheckpoint, ReconstructDustOptions } from './midnightDust
 
 const mocks = vi.hoisted(() => ({
   reconstruct: vi.fn(), balance: vi.fn(), identity: vi.fn(), recheck: vi.fn(), load: vi.fn(), writer: vi.fn(), save: vi.fn(),
+  /** The signal the fee builder gave its transport: aborted when the build is stopped. */
+  stop: { signal: null as AbortSignal | null },
 }));
 vi.mock('./midnightDustLightSync', () => ({ reconstructDustState: mocks.reconstruct }));
 vi.mock('./midnightDustLightLedger9', () => ({ dustLedger9: {}, balanceLightDust9: mocks.balance }));
-vi.mock('./midnightDustLightTransport', () => ({ createDustLightTransport: () => ({}) }));
+vi.mock('./midnightDustLightTransport', () => ({ createDustLightTransport: (_endpoints: unknown, signal: AbortSignal) => { mocks.stop.signal = signal; return {}; } }));
 vi.mock('./midnightChainIdentity', () => ({ readVerifiedMidnightChainIdentity: mocks.identity, assertMidnightChainIdentityUnchanged: mocks.recheck }));
 vi.mock('./midnightDustSpendCheckpoint', () => ({ loadDustSpendCheckpoint: mocks.load, dustSpendCheckpointWriter: mocks.writer }));
 
@@ -83,5 +85,32 @@ describe('ledger 9 DUST fee: the spend scan is kept as it goes', () => {
     await balanceAndSignLedger9Transfer(args());
     expect(mocks.writer).toHaveBeenCalledTimes(1);
     expect(mocks.save.mock.calls).toEqual([[checkpoint(100)], [checkpoint(250)], [checkpoint(300)]]);
+  });
+
+  it('a build stopped at the transaction\'s expiry, its scan unfinished, has stored the stages the scan settled', async () => {
+    vi.useFakeTimers();
+    try {
+      const ttlMs = 300_000;
+      mocks.reconstruct.mockImplementation(async (_ledger, _key, _network, _transport, progress: (percent: number, detail: string) => void) => {
+        // A scan longer than the build may take: it settles a stage a minute, and its requests fail once the build is stopped.
+        const stopped = new Promise<never>((_, reject) => mocks.stop.signal!.addEventListener('abort', () => reject(new Error('aborted'))));
+        stopped.catch(() => {});
+        for (let stage = 1; ; stage++) {
+          await Promise.race([new Promise(resolve => setTimeout(resolve, 50_000)), stopped]);
+          progress(30 + stage, '');
+          options().onCheckpoint!(checkpoint(stage * 1_000));
+        }
+      });
+      const started = Date.now();
+      const building = balanceAndSignLedger9Transfer(args());
+      const failed = expect(building).rejects.toThrow('DUST synchronization timed out');
+      await vi.advanceTimersByTimeAsync(ttlMs + 60_000);
+      await failed;
+      // Stopped by the expiry, not by silence: the scan was answering all along.
+      expect(mocks.save.mock.calls.length).toBe(Math.floor(ttlMs / 50_000));
+      expect(mocks.save.mock.calls.at(-1)).toEqual([checkpoint(Math.floor(ttlMs / 50_000) * 1_000)]);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(ttlMs);
+      expect(mocks.balance).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
   });
 });
