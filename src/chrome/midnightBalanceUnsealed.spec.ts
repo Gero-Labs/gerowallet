@@ -23,6 +23,7 @@ function setup(overrides: Partial<BalanceUnsealedDeps> = {}, recordActivity = vi
     validate: vi.fn(() => ({ ok: true as const, tx: 'aa', payFees: true as const })),
     loadWallet: vi.fn(async () => ({ ownUnshieldedAddress: 'mn_addr_test1own', recordActivity })),
     prompt: vi.fn(async () => ({ ok: true as const, contributions: [], payments: [] })),
+    sameWalletStill: vi.fn(() => true),
     park: vi.fn(async () => ({ data: { tx: 'bb' } })),
     apiError,
     parseParkError: (err, code, reason) => apiError(code, err instanceof Error ? err.message : reason),
@@ -90,6 +91,32 @@ describe('balanceUnsealedTransaction always answers the dapp, exactly once', () 
     expect(sent).toEqual([{ error: apiError(MidnightErrorCode.InvalidRequest, 'tx already spends from this wallet') }]);
   });
 
+  it('a ledger the wallet could not read is InternalError, not the dapp\'s mistake', async () => {
+    const reason = 'Could not read which ledger Midnight Preprod runs';
+    const unread = { ok: false as const, reason, internal: true as const };
+    const atValidation = setup({ validate: vi.fn(() => unread) });
+    await atValidation.run();
+    expect(atValidation.sent).toEqual([{ error: apiError(MidnightErrorCode.InternalError, reason) }]);
+    const atPrompt = setup({ prompt: vi.fn(async () => unread) });
+    await atPrompt.run();
+    expect(atPrompt.sent).toEqual([{ error: apiError(MidnightErrorCode.InternalError, reason) }]);
+  });
+
+  it('a wallet that changed or locked during the checks is Disconnected, and nothing is parked or recorded', async () => {
+    let same = true;
+    const park = vi.fn(async () => ({ data: { tx: 'bb' } }));
+    const { sent, run, recordActivity } = setup({
+      park,
+      // Switches while the summary is read, after every earlier step.
+      prompt: vi.fn(async () => { same = false; return { ok: true as const, contributions: [], payments: [] }; }),
+      sameWalletStill: () => same,
+    });
+    await run();
+    expect(sent).toEqual([{ error: apiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') }]);
+    expect(park).not.toHaveBeenCalled();
+    expect(recordActivity).not.toHaveBeenCalled();
+  });
+
   it('the happy path parks the summary and answers with the sealed tx', async () => {
     const park = vi.fn(async () => ({ data: { tx: 'bb' } }));
     const { sent, run, recordActivity } = setup({ park });
@@ -120,5 +147,8 @@ describe('the background handler uses it', () => {
     expect(body).toContain('const reply = replyOnce((opts: ReplyOpts) => {');
     expect(body).toContain('void answerBalanceUnsealedTransaction(data, reply, {');
     expect(body).not.toContain('void (async () => {');
+    // Wallet, network, lock and site permission are all read again before the prompt is parked.
+    expect(body).toContain('const { id: walletId, network: walletNetwork } = currentWallet;');
+    expect(body).toMatch(/now\?\.id === walletId && now\.network === walletNetwork && !walletStore\.isLocked && WalletStore\.isWhitelisted\(origin\)/);
   });
 });

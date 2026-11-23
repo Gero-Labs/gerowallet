@@ -35,6 +35,12 @@ export interface BalanceUnsealedDeps {
   validate: (data: unknown) => ConnectorBalanceValidation;
   loadWallet: () => Promise<BalanceUnsealedWalletSide>;
   prompt: (tx: string, ownUnshieldedAddress: string) => Promise<ConnectorBalancePrompt>;
+  /**
+   * Whether the wallet, its network, the lock state and the site's permission are still those
+   * the request was admitted with. The steps above await, and the prompt is stamped with
+   * whichever wallet is active when it is parked.
+   */
+  sameWalletStill: () => boolean;
   /** Parks the approval for the dapp's tab; resolves with the panel's answer (`data: { tx }`). */
   park: (data: { tx: string } & Omit<Extract<ConnectorBalancePrompt, { ok: true }>, 'ok'>) => Promise<{ data?: unknown }>;
   apiError: (code: string, reason: string) => unknown;
@@ -59,13 +65,21 @@ export async function answerBalanceUnsealedTransaction(
     await deps.resolveLedger().catch(() => { /* the check below names it */ });
     const validation = deps.validate(data);
     if (validation.ok === false) {
-      reply({ error: deps.apiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+      // A ledger the wallet could not read is its own failure, not a bad request.
+      const code = validation.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+      reply({ error: deps.apiError(code, validation.reason) });
       return;
     }
     const wallet = await deps.loadWallet();
     const prompt = await deps.prompt(validation.tx, wallet.ownUnshieldedAddress);
     if (prompt.ok === false) {
-      reply({ error: deps.apiError(MidnightErrorCode.InvalidRequest, prompt.reason) });
+      const code = prompt.internal ? MidnightErrorCode.InternalError : MidnightErrorCode.InvalidRequest;
+      reply({ error: deps.apiError(code, prompt.reason) });
+      return;
+    }
+    // No await between this check and parking: nothing can switch the wallet in between.
+    if (!deps.sameWalletStill()) {
+      reply({ error: deps.apiError(MidnightErrorCode.Disconnected, 'The active wallet changed or locked while the request was checked') });
       return;
     }
     // The dapp calls this after its (async) proving, so there is no user

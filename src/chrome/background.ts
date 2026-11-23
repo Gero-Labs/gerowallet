@@ -8258,6 +8258,9 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  // The wallet the site's permission was checked against, as in balanceSealedTransaction below:
+  // the checks await, and the prompt is stamped with whichever wallet is active when it is parked.
+  const { id: walletId, network: walletNetwork } = currentWallet;
   // Answers on every path, a throw included (issue 1619).
   void answerBalanceUnsealedTransaction(data, reply, {
     resolveLedger: () => resolveMidnightLedger(currentWallet.network),
@@ -8270,6 +8273,10 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
       };
     },
     prompt: (tx, ownAddress) => connectorBalancePrompt(tx, midnightSdkNetworkId(currentWallet.network), ownAddress),
+    sameWalletStill: () => {
+      const now = walletManager.getWallet();
+      return now?.id === walletId && now.network === walletNetwork && !walletStore.isLocked && WalletStore.isWhitelisted(origin);
+    },
     park: (payloadData): Promise<BackgroundResponse> =>
       parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, { data: payloadData, ...promptSite(origin, send) }, tabId),
     apiError: midnightApiError,
