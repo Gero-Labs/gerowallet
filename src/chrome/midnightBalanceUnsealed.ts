@@ -1,6 +1,7 @@
 import { MidnightErrorCode } from '@/chrome/config';
 import type { ConnectorBalancePrompt, ConnectorBalanceValidation } from '@/chains/midnight/midnightConnectorBalance';
 import type { SiteActivityEvent } from '@/chains/midnight/midnightSiteActivity';
+import { debugLog } from '@/utils/debug';
 
 export interface ConnectorReply {
   data?: unknown;
@@ -90,6 +91,8 @@ export async function answerBalanceUnsealedTransaction(
     wallet.recordActivity({ type: 'funding-done' });
   } catch {
     // A failed import, prompt read or activity record still answers the dapp, which would otherwise wait forever.
+    // Fixed text only: the error may carry transaction data. A no-op reply here means the answer was already sent.
+    debugLog('Midnight balanceUnsealedTransaction: a step failed; answering InternalError if not yet answered');
     reply({ error: deps.apiError(MidnightErrorCode.InternalError, FAILED) });
   }
 }
