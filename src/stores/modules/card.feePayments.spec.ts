@@ -62,10 +62,11 @@ describe('sent fee payments across devices', () => {
   });
 
   it('adopts a payment another device recorded', async () => {
-    http.getResponse = () => ({ data: { tx_id: TX, sent_at: '2026-10-22T10:36:56Z' } });
+    const sentAt = new Date(Date.now() - 60_000).toISOString();
+    http.getResponse = () => ({ data: { tx_id: TX, sent_at: sentAt } });
     await store.syncSentFeePayment('order-c');
     expect(http.get).toEqual([url('order-c')]);
-    expect(sentFeePayment('order-c')).toEqual({ txId: TX, sentAt: Date.parse('2026-10-22T10:36:56Z') });
+    expect(sentFeePayment('order-c')).toEqual({ txId: TX, sentAt: Date.parse(sentAt) });
   });
 
   it('leaves the pay button alone when no device recorded a payment', async () => {

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 // Normalize CRLF (Windows checkouts) before slicing on newline delimiters.
 const read = (rel: string) => readFileSync(join(__dirname, '..', '..', rel), 'utf8').replace(/\r\n/g, '\n');
@@ -155,11 +155,12 @@ describe('NFT market signing wiring', () => {
           else if (/\.(ts|vue)$/.test(name) && !/\.(spec|test)\.ts$/.test(name)) files.push(full);
         }
       };
-      walk(join(__dirname, '..', '..'));
+      const sourceRoot = join(__dirname, '..', '..');
+      walk(sourceRoot);
       const granting = files
         .filter((file) => /grantDappMarketPass\(/.test(readFileSync(file, 'utf8')))
-        .map((file) => file.slice(file.lastIndexOf('src/')));
-      expect(granting.sort()).toEqual(['src/chrome/nftMarket/dappMarketPass.ts', 'src/chrome/nftMarket/marketAllowance.ts']);
+        .map((file) => relative(sourceRoot, file).split(sep).join('/'));
+      expect(granting.sort()).toEqual(['chrome/nftMarket/dappMarketPass.ts', 'chrome/nftMarket/marketAllowance.ts']);
     });
   });
 
