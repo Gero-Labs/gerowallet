@@ -327,6 +327,85 @@ describe('sweep prerequisites', () => {
     expect(mocks.error).toHaveBeenCalledWith('Could not serialize message.');
   });
 
+  it.each([
+    ['disconnected message port', { error: 'The message port closed before a response was received.' }],
+    ['absent reply', undefined],
+    ['missing transaction ID', { data: {} }],
+    ['blank transaction ID', { data: { txId: ' ' } }],
+  ])('keeps a payment open with an unconfirmed outcome after a %s', async (_name, reply) => {
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockResolvedValueOnce(reply);
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    const { signing } = sweeper([], [], merge, { onSuccess, onClose });
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['payment']);
+    expect(mocks.error).toHaveBeenCalledWith(i18n.t('errors.submitUnconfirmed'));
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(signing.loading.value).toBe(false);
+  });
+
+  it('stops a sweep at a missing receipt and counts only acknowledged merges', async () => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id === 'm2') return { data: {} };
+      return { data: { txId: 'submitted' } };
+    });
+    const onInterrupted = vi.fn();
+    const { signing } = sweeper(['m1', 'm2'], ['m1', 'm2'], merge, { onInterrupted });
+    await signing.handleSign();
+    await flushPromises();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2']);
+    expect(onInterrupted).toHaveBeenCalledWith({ step: 2, total: 3, mergesSent: 1, unconfirmedStep: 'merge', reason: i18n.t('errors.submitUnconfirmed') });
+    expect(mocks.success).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'rejected', 'worker timeout'])('keeps an unconfirmed final sweep payment from being sent again (%s)', async failure => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      if (JSON.parse(data.txCbor).id !== 'payment') return { data: { txId: 'm1' } };
+      if (failure === 'rejected') throw new Error('port closed');
+      if (failure === 'worker timeout') return { data: { error: 'Your submit endpoint: Transaction submission could not be confirmed' } };
+      return { data: { txId: ' ' } };
+    });
+    const onInterrupted = vi.fn(), onSuccess = vi.fn(), onClose = vi.fn();
+    const { signing } = sweeper(['m1'], ['m1'], merge, { onInterrupted, onSuccess, onClose });
+    await signing.handleSign();
+    await flushPromises();
+    expect(onInterrupted).toHaveBeenCalledWith(expect.objectContaining({ step: 2, total: 2, mergesSent: 1, unconfirmedStep: 'payment' }));
+    await signing.handleSign();
+    await signing.submitTx();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'payment']);
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('resumes after a lost merge receipt only when that exact output appears in the wallet', async () => {
+    mocks.send.mockImplementation(async ({ method, data }) => {
+      if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
+      if (method === MessageTypes.SIGN_TX) return { data: { witnesses: 'witness' } };
+      return JSON.parse(data.txCbor).id === 'm1' ? { data: {} } : { data: { txId: 'submitted' } };
+    });
+    const onInterrupted = vi.fn();
+    const { signing } = sweeper(['m1','m2'], ['m1','m2'], merge, { onInterrupted });
+    await signing.handleSign();
+    const wrongIndex = output('m1');
+    wrongIndex[0].index = 1;
+    walletStore.utxos = [wrongIndex, output('other')];
+    await signing.handleSign();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1']);
+    walletStore.utxos = [output('m1')];
+    await signing.handleSign();
+    expect(sentIds(MessageTypes.SUBMIT_TX)).toEqual(['m1', 'm2', 'payment']);
+    expect(mocks.success).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a merge the payment does not spend, before asking for the password', async () => {
     const { signing } = sweeper(['m1', 'm2'], ['m1']);
     await signing.handleSign();

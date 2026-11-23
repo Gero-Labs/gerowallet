@@ -29,7 +29,7 @@ export interface SweepStopView {
   body: SweepText;
   /** The friendly reason the signer reported, shown behind a disclosure. */
   reason: string;
-  tryAgain: SweepText;
+  tryAgain: SweepText | null;
 }
 
 export interface SweepProgressView {
@@ -137,16 +137,19 @@ function stoppedView(stop: SweepStop): SweepProgressView {
     rows: [
       { id: 'sign', state: 'done', label: text('send.sweepSignStep'), detail: text('send.sweepSignedCount', { signed: total, total }) },
       stoppedAtMerge
-        ? { id: 'merges', state: 'error', label: text('send.sweepMergesStepLive'), detail: text('send.sweepMergesStopped', { sent: mergesSent, merges }) }
+        ? { id: 'merges', state: 'error', label: text('send.sweepMergesStepLive'), detail: stop.unconfirmedStep === 'merge'
+          ? text('send.sweepUnconfirmed') : text('send.sweepMergesStopped', { sent: mergesSent, merges }) }
         : { id: 'merges', state: 'done', label: text('send.sweepMergesStepLive'), detail: text('send.sweepMergesSentCount', { sent: merges, merges }) },
-      { id: 'payment', state: stoppedAtMerge ? 'pending' : 'error', label: text('send.sweepPaymentLabel'), detail: text('send.sweepPaymentNotSent') },
+      { id: 'payment', state: stoppedAtMerge ? 'pending' : 'error', label: text('send.sweepPaymentLabel'),
+        detail: text(stop.unconfirmedStep === 'payment' ? 'send.sweepUnconfirmed' : 'send.sweepPaymentNotSent') },
     ],
     caption: null,
     stop: {
       title: text('send.sweepStoppedTitle', { step, total }),
-      body: plural('send.sweepStoppedBody', merges, { sent: mergesSent, merges }),
+      body: stop.unconfirmedStep === 'payment' ? text('errors.submitUnconfirmed')
+        : stop.unconfirmedStep === 'merge' ? text('send.sweepMergeCheck') : plural('send.sweepStoppedBody', merges, { sent: mergesSent, merges }),
       reason: stop.reason,
-      tryAgain: text('send.sweepTryAgainNote', { step }),
+      tryAgain: stop.unconfirmedStep ? null : text('send.sweepTryAgainNote', { step }),
     },
     titles: [],
     counts: [],

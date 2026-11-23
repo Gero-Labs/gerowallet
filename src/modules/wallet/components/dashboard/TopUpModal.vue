@@ -47,10 +47,11 @@
         <SweepTimeline v-else-if="sweepPlan" v-bind="sweepPlan" />
         <SweepProgressPanel v-if="sweepProgress || sweepStop" :progress="sweepProgress" :stop="sweepStop" />
         <CardSignSection
+          v-show="sweepStop?.unconfirmedStep !== 'payment'"
           ref="signSection"
           :label="t('card.signAndTopUp')"
           :prepare="buildTx"
-          :disabled="!depositAddress || planning"
+          :disabled="!depositAddress || planning || sweepStop?.unconfirmedStep === 'payment'"
           :prerequisites="sweepPrerequisites"
           @busy="busy = $event"
           @progress="onSweepProgress"

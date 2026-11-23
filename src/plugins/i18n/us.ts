@@ -4851,6 +4851,8 @@ export default {
   'send.sweepShowDetails': 'Show details',
   'send.sweepMergesStopped': '{sent} of {merges} sent · stopped at the next one',
   'send.sweepPaymentNotSent': 'Not sent',
+  'send.sweepUnconfirmed': 'Submission unconfirmed',
+  'send.sweepMergeCheck': 'This merge may already be on its way. Check your activity, then try again after its output appears in your wallet. The payment is still waiting.',
   'send.sweepTryAgainNote': 'Try again picks up at transaction {step} and skips what already went out. If it stops again, wait a minute and press Max: Gero plans from what is left.',
   'send.sweepDoneTitle': 'Payment sent',
   'send.sweepDoneTo': 'to {address}',

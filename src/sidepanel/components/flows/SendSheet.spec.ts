@@ -315,6 +315,25 @@ describe('side-panel submission dismissal', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]]);
   });
 
+  it.each([
+    ['disconnected message port', { error: 'The message port closed before a response was received.' }],
+    ['absent reply', undefined],
+    ['missing transaction ID', { data: {} }],
+    ['blank transaction ID', { data: { txId: ' ' } }],
+  ] as const)('reports an unconfirmed outcome after a %s and never shows success', async (_name, reply) => {
+    const { wrapper, view } = await openSheet();
+    mocks.send.mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: { witnesses: 'witness' } })
+      .mockResolvedValueOnce(reply);
+    await view.signAndSubmit();
+    await flushPromises();
+    expect(methods()).toEqual([MessageTypes.VERIFY_SPENDING_PASSWORD, MessageTypes.SIGN_TX, MessageTypes.SUBMIT_TX]);
+    expect(view.passwordError).toBe('errors.submitUnconfirmed');
+    expect(view.txSuccess).toBe(false);
+    expect(mocks.success).not.toHaveBeenCalled();
+    expect(wrapper.get('.bottom-sheet-header button').attributes('disabled')).toBeUndefined();
+  });
+
   it('keeps explicit cancellation available during password verification', async () => {
     const { wrapper, view } = await openSheet();
     const password = deferred<unknown>();
