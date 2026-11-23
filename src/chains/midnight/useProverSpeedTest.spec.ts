@@ -89,4 +89,11 @@ describe('useProverSpeedTest', () => {
     expect(test.rows.value.map((r) => r.state.status)).toEqual(['done', 'failed', 'done']);
     expect(test.fastest.value).toBe('helper');
   });
+
+  it('keeps that Gero Prover made its test proof on the graphics processor', async () => {
+    fake.helper = { proveMs: 190, accelerated: true };
+    const test = useProverSpeedTest(() => ({ browser: false, helper: true }));
+    await test.run();
+    expect(test.rows.value[1].state).toEqual({ status: 'done', ms: 190, accelerated: true });
+  });
 });

@@ -16,8 +16,11 @@ export type SpeedRowId = 'standard' | 'threaded' | 'helper';
 export type SpeedRowState =
   | { status: 'idle' }
   | { status: 'running' }
-  /** `threads`: what the prover reported, which for `threaded` may be 1 when it fell back. */
-  | { status: 'done'; ms: number; threads?: number }
+  /**
+   * `threads`: what the prover reported, which for `threaded` may be 1 when it fell back.
+   * `accelerated`: Gero Prover's graphics processor took part in the test proof (absent otherwise).
+   */
+  | { status: 'done'; ms: number; threads?: number; accelerated?: boolean }
   /** Not available here: the helper is not set up, or this browser cannot run threads. */
   | { status: 'unavailable' }
   | { status: 'failed' };
@@ -77,7 +80,9 @@ export function useProverSpeedTest(offers: () => { browser: boolean; helper: boo
     try {
       await askGeroProver({ action: 'selfTest' });
       const { selfTest } = await askGeroProver({ action: 'selfTest' });
-      set('helper', selfTest ? { status: 'done', ms: selfTest.proveMs } : { status: 'failed' });
+      set('helper', selfTest
+        ? { status: 'done', ms: selfTest.proveMs, ...(selfTest.accelerated ? { accelerated: true } : {}) }
+        : { status: 'failed' });
     } catch {
       set('helper', geroProverSnapshot.value?.connection === 'connected' ? { status: 'failed' } : { status: 'unavailable' });
     }
