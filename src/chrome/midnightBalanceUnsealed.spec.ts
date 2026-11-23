@@ -2,12 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MidnightErrorCode } from '@/chrome/config';
-import {
-  answerBalanceUnsealedTransaction,
-  replyOnce,
-  type BalanceUnsealedDeps,
-  type ConnectorReply,
-} from '@/chrome/midnightBalanceUnsealed';
+import { replyOnce, type ConnectorReply } from '@/chrome/connectorReply';
+import { answerBalanceUnsealedTransaction, type BalanceUnsealedDeps } from '@/chrome/midnightBalanceUnsealed';
 
 // Issue 1619: an unexpected throw in balanceUnsealedTransaction's async part
 // left the dapp's promise waiting forever. Every path must answer, once.

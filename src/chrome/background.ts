@@ -36,7 +36,8 @@ import { createDexieDeviceShareStore, upgradeMpcDeviceShare } from '@/chrome/mpc
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
 import { embeddingSite, promptSite } from '@/chrome/originBinding';
-import { answerBalanceUnsealedTransaction, replyOnce } from '@/chrome/midnightBalanceUnsealed';
+import { answerBalanceUnsealedTransaction } from '@/chrome/midnightBalanceUnsealed';
+import { replyOnce } from '@/chrome/connectorReply';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { INVALID_SIGN_DATA_PAYLOAD_MESSAGE, RESERVED_SIGN_DATA_MESSAGE, signDataRefusal } from '@/shared/utils/reservedSigningDomains';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
@@ -8297,13 +8298,10 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
  */
 app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
   const { id, origin, send, data } = request;
-  let replied = false;
-  const reply = (opts: ReplyOpts) => {
-    // Once only: the catch-all below must never answer a request already answered.
-    if (replied) return;
-    replied = true;
+  // Once only: the catch-all below must never answer a request already answered.
+  const reply = replyOnce((opts: ReplyOpts) => {
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
-  };
+  });
   const currentWallet = walletManager.getWallet();
   if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
     reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });

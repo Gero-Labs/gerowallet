@@ -2,25 +2,7 @@ import { MidnightErrorCode } from '@/chrome/config';
 import type { ConnectorBalancePrompt, ConnectorBalanceValidation } from '@/chains/midnight/midnightConnectorBalance';
 import type { SiteActivityEvent } from '@/chains/midnight/midnightSiteActivity';
 import { debugLog } from '@/utils/debug';
-
-export interface ConnectorReply {
-  data?: unknown;
-  error?: unknown;
-}
-
-/**
- * Wraps a connector handler's `sendResponse` so the dapp is answered once only:
- * the catch-all in `answerBalanceUnsealedTransaction` must never answer a request
- * that was already answered.
- */
-export function replyOnce(send: (opts: ConnectorReply) => void): (opts: ConnectorReply) => void {
-  let replied = false;
-  return (opts) => {
-    if (replied) return;
-    replied = true;
-    send(opts);
-  };
-}
+import type { ConnectorReply } from '@/chrome/connectorReply';
 
 /** What the wallet needs from the lazily loaded Midnight store. */
 export interface BalanceUnsealedWalletSide {
