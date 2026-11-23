@@ -388,7 +388,7 @@ const emptyStateShowing = computed(() => {
     return false;
   }
   // Midnight's balances are its own store's, not a Cardano account.
-  if (isMidnight.value) return isMidnightWalletEmpty(midnightStore.balances);
+  if (isMidnight.value) return isMidnightWalletEmpty(midnightStore.balances, midnightStore.utxos);
   // Solana's balance is Gero Sync's snapshot (walletStore.solana), not a Cardano account.
   if (isSolana.value) return isSolanaWalletEmpty(walletStore.solana);
   // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
