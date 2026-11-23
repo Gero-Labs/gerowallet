@@ -36,6 +36,8 @@ import { createDexieDeviceShareStore, upgradeMpcDeviceShare } from '@/chrome/mpc
 import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { assessWcVerification, wcScanTargets, wcVerificationQuery, type WcVerification } from '@/services/walletConnect/verifyContext';
 import { embeddingSite, promptSite } from '@/chrome/originBinding';
+import { answerBalanceUnsealedTransaction } from '@/chrome/midnightBalanceUnsealed';
+import { replyOnce } from '@/chrome/connectorReply';
 import { mayReleaseAddress, readBringOptOut } from '@/chrome/bringAddressSharing';
 import { INVALID_SIGN_DATA_PAYLOAD_MESSAGE, RESERVED_SIGN_DATA_MESSAGE, signDataRefusal } from '@/shared/utils/reservedSigningDomains';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
@@ -8235,9 +8237,10 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
  */
 app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
   const { id, origin, send, data } = request;
-  const reply = (opts: ReplyOpts) => {
+  // Once only: the catch-all in answerBalanceUnsealedTransaction must never answer twice.
+  const reply = replyOnce((opts: ReplyOpts) => {
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
-  };
+  });
   const currentWallet = walletManager.getWallet();
   if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
     reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
@@ -8256,45 +8259,30 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
-  void (async () => {
-    await resolveMidnightLedger(currentWallet.network).catch(() => { /* the check below names it */ });
-    const validation = validateConnectorBalanceRequest(data, currentWallet.network);
-    if (validation.ok === false) {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
-      return;
-    }
-    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
-    const prompt = await connectorBalancePrompt(
-      validation.tx, midnightSdkNetworkId(currentWallet.network), midnightStore.addresses.unshielded,
-    );
-    if (prompt.ok === false) {
-      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, prompt.reason) });
-      return;
-    }
-    const payload = {
-      data: { tx: validation.tx, contributions: prompt.contributions, payments: prompt.payments },
-      ...promptSite(origin, send),
-    };
-    // The dapp calls this after its (async) proving, so there is no user
-    // gesture left to open the panel with. Park the request instead of
-    // failing it (badge; delivered when the user opens the panel; immediate
-    // when it is already open) — same treatment as the private-balance and
-    // proof-server prompts.
-    midnightActions.recordSiteActivity(origin, { type: 'funding' });
-    parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
-      .then((response: BackgroundResponse) => {
-        midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
-        reply({ data: response.data }); // response.data === { tx }
-      })
-      .catch(err => {
-        const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request');
-        midnightActions.recordSiteActivity(origin, {
-          type: 'funding-failed',
-          reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
-        });
-        reply({ error });
-      });
-  })();
+  // The wallet the site's permission was checked against, as in balanceSealedTransaction below:
+  // the checks await, and the prompt is stamped with whichever wallet is active when it is parked.
+  const { id: walletId, network: walletNetwork } = currentWallet;
+  // Answers on every path, a throw included (issue 1619).
+  void answerBalanceUnsealedTransaction(data, reply, {
+    resolveLedger: () => resolveMidnightLedger(currentWallet.network),
+    validate: (d) => validateConnectorBalanceRequest(d, currentWallet.network),
+    loadWallet: async () => {
+      const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
+      return {
+        ownUnshieldedAddress: midnightStore.addresses.unshielded,
+        recordActivity: (event) => midnightActions.recordSiteActivity(origin, event),
+      };
+    },
+    prompt: (tx, ownAddress) => connectorBalancePrompt(tx, midnightSdkNetworkId(currentWallet.network), ownAddress),
+    sameWalletStill: () => {
+      const now = walletManager.getWallet();
+      return now?.id === walletId && now.network === walletNetwork && !walletStore.isLocked && WalletStore.isWhitelisted(origin);
+    },
+    park: (payloadData): Promise<BackgroundResponse> =>
+      parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, { data: payloadData, ...promptSite(origin, send) }, tabId),
+    apiError: midnightApiError,
+    parseParkError: parseMidnightMiniGeroError,
+  });
   return true;
 });
 
@@ -8310,13 +8298,10 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
  */
 app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
   const { id, origin, send, data } = request;
-  let replied = false;
-  const reply = (opts: ReplyOpts) => {
-    // Once only: the catch-all below must never answer a request already answered.
-    if (replied) return;
-    replied = true;
+  // Once only: the catch-all below must never answer a request already answered.
+  const reply = replyOnce((opts: ReplyOpts) => {
     sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
-  };
+  });
   const currentWallet = walletManager.getWallet();
   if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
     reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });

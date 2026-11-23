@@ -160,8 +160,8 @@ describe('balanceSealedTransaction: checked before prompting, shown in the balan
   it('always answers the dapp, exactly once: a throw anywhere in the async part ends in InternalError', () => {
     const body = handler(read('chrome/background.ts'), 'balanceSealedTransaction');
     // `reply` is idempotent, so the catch-all can never answer twice.
-    expect(body).toContain('let replied = false;');
-    expect(body).toMatch(/const reply = \(opts: ReplyOpts\) => \{\n\s+\/\/[^\n]*\n\s+if \(replied\) return;\n\s+replied = true;\n\s+sendResponse\(/);
+    expect(body).toContain('const reply = replyOnce((opts: ReplyOpts) => {');
+    expect(body).not.toContain('let replied');
     const asyncStart = body.indexOf('void (async () => {\n    try {\n');
     const catchAll = body.lastIndexOf("} catch {\n      // A failed import, prompt read or funds check still answers the dapp");
     expect(asyncStart).toBeGreaterThan(-1);
