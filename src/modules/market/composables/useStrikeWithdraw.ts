@@ -28,6 +28,8 @@ export interface WithdrawQuote extends WithdrawQuoteResponse {
   expiresAtMs: number;
   /** Local Unix-ms timestamp captured when the quote was received. */
   receivedAtMs: number;
+  /** The USD amount this quote was requested for, as sent to Strike. */
+  requestedUsd?: string;
 }
 
 export type WithdrawStatus =
@@ -46,6 +48,32 @@ const status = ref<WithdrawStatus>('idle');
 const error = ref<string | null>(null);
 const requestId = ref<string | null>(null);
 let quoteVersion = 0;
+
+/**
+ * What became of a withdrawal once it was sent to Strike.
+ *
+ * From the executeWithdraw call onwards Strike may have accepted it, so the result
+ * no longer belongs to the review on screen: `reset()`, closing the sheet, a new
+ * quote, a lock and a wallet switch all leave it alone. It is kept under the wallet
+ * it was sent from (`strikeWalletKey()`), shown only while that wallet is the logged
+ * one, and dropped by `acknowledgeSubmission()` once it is final and has been seen.
+ */
+export interface StrikeWithdrawSubmission {
+  walletKey: string;
+  withdrawId: string;
+  /** The USD amount of the approved quote, when Strike echoed it. */
+  usd: string | null;
+  status: 'submitting' | 'settled' | 'error';
+  requestId: string | null;
+  error: string | null;
+}
+const submissions = ref<Record<string, StrikeWithdrawSubmission>>({});
+
+/** Identifies the logged wallet account: one record per account, and its base address. */
+function strikeWalletKey(): string {
+  const wallet = walletStore.loggedWallet;
+  return wallet ? `${wallet.id ?? ''}|${wallet.baseAddress ?? ''}` : '';
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -250,6 +278,21 @@ export function useStrikeWithdraw() {
    *   `blockchain:'Cardano'` ALL → 400 "unsupported asset". The GitBook's
    *   ADA example and `/auth/account-requirements` are both misleading.
    */
+  /** The submitted withdrawal of the logged wallet, if it has one that was not acknowledged. */
+  const submission = computed<StrikeWithdrawSubmission | null>(
+    () => submissions.value[strikeWalletKey()] ?? null,
+  );
+
+  /** Drop the logged wallet's result once it is final. A pending one stays. */
+  function acknowledgeSubmission(): void {
+    const key = strikeWalletKey();
+    const current = submissions.value[key];
+    if (!current || current.status === 'submitting') return;
+    const rest = { ...submissions.value };
+    delete rest[key];
+    submissions.value = rest;
+  }
+
   async function requestQuote(amountUsd: string, asset = 'USDM'): Promise<void> {
     const version = ++quoteVersion;
     error.value = null;
@@ -275,8 +318,9 @@ export function useStrikeWithdraw() {
         throw new Error('Invalid withdrawal amount.');
       }
 
+      const usd = formatStrikeUsd(cents);
       const raw = await strikeUserApi.getWithdrawQuote({
-        usd_value: formatStrikeUsd(cents),
+        usd_value: usd,
         blockchain: 'cardano',
         asset,
       }) as WithdrawQuoteResponse & {
@@ -293,6 +337,7 @@ export function useStrikeWithdraw() {
         amount_received: raw.amount_received,
         expiresAtMs: parseExpiry(raw.expires_at),
         receivedAtMs: Date.now(),
+        requestedUsd: usd,
       };
       status.value = 'quoted';
     } catch (e) {
@@ -313,12 +358,30 @@ export function useStrikeWithdraw() {
    */
   async function signAndSubmit(password: string, pkBytes?: Uint8Array): Promise<boolean> {
     if (isWithdrawing.value || status.value === 'settled') return false;
+    // A withdrawal of this wallet is still with Strike: its outcome comes first.
+    if (submissions.value[strikeWalletKey()]?.status === 'submitting') return false;
     const approved = quote.value;
     if (!approved) {
       error.value = 'No active withdrawal quote.';
       status.value = 'error';
       return false;
     }
+    // The result belongs to the wallet that approved the quote, whatever is logged later.
+    const submittedFrom = strikeWalletKey();
+    let submitted: StrikeWithdrawSubmission | null = null;
+    const record = (patch: Partial<StrikeWithdrawSubmission>): void => {
+      const before: StrikeWithdrawSubmission = submitted ?? {
+        walletKey: submittedFrom,
+        withdrawId: approved.withdraw_id,
+        usd: approved.requestedUsd ?? null,
+        status: 'submitting',
+        requestId: null,
+        error: null,
+      };
+      submitted = { ...before, ...patch };
+      submissions.value = { ...submissions.value, [submittedFrom]: submitted };
+    };
+    const wasSubmitted = () => submitted !== null;
     const stillApproved = () => {
       if (quote.value !== approved) return false;
       if (approved.expiresAtMs && Date.now() >= approved.expiresAtMs) {
@@ -342,12 +405,15 @@ export function useStrikeWithdraw() {
         if (!stillApproved()) return false;
       }
 
+      // Submission starts here. Whatever happens next is recorded, even if the review is gone.
+      record({ status: 'submitting' });
       status.value = 'submitting';
       const submitRes = await strikeUserApi.executeWithdraw(
         approved.withdraw_id,
         walletSignature,
         signedTxCbor,
       );
+      record({ status: 'settled', requestId: submitRes?.request_id ?? approved.withdraw_id });
       // Strike accepted this request even if the user has since opened a new review.
       if (quote.value !== approved) return true;
       requestId.value = submitRes.request_id ?? approved.withdraw_id;
@@ -363,6 +429,9 @@ export function useStrikeWithdraw() {
       status.value = 'settled';
       return true;
     } catch (e) {
+      if (wasSubmitted()) {
+        record({ status: 'error', error: extractStrikeError(e, 'Failed to submit the withdrawal.') });
+      }
       if (quote.value !== approved) return false;
       const dbg = strikeErrorDebugInfo(e);
       debugLog('[strike-withdraw] signAndSubmit failed:', dbg.status, dbg.body);
@@ -397,6 +466,7 @@ export function useStrikeWithdraw() {
     status,
     error,
     requestId,
+    submission,
     // Aliases
     withdrawStatus,
     withdrawError,
@@ -410,5 +480,6 @@ export function useStrikeWithdraw() {
     requestQuote,
     signAndSubmit,
     reset,
+    acknowledgeSubmission,
   };
 }

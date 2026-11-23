@@ -215,16 +215,16 @@
       <div v-else-if="stepNum === 3" class="step-pane status-pane">
         <div class="status-icon-wrap">
           <v-progress-circular
-            v-if="withdrawStatus === 'pending' || withdrawStatus === 'submitting'"
+            v-if="shownStatus === 'pending' || shownStatus === 'submitting'"
             indeterminate
             size="56"
             width="3"
             color="var(--g-accent)"
           />
-          <v-icon v-else-if="withdrawStatus === 'settled'" size="56" color="success">
+          <v-icon v-else-if="shownStatus === 'settled'" size="56" color="success">
             mdi-check-circle-outline
           </v-icon>
-          <v-icon v-else-if="withdrawStatus === 'error'" size="56" color="error">
+          <v-icon v-else-if="shownStatus === 'error'" size="56" color="error">
             mdi-alert-circle-outline
           </v-icon>
         </div>
@@ -233,15 +233,15 @@
         <div class="status-sub">{{ statusSub }}</div>
 
         <transition name="fade-slide">
-          <div v-if="withdrawError && withdrawStatus === 'error'" class="error-banner mt-3" style="text-align:left;">
+          <div v-if="shownError && shownStatus === 'error'" class="error-banner mt-3" style="text-align:left;">
             <v-icon size="14" color="error" class="mr-2" style="flex-shrink:0">mdi-alert-circle-outline</v-icon>
-            <span>{{ withdrawError }}</span>
+            <span>{{ shownError }}</span>
           </div>
         </transition>
 
         <div class="btn-row mt-5" style="width:100%;">
           <v-btn
-            v-if="withdrawStatus === 'settled'"
+            v-if="shownStatus === 'settled'"
             variant="flat"
             block
             class="action-btn"
@@ -249,7 +249,7 @@
           >
             {{ $t('perps.withdraw.done') }}
           </v-btn>
-          <template v-else-if="withdrawStatus === 'error'">
+          <template v-else-if="shownStatus === 'error'">
             <v-btn variant="flat" class="ghost-btn" @click="closeSheet()">
               {{ $t('perps.withdraw.close') }}
             </v-btn>
@@ -298,7 +298,15 @@ const {
   requestQuote,
   signAndSubmit,
   resetWithdraw,
+  submission,
+  acknowledgeSubmission,
 } = useStrikeWithdraw();
+
+// Once a withdrawal has been sent to Strike the composable keeps its result for
+// this wallet, whatever happens to the review. While one is kept it is all the
+// sheet shows, so it survives a close and no second withdrawal starts on top of it.
+const shownStatus = computed(() => submission.value?.status ?? withdrawStatus.value);
+const shownError = computed(() => (submission.value ? submission.value.error : withdrawError.value));
 
 const { account, marginRatio, loadAccount } = useStrikeAccount();
 
@@ -318,6 +326,7 @@ let tickHandle: number | null = null;
 
 // ── Computed ────────────────────────────────────────────────────────────────
 const stepNum = computed<1 | 2 | 3>(() => {
+  if (submission.value) return 3;
   switch (withdrawStatus.value) {
     case 'idle':
     case 'quoting':
@@ -412,7 +421,7 @@ const youReceiveLabel = computed(() => {
 });
 
 const statusTitle = computed(() => {
-  switch (withdrawStatus.value) {
+  switch (shownStatus.value) {
     case 'submitting':  return i18n.t('perps.withdraw.statusSubmitting') as string;
     case 'pending':     return i18n.t('perps.withdraw.statusPending') as string;
     case 'settled':     return i18n.t('perps.withdraw.statusSettled') as string;
@@ -423,7 +432,7 @@ const statusTitle = computed(() => {
 });
 
 const statusSub = computed(() => {
-  switch (withdrawStatus.value) {
+  switch (shownStatus.value) {
     case 'signing':     return i18n.t('perps.withdraw.statusSigningSub') as string;
     case 'submitting':  return i18n.t('perps.withdraw.statusSubmittingSub') as string;
     case 'pending':     return i18n.t('perps.withdraw.statusPendingSub') as string;
@@ -495,6 +504,7 @@ function goBackToAmount() {
 }
 
 function retry() {
+  acknowledgeSubmission();
   resetWithdraw();
   password.value = '';
   showFullMessage.value = false;
@@ -519,6 +529,8 @@ onBeforeUnmount(() => {
 });
 
 watch(() => props.modelValue, (val) => {
+  // A final result was on screen, so closing means it has been seen. One still pending is kept.
+  if (!val) acknowledgeSubmission();
   resetWithdraw();
   password.value = '';
   if (val) {
