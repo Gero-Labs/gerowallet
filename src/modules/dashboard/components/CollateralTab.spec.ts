@@ -22,5 +22,4 @@ describe('Set Collateral signing (issue 1558)', () => {
     expect(dialog).toContain('<TransactionAuthSection');
     expect(dialog).toContain('<KeystoneSignDialog');
   });
-
 });

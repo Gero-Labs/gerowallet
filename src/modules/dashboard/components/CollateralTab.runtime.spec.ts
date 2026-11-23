@@ -83,6 +83,19 @@ describe('Set Collateral review', () => {
     expect(api.error).toHaveBeenCalledWith('settings.failedToBuildCollateral');
   });
 
+  it.each([
+    [400, 'settings.insufficientAdaForCollateral'],
+    [429, 'settings.failedToBuildCollateral'],
+  ])('shows the correct build error for HTTP %i and keeps the signing dialog closed', async (status, expected) => {
+    const message = 'Insufficient ADA to cover minimum UTXO for change output containing native tokens.';
+    api.build.mockRejectedValue({ message, response: { status, data: { error: 'Transaction Build Failed', message } } });
+    const wrapper = mountTab();
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.review').exists()).toBe(false);
+    expect(api.error).toHaveBeenCalledWith(expected);
+  });
+
   it('discards an old wallet build even after switching back, and allows a fresh review after cancellation', async () => {
     let finish!: (result: ReturnType<typeof build>) => void;
     api.build.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));

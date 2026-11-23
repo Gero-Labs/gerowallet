@@ -187,12 +187,11 @@ const setCollateral = async () => {
     console.error('Error building collateral transaction via nexus:', error);
     const err = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
     const status = err.response?.status;
-    const serverMsg = err.response?.data?.error || err.response?.data?.message;
+    const insufficientFunds = [err.message, err.response?.data?.message, err.response?.data?.error]
+      .some(message => typeof message === 'string' && /insufficient/i.test(message));
     if (status === 401 || status === 429) {
       snackbar.setError(t('settings.failedToBuildCollateral'));
-    } else if (serverMsg && /insufficient/i.test(serverMsg)) {
-      snackbar.setError(t('settings.insufficientAdaForCollateral'));
-    } else if (err.message?.includes('UTxO Balance Insufficient')) {
+    } else if (insufficientFunds) {
       snackbar.setError(t('settings.insufficientAdaForCollateral'));
     } else {
       snackbar.setError(t('settings.failedToBuildCollateral'));
