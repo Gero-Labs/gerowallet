@@ -30,7 +30,7 @@ export interface FeatureFlags {
   // `networks.resolveGovernanceSupport` — so both must pass before the route or
   // the nav item appears.
   isGovernanceEnabled: boolean;
-  // Sub-gate for CASTING governance votes (the CastVoteDialog / VoteCta surface).
+  // Signing gate for official DRep votes and advisory CIP-0204 holder answers.
   // Default OFF and ships dark, SEPARATELY from `isGovernanceEnabled`: voting is a
   // value-moving surface (signed, irreversible on-chain statements), so the read
   // surface can go live while vote casting is still being verified on preprod.

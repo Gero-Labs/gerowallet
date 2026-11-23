@@ -1,8 +1,9 @@
 import { Cardano } from '@cardano-sdk/core';
 import {
   InputSelector,
+  InputSelectionError,
+  InputSelectionFailure,
   ChangeAddressResolver,
-  SelectionSkeleton,
   roundRobinRandomImprove,
   ImplicitValue,
   ProtocolParametersForInputSelection,
@@ -19,6 +20,7 @@ import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
 import { Keys } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
+import { DEFAULT_TX_TTL_SLOTS } from './transaction';
 
 /** CIP-0149 metadata label for voluntary DRep compensation */
 export const CIP149_METADATA_LABEL = BigInt(3692);
@@ -89,6 +91,8 @@ export async function buildCardanoTransaction({
   implicitCoin = BigInt(0),
   walletContext,
   auxiliaryData,
+  requiredExtraSignatures,
+  invalidHereafter,
   excludeCollateral = true
 }: {
   certificates?: Cardano.Certificate[];
@@ -111,6 +115,9 @@ export async function buildCardanoTransaction({
     keys: Keys | null;
   };
   auxiliaryData?: Cardano.AuxiliaryData;
+  requiredExtraSignatures?: Cardano.TxBody['requiredExtraSignatures'];
+  /** Optional cap on the usual one-hour validity window. */
+  invalidHereafter?: Cardano.Slot;
   excludeCollateral?: boolean;
 }): Promise<Cardano.Tx> {
   // Check if we have epoch parameters
@@ -118,99 +125,22 @@ export async function buildCardanoTransaction({
     throw new Error('Epoch parameters not available');
   }
 
-  // Calculate total withdrawals amount
-  let totalWithdrawals = BigInt(0);
-  if (withdrawals.length > 0) {
-    totalWithdrawals = withdrawals.reduce((sum, withdrawal) => sum + withdrawal.quantity, BigInt(0));
-  }
+  // Fee estimation and the body handed to the signer must commit to the same
+  // metadata, witness requirements and validity interval.
+  const bodyFields = {
+    validityInterval: { invalidHereafter: Cardano.Slot(Math.min(Number(tip.slot) + DEFAULT_TX_TTL_SLOTS, invalidHereafter ?? Infinity)) },
+    ...(auxiliaryData && { auxiliaryDataHash: Cardano.computeAuxiliaryDataHash(auxiliaryData) }),
+    ...(requiredExtraSignatures?.length && { requiredExtraSignatures }),
+  };
 
-  // Create a change address resolver for input selection
+  // The selector has already split change to satisfy maxValueSize and minimum ADA.
+  // Only replace the placeholder address; recombining the values invalidates that split.
   const changeAddressResolver: ChangeAddressResolver = {
-    resolve: async (selectionSkeleton: SelectionSkeleton) => {
-      // Calculate change amounts for both ADA and native tokens
-      const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
-      const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
-      const implicitCost = implicitCoin + selectionSkeleton.fee;
-      // Add withdrawals to the available balance (withdrawals are incoming funds)
-      const changeAmount = totalInput + totalWithdrawals - totalOutput - implicitCost;
-
-      // Calculate change assets by aggregating all input assets and subtracting output assets
-      const changeAssets = new Map<Cardano.AssetId, bigint>();
-
-
-      // Add all input assets
-      for (const [, utxo] of selectionSkeleton.inputs) {
-        if (utxo.value.assets) {
-          for (const [assetId, quantity] of utxo.value.assets) {
-            const currentQuantity = changeAssets.get(assetId) || BigInt(0);
-            const newQuantity = currentQuantity + quantity;
-            changeAssets.set(assetId, newQuantity);
-          }
-        }
-      }
-
-
-      // Subtract all output assets
-      for (const output of selectionSkeleton.outputs) {
-        if (output.value.assets) {
-          for (const [assetId, quantity] of output.value.assets) {
-            const currentQuantity = changeAssets.get(assetId) || BigInt(0);
-            const newQuantity = currentQuantity - quantity;
-            if (newQuantity > BigInt(0)) {
-              changeAssets.set(assetId, newQuantity);
-            } else {
-              changeAssets.delete(assetId);
-            }
-          }
-        }
-      }
-
-
-      // CRITICAL FIX: For transactions with certificates or withdrawals (and no explicit outputs),
-      // we ALWAYS need a change output to return the remaining balance to the wallet.
-      // The issue is that during fee estimation, the fee might be underestimated, causing
-      // changeAmount to appear negative or zero. But we still need to create the change output
-      // so the actual fee calculation (with witness overhead) includes its size.
-      // Vote-only transactions have no certificates, no withdrawals and no
-      // outputs, so they need the same forced change output — without it the
-      // changeAmount <= 0 branch returns [] and serializeCardanoJsSdkTx throws
-      // on empty outputs.
-      const hasVotes = !!votingProcedures && votingProcedures.length > 0;
-      const isCertificateOrWithdrawalOnly =
-        (certificates.length > 0 || withdrawals.length > 0 || hasVotes) && selectionSkeleton.outputs.size === 0;
-
-      // Only skip change output if:
-      // 1. There's definitely no change (negative or zero)
-      // 2. AND there are no remaining assets
-      // 3. AND this is NOT a certificate/withdrawal-only transaction
-      if (changeAmount <= BigInt(0) && changeAssets.size === 0 && !isCertificateOrWithdrawalOnly) {
-        return []; // No change needed
-      }
-
-      // Ensure we have at least minimum ADA for the change output
-      // For certificate/withdrawal transactions, use a reasonable minimum even if calculated change is low
-      let finalChangeAmount: bigint;
-      if (changeAmount > BigInt(0)) {
-        finalChangeAmount = changeAmount;
-      } else if (isCertificateOrWithdrawalOnly) {
-        // For certificate/withdrawal transactions, ensure minimum change
-        // This will be refined during input selection iterations
-        finalChangeAmount = BigInt(1000000); // 1 ADA minimum
-      } else {
-        finalChangeAmount = BigInt(1000000); // 1 ADA minimum
-      }
-
-      // Create change output to a specified address
-      const changeOutput: Cardano.TxOut = {
-        address: changeAddress as Cardano.PaymentAddress,
-        value: {
-          coins: finalChangeAmount,
-          assets: changeAssets
-        }
-      };
-
-      return [changeOutput];
-    }
+    resolve: async ({ change }) => change.map(output => ({
+      ...output,
+      address: changeAddress as Cardano.PaymentAddress,
+      value: { ...output.value, assets: output.value.assets ?? new Map() },
+    })),
   };
 
   // Use Cardano JS SDK input selection
@@ -230,15 +160,13 @@ export async function buildCardanoTransaction({
   };
 
   // Create a buildTx function that properly constructs the transaction
-  const buildTx: BuildTx = async (selectionSkeleton: SelectionSkeleton) => {
+  const buildTx: BuildTx = async selectionSkeleton => {
     // Build transaction body with selected inputs and outputs
     const txBody: Cardano.TxBody = {
       inputs: Array.from(selectionSkeleton.inputs).map(utxo => utxo[0]),
-      outputs: Array.from(selectionSkeleton.outputs),
+      outputs: [...selectionSkeleton.outputs, ...selectionSkeleton.change],
       fee: selectionSkeleton.fee,
-      validityInterval: {
-        invalidHereafter: Cardano.Slot(Number(tip.slot) + 3600) // 1 hour from now
-      }
+      ...bodyFields
     };
 
     // Add certificates if provided
@@ -246,9 +174,6 @@ export async function buildCardanoTransaction({
       txBody.certificates = certificates;
     }
 
-    // Conway voting procedures. MUST be mirrored at the pre-selected-inputs
-    // txBody site below — setting it in only one place makes votes silently
-    // vanish on the other path, with no error.
     if (votingProcedures && votingProcedures.length > 0) {
       txBody.votingProcedures = votingProcedures;
     }
@@ -256,11 +181,6 @@ export async function buildCardanoTransaction({
     // Add withdrawals if provided
     if (withdrawals.length > 0) {
       txBody.withdrawals = withdrawals;
-    }
-
-    // Compute auxiliaryDataHash if metadata is provided
-    if (auxiliaryData) {
-      txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
     }
 
     // Return the complete transaction
@@ -273,32 +193,16 @@ export async function buildCardanoTransaction({
   };
 
   // Create custom computeMinimumCost that uses our witness-aware fee calculation
-  const computeMinimumCost: EstimateTxCosts = async (selectionSkeleton: SelectionSkeleton) => {
-    // CRITICAL: Resolve change outputs before building transaction for fee calculation
-    // The change output significantly affects transaction size and thus fee
-    const changeOutputs = await changeAddressResolver.resolve(selectionSkeleton);
-
-    // Build skeleton with change outputs included for accurate fee calculation
-    const skeletonWithChange: SelectionSkeleton = {
+  const computeMinimumCost: EstimateTxCosts = async selectionSkeleton => {
+    const tx = await buildTx({
       ...selectionSkeleton,
-      outputs: new Set([...selectionSkeleton.outputs, ...changeOutputs])
-    };
-
-    // Build the transaction to get the actual structure (including change output)
-    const tx = await buildTx(skeletonWithChange);
+      change: await changeAddressResolver.resolve(selectionSkeleton),
+    });
 
     // Convert selection skeleton inputs to resolved UTXOs for fee calculation
     const resolvedInputs = Array.from(selectionSkeleton.inputs);
 
-    // Use our witness-aware fee calculation with wallet context for accurate signature estimation.
-    // minFee declares non-null keys; runtime has always tolerated the store's nullable keys here,
-    // so the assertion preserves the exact pre-typing behavior.
-    const fee = BrowserTxConstruction.minFee(
-      tx,
-      resolvedInputs,
-      protocolParams,
-      walletContext as Parameters<typeof BrowserTxConstruction.minFee>[3]
-    );
+    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams, walletContext);
 
     return { fee };
   };
@@ -308,7 +212,8 @@ export async function buildCardanoTransaction({
     computeMinimumCost,
     computeMinimumCoinQuantity: computeMinimumCoinQuantity(protocolParams.coinsPerUtxoByte),
     tokenBundleSizeExceedsLimit: tokenBundleSizeExceedsLimit(protocolParams.maxValueSize),
-    computeSelectionLimit: computeSelectionLimit(protocolParams.maxTxSize, buildTx)
+    computeSelectionLimit: computeSelectionLimit(protocolParams.maxTxSize, async selection =>
+      BrowserTxConstruction.withEstimatedWitnesses(await buildTx(selection), [...selection.inputs], walletContext)),
   };
 
   // exclude the auto-picked collateral UTxO from coin selection
@@ -374,76 +279,49 @@ export async function buildCardanoTransaction({
 
   const outputsSet = new Set<Cardano.TxOut>(normalizedOutputs);
 
-  // Handle deposit/return as an implicit coin for input selection
+  const withdrawalsTotal = withdrawals.reduce((sum, withdrawal) => sum + withdrawal.quantity, 0n);
+  const refund = implicitCoin < 0n ? -implicitCoin : 0n;
   const implicitValue: ImplicitValue = {
-    coin: implicitCoin !== BigInt(0) ? {
-      // For deposits (positive): we need to pay a deposit (reduces available funds)
-      // For deposit returns (negative): we get a deposit back (increases available funds)
-      deposit: implicitCoin
-    } : undefined
+    coin: {
+      input: withdrawalsTotal + refund,
+      withdrawals: withdrawalsTotal,
+      reclaimDeposit: refund,
+      deposit: implicitCoin > 0n ? implicitCoin : 0n,
+    },
   };
 
-
   // Perform input selection with implicit value for deposits
-  const selectionResult = await selector.select({
+  const selectionParams = {
     preSelectedUtxo: new Set(),
     utxo: utxoSet,
     outputs: outputsSet,
     constraints,
     implicitValue
-  });
-
-
-  // Build the final transaction body - include both requested outputs and change outputs
-  // Ensure change outputs also have proper asset structure
-  const normalizedChange = selectionResult.selection.change.map(output => ({
-    ...output,
-    value: {
-      ...output.value,
-      assets: output.value.assets || new Map()
+  } satisfies Parameters<InputSelector['select']>[0];
+  let selectionResult;
+  try {
+    selectionResult = await selector.select(selectionParams);
+  } catch (error) {
+    // Packing up to maxValueSize can split a policy between two outputs. Its
+    // repeated policy ID then needs more minimum ADA than the wallet has.
+    // For fee-only metadata try whole policies before reporting insufficient funds.
+    const feeOnlyMetadata = auxiliaryData && !outputs.length && !certificates.length &&
+      !withdrawals.length && !votingProcedures?.length && !implicitCoin;
+    const hasTokens = formattedUtxos.some(([, output]) => output.value.assets?.size);
+    if (!feeOnlyMetadata || !hasTokens || !(error instanceof InputSelectionError) ||
+        error.failure !== InputSelectionFailure.UtxoFullyDepleted) {
+      throw error;
     }
-  }));
-  const finalOutputs = [...normalizedOutputs, ...normalizedChange];
-
-
-  const txBody: Cardano.TxBody = {
-    inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
-    outputs: finalOutputs,
-    fee: selectionResult.selection.fee,
-    validityInterval: {
-      invalidHereafter: Cardano.Slot(Number(tip.slot) + 3600) // 1 hour from now
-    }
-  };
-
-  // Add certificates if provided
-  if (certificates.length > 0) {
-    txBody.certificates = certificates;
+    selectionResult = await selector.select({
+      ...selectionParams,
+      constraints: {
+        ...constraints,
+        tokenBundleSizeExceedsLimit: assets => constraints.tokenBundleSizeExceedsLimit(assets) ||
+          new Set(Array.from(assets?.keys() ?? [], id => Cardano.AssetId.getPolicyId(id))).size > 1,
+      },
+    });
   }
-
-  // Mirrors the coin-selection path above — keep the two textually identical.
-  if (votingProcedures && votingProcedures.length > 0) {
-    txBody.votingProcedures = votingProcedures;
-  }
-
-  // Add withdrawals if provided
-  if (withdrawals.length > 0) {
-    txBody.withdrawals = withdrawals;
-  }
-
-  // Compute auxiliaryDataHash if metadata is provided
-  if (auxiliaryData) {
-    txBody.auxiliaryDataHash = Cardano.computeAuxiliaryDataHash(auxiliaryData);
-  }
-
-  // Create a final transaction
-  return {
-    id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
-    body: txBody,
-    witness: {
-      signatures: new Map()
-    },
-    auxiliaryData
-  };
+  return buildTx(selectionResult.selection);
 }
 
 /**

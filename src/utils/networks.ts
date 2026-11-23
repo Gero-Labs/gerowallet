@@ -1,4 +1,5 @@
 import { Blockchain, Network, Provider } from '@/models/types';
+import { SLOTS_PER_EPOCH } from '@/shared/utils/transaction';
 import {
   CIP113_ALLOWED_NETWORKS,
   CIP113_BASE_MAINNET as CIP113_DEPLOYMENTS_MAINNET,
@@ -148,6 +149,8 @@ export interface NetworkInfo {
   realFiSupport?: boolean;
   networkParams: {
     networkMagic: number;
+    /** Shelley genesis slotLength (converted to milliseconds) and epochLength. */
+    slotTiming?: { slotLengthMs: number; slotsPerEpoch: number };
   }
 }
 
@@ -274,7 +277,8 @@ export default {
       // the network CAN reach RealFi, the flag says whether it is switched on.
       realFiSupport: true,
       networkParams: {
-        networkMagic: 764824073
+        networkMagic: 764824073,
+        slotTiming: { slotLengthMs: 1_000, slotsPerEpoch: SLOTS_PER_EPOCH },
       }
     },
     {
@@ -327,7 +331,8 @@ export default {
       // network the Earn surface is reachable from today.
       realFiSupport: true,
       networkParams: {
-        networkMagic: 1
+        networkMagic: 1,
+        slotTiming: { slotLengthMs: 1_000, slotsPerEpoch: SLOTS_PER_EPOCH },
       }
     },
     {

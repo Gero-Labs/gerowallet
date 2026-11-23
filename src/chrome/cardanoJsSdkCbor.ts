@@ -64,6 +64,25 @@ export function deserializeCardanoJsSdkTx(cborHex: string): Cardano.Tx {
  * Alternative to @cardano-sdk/tx-construction that works in browser environments
  */
 export class BrowserTxConstruction {
+  /** Use the same witness set to price and size the transaction during coin selection. */
+  static withEstimatedWitnesses(tx: Cardano.Tx, inputs: Cardano.Utxo[], wallet?: { keys: Keys | null }): Cardano.Tx {
+    if (tx.witness.signatures?.size) return tx;
+    const hasStakeOperation = !!(tx.body.certificates?.length || tx.body.withdrawals?.length);
+    let count = Math.max(hasStakeOperation ? 2 : 1, 1 + (tx.body.requiredExtraSignatures?.length ?? 0));
+    if (wallet?.keys) {
+      try {
+        count = analyzeTransactionForSignatures(tx, inputs, wallet.keys).length;
+      } catch (error) {
+        console.warn('Could not resolve transaction signers for estimation', error);
+      }
+    }
+    const signatures = new Map<Ed25519PublicKeyHex, Ed25519SignatureHex>();
+    for (let i = 0; i < count; i++) {
+      signatures.set(i.toString(16).padStart(64, '0') as Ed25519PublicKeyHex, '0'.repeat(128) as Ed25519SignatureHex);
+    }
+    return { ...tx, witness: { ...tx.witness, signatures } };
+  }
+
   /**
    * Calculate minimum transaction fee using linear fee formula
    * @param tx - The Cardano JS SDK transaction
@@ -77,79 +96,14 @@ export class BrowserTxConstruction {
     resolvedInputs: Cardano.Utxo[],
     protocolParams: Parameters<typeof minFeeSDK>[2],
     walletContext?: {
-      keys: Keys;
+      keys: Keys | null;
     }
   ): bigint {
     try {
-      // Check if we need to add dummy witnesses for accurate fee calculation
-      const hasEmptyWitnesses = !tx.witness.signatures || tx.witness.signatures.size === 0;
-
-      if (hasEmptyWitnesses) {
-        let estimatedSignatures: number;
-
-        // Use accurate signature analysis if wallet context is available
-        if (walletContext) {
-          try {
-            const requiredSigners = analyzeTransactionForSignatures(tx, resolvedInputs, walletContext.keys);
-
-            estimatedSignatures = requiredSigners.length;
-          } catch (error) {
-            console.warn('🔧 Error analyzing signatures, falling back to heuristic:', error);
-            // Fallback to conservative heuristic
-            const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
-            const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
-            estimatedSignatures = (hasCertificates || hasWithdrawals) ? 2 : 1;
-          }
-        } else {
-          // Fallback to conservative heuristic when wallet context is not available
-          const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
-          const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
-          const requiresStakeKey = hasCertificates || hasWithdrawals;
-          estimatedSignatures = requiresStakeKey ? 2 : 1;
-        }
-
-        // CRITICAL FIX: Create dummy witnesses with realistic structure
-        // This ensures the CBOR serialization includes the actual witness Map structure
-        // which has different encoding overhead than an empty Map
-        const dummySignatures = new Map<Ed25519PublicKeyHex, Ed25519SignatureHex>();
-
-        // Add dummy signatures (32 byte vkey + 64 byte signature in hex)
-        // IMPORTANT: Each signature must have a UNIQUE key to ensure proper CBOR Map encoding
-        // Using the same key for all signatures can cause CBOR to optimize the encoding
-        for (let i = 0; i < estimatedSignatures; i++) {
-          // Create unique dummy keys by varying the first byte
-          const keyPrefix = i.toString(16).padStart(2, '0');
-          const dummyVKey = (keyPrefix + '0'.repeat(62)) as Ed25519PublicKeyHex; // 32 bytes = 64 hex chars
-          const dummySignature = '0'.repeat(128) as Ed25519SignatureHex; // 64 bytes = 128 hex chars
-          dummySignatures.set(dummyVKey, dummySignature);
-        }
-
-        // Create a transaction copy with dummy witnesses for accurate CBOR serialization
-        const txWithDummyWitnesses: Cardano.Tx = {
-          ...tx,
-          witness: {
-            ...tx.witness,
-            signatures: dummySignatures
-          }
-        };
-
-        // Now call SDK's minFee with the transaction that has proper witness structure
-        const baseFee = minFeeSDK(txWithDummyWitnesses, resolvedInputs, protocolParams);
-
-        // Add a small safety margin to account for CBOR encoding variations
-        // Typically 60-80 bytes (~2,640-3,520 lovelace with minFeeCoefficient=44)
-        // This ensures we never underestimate the fee
-        const safetyMarginBytes = BigInt(80);
-        const safetyMarginFee = safetyMarginBytes * BigInt(protocolParams.minFeeCoefficient);
-        const calculatedFee = baseFee + safetyMarginFee;
-
-        return calculatedFee;
-      } else {
-        // Transaction already has witnesses, use it directly
-        const calculatedFee = minFeeSDK(tx, resolvedInputs, protocolParams);
-
-        return calculatedFee;
-      }
+      const signed = BrowserTxConstruction.withEstimatedWitnesses(tx, resolvedInputs, walletContext);
+      const fee = minFeeSDK(signed, resolvedInputs, protocolParams);
+      // Allow for encoding variations before the real witnesses are available.
+      return signed === tx ? fee : fee + 80n * BigInt(protocolParams.minFeeCoefficient);
     } catch (error) {
       console.error('Error calculating minimum fee with SDK:', error);
       // Fallback to a reasonable default fee for complex transactions

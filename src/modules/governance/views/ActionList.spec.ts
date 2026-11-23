@@ -31,7 +31,7 @@ vi.mock('@/api/blockchain-api', () => ({
 }));
 
 vi.mock('@/modules/governance/dialogs/CastVoteDialog.vue', () => ({
-  default: { name: 'CastVoteDialog', props: ['isOpen', 'actions'], render: () => null },
+  default: { name: 'CastVoteDialog', props: ['isOpen', 'actions', 'mode'], render: () => null },
 }));
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -42,6 +42,9 @@ import governanceActionsStore from '@/stores/governanceActionsStore';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import { toCip129 } from '@/shared/utils/drepId';
+import { Cardano } from '@cardano-sdk/core';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 /** Echoes params so a wrong interpolated number cannot hide inside the key. */
 const $t = (key: string, values?: Record<string, unknown>): string =>
@@ -90,7 +93,10 @@ function mountPage(): VueWrapper {
       'v-chip': true,
       'v-chip-group': true,
       'v-skeleton-loader': true,
-      'v-pagination': true,
+      'v-pagination': {
+        props: ['modelValue'],
+        template: '<button class="test-page" @click="$emit(\'update:modelValue\', modelValue === 1 ? 2 : 1)">Change page</button>',
+      },
       AsOf: true,
       'v-btn': {
         inheritAttrs: false,
@@ -124,6 +130,70 @@ afterEach(() => {
   wrapper?.unmount();
   wrapper = null;
   vi.restoreAllMocks();
+});
+
+describe('ActionList holder answers', () => {
+  beforeEach(() => {
+    vi.spyOn(featureFlagsStore, 'isGovernanceVotingEnabled').mockReturnValue(true);
+    const cred = { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16('ab'.repeat(28)) };
+    const stakeAddress = Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Mainnet, cred).toAddress().toBech32();
+    walletStore.loggedWallet = { chain: 'Cardano', network: 'Mainnet', type: 'Normal', stakeAddress };
+    walletStore.keys = {
+      stake: [{ address: stakeAddress, cred: cred.hash, path: "m/1852'/1815'/0'/2/0" }],
+      payment: [{ address: 'fixture-change-address' }],
+    } as never;
+    walletStore.account = null;
+  });
+
+  it('opens a batch of holder answers for an undelegated wallet without a DRep', async () => {
+    const actions = [proposal('aa#0'), proposal('bb#0', { status: 'ratified' }), proposal('cc#0', { status: 'enacted' })];
+    listProposals.mockResolvedValue({ items: actions, page: 1, pageSize: 50, total: 3 });
+
+    wrapper = mountPage();
+    await settle();
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) await box.setValue(true);
+    const bar = wrapper.get('.action-list__batch-bar');
+    expect(bar.text()).not.toContain('governance.voteOnSelected');
+
+    // If the selected action closes while the list is open, the holder can
+    // remove it without losing the rest of the batch.
+    governanceActionsStore.state.actions[1].status = 'enacted';
+    await Vue.nextTick();
+    expect(bar.text()).not.toContain('governance.answerSelected');
+    await boxes[1].setValue(false);
+    expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(1);
+    governanceActionsStore.state.actions[1].status = 'ratified';
+    await Vue.nextTick();
+    await wrapper.findAll('input[type="checkbox"]')[1].setValue(true);
+    await bar.get('button').trigger('click');
+    const dialog = wrapper.getComponent({ name: 'CastVoteDialog' });
+    expect(dialog.props()).toMatchObject({ isOpen: true, mode: 'answer', actions: actions.slice(0, 2) });
+  });
+
+  it('keeps both pages in one review and clears the batch on a wallet switch', async () => {
+    const first = proposal('aa#0');
+    const second = proposal('bb#0');
+    listProposals.mockImplementation(({ page }) => Promise.resolve({ items: [page === 1 ? first : second], page, total: 51 }));
+    wrapper = mountPage();
+    await settle();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get('.test-page').trigger('click');
+    await settle();
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await wrapper.get('.action-list__batch-bar button').trigger('click');
+    const dialog = wrapper.getComponent({ name: 'CastVoteDialog' });
+    expect(dialog.props('actions')).toEqual([first, second]);
+    dialog.vm.$emit('close');
+    await Vue.nextTick();
+    await wrapper.get('.test-page').trigger('click');
+    await settle();
+    expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 42 };
+    await Vue.nextTick();
+    expect(wrapper.find('.action-list__batch-bar').exists()).toBe(false);
+  });
 });
 
 describe('ActionList stat strip', () => {
