@@ -233,6 +233,13 @@
                         :network="loggedWallet.network"
                         @update:model-value="sponsorWalletId = $event"
                       />
+                      <!-- Gero's fee station: offered only when no fee wallet is chosen. -->
+                      <MidnightStationFeeNote
+                        v-if="stationShown"
+                        :status="stationStatus"
+                        :use-station="!stationOptedOut"
+                        @update:use-station="stationOptedOut = !$event"
+                      />
                       <!-- Unlock block for the chosen sponsor. Both branches name
                            BOTH wallets: the single likeliest mistake here is
                            entering the sending wallet's credential. -->
@@ -318,6 +325,11 @@
               <div v-if="sponsorWallet" class="midnight-info-note mt-2">
                 <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-link-variant</v-icon>
                 <span>{{ t('midnight.sponsor.disclosureLinkability') }}</span>
+              </div>
+              <!-- Gero's fee station pays: say so where the fee is reviewed. -->
+              <div v-if="feeSource === 'station'" class="midnight-info-note mt-2" data-test="station-review">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-gift-outline</v-icon>
+                <span>{{ t('midnight.station.feeLine') }}</span>
               </div>
               <!-- Who is unlocked for this send, with a way back to the picker. -->
               <div v-if="sponsorWallet" class="sponsor-review mt-2">
@@ -489,6 +501,8 @@ import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScanner
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
+import MidnightStationFeeNote from '@/shared/components/MidnightStationFeeNote.vue';
+import { useMidnightStationFee } from '@/shared/composables/useMidnightStationFee';
 import { geroStore } from '@/stores/geroStore';
 import { secretsWallet } from '@/shared/utils/walletAccount';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
@@ -649,12 +663,27 @@ const noFeeCapacity = computed(() => blocksMidnightSendLive(dustFeeInputs.value)
 const sponsorWalletId = ref<number | null>(null);
 
 /**
- * A verified missing DUST balance only blocks the send when nothing else will pay for
- * it. With a sponsor chosen the fee comes from that wallet, so the step-1 guard
- * must stand down — otherwise the feature is unreachable from the one screen
- * that needs it. An unverified zero never reaches this: it warns but does not block.
+ * Gero's fee station: the third fee source, considered only while this wallet
+ * may lack DUST and no fee wallet is chosen (useMidnightStationFee.ts). Not the
+ * "sponsor" above, which is another wallet the user owns.
  */
-const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
+const {
+  status: stationStatus, optedOut: stationOptedOut, shown: stationShown, source: feeSource, refresh: refreshStation,
+} = useMidnightStationFee({
+  mayLackDust,
+  feeWalletChosen: computed(() => sponsorWalletId.value != null),
+  shielded: computed(() => isShielded.value),
+  network: computed(() => loggedWallet.value?.network),
+});
+
+/**
+ * A verified missing DUST balance only blocks the send when nothing else will pay for
+ * it. With a sponsor chosen, or Gero's fee station paying, the fee comes from
+ * elsewhere, so the step-1 guard must stand down — otherwise the feature is
+ * unreachable from the one screen that needs it. An unverified zero never reaches
+ * this: it warns but does not block.
+ */
+const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null && feeSource.value !== 'station');
 
 /** The chosen sponsor's stored record, for deciding how to unlock it. */
 const sponsorWallet = computed(() => (
@@ -870,11 +899,14 @@ const { message: liveMessage, announce } = usePoliteAnnouncer();
 const timelineLabels = computed<SendTimelineLabels>(() => ({
   authorize: String(t('midnight.send.stageAuthorize')),
   build: String(t('midnight.send.stageBuild')),
-  sync: String(sponsorWallet.value
-    ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
-    : t('midnight.send.stageSync')),
+  // A station-paid send has no DUST sync: that step is getting the fee covered.
+  sync: String(feeSource.value === 'station'
+    ? t('midnight.station.stageVoucher')
+    : sponsorWallet.value
+      ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+      : t('midnight.send.stageSync')),
   sign: String(t('midnight.send.stageSign')),
-  submit: String(t('midnight.send.stageSubmit')),
+  submit: String(feeSource.value === 'station' ? t('midnight.station.stageSubmit') : t('midnight.send.stageSubmit')),
   provingDevice: String(t('midnight.send.stageProvingDevice')),
   provingLocal: String(t('midnight.send.stageProvingLocal')),
   provingZkpaas: String(t('midnight.send.stageProvingZkpaas')),
@@ -1346,33 +1378,40 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
   // submit is accepted, even if the dialog has been reset or closed by then.
   const draft = sendDraft();
   const paying = sponsorWallet.value;
+  // Who pays is fixed when the send starts: a status that changes mid-send changes nothing.
+  const viaStation = feeSource.value === 'station';
   let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
     const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    const { sendUnshieldedViaStation } = await awaitFreshApproval(() => import('@/services/midnightStationSend.service'), current);
     sponsor = await buildSponsorArg(current);
     if (!current()) { sponsor?.prfSecret?.fill(0); return; }
-    const result = await sendUnshieldedNight(
-      wallet.network,
-      {
-        fromAddress: wallet.baseAddress,
-        outputs: [{
-          address: draft.to,
-          amount: draft.amount.toString(),
-          token: draft.token,
-        }],
-        ttlMs: Date.now() + 5 * 60_000,
-      },
-      credentials,
-      (stage) => {
-        // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
-        if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
-        if (current()) sendStage.value = stage;
-      },
-      sponsor,
-      forceRemote,
-      current,
-      busyHandlers(current),
-    );
+    const request = {
+      fromAddress: wallet.baseAddress,
+      outputs: [{
+        address: draft.to,
+        amount: draft.amount.toString(),
+        token: draft.token,
+      }],
+      ttlMs: Date.now() + 5 * 60_000,
+    };
+    const onStage = (stage: MidnightSendStage) => {
+      // Signed: the PassKey secrets are not needed again, even if Gero Cloud keeps the send waiting.
+      if (stage === 'submitting' || stage === 'provingCloud') wipePasskeySecrets(credentials, sponsor);
+      if (current()) sendStage.value = stage;
+    };
+    const result = viaStation
+      ? await sendUnshieldedViaStation(wallet.network, request, credentials, onStage, current)
+      : await sendUnshieldedNight(
+        wallet.network,
+        request,
+        credentials,
+        onStage,
+        sponsor,
+        forceRemote,
+        current,
+        busyHandlers(current),
+      );
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
       'status:', result.status, 'sponsor:', paying?.id ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
@@ -1423,6 +1462,8 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
     if (!current()) return;
     showSendError(e);
   } finally {
+    // A voucher was spent, held or refused: what the note says may no longer be true.
+    if (viaStation) void refreshStation();
     sponsor?.prfSecret?.fill(0);
     busySeconds.value = null;
     answerBusy('cancel');

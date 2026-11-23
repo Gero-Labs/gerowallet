@@ -144,6 +144,12 @@ import {
   validateConnectorIntentRequest,
 } from '@/chains/midnight/midnightConnectorIntent';
 import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
+// Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
+// in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
+import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
+import {
+  ensureStationVouchers, midnightStationStatus, redeemSealedWithStation, rememberSealedForStation,
+} from '@/chrome/midnightStation';
 import { isNewTopDocument, ParkedConnects, takeParkedRequests } from '@/chrome/midnightParkedPrompts';
 import {
   SolanaDappErrorCode,
@@ -6531,6 +6537,138 @@ app.addToOptions(
     } finally { timer.done(outcome); secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
+
+/**
+ * Gero's fee station: whether a station-paid send can be offered to the logged
+ * Midnight wallet. No credential; answers counts and a reason code only.
+ */
+app.addToOptions(MessageTypes.MIDNIGHT_STATION_STATUS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('No Midnight wallet logged in');
+    // Software wallets only: a watch wallet cannot sign, and Midnight has no hardware wallets.
+    const stakeAddress = walletBg.encryptedMnemonic || walletBg.prfEncryptedMnemonic
+      ? (await walletBg.getMidnightWalletKeys()).cardanoStakeAddress
+      : undefined;
+    // Ledger 8 chains have no sealed-merge path.
+    const status = await resolveMidnightLedger(walletBg.network) === 9
+      ? await midnightStationStatus(walletBg.network, stakeAddress)
+      : { available: false, remaining: 0, reason: 'STATION_OFF' as const };
+    sendResponse({ id: request.id, data: { success: true, ...status }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/**
+ * Gero's fee station, step 1: make sure a voucher is held (issuing the day's
+ * batch with the twin stake key when none is), then check, sign and seal the
+ * send Nexus built with NO fee.
+ *
+ * Request: `{ unprovenTxHex, intendedOutputs, password?, prfSecret? }`.
+ * Response: `{ success: true, sealedTxHex, txIdentifiers }`. A station refusal
+ * answers its code as `error` (midnightStationConfig.ts).
+ */
+app.addToOptions(MessageTypes.MIDNIGHT_STATION_SEAL, async (request, sendResponse) => {
+  const secretBuffers: Uint8Array[] = [];
+  const timer = midnightTimer('worker station seal');
+  let outcome: 'ok' | 'failed' = 'failed';
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('No Midnight wallet logged in');
+    const network = walletBg.network;
+    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
+    const assertSession = captureMidnightSigningSession(walletBg.id, network, () => ({
+      walletId: walletManager.getWallet()?.id, network: walletManager.getWallet()?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+    const { unprovenTxHex, password, prfSecret, intendedOutputs } = request.data || {};
+    if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) throw new Error('unprovenTxHex is required');
+    if (!Array.isArray(intendedOutputs) || intendedOutputs.length === 0 || !intendedOutputs.every((o: unknown) =>
+      !!o && typeof o === 'object'
+      && typeof (o as { address?: unknown }).address === 'string'
+      && typeof (o as { amount?: unknown }).amount === 'string'
+      && typeof (o as { token?: unknown }).token === 'string')) {
+      throw new Error('intendedOutputs[] ({ address, amount, token }) is required');
+    }
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    if (prfBytes) secretBuffers.push(prfBytes);
+
+    const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+    const { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } = await import('@/chains/midnight/midnightChainIdentity');
+    const { midnightActions } = await import('@/stores/midnightStore');
+    if (await resolveMidnightLedger(network) !== 9) throw new MidnightStationError('STATION_OFF');
+    const endpoints = getMidnightEndpoints(network);
+    if (!endpoints) throw new MidnightStationError('STATION_OFF');
+    // As a normal ledger 9 send: the chain must be the same one across signing.
+    const identity = await readVerifiedMidnightChainIdentity(endpoints);
+    const stakeAddress = (await walletBg.getMidnightWalletKeys(password, prfBytes)).cardanoStakeAddress;
+    if (!stakeAddress) throw new MidnightStationError('NO_TWIN');
+    timer.lap('ledgerIdentityKeys');
+    assertSession();
+    try {
+      // Vouchers first: a wallet that is not eligible signs nothing.
+      await timer.time('vouchers', () => ensureStationVouchers(network, stakeAddress,
+        subject => walletBg.signMidnightStationChallenge(subject, password, prfBytes)));
+      assertSession();
+      // The timeline's fee step is done; signing follows (useMidnightSendTimeline.ts).
+      midnightActions.setSendProgress({ phase: 'syncingDust', percent: 100, detail: '' });
+      const sealed = await timer.time('seal', () => walletBg.sealMidnightTransferForStation(unprovenTxHex, password, prfBytes, intendedOutputs));
+      await assertMidnightChainIdentityUnchanged(endpoints, identity);
+      assertSession();
+      // Only what was sealed here, for this wallet, is redeemed (MIDNIGHT_STATION_REDEEM).
+      rememberSealedForStation(network, stakeAddress, sealed.identifiers);
+      outcome = 'ok';
+      sendResponse({
+        id: request.id,
+        data: { success: true, sealedTxHex: sealed.sealedTxHex, txIdentifiers: sealed.identifiers },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } finally {
+      midnightActions.setSendProgress(null);
+    }
+  } catch (error) {
+    // No build-failure mark: that tells a dApp approval a decline was the wallet's (midnightBuildFailure.ts),
+    // and a station send only ever starts from the wallet's own send screens.
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  } finally { timer.done(outcome); secretBuffers.forEach(bytes => bytes.fill(0)); }
+});
+
+/**
+ * Gero's fee station, step 2: spend one voucher on the sealed bytes. No
+ * credential. The request to the station carries no device token. Only a
+ * transaction step 1 sealed for this wallet a moment ago is redeemed.
+ *
+ * Request: `{ sealedTxHex, ttlMs }`.
+ * Response: `{ success: true, txHash, ledgerTxHash, status, blockHeight?, remaining }`.
+ */
+app.addToOptions(MessageTypes.MIDNIGHT_STATION_REDEEM, async (request, sendResponse) => {
+  const timer = midnightTimer('worker station redeem');
+  let outcome: 'ok' | 'failed' = 'failed';
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg || walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('No Midnight wallet logged in');
+    const { sealedTxHex, ttlMs } = request.data || {};
+    if (typeof sealedTxHex !== 'string' || !/^(?:[0-9a-f]{2})+$/i.test(sealedTxHex)) throw new Error('sealedTxHex is required');
+    if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) throw new Error('ttlMs is required (epoch millis)');
+    const stakeAddress = (await walletBg.getMidnightWalletKeys()).cardanoStakeAddress;
+    if (!stakeAddress) throw new MidnightStationError('NO_TWIN');
+    // Read from the bytes themselves: the voucher is held for exactly this transaction.
+    const identifiers = await midnightTxIdentifiers(sealedTxHex, walletBg.network, true);
+    if (!identifiers?.length) throw new MidnightStationError('TX_NOT_ELIGIBLE');
+    const result = await timer.time('redeem', () => redeemSealedWithStation(walletBg.network, stakeAddress, sealedTxHex, identifiers, ttlMs));
+    outcome = 'ok';
+    sendResponse({ id: request.id, data: { success: true, ...result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  } finally { timer.done(outcome); }
+});
 
 /**
  * Header names a `proving.headers` request may carry — exactly the Arkhia
