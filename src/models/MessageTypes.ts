@@ -135,6 +135,8 @@ export enum MessageTypes {
   // connected browser context, mirroring ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT
   // above. See midnightStore.setProofServer.
   SET_MIDNIGHT_PROOF_SERVER = 'SET_MIDNIGHT_PROOF_SERVER',
+  /** Gero Prover (desktop helper for Midnight proofs): status and controls. Extension pages only. */
+  GERO_PROVER = 'GERO_PROVER',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).

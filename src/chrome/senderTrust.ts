@@ -52,6 +52,9 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'ANNOUNCEMENT_READ',
   'ANNOUNCEMENT_DISMISS_BANNER',
   'ANNOUNCEMENTS_SET_PREFS',
+  // Starts Gero Prover on this computer, runs a test proof in it, switches its graphics
+  // processor and deletes its key files: the Proof server page's controls, never a web page's.
+  'GERO_PROVER',
   // Part of signing: only the wallet's own pages sign (Ledger, Keystone, Trezor over WebUSB).
   'CIP113_SIGN_PREFLIGHT',
   // Trezor signing in the worker; like the preflight, it honours the CIP-113 Send allowance.

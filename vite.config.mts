@@ -443,6 +443,11 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public', flatten: true },
               // Pinned Midnight DUST-fee proving keys (midnightZkKeys.ts), read by the prover worker.
               { src: 'src/assets/midnight-zk/*', dest: 'extension/midnight-zk', flatten: true },
+              // The multi-threaded prover build (midnightZkirThreads.ts), when it has been made
+              // (scripts/midnight-zkir-mt.mjs): the folder copied whole, because its glue
+              // starts its own worker threads from a script beside it. Absent, nothing is copied
+              // and the prover proves on one thread.
+              { src: 'src/assets/midnight-zkir-mt', dest: 'extension' },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|bg-dapp).*',

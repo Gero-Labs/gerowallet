@@ -1,0 +1,107 @@
+--- a/midnight-curves-0.2.1/src/bls12_381/g1.rs
++++ b/midnight-curves-0.2.1/src/bls12_381/g1.rs
+@@ -625,7 +625,33 @@
+     /// Perform a multi-exponentiation, aka "multi-scalar-multiplication" (MSM)
+     /// using `blst`'s implementation of Pippenger's algorithm.
+     /// Note: `scalars` is cloned in this method.
++    ///
++    /// [mt-msm experiment] On wasm32 `blst` has no thread pool (its `no-threads`
++    /// cfg), so its Pippenger runs on one thread. When rayon has more than one
++    /// thread, split the input into one chunk per thread, run the unchanged
++    /// serial MSM on each chunk and add the partial results: an MSM is a sum,
++    /// so the group element is the same. Small or uneven inputs keep the
++    /// original path.
+     pub fn multi_exp(points: &[Self], scalars: &[Fq]) -> Self {
++        #[cfg(target_arch = "wasm32")]
++        {
++            use rayon::prelude::*;
++            const MIN_CHUNK: usize = 256;
++            let threads = rayon::current_num_threads();
++            if threads > 1 && points.len() == scalars.len() && points.len() >= 2 * MIN_CHUNK {
++                let chunk = points.len().div_ceil(threads).max(MIN_CHUNK);
++                return points
++                    .par_chunks(chunk)
++                    .zip(scalars.par_chunks(chunk))
++                    .map(|(p, s)| Self::multi_exp_serial(p, s))
++                    .reduce(Self::identity, |a, b| a + b);
++            }
++        }
++        Self::multi_exp_serial(points, scalars)
++    }
++
++    /// The original `multi_exp`: one call into `blst`'s Pippenger.
++    fn multi_exp_serial(points: &[Self], scalars: &[Fq]) -> Self {
+         let n = if points.len() < scalars.len() {
+             points.len()
+         } else {
+--- a/midnight-curves-0.3.1/src/bls12_381/g1.rs
++++ b/midnight-curves-0.3.1/src/bls12_381/g1.rs
+@@ -625,7 +625,33 @@
+     /// Perform a multi-exponentiation, aka "multi-scalar-multiplication" (MSM)
+     /// using `blst`'s implementation of Pippenger's algorithm.
+     /// Note: `scalars` is cloned in this method.
++    ///
++    /// [mt-msm experiment] On wasm32 `blst` has no thread pool (its `no-threads`
++    /// cfg), so its Pippenger runs on one thread. When rayon has more than one
++    /// thread, split the input into one chunk per thread, run the unchanged
++    /// serial MSM on each chunk and add the partial results: an MSM is a sum,
++    /// so the group element is the same. Small or uneven inputs keep the
++    /// original path.
+     pub fn multi_exp(points: &[Self], scalars: &[Fq]) -> Self {
++        #[cfg(target_arch = "wasm32")]
++        {
++            use rayon::prelude::*;
++            const MIN_CHUNK: usize = 256;
++            let threads = rayon::current_num_threads();
++            if threads > 1 && points.len() == scalars.len() && points.len() >= 2 * MIN_CHUNK {
++                let chunk = points.len().div_ceil(threads).max(MIN_CHUNK);
++                return points
++                    .par_chunks(chunk)
++                    .zip(scalars.par_chunks(chunk))
++                    .map(|(p, s)| Self::multi_exp_serial(p, s))
++                    .reduce(Self::identity, |a, b| a + b);
++            }
++        }
++        Self::multi_exp_serial(points, scalars)
++    }
++
++    /// The original `multi_exp`: one call into `blst`'s Pippenger.
++    fn multi_exp_serial(points: &[Self], scalars: &[Fq]) -> Self {
+         let n = if points.len() < scalars.len() {
+             points.len()
+         } else {
+diff --git a/Cargo.lock b/Cargo.lock
+index 4c78d2f..87e4c99 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3207,8 +3207,6 @@ dependencies = [
+ [[package]]
+ name = "midnight-curves"
+ version = "0.2.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "71a947535f03578bdc6401354accbf515257dcbaca7fb6a73c48fb0c17281a6c"
+ dependencies = [
+  "bitvec",
+  "blst",
+@@ -3234,8 +3232,6 @@ dependencies = [
+ [[package]]
+ name = "midnight-curves"
+ version = "0.3.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "efaa236cfabccb367c0a89e58a6e8f0b4ba70fb81efd07acfe1d3a0ec3bed081"
+ dependencies = [
+  "bitvec",
+  "blst",
+diff --git a/Cargo.toml b/Cargo.toml
+index edeef4c..49b75a6 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,6 +72,8 @@ midnight-serialize = { path = "serialize" }
+ # The pinned midnight-zkir asks crates.io for transient-crypto 3.0.0, which is
+ # unpublished; resolve it to the in-tree copy.
+ midnight-transient-crypto = { path = "transient-crypto" }
++midnight-curves-0-2 = { package = "midnight-curves", path = "/patched/midnight-curves-0.2.1" }
++midnight-curves-0-3 = { package = "midnight-curves", path = "/patched/midnight-curves-0.3.1" }
+ 
+ [workspace.metadata.spellcheck]
+ config = ".spellcheck/cargo-spellcheck.toml"

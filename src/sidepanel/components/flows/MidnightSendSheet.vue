@@ -453,6 +453,8 @@ import midnightLogo from '@/assets/svg/midnight.svg';
 import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
 import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
+import { helperProcessorLabel } from '@/chains/midnight/geroProverState';
+import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { midnightStore } from '@/stores/midnightStore';
 import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
@@ -933,7 +935,7 @@ async function acceptConsent() {
  * which this device cannot prove) still needs a consent notice.
  */
 function sendProver() {
-  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded');
+  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere());
 }
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }
@@ -1259,17 +1261,23 @@ const timelineLabels = computed(() => ({
   sign: t('midnight.send.stageSign') as string,
   submit: (feeSource.value === 'station' ? t('midnight.station.stageSubmit') : t('midnight.send.stageSubmit')) as string,
   provingDevice: t('midnight.send.stageProvingDevice') as string,
+  provingHelper: t('midnight.send.stageProvingHelper') as string,
   provingLocal: t('midnight.send.stageProvingLocal') as string,
   provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
   provingCloud: t('midnight.send.stageProvingCloud') as string,
 }));
 const { message: liveMessage, announce } = usePoliteAnnouncer();
+// "Keep this panel open" is always shown under the timeline, so a proving hint need not repeat it.
+const keepOpen = { keepOpenShown: true };
 const timelineNodes = useMidnightSendTimeline(
   computed(() => sendStage.value),
   timelineLabels,
   {
-    // "Keep this panel open" is always shown under the timeline, so the slow hint need not repeat it.
-    provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), { keepOpenShown: true }),
+    provingDetailFor: (step, seconds) => provingDetail(step, seconds, (key, params) => String(t(key, params)), {
+      ...keepOpen,
+      helperProcessor: helperProcessorLabel((key, params) => String(t(key, params))),
+      deviceThreads: browserThreadsLabel((key, params) => String(t(key, params))),
+    }),
     announce,
     // Gero Cloud is busy: counting down to the automatic resubmit.
     submitDetail: computed(() => (busySeconds.value != null ? String(t('midnight.busy.retrying', { n: busySeconds.value })) : undefined)),

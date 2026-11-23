@@ -94,6 +94,22 @@ export interface FeatureFlags {
   // here (Zswap proofs: 30-70 s on a fast laptop) and Gero receives no secret.
   // Public sends prove their DUST fee on this device either way.
   isMidnightShieldedDeviceProvingEnabled: boolean;
+  // Gero Prover: Midnight proofs made by a desktop helper app on this computer (native, all
+  // cores, the graphics processor where it has a backend) instead of the WASM prover in the
+  // browser. Default OFF, ships dark: the helper and its upstream provers are unaudited. Off,
+  // the Proof server page and the send dialogs are exactly as before, and a stored choice of
+  // the helper reads as the Docker proof server (walletProverFor). The flag never loosens a
+  // check: the helper is used only when the user also chose it and allowed the browser to
+  // talk to it (midnightProvingFlags.ts).
+  isGeroProverEnabled: boolean;
+  // Midnight proofs in the browser on several processor threads: a multi-threaded build of the
+  // same zkir prover (midnightZkirThreads.ts), used when the browser can run it and its files
+  // match their pins, else the standard build. Also offers "In this browser" under Proof server →
+  // This computer, where every proof of a send, private ones included, is made in the browser.
+  // Default OFF, ships dark: the threaded build is upstream demo-grade code and is not approved
+  // to ship. A speed setting, not a trust decision: both builds are the same prover with the
+  // same pinned keys.
+  isMidnightThreadedProvingEnabled: boolean;
   // CIP-113 Send (Gero's own transfer of a programmable token). Default OFF, ships dark.
   // Gates the UI ONLY: the Send action on a CIP-113 token. Display, the signing refusals and
   // the background's checks stay on the build-time network gates (cip113Deployments.ts).
@@ -176,6 +192,8 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isLiveChatEnabled: false,
     isSubmitApiEnabled: false,
     isMidnightShieldedDeviceProvingEnabled: false,
+    isGeroProverEnabled: false,
+    isMidnightThreadedProvingEnabled: false,
     isCip113Enabled: false,
     isMidnightSponsoredFeesEnabled: false,
     isNftMarketEnabled: false,
@@ -272,6 +290,10 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
     // Shielded on-device proving ships DARK (default false).
     featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled = featureFlagService.getFlag('isMidnightShieldedDeviceProvingEnabled', false);
+    // Gero Prover ships DARK (default false).
+    featureFlagsState.flags.isGeroProverEnabled = featureFlagService.getFlag('isGeroProverEnabled', false);
+    // Threaded browser proving ships DARK (default false).
+    featureFlagsState.flags.isMidnightThreadedProvingEnabled = featureFlagService.getFlag('isMidnightThreadedProvingEnabled', false);
     // CIP-113 Send ships DARK (default false); UI-only gate for the Send action.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     // Station-paid Midnight fees ship DARK (default false); UI-only gate.
@@ -389,6 +411,12 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isMidnightShieldedDeviceProvingEnabled', (newValue) => {
       featureFlagsState.flags['isMidnightShieldedDeviceProvingEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isGeroProverEnabled', (newValue) => {
+      featureFlagsState.flags['isGeroProverEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isMidnightThreadedProvingEnabled', (newValue) => {
+      featureFlagsState.flags['isMidnightThreadedProvingEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       featureFlagsState.flags['isCip113Enabled'] = newValue === true;
@@ -669,6 +697,23 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isMidnightShieldedDeviceProvingEnabled;
   },
 
+  /**
+   * Offer Gero Prover, the desktop helper that makes Midnight proofs on this
+   * computer. Ships DARK (default false); see the flag's declaration.
+   */
+  isGeroProverEnabled(): boolean {
+    return featureFlagsState.flags.isGeroProverEnabled;
+  },
+
+  /**
+   * Prove in the browser on several processor threads, and offer "In this
+   * browser" as a way to prove on this computer. Ships DARK (default false);
+   * see the flag's declaration.
+   */
+  isMidnightThreadedProvingEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightThreadedProvingEnabled;
+  },
+
   /** Gero Card cardholder-details step; on unless the flag service says false. */
   isCardholderDetailsEnabled(): boolean {
     return featureFlagsState.flags.isCardholderDetailsEnabled;
@@ -753,6 +798,8 @@ export const featureFlagsStore = {
       isLiveChatEnabled: false,
       isSubmitApiEnabled: false,
       isMidnightShieldedDeviceProvingEnabled: false,
+    isGeroProverEnabled: false,
+    isMidnightThreadedProvingEnabled: false,
       isCip113Enabled: false,
       isMidnightSponsoredFeesEnabled: false,
       isNftMarketEnabled: false,
