@@ -90,14 +90,28 @@ function fundedFixture({ chains = 1 }: { chains?: 1 | 2 } = {}) {
     backingNight: coin.backingNight, ctime: coin.ctime.getTime() / 1000, collapsedMerkleTree: null })) };
   const transport: DustLightTransport = {
     snapshot: vi.fn(async () => snapshot),
-    spends: vi.fn(async (_block, prefixes) => ({ nextBlock: null,
-      transactions: transactions.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })),
+    spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => ({
+      nextBlock: toBlock < block.height ? toBlock + 1 : null,
+      transactions: transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock
+        && tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))),
+    })),
     commitments: vi.fn(async (_block, ranges) => ranges.map(r => update(r.startIndex, r.endIndex))),
   };
   return { key, local, snapshot, transport, spentBacking };
 }
 
 describe('funded ledger-9 DUST projection', () => {
+  it('returns only spends inside the requested block range, including its endpoints', async () => {
+    const f = fundedFixture();
+    try {
+      const heights = async (from: number, to: number) =>
+        (await f.transport.spends(f.snapshot.block, [''], from, to)).transactions.map(tx => tx.block.height);
+      expect(await heights(0, 2)).toEqual([]);
+      expect(await heights(3, 4)).toEqual([3, 4]);
+      expect(await heights(5, 5)).toEqual([5]);
+    } finally { f.key.clear(); }
+  });
+
   it('reconstructs spent descendants and produces spendable witnesses matching full replay', async () => {
     const f = fundedFixture();
     try {
@@ -491,7 +505,7 @@ describe('sliced DUST spend scans', () => {
         spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
           const end = toBlock - fromBlock > 1_000 ? fromBlock + Math.floor((toBlock - fromBlock) / 2) : toBlock;
           if (end < toBlock) cut++;
-          const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+          const page = await f.transport.spends(f.snapshot.block, prefixes, 0, f.snapshot.block.height);
           return { nextBlock: end < height ? end + 1 : null, transactions: page.transactions
             .map(tx => ({ ...tx, block: { ...tx.block, height: moved.get(tx.block.height) ?? tx.block.height } }))
             .filter(tx => tx.block.height >= fromBlock && tx.block.height <= end) };
@@ -671,7 +685,7 @@ describe('long DUST spend scans are settled in stages', () => {
       spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
         if (toBlock > reach) throw new Error(outOfTime);
         ranges.push([fromBlock, toBlock]);
-        const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
+        const page = await f.transport.spends(f.snapshot.block, prefixes, 0, f.snapshot.block.height);
         return { nextBlock: toBlock < height ? toBlock + 1 : null, transactions: page.transactions
           .map(tx => ({ ...tx, block: { ...tx.block, height: moved.get(tx.block.height) ?? tx.block.height } }))
           .filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
