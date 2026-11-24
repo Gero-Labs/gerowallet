@@ -2,7 +2,7 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import type { CardInfo } from '@/models/card';
 import cardStore from '@/stores/modules/card';
 import { cardUuidFromOrderStatus } from '@/modules/wallet/utils/cardApiCompat';
-import { deliveryPaymentState, orderPollDelay, type DeliveryPaymentState } from '@/modules/wallet/utils/cardOrderTracker';
+import { deliveryPaymentState, orderPastPayment, orderPollDelay, type DeliveryPaymentState } from '@/modules/wallet/utils/cardOrderTracker';
 
 export interface OrderSnapshot {
   /** Order status: new, dispatched, activating, done, rejected, unknown. */
@@ -32,9 +32,12 @@ export function useOrderTracking(cards: ComputedRef<CardInfo[]>) {
     cards.value.filter(card => {
       const data = card.cardData;
       if (!data?.order_uuid || data.card_uuid) return false;
-      if (data.status?.toLowerCase() === 'rejected' || data.delivery?.payment_status === 'expired') return false;
-      // An order the provider already ended needs no more polling.
+      if (data.status?.toLowerCase() === 'rejected') return false;
       const seen = snapshots.value[data.order_uuid];
+      // Past its fee, only the order status and the issued card matter: keep checking until the card exists.
+      if (orderPastPayment(seen?.status ?? data.status)) return true;
+      if (data.delivery?.payment_status === 'expired') return false;
+      // An order the provider already ended needs no more polling.
       return !seen || (seen.status !== 'rejected' && seen.payment !== 'rejected' && seen.payment !== 'expired');
     }),
   );

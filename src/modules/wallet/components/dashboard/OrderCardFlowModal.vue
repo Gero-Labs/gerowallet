@@ -133,6 +133,7 @@ import snackbar from '@/plugins/snackbar';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
+import { orderPastPayment } from '@/modules/wallet/utils/cardOrderTracker';
 import {
   emptyAddress, isMissingDetailsRejection, isStoredDetailsRejection, lovelaceFromAda, savedDeliveryAddress,
   toOrderPayload, toProviderAddress,
@@ -223,6 +224,7 @@ const hasPhysicalCard = computed(() =>
     if (data?.own_type !== 'physical' || data.status?.toLowerCase() === 'rejected') return false;
     if (data.card_uuid) return true;
     if (!data.order_uuid) return false;
+    if (orderPastPayment(data.status)) return true;
     const payment = data.delivery?.payment_status?.toLowerCase();
     return !!payment && !['pending', 'failed', 'expired'].includes(payment);
   }),
