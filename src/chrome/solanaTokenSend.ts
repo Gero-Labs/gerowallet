@@ -123,6 +123,10 @@ const TOKEN_ACCOUNT_RENT_ESTIMATE = 2_039_280n;
  * The most a new associated token account's deposit can be: a Token-2022 account carrying every
  * account extension a mint can require stays well under 400 bytes. A simulated deposit above it,
  * or below a plain account's, is not believed (the review would show a wrong cost).
+ *
+ * Both bounds follow from today's rent parameters (3480 lamports per byte-year, 2 years). If the
+ * network ever changed them, every send that opens an account would fail closed here with
+ * SIMULATION_FAILED: update TOKEN_ACCOUNT_RENT_ESTIMATE and this cap together.
  */
 const TOKEN_ACCOUNT_RENT_MAX = 4_000_000n;
 
