@@ -13,12 +13,7 @@
       :src="assets.connectTrezorSvg"
       :alt="t('wallet.connectTrezor')"
     />
-    <img
-      v-if="walletType === WalletType.Keystone && !keystoneScan"
-      :src="assets.connectKeystoneSvg"
-      style="width: 230px; height: 126px; align-self: center;"
-      :alt="t('wallet.connectKeystone')"
-    />
+    <!-- No Keystone illustration: with the alert and the QR it overflowed the card (issue 1656). -->
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="connect-steps t-body">
