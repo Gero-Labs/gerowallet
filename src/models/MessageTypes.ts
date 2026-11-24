@@ -12,6 +12,10 @@ export enum MessageTypes {
   SOLANA_SEND_QUOTE = 'SOLANA_SEND_QUOTE',
   /** Gero's own SOL send: the worker checks, signs and submits (chrome/solanaSend.ts). */
   SEND_SOLANA = 'SEND_SOLANA',
+  /** What an SPL token send would do (the worker plans and simulates it; nothing is held). */
+  SOLANA_TOKEN_SEND_QUOTE = 'SOLANA_TOKEN_SEND_QUOTE',
+  /** Gero's own SPL token send from a password or PassKey wallet (chrome/solanaTokenSend.ts). */
+  SEND_SOLANA_TOKEN = 'SEND_SOLANA_TOKEN',
   /** Hardware Solana send, step 1: the worker checks and builds the transfer message for the device. */
   PREPARE_SOLANA_SEND = 'PREPARE_SOLANA_SEND',
   /** Hardware Solana send, step 2: the device's signature over that message; the worker submits. */

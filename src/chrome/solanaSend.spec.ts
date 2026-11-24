@@ -1,13 +1,17 @@
 // Gero's own SOL send in the worker (chrome/solanaSend.ts).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const store = vi.hoisted(() => ({ state: { solana: { lamports: '2000000000' as string | null } } }));
+const store = vi.hoisted(() => ({
+  state: { solana: { lamports: '2000000000' as string | null, tokens: null as Array<Record<string, unknown>> | null } },
+}));
 vi.mock('@/stores/walletStore', () => ({ default: store }));
 vi.mock('@/api/solana-api', () => ({ SolanaApi: class {} }));
 
 import {
   clearSolanaHardwareSends,
   prepareSolanaHardwareSend,
+  prepareSolanaHardwareTokenSend,
+  sendSolanaToken,
   quoteSolanaSend,
   sendSolana,
   SOLANA_HARDWARE_SEND_TTL_MS,
@@ -17,7 +21,12 @@ import {
   type SolanaSendWallet,
 } from './solanaSend';
 import { deriveSolanaKeypairFromMnemonic } from '@/chains/solana/solanaKeyManager';
-import { buildSignedSolTransfer, buildSolTransferMessage, signSolanaBytes } from '@/chains/solana/solanaTransaction';
+import {
+  SYSTEM_PROGRAM_ID, buildSignedSolTransfer, buildSolTransferMessage, signSolanaBytes, verifySolanaSignature,
+} from '@/chains/solana/solanaTransaction';
+import { TOKEN_PROGRAM_ID, associatedTokenAddress } from '@/chains/solana/solanaTokenTransfer';
+import { base58Decode } from '@/chains/solana/solanaBase58';
+import type { SolanaRemoteAccount } from '@/chains/solana/solanaNexusAccounts';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const FROM = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
@@ -181,5 +190,67 @@ describe('SOL send from a hardware wallet', () => {
     const { message } = await prepareSolanaHardwareSend(w, request, api(), 1_000);
     await expect(submitSolanaHardwareSend(w, { signature: signWith(message) }, api(), 1_000 + SOLANA_HARDWARE_SEND_TTL_MS))
       .rejects.toMatchObject({ code: 'SEND_EXPIRED' });
+  });
+});
+
+describe('token send in the worker', () => {
+  const MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const SOURCE = associatedTokenAddress(FROM, MINT, TOKEN_PROGRAM_ID);
+  const DEST = associatedTokenAddress(TO, MINT, TOKEN_PROGRAM_ID);
+  const tokenRow = (address: string, owner: string, amount: bigint): SolanaRemoteAccount => ({
+    address, exists: true, lamports: 2_039_280n, owner: TOKEN_PROGRAM_ID, program: 'spl-token',
+    parsed: { type: 'account', info: { mint: MINT, owner, state: 'initialized', tokenAmount: { amount: amount.toString(), decimals: 6 } } },
+  });
+  const chain: Record<string, SolanaRemoteAccount> = {
+    [MINT]: { address: MINT, exists: true, lamports: 1n, owner: TOKEN_PROGRAM_ID, program: 'spl-token', parsed: { type: 'mint', info: { decimals: 6 } } },
+    [SOURCE]: tokenRow(SOURCE, FROM, 5_000_000n),
+    [DEST]: tokenRow(DEST, TO, 0n),
+    [FROM]: { address: FROM, exists: true, lamports: 1_000_000_000n, owner: SYSTEM_PROGRAM_ID, program: 'system', parsed: null },
+  };
+  const tokenApi = () => ({
+    ...api(),
+    getAccounts: vi.fn(async (addresses: string[]) => addresses.map((a) => chain[a]
+      ?? { address: a, exists: false, lamports: null, owner: null, program: null, parsed: null })),
+    simulate: vi.fn(async (_tx: string, accounts: string[]) => ({
+      success: true, err: null, logs: [], unitsConsumed: 1, before: [],
+      after: [chain[FROM], tokenRow(accounts[1], FROM, 3_750_000n), tokenRow(accounts[2], TO, 1_250_000n)],
+    })),
+  });
+  const tokenRequest = { mint: MINT, recipientAddress: TO, amount: '1250000', feeLevel: 'standard' };
+  const keypair = () => deriveSolanaKeypairFromMnemonic(MNEMONIC, 0);
+  const tokenWallet = () => ({
+    ...wallet(),
+    signSolanaSendMessage: vi.fn(async (message: Uint8Array, _password?: string) => signSolanaBytes(message, keypair().secretKey)),
+  });
+
+  beforeEach(() => {
+    store.state.solana.tokens = [{ mint: MINT, amount: '5000000', decimals: 6, tokenAccount: SOURCE }];
+    clearSolanaHardwareSends();
+  });
+
+  it('plans, signs the planned message and submits it', async () => {
+    const w = tokenWallet();
+    const a = tokenApi();
+    await expect(sendSolanaToken(w, { ...tokenRequest, password: 'pw' }, a)).resolves.toEqual({ signature: 'sig-from-nexus' });
+    const [message, password] = w.signSolanaSendMessage.mock.calls[0];
+    expect(password).toBe('pw');
+    const sent = Uint8Array.from(atob((a.submit.mock.calls as unknown as string[][])[0][0]), (c) => c.charCodeAt(0));
+    expect(Array.from(sent.subarray(65))).toEqual(Array.from(message));
+    expect(verifySolanaSignature(sent.subarray(1, 65), message, base58Decode(FROM))).toBe(true);
+  });
+
+  it('signs nothing for a refused plan, and reports its code', async () => {
+    const w = tokenWallet();
+    store.state.solana.tokens = [];
+    await expect(sendSolanaToken(w, { ...tokenRequest, password: 'pw' }, tokenApi())).rejects.toMatchObject({ code: 'TOKEN_UNKNOWN' });
+    expect(w.signSolanaSendMessage).not.toHaveBeenCalled();
+  });
+
+  it('a hardware wallet gets the planned message, and the worker submits only its own signature over it', async () => {
+    const w = tokenWallet();
+    const { message, tokenAccounts } = await prepareSolanaHardwareTokenSend(w, tokenRequest, tokenApi());
+    expect(tokenAccounts).toEqual([{ baseAddress: TO, tokenProgram: TOKEN_PROGRAM_ID, tokenMint: MINT, tokenAccount: DEST }]);
+    const signature = Array.from(signSolanaBytes(Uint8Array.from(message), keypair().secretKey));
+    await expect(submitSolanaHardwareSend(w, { signature }, api())).resolves.toEqual({ signature: 'sig-from-nexus' });
   });
 });

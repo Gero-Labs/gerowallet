@@ -6,6 +6,7 @@ import hardwareLoading from '@/plugins/hardwareLoading';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { resolveAccountIndex } from '@/shared/utils/walletAccount';
 import { isSolanaHardware, solanaHardwareSignsMessages } from '@/chains/solana/solanaHardwarePolicy';
+import type { SolanaTokenAccountInfo } from '@/chrome/solanaTokenSend';
 import { keystoneSolanaSignRequest, parseKeystoneSolanaSignature, type KeystoneSolanaSignKind } from '@/shared/utils/solanaKeystone';
 
 /**
@@ -76,7 +77,12 @@ export function useSolanaHardwareSigner(opts: { getIsBT?: () => boolean } = {}) 
     return kind === 'transaction' ? isSolanaHardware(type) : solanaHardwareSignsMessages(type);
   }
 
-  async function sign(bytes: Uint8Array, kind: KeystoneSolanaSignKind): Promise<Uint8Array> {
+  async function sign(
+    bytes: Uint8Array,
+    kind: KeystoneSolanaSignKind,
+    /** For Trezor's screen: the token accounts a transfer names (from the worker's prepare). */
+    tokenAccounts?: SolanaTokenAccountInfo[],
+  ): Promise<Uint8Array> {
     const wallet = walletStore.loggedWallet;
     if (!wallet || !canSign(kind)) throw new SolanaHardwareSignError(t('solana.hardware.cannotSignMessage'));
     const accountIndex = resolveAccountIndex(wallet);
@@ -104,7 +110,7 @@ export function useSolanaHardwareSigner(opts: { getIsBT?: () => boolean } = {}) 
         return await signSolanaWithLedger(opts.getIsBT?.() ?? false, accountIndex, bytes);
       }
       const trezor = (await import('@/shared/utils/trezor')).default;
-      return await trezor.signSolanaTransaction(accountIndex, bytes, wallet.network !== Network.MAINNET);
+      return await trezor.signSolanaTransaction(accountIndex, bytes, wallet.network !== Network.MAINNET, tokenAccounts);
     } finally {
       hardwareLoading.setLoading(false);
     }
