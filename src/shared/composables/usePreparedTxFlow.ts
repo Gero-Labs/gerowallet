@@ -220,7 +220,7 @@ export function usePreparedTxFlow<
             ...(credentials.privateKeyBytes ? { privateKeyBytes: Array.from(credentials.privateKeyBytes) } : {}),
           },
         })) as Reply<{ witnesses?: string; error?: string }>;
-        if (!signed?.data?.witnesses) {
+        if (signed?.data?.error || typeof signed?.data?.witnesses !== 'string' || !signed.data.witnesses.trim()) {
           if (isRefusal(signed?.data?.error)) return expired();
           stage.value = 'review';
           return fail(PREPARED_TX_SIGN_FAILED);
@@ -234,7 +234,8 @@ export function usePreparedTxFlow<
         method: MessageTypes.SUBMIT_TX,
         data: { txCbor: transaction.txCbor, witnessHex },
       })) as Reply<{ txId?: string; error?: string }>;
-      if (!submitted?.data?.txId) {
+      const txId = submitted?.data?.txId;
+      if (submitted?.data?.error || typeof txId !== 'string' || !txId.trim()) {
         const refused = typeof submitted?.data?.error === 'string' ? options.submitRefusalCode?.(submitted.data.error) : undefined;
         if (!refused) return unconfirmed();
         // The network said no, for a reason the caller recognised: nothing is on its way.
@@ -242,7 +243,7 @@ export function usePreparedTxFlow<
         stage.value = 'idle';
         return fail(refused);
       }
-      submittedTxId.value = submitted.data.txId;
+      submittedTxId.value = txId.trim();
       stage.value = 'done';
       return true;
     } catch {
