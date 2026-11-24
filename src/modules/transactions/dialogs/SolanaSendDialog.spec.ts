@@ -187,3 +187,56 @@ describe('SolanaSendDialog: a token', () => {
     expect(wrapper.find('[data-test="sol-password"]').exists()).toBe(false);
   });
 });
+
+describe('SolanaSendDialog: an NFT', () => {
+  const NFT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+  const TOKEN = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const NFT_QUOTE = { mint: NFT, decimals: 0, amount: '1', received: '1', createsAccount: false, rentLamports: '0', feeLamports: '5000' };
+
+  beforeEach(() => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.SOLANA, network: Network.DEVNET, publicKey: FROM, encryptionMethod: 'password' } as never;
+    const store = walletStore as unknown as { solana: unknown; solanaNfts: unknown };
+    store.solana = {
+      lamports: '2000000000',
+      tokens: [{ mint: NFT, amount: '1', decimals: 0, tokenAccount: TO }, { mint: TOKEN, amount: '5000000', decimals: 6, tokenAccount: TO }],
+    };
+    store.solanaNfts = { [NFT]: { mint: NFT, name: 'Mad Lad #7', standard: 'nonFungible', attributes: [] } };
+    send.mockReset();
+    send.mockImplementation(async ({ method }: { method: string }) => {
+      if (method === MessageTypes.SOLANA_SEND_QUOTE) return { data: { success: true, result: QUOTE } };
+      if (method === MessageTypes.SOLANA_TOKEN_SEND_QUOTE) return { data: { success: true, result: NFT_QUOTE } };
+      return { data: { success: true, result: { signature: SIGNATURE } } };
+    });
+  });
+
+  it('sends that NFT, one unit, with no asset or amount to choose', async () => {
+    const wrapper = mount(SolanaSendDialog as unknown as Parameters<typeof mount>[0], {
+      props: { modelValue: true, nftMint: NFT },
+      global: { plugins: [createTestVuetify()], mocks: { $t: (key: string) => key } },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-test="sol-nft"]').text()).toContain('Mad Lad #7');
+    expect(wrapper.find('[data-test="sol-asset"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="sol-amount"]').exists()).toBe(false);
+
+    await wrapper.find('[data-test="sol-recipient"]').setValue(TO);
+    await wrapper.find('[data-test="sol-continue"]').trigger('click');
+    await flushPromises();
+    const request = { mint: NFT, recipientAddress: TO, amount: '1', feeLevel: 'standard' };
+    expect(send).toHaveBeenCalledWith({ method: MessageTypes.SOLANA_TOKEN_SEND_QUOTE, data: request });
+    await wrapper.find('[data-test="sol-password"]').setValue('pw');
+    await wrapper.find('[data-test="sol-send"]').trigger('click');
+    await flushPromises();
+    expect(send).toHaveBeenLastCalledWith({
+      method: MessageTypes.SEND_SOLANA_TOKEN,
+      data: { ...request, maxSolCost: '5000', minReceived: '1', password: 'pw' },
+    });
+  });
+
+  it('keeps NFTs out of the token picker', async () => {
+    const wrapper = render();
+    await flushPromises();
+    const items = wrapper.findComponent({ name: 'VSelect' }).props('items') as Array<{ value: string }>;
+    expect(items.map((i) => i.value)).toEqual(['SOL', TOKEN]);
+  });
+});

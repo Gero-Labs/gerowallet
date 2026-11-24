@@ -7,9 +7,10 @@ import { Blockchain } from '@/models/types';
 
 const store = vi.hoisted(() => {
   const empty = () => ({ lamports: null, tokens: null, tipSlot: null, historyTruncated: false });
-  const state: { solana: Record<string, unknown>; solanaTransactions: Array<Record<string, unknown>> } = {
+  const state: { solana: Record<string, unknown>; solanaTransactions: Array<Record<string, unknown>>; solanaNfts: Record<string, unknown> } = {
     solana: empty(),
     solanaTransactions: [],
+    solanaNfts: {},
   };
   return {
     empty,
@@ -17,6 +18,7 @@ const store = vi.hoisted(() => {
     setSolanaTransactions: vi.fn((txs: Array<Record<string, unknown>>) => { state.solanaTransactions = txs; }),
     setSolanaState: vi.fn((update: Record<string, unknown>) => { state.solana = { ...state.solana, ...update }; }),
     flush: vi.fn(async () => undefined),
+    setSolanaNfts: vi.fn((nfts: Record<string, unknown>) => { state.solanaNfts = nfts; }),
   };
 });
 
@@ -27,19 +29,22 @@ vi.mock('@cardano-sdk/core', () => ({ Serialization: {} }));
 vi.mock('@/stores/loading', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: { setTip: vi.fn() } }));
 vi.mock('@/stores/walletStore', () => ({
-  default: { state: {}, setSolanaTransactions: store.setSolanaTransactions, setSolanaState: store.setSolanaState },
+  default: { state: {}, setSolanaTransactions: store.setSolanaTransactions, setSolanaState: store.setSolanaState, setSolanaNfts: store.setSolanaNfts },
   walletStore: store.state,
   emptySolanaState: store.empty,
   flushWalletStorePersistence: store.flush,
 }));
 vi.mock('@/services/websocket.service', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
+vi.mock('@/api/solana-api', () => ({ SolanaApi: class { getNftMetadata = vi.fn(async () => { throw new Error('no network in tests'); }); } }));
 
 function setup(chain = Blockchain.SOLANA, cursor = 0) {
   let syncRow: Record<string, unknown> | undefined = cursor ? { id: 1, height: cursor } : undefined;
   const put = vi.fn(async (row: Record<string, unknown>) => { syncRow = row; });
   const wallet = {
     chain,
+    id: 7,
+    network: 'Devnet',
     getLastSyncInfo: vi.fn(async () => syncRow),
     getDb: vi.fn(async () => ({ table: () => ({ put }) })),
   };
@@ -56,6 +61,8 @@ beforeEach(() => {
   store.setSolanaTransactions.mockClear();
   store.setSolanaState.mockClear();
   store.flush.mockClear();
+  store.state.solanaNfts = {};
+  store.setSolanaNfts.mockClear();
 });
 
 describe('applySolanaSync', () => {
@@ -166,5 +173,45 @@ describe('handleSolanaForceResync', () => {
     expect(store.state.solanaTransactions).toEqual([]);
     expect(store.state.solana).toEqual(store.empty());
     expect(syncRow()).toMatchObject({ id: 1, height: 0 });
+  });
+});
+
+describe('syncSolanaNfts', () => {
+  const A = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+  const B = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const C = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+  const held = (...mints: string[]) => mints.map((mint) => ({ mint, amount: '1', decimals: 0 }));
+  const row = (mint: string) => ({ mint, standard: 'nonFungible', name: mint.slice(0, 3), offChain: true, fetchedAt: 1 });
+
+  it('asks Nexus only about mints it does not know, and keeps what it knows', async () => {
+    const { service } = setup();
+    store.state.solanaNfts = { [A]: row(A) };
+    const api = { getNftMetadata: vi.fn(async (mints: string[]) => mints.map((m) => (m === B ? row(B) : false))) };
+    await service.syncSolanaNfts([...held(A, B, C), { mint: 'X', amount: '5', decimals: 6 }], api as never);
+    expect(api.getNftMetadata).toHaveBeenCalledWith([B, C]);
+    expect(store.setSolanaNfts).toHaveBeenCalledWith({ [A]: row(A), [B]: row(B), [C]: false });
+  });
+
+  it('drops NFTs no longer held, without asking anything', async () => {
+    const { service } = setup();
+    store.state.solanaNfts = { [A]: row(A), [B]: row(B) };
+    const api = { getNftMetadata: vi.fn() };
+    await service.syncSolanaNfts(held(B), api as never);
+    expect(api.getNftMetadata).not.toHaveBeenCalled();
+    expect(store.setSolanaNfts).toHaveBeenCalledWith({ [B]: row(B) });
+  });
+
+  it('keeps what it knows when Nexus fails, and changes nothing when nothing changed', async () => {
+    const { service } = setup();
+    store.state.solanaNfts = { [A]: row(A) };
+    await service.syncSolanaNfts(held(A, B), { getNftMetadata: vi.fn(async () => { throw new Error('down'); }) } as never);
+    expect(store.setSolanaNfts).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for another chain', async () => {
+    const { service } = setup(Blockchain.CARDANO);
+    const api = { getNftMetadata: vi.fn() };
+    await service.syncSolanaNfts(held(A), api as never);
+    expect(api.getNftMetadata).not.toHaveBeenCalled();
   });
 });
