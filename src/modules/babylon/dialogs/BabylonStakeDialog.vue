@@ -4,7 +4,7 @@
     :isOpen="props.modelValue"
     :title="$t('babylon.stakeDialog.title')"
     :img="assts.coinsStacked"
-    img-color="var(--g-accent)"
+    img-color="var(--g-text-1)"
     :min-height="0"
     :scrollable="true"
     :loading="loading"

@@ -25,7 +25,8 @@ vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: (...args: unkn
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: (...args: unknown[]) => txToLedger(...args) } }));
 vi.mock('@/shared/utils/keystone', () => ({
   createKeystoneSignRequest: (...args: unknown[]) => createKeystoneSignRequest(...args),
-  parseSignature: () => ({ witnessSet: 'KEYSTONE_WITNESSES' }),
+  // The answer reader (request id or hash binding) is keystoneTxWitnessSet.spec.ts's subject.
+  keystoneTxWitnessSet: async () => 'KEYSTONE_WITNESSES',
 }));
 vi.mock('@/utils/networks', () => ({ default: { resolveNetwork: () => ({ networkId: 0 }) } }));
 vi.mock('@cardano-sdk/core', async () => {

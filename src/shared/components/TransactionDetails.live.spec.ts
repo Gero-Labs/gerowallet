@@ -4,6 +4,8 @@ import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
+// No market logos here: these tests are about rows, not images (the logo lookup imports market data).
+vi.mock('@/modules/market/composables/useMarketData', () => ({ getTokenByUnit: () => undefined }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
   transactions: [], loggedWallet: { chain: 'Cardano', network: 'Preprod' }, keys: {}, contacts: {}, config: {},
 }) }));

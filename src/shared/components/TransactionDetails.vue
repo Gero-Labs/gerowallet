@@ -442,6 +442,7 @@ import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
 import TxTag from '@/modules/transactions/components/TxTag.vue';
 import filters from '@/shared/utils/filters';
 import { resolveAsset } from '@/shared/utils/resolver';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Buffer } from 'buffer';
@@ -612,8 +613,12 @@ const relativeTime = computed(() => time.format(txDate.value));
 const adaDelta = computed(() => Number(liveTx.value.ada ?? 0));
 
 const verb = computed(() => {
-  // A self transfer moves nothing out of the wallet but the fee
+  // A self transfer moves nothing out of the wallet but the fee; nor does a certificate
+  // transaction (a vote delegation) whose only outflow is exactly its fee. One that also
+  // paid a deposit did send more, and says so.
   if (kind.value === 'self') return t('signTx.networkFee');
+  const fee = Number(liveTx.value.body?.fee ?? 0);
+  if (fee > 0 && adaDelta.value === -fee) return t('signTx.networkFee');
   if (adaDelta.value > 0) return t('transactions.received');
   if (adaDelta.value < 0) return t('transactions.sent');
   return '';
@@ -651,6 +656,16 @@ const ioSummary = computed(() =>
 // ---------------------------------------------------------------------------
 // Assets
 // ---------------------------------------------------------------------------
+/**
+ * Gero's market logo over a token's own metadata image, as the holdings list shows it: the
+ * metadata can carry an old image (GERO's did). Reactive on the market list, so a logo that
+ * loads later replaces the metadata one.
+ */
+const withMarketImage = (info: ReturnType<typeof resolveAsset>) => {
+  const marketImg = info?.unit ? getTokenByUnit(info.unit)?.img : undefined;
+  return marketImg ? { ...info, img: marketImg } : info;
+};
+
 const txAssets = computed(() => {
   if (liveTx.value) {
     // Guard against missing asset arrays (pending transactions may not have these fields yet)
@@ -663,7 +678,7 @@ const txAssets = computed(() => {
         // Defense-in-depth: a single asset that fails to resolve must not crash
         // the entire transaction-details view.
         try {
-          map[asset.unit] = resolveAsset(asset);
+          map[asset.unit] = withMarketImage(resolveAsset(asset));
         } catch (e) {
           console.warn('[TransactionDetails] resolveAsset failed for', asset?.unit, e);
         }
@@ -678,7 +693,7 @@ const assetInfo = (asset: { unit: string; quantity: number }) => {
   const cached = txAssets.value[asset.unit];
   if (cached) return cached;
   try {
-    return resolveAsset(asset);
+    return withMarketImage(resolveAsset(asset));
   } catch {
     return null;
   }

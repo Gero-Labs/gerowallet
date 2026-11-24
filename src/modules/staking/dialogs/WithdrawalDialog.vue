@@ -1,58 +1,52 @@
 <template>
-  <BaseDialog persistent :width="850" :isOpen="isOpen" @close="resetState(); $emit('close')" :min-height="300" :title="t('staking.withdrawStakingRewards')" :loading="loading"
+  <BaseDialog persistent :width="560" :img="assets.withdrawalSvg" img-color="var(--g-text-1)" :isOpen="isOpen" @close="resetState(); $emit('close')" :min-height="300" :title="t('staking.withdrawStakingRewards')" :loading="loading"
               :subtitle="t('staking.withdrawSubtitle')">
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-      <v-alert
-        border="start"
-        color="primary"
-        type="info"
-        prominent
-        class="text-left"
-      >
-        <ul>
-          <li>{{ $t('staking.rewardsEarnedByDelegating') }}</li>
-          <li>{{ $t('staking.stakingAllowsPassiveIncome') }}</li>
-          <li>{{ $t('staking.rewardsDistributedEveryEpoch') }}</li>
-          <li>{{ $t('staking.rewardsAutoRestaked') }}</li>
-        </ul>
-      </v-alert>
+    <!-- What the withdrawal does, as a receipt: rewards, less the fee (and a DRep
+         donation when one applies), and what reaches the wallet. -->
+    <v-card-text class="px-3 pb-2" style="z-index: 1" v-if="account && tx">
+      <div class="wd-receipt glass-tier">
+        <div class="wd-row">
+          <span class="wd-k">{{ $t('staking.rewards') }}</span>
+          <span class="wd-v g-num">{{ toCurrency(withdrawals) }}</span>
+        </div>
+        <div class="wd-row">
+          <span class="wd-k">{{ $t('signTx.networkFee') }}</span>
+          <span class="wd-v g-num">−{{ toCurrency(tx?.body?.fee?.toString() || '0') }}</span>
+        </div>
+        <div class="wd-row" v-if="compensationInfo && !compensationInfo.belowMinimum && !skipCompensation">
+          <span class="wd-k">{{ $t('governance.compensationAmount', { percent: (compensationInfo.bps / 10).toFixed(1) + '%' }) }}</span>
+          <span class="wd-v g-num">−{{ toCurrency(compensationInfo.donationLovelace) }}</span>
+        </div>
+        <div class="wd-row wd-row--total">
+          <span class="wd-k">{{ $t('governance.youReceive') }}</span>
+          <span class="wd-total g-num">{{ toCurrency(netWithdrawal) }}</span>
+        </div>
+      </div>
     </v-card-text>
 
     <!-- CIP-0149: DRep Compensation Breakdown -->
     <v-card-text class="px-3 pt-0" v-if="compensationInfo && !compensationInfo.belowMinimum && !skipCompensation">
-      <v-card flat variant="outlined" class="rounded-lg pa-3" style="border-color: var(--v-primary-base) !important">
-        <div class="d-flex align-center mb-2">
-          <v-icon size="small" color="primary" class="mr-2">mdi-gift-outline</v-icon>
-          <span class="text-subtitle-2 white--text font-weight-medium">{{ $t('governance.drepCompensation') }}</span>
+      <!-- The donation's amount is a line of the receipt above; this explains it and offers the skip. -->
+      <div class="wd-note glass-tier">
+        <div class="wd-note__head">
+          <v-icon size="small" color="primary">mdi-gift-outline</v-icon>
+          <span class="t-body font-weight-medium">{{ $t('governance.drepCompensation') }}</span>
         </div>
-        <p class="text-caption text--secondary mb-3">
+        <p class="t-caption wd-note__text">
           {{ $t('governance.compensationWithdrawDesc', {
             drepName: currentDRepName,
             percent: (compensationInfo.bps / 10).toFixed(1) + '%'
           }) }}
         </p>
-        <div class="d-flex justify-space-between text-caption mb-1">
-          <span>{{ $t('governance.rewardsBeingWithdrawn') }}</span>
-          <span>{{ toCurrency(withdrawals) }}</span>
-        </div>
-        <div class="d-flex justify-space-between text-caption mb-1 primary--text">
-          <span>{{ $t('governance.compensationAmount', { percent: (compensationInfo.bps / 10).toFixed(1) + '%' }) }}</span>
-          <span>−{{ toCurrency(compensationInfo.donationLovelace) }}</span>
-        </div>
-        <v-divider class="my-1"></v-divider>
-        <div class="d-flex justify-space-between text-subtitle-2 font-weight-bold mt-1">
-          <span>{{ $t('governance.youReceive') }}</span>
-          <span>{{ toCurrency(withdrawals - compensationInfo.donationLovelace) }}</span>
-        </div>
         <v-checkbox
+          color="primary"
           :model-value="skipCompensation"
           @update:model-value="emit('update:skipCompensation', $event)"
           :label="$t('governance.skipCompensationThisTime')"
           density="compact"
           hide-details
-          class="mt-2 pt-0"
         />
-      </v-card>
+      </div>
     </v-card-text>
 
     <!-- CIP-0149: Below minimum notice -->
@@ -65,26 +59,18 @@
       </v-alert>
     </v-card-text>
 
-    <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
-      <v-form ref="form" v-model="valid">
-        <v-row no-gutters>
-          <v-col :cols="cols">
-            <h4>{{ $t('staking.rewardsAmount') }}
-              <v-btn size="x-small" icon variant="text">
-                <v-icon size="small">mdi-information-outline</v-icon>
-              </v-btn>
-            </h4>
-            <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
-          </v-col>
-          <v-col :cols="cols">
-            <h4>{{ $t('staking.txFee') }}</h4>
-            <h4><strong>{{ toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
-          </v-col>
-          <v-col :cols="cols">
-            <h4>{{ $t('common.total') }}</h4>
-            <h4><strong>{{ toCurrency(netWithdrawal) }}</strong></h4>
-          </v-col>
-          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
+    <!-- Background on rewards: quiet, below the amounts it explains. -->
+    <v-card-text class="px-3 pt-0">
+      <ul class="wd-about t-caption">
+        <li>{{ $t('staking.rewardsEarnedByDelegating') }}</li>
+        <li>{{ $t('staking.stakingAllowsPassiveIncome') }}</li>
+        <li>{{ $t('staking.rewardsDistributedEveryEpoch') }}</li>
+        <li>{{ $t('staking.rewardsAutoRestaked') }}</li>
+      </ul>
+    </v-card-text>
+
+    <v-card-actions class="wd-actions" v-if="account && tx">
+      <v-form ref="form" v-model="valid" class="wd-form">
             <!-- Transaction Authentication Section -->
             <TransactionAuthSection
               :wallet-type="loggedWallet?.type"
@@ -110,37 +96,19 @@
               @submit="signWithdrawalTx"
               @enter="signWithdrawalTx"
               @password-field-ref="setPasswordFieldRef"
-              button-style="width: 295px; max-width: 295px"
+              button-style="width: 100%"
             />
             <!-- Hide action button for PRF wallets (handled above), show for password/hardware wallets -->
-            <v-btn
-              v-if="!isPrfWallet && isSubmit"
-              color="primary"
-              elevation="0"
-              @click="signWithdrawalTx"
-              height="40"
-              :disabled="loading || !valid"
+            <GButton
+              v-if="!isPrfWallet"
+              tier="primary"
+              block
+              :disabled="!valid"
               :loading="loading"
-              class="mx-2"
-              style="margin-bottom: 1px"
+              @click="signWithdrawalTx()"
             >
-              {{ $t('staking.submitTransaction') }}
-            </v-btn>
-            <v-btn
-              v-else-if="!isPrfWallet && !isSubmit"
-              color="primary"
-              elevation="0"
-              @click="signWithdrawalTx"
-              height="40"
-              :disabled="loading || !valid"
-              :loading="loading"
-              class="mx-2"
-              style="margin-bottom: 1px"
-            >
-              {{ $t('staking.signAndWithdraw') }}
-            </v-btn>
-          </v-col>
-        </v-row>
+              {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndWithdraw') }}
+            </GButton>
       </v-form>
     </v-card-actions>
 
@@ -163,6 +131,8 @@ import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
 import { WalletType } from '@/models/types';
@@ -267,10 +237,6 @@ const currentDRepName = computed(() => {
   return drep.drep_id || '';
 });
 
-const cols = computed(() => {
-  return 4;
-});
-
 const signWithdrawalTx = async () => {
   await handleSign(form.value || undefined);
 };
@@ -285,6 +251,80 @@ watch(() => props.isOpen, (val) => {
 });
 
 </script>
-<style scoped>
+<style scoped lang="scss">
+// The amounts as a receipt: label left, figure right, the amount received last and largest.
+.wd-receipt {
+  padding: var(--g-s-3) var(--g-s-4);
+  border-radius: var(--g-r-card);
+}
 
+.wd-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  padding: var(--g-s-1) 0;
+}
+
+.wd-k {
+  color: var(--g-text-2);
+}
+
+.wd-v {
+  color: var(--g-text-1);
+}
+
+.wd-row--total {
+  margin-top: var(--g-s-2);
+  padding-top: var(--g-s-3);
+  border-top: 1px solid var(--g-hairline-1);
+
+  .wd-k {
+    color: var(--g-text-1);
+    font-weight: 600;
+  }
+}
+
+.wd-total {
+  color: var(--g-accent);
+  font-size: 20px;
+  font-weight: 650;
+}
+
+// The DRep donation: its explanation and the skip; its amount is a receipt line.
+.wd-note {
+  padding: var(--g-s-3) var(--g-s-4);
+  border-radius: var(--g-r-card);
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-2);
+  }
+
+  &__text {
+    margin: var(--g-s-2) 0 0;
+    color: var(--g-text-2);
+  }
+}
+
+// Background on rewards, quiet beside the amounts.
+.wd-about {
+  margin: 0;
+  padding-left: var(--g-s-4);
+  color: var(--g-text-3);
+  line-height: 1.6;
+}
+
+// The password (or device toggle) and the action, full width.
+.wd-actions {
+  padding: 0 var(--g-s-3) var(--g-s-3);
+}
+
+.wd-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+}
 </style>

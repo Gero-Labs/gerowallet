@@ -175,7 +175,7 @@
       :isOpen="confirmDialog"
       :title="t('thorchain.confirmSwap')"
       :img="assts.swapSvg"
-      img-color="var(--g-accent)"
+      img-color="var(--g-text-1)"
       :min-height="0"
       @close="confirmDialog = false"
     >

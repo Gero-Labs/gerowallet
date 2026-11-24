@@ -11,6 +11,8 @@ import { CryptoHDKey, CryptoMultiAccounts } from '@keystonehq/bc-ur-registry';
 import { Options } from 'qr-code-styling/lib/types';
 import logo128Url from '@/assets/img/bkp/logo128.png';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Ed25519PublicKey, Ed25519PublicKeyHex, Ed25519Signature, Ed25519SignatureHex, ready } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
 import { createBuilderWithSigStructure, createCoseKeyHex, toHexArray, buildAndSignData } from '@/shared/utils/converter';
 import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
@@ -152,6 +154,55 @@ export const parseKeystoneAccounts = (cbor: Buffer, accountIndices: number[]): {
 
 export const parseSignature = (ur: UR): CardanoSignature => {
   return sdk.cardano.parseSignature(ur);
+}
+
+/** What a transaction sign request expects back: its id, and the hash when it went the hash route. */
+export interface KeystoneTxAnswerContext {
+  /** The request's id; checked against a wrapped answer when given. */
+  requestId?: string;
+  /** Set for a tx-hash request (`createKeystoneSignRequest` → `txHash`): the hash every signature must cover. */
+  txHash?: string | null;
+}
+
+/**
+ * The witness set (CBOR hex) in a Keystone answer to a transaction sign request.
+ *
+ * A full-transaction request is answered with `CardanoSignature { request id, witness set }`. A
+ * tx-hash request (a transaction of 2048 bytes or more) is answered with the bare witness set and
+ * no request id: the firmware encodes `sign_tx_hash`'s `witness_set.to_bytes()` straight into the
+ * `cardano-signature` UR (keystone3-firmware `cardano_sign_tx_hash_by_icarus`). Read as the wrapped
+ * form, that answer has neither field, so every hash-route signature was refused as invalid
+ * (issue 1518). With no id to compare, such an answer is bound to its request by its signatures
+ * instead: each one must verify over the hash Gero asked for, so a witness set made for another
+ * transaction is refused.
+ */
+export async function keystoneTxWitnessSet(ur: UR, context: KeystoneTxAnswerContext): Promise<string> {
+  if (ur?.type !== 'cardano-signature') throw new Error('Invalid Keystone signature');
+
+  // The SDK reads keys 1 and 2 of a CardanoSignature map; on a bare witness set it finds
+  // neither, and depending on the build returns empty strings or throws.
+  let wrapped: CardanoSignature | undefined;
+  try {
+    wrapped = parseSignature(ur);
+  } catch {
+    wrapped = undefined;
+  }
+  if (wrapped?.witnessSet && typeof wrapped.witnessSet === 'string') {
+    if (context.requestId && wrapped.requestId !== context.requestId) throw new Error('Invalid Keystone signature');
+    return wrapped.witnessSet;
+  }
+
+  if (!context.txHash) throw new Error('Invalid Keystone signature');
+  const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(Buffer.from(ur.cbor).toString('hex')));
+  const signatures = witnessSet.toCore().signatures;
+  if (!signatures?.size) throw new Error('Invalid Keystone signature');
+  await ready();
+  for (const [vkey, signature] of signatures) {
+    const verified = Ed25519PublicKey.fromHex(Ed25519PublicKeyHex(vkey))
+      .verify(Ed25519Signature.fromHex(Ed25519SignatureHex(signature)), HexBlob(context.txHash));
+    if (!verified) throw new Error('Invalid Keystone signature');
+  }
+  return witnessSet.toCbor();
 }
 
 /**

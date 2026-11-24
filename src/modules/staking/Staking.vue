@@ -5,17 +5,21 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat variant="outlined" class="glass-panel">
+        <v-card flat variant="outlined" class="glass-panel staking-pools-card">
+          <!-- PRO (the detailed pool table) pinned to the card's top-right corner, level
+               with the title, whatever else the title row holds. -->
+          <v-switch
+            density="compact"
+            v-model="isPro"
+            :label="$t('staking.pro')"
+            hide-details
+            class="staking-pro-switch"
+          ></v-switch>
           <v-card-title class="pa-0">
-            <v-list-item lines="two">
+            <v-list-item lines="two" class="staking-pools-head">
               <div class="g-list-content">
                 <v-list-item-title class="staking-header">
                   {{ $t('staking.availableStakePools') }}
-                  <v-spacer></v-spacer>
-                  <div class="staking-pro-toggle">
-                    <p class="mr-5 my-auto">{{ $t('staking.pro') }}</p>
-                    <v-switch inset density="compact" v-model="isPro" hide-details class="staking-switch" :aria-label="$t('staking.pro')"> </v-switch>
-                  </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
                   {{ $t('staking.earnRewardsByStakingDesc', {
@@ -648,13 +652,21 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 
-.staking-pro-toggle {
-  display: flex;
+/* PRO sits in the card's top-right corner, level with the title. The title row keeps
+   clear of it, so the title and the "Stake with Gero" button never run under it. */
+.staking-pools-card {
+  position: relative;
+
+  .staking-pools-head {
+    padding-inline-end: 120px;
+  }
 }
 
-.staking-switch {
-  margin-top: 0;
-  align-items: center;
+.staking-pro-switch {
+  position: absolute;
+  top: var(--g-s-3);
+  right: var(--g-s-4);
+  z-index: 1;
 }
 
 .staking-gero-support {

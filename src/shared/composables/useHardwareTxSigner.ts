@@ -8,7 +8,7 @@ import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
-import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, keystoneTxWitnessSet } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 
 /**
@@ -54,6 +54,8 @@ export function useHardwareTxSigner(opts: HardwareTxSignerOptions = {}) {
   const keystoneShow = ref(false);
   let keystoneResolve: ((witnessHex: string) => void) | null = null;
   let keystoneReject: ((e: Error) => void) | null = null;
+  // The request the dialog shows: the answer is checked against it (keystoneTxWitnessSet).
+  let keystoneRequest: { requestId: string; txHash: string | null } | null = null;
 
   async function signLedger(cbor: string): Promise<string> {
     const w = walletStore.loggedWallet;
@@ -101,6 +103,7 @@ export function useHardwareTxSigner(opts: HardwareTxSignerOptions = {}) {
     );
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
+    keystoneRequest = { requestId: signRequestResponse.requestId, txHash: signRequestResponse.txHash ?? null };
     keystoneShow.value = true;
 
     return new Promise<string>((resolve, reject) => {
@@ -109,20 +112,23 @@ export function useHardwareTxSigner(opts: HardwareTxSignerOptions = {}) {
     });
   }
 
-  function onKeystoneScan(ur: UR) {
+  async function onKeystoneScan(ur: UR) {
+    const resolve = keystoneResolve;
+    const reject = keystoneReject;
+    const request = keystoneRequest;
+    keystoneResolve = null;
+    keystoneReject = null;
+    keystoneRequest = null;
     try {
-      const signature = parseSignature(ur);
-      if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-        throw new Error('Invalid Keystone signature');
-      }
+      if (!request) throw new Error('Invalid Keystone signature');
+      // Wrapped answer: checked by request id. Hash-route answer (bare witness set): its
+      // signatures must cover request.txHash.
+      const witnessSet = await keystoneTxWitnessSet(ur, request);
       keystoneShow.value = false;
-      keystoneResolve?.(signature.witnessSet);
+      resolve?.(witnessSet);
     } catch (e) {
       keystoneShow.value = false;
-      keystoneReject?.(e as Error);
-    } finally {
-      keystoneResolve = null;
-      keystoneReject = null;
+      reject?.(e as Error);
     }
   }
 
@@ -131,6 +137,7 @@ export function useHardwareTxSigner(opts: HardwareTxSignerOptions = {}) {
     keystoneReject?.(new Error('Keystone signing cancelled'));
     keystoneResolve = null;
     keystoneReject = null;
+    keystoneRequest = null;
   }
 
   function failKeystone(msg: string) {

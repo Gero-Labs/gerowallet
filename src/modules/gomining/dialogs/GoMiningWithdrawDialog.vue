@@ -4,7 +4,7 @@
     :isOpen="modelValue"
     :title="t('gomining.withdrawEarnings')"
     :img="assts.withdrawalSvg"
-    img-color="var(--g-accent)"
+    img-color="var(--g-text-1)"
     :min-height="0"
     :loading="submitting"
     :persistent="submitting"

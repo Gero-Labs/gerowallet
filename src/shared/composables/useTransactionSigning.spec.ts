@@ -19,7 +19,14 @@ vi.mock('@/chrome/cardanoJsSdkCbor', () => ({ serializeCardanoJsSdkTx: (tx: unkn
 vi.mock('@cardano-sdk/core', () => ({ Serialization: { TransactionWitnessSet: { fromCore: () => ({ toCbor: () => 'witness' }) }, Transaction: { fromCbor: vi.fn() } } }));
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: mocks.ledger, ledgerErrorHandling: vi.fn() } }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: vi.fn() }));
-vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: mocks.createQr, parseSignature: mocks.parseQr }));
+vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: mocks.createQr, parseSignature: mocks.parseQr,
+  // The real reader's request-id binding, over the parseQr stub (hash binding: keystoneTxWitnessSet.spec.ts).
+  keystoneTxWitnessSet: async (ur: unknown, ctx: { requestId?: string }) => {
+    const signature = mocks.parseQr(ur) as { requestId?: string; witnessSet?: string } | undefined;
+    if (!signature?.witnessSet || (ctx.requestId && signature.requestId !== ctx.requestId)) throw new Error('Invalid Keystone signature');
+    return signature.witnessSet;
+  },
+}));
 vi.mock('@/stores/featureFlagsStore', () => ({ featureFlagsStore: { isCrossDeviceSigningEnabled: () => false, state: { flags: {} } } }));
 vi.mock('@/stores/remoteSigningStore', () => ({ remoteSigningStore: { ensureLoaded: async () => {} } }));
 vi.mock('@/utils/networks', () => ({ default: { resolveNetwork: () => ({}) } }));
