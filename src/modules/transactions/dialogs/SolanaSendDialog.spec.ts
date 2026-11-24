@@ -164,7 +164,11 @@ describe('SolanaSendDialog: a token', () => {
     await wrapper.find('[data-test="sol-password"]').setValue('pw');
     await wrapper.find('[data-test="sol-send"]').trigger('click');
     await flushPromises();
-    expect(send).toHaveBeenLastCalledWith({ method: MessageTypes.SEND_SOLANA_TOKEN, data: { ...request, password: 'pw' } });
+    // The reviewed cost and amount received go along as limits the worker holds the send to.
+    expect(send).toHaveBeenLastCalledWith({
+      method: MessageTypes.SEND_SOLANA_TOKEN,
+      data: { ...request, maxSolCost: '2046280', minReceived: '1240000', password: 'pw' },
+    });
     expect(wrapper.find('[data-test="sol-sent"]').exists()).toBe(true);
   });
 

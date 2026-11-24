@@ -152,6 +152,19 @@ describe('planning a token send', () => {
     await expect(plan(chain(), request, { fee: 1_250_000n })).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
   });
 
+  it('refuses a pasted token account that a program address owns', async () => {
+    const vault = tokenAccount(DEST, PDA, 0n);
+    await expect(plan(chain({ [DEST]: vault }), { ...request, recipientAddress: DEST })).rejects.toMatchObject({ code: 'RECIPIENT_NOT_WALLET' });
+  });
+
+  it('holds a send to the cost and amount received the user reviewed', async () => {
+    // Reviewed: fee 7000 + deposit 2039280, all 1250000 received.
+    await expect(plan(chain(), { ...request, maxSolCost: '2046280', minReceived: '1250000' })).resolves.toBeTruthy();
+    await expect(plan(chain(), { ...request, maxSolCost: '2046279' })).rejects.toMatchObject({ code: 'COST_CHANGED' });
+    await expect(plan(chain(), { ...request, minReceived: '1250000' }, { fee: 1n })).rejects.toMatchObject({ code: 'COST_CHANGED' });
+    await expect(plan(chain(), { ...request, maxSolCost: '-1' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  });
+
   it('says LOOKUP_FAILED when Nexus cannot be read', async () => {
     const a = api(chain());
     a.getAccounts.mockRejectedValueOnce(new Error('down'));

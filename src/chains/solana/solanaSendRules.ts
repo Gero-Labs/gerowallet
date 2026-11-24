@@ -107,6 +107,7 @@ export function solanaSendErrorKey(code: string | undefined): string {
     case 'INSUFFICIENT_SOL': return 'solana.token.insufficientSol';
     case 'SIMULATION_FAILED': return 'solana.token.simulationFailed';
     case 'LOOKUP_FAILED': return 'solana.token.lookupFailed';
+    case 'COST_CHANGED': return 'solana.token.costChanged';
     default: return 'solana.sendFailed';
   }
 }

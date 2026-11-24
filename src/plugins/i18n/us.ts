@@ -6815,6 +6815,7 @@ export default {
   'solana.token.insufficientSol': "You don't have enough SOL for the network fee (and the deposit, if the recipient needs a token account).",
   'solana.token.simulationFailed': 'The network would reject this transfer, so nothing was signed. Try again later.',
   'solana.token.lookupFailed': "Couldn't check this transfer right now. Try again in a moment.",
+  'solana.token.costChanged': 'The cost changed since you reviewed it. Go back and review the send again.',
   'solana.dapp.warn.assignsWallet': 'Hands control of your Solana account to another program.',
   'solana.dapp.warn.givesTokenAccount': 'Hands one of your token accounts to another address.',
   'solana.dapp.warn.nonceAuthority': 'Hands a nonce account you control to another address.',

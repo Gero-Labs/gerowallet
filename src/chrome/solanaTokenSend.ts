@@ -43,7 +43,8 @@ export type SolanaTokenSendRefusal =
   | 'RECIPIENT_WRONG_TOKEN'
   | 'INSUFFICIENT_SOL'
   | 'SIMULATION_FAILED'
-  | 'LOOKUP_FAILED';
+  | 'LOOKUP_FAILED'
+  | 'COST_CHANGED';
 
 export class SolanaTokenSendError extends Error {
   constructor(readonly code: SolanaTokenSendRefusal) {
@@ -66,6 +67,13 @@ export interface SolanaTokenSendRequest {
   /** Raw units, decimal string. */
   amount?: unknown;
   feeLevel?: unknown;
+  /**
+   * Limits from the review the user approved (decimal strings, optional): the plan is refused if it
+   * would cost more SOL (fee plus deposit) or deliver less than that review showed. They can only
+   * narrow what is sent, never widen it.
+   */
+  maxSolCost?: unknown;
+  minReceived?: unknown;
 }
 
 export interface SolanaTokenPlan {
@@ -208,6 +216,8 @@ export async function planSolanaTokenSend(
   if (pasted) {
     if (pasted.mint !== mint || recipientAccount.owner !== tokenProgram) throw new SolanaTokenSendError('RECIPIENT_WRONG_TOKEN');
     if (pasted.owner === from) throw new SolanaTokenSendError('SAME_ADDRESS');
+    // A token account owned by a program address (a vault) is refused like such a recipient.
+    if (!isOnCurveSolanaAddress(pasted.owner)) throw new SolanaTokenSendError('RECIPIENT_NOT_WALLET');
     recipient = pasted.owner;
     destination = recipientInput;
     destinationAccount = recipientAccount;
@@ -250,7 +260,7 @@ export async function planSolanaTokenSend(
   } catch {
     throw new SolanaTokenSendError('LOOKUP_FAILED');
   }
-  if (!simulation.success || !simulation.after) {
+  if (!simulation.success || !simulation.after || simulation.after.length < 3) {
     const needed = feeLamports + (createsAccount ? TOKEN_ACCOUNT_RENT_ESTIMATE : 0n);
     if (senderAccount.lamports === null || senderAccount.lamports < needed) throw new SolanaTokenSendError('INSUFFICIENT_SOL');
     throw new SolanaTokenSendError('SIMULATION_FAILED');
@@ -264,6 +274,16 @@ export async function planSolanaTokenSend(
   const received = dstAfter.amount - destinationBefore;
   if (received <= 0n || received > amount) throw new SolanaTokenSendError('SIMULATION_FAILED');
   const rentLamports = createsAccount ? simulation.after[2].lamports ?? 0n : 0n;
+
+  const { maxSolCost, minReceived } = request;
+  if (maxSolCost !== undefined) {
+    if (typeof maxSolCost !== 'string' || !/^\d+$/.test(maxSolCost)) throw new SolanaTokenSendError('INVALID_REQUEST');
+    if (feeLamports + rentLamports > BigInt(maxSolCost)) throw new SolanaTokenSendError('COST_CHANGED');
+  }
+  if (minReceived !== undefined) {
+    if (typeof minReceived !== 'string' || !/^\d+$/.test(minReceived)) throw new SolanaTokenSendError('INVALID_REQUEST');
+    if (received < BigInt(minReceived)) throw new SolanaTokenSendError('COST_CHANGED');
+  }
 
   return { message, mint, tokenProgram, decimals, amount, received, recipient, destination, createsAccount, rentLamports, feeLamports };
 }

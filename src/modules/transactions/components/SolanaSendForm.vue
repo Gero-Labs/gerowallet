@@ -539,8 +539,15 @@ async function confirmSend(): Promise<void> {
   loading.value = true;
   sendError.value = '';
   try {
+    // A token send carries the reviewed cost and amount received as limits the worker holds it to.
     const data: Record<string, unknown> = selectedToken.value
-      ? tokenRequest()
+      ? {
+        ...tokenRequest(),
+        ...(tokenQuote.value ? {
+          maxSolCost: (BigInt(tokenQuote.value.feeLamports) + BigInt(tokenQuote.value.rentLamports)).toString(),
+          minReceived: tokenQuote.value.received,
+        } : {}),
+      }
       : { recipientAddress: recipient.value, lamports: amount.value.toString(), feeLevel: feeLevel.value };
     if (isHardware.value) {
       const response = await sendFromDevice(data);

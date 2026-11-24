@@ -6583,6 +6583,7 @@ export default {
   'solana.token.insufficientSol': 'No tienes suficiente SOL para la comisión de red (y el depósito, si el destinatario necesita una cuenta de token).',
   'solana.token.simulationFailed': 'La red rechazaría esta transferencia, así que no se firmó nada. Vuelve a intentarlo más tarde.',
   'solana.token.lookupFailed': 'No se pudo comprobar esta transferencia ahora. Vuelve a intentarlo en un momento.',
+  'solana.token.costChanged': 'El costo cambió desde que lo revisaste. Vuelve atrás y revisa el envío otra vez.',
   'solana.dapp.warn.assignsWallet': 'Entrega el control de tu cuenta de Solana a otro programa.',
   'solana.dapp.warn.givesTokenAccount': 'Entrega una de tus cuentas de tokens a otra dirección.',
   'solana.dapp.warn.nonceAuthority': 'Entrega una cuenta nonce que controlas a otra dirección.',

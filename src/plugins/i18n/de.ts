@@ -6708,6 +6708,7 @@ export default {
   'solana.token.insufficientSol': 'Sie haben nicht genug SOL für die Netzwerkgebühr (und die Hinterlegung, falls der Empfänger ein Token-Konto braucht).',
   'solana.token.simulationFailed': 'Das Netzwerk würde diese Überweisung ablehnen, daher wurde nichts signiert. Versuchen Sie es später erneut.',
   'solana.token.lookupFailed': 'Diese Überweisung konnte gerade nicht geprüft werden. Versuchen Sie es gleich erneut.',
+  'solana.token.costChanged': 'Die Kosten haben sich seit Ihrer Prüfung geändert. Gehen Sie zurück und prüfen Sie die Überweisung erneut.',
   'solana.dapp.warn.assignsWallet': 'Übergibt die Kontrolle über Ihr Solana-Konto an ein anderes Programm.',
   'solana.dapp.warn.givesTokenAccount': 'Übergibt eines Ihrer Token-Konten an eine andere Adresse.',
   'solana.dapp.warn.nonceAuthority': 'Übergibt ein Nonce-Konto, das Sie kontrollieren, an eine andere Adresse.',
