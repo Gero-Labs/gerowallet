@@ -368,7 +368,7 @@ export default defineComponent({
         }
 
         const witnessHex = signResult?.data?.witnesses;
-        if (typeof witnessHex !== 'string' || !witnessHex.trim()) throw new Error('No witness returned from signing.');
+        if (typeof witnessHex !== 'string' || !witnessHex.trim()) throw new Error(t('errors.unknownError'));
 
         // 2. Submit via background SUBMIT_TX (merges witness into the CBOR)
         await submittedTxId(Messaging.sendToBackgroundFromOptions({
