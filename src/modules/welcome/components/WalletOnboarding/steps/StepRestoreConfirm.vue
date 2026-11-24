@@ -46,6 +46,7 @@
       <!-- PRF acknowledgments -->
       <v-form ref="prfForm" v-model="prfFormValid">
         <v-checkbox
+          color="primary"
           v-model="acknowledgments.recoveryPhrase"
           :rules="[rules.required()]"
           hide-details
@@ -57,6 +58,7 @@
         </v-checkbox>
 
         <v-checkbox
+          color="primary"
           v-model="acknowledgments.termsAccepted"
           :rules="[rules.required()]"
           hide-details
@@ -125,6 +127,7 @@
 
         <!-- Password acknowledgments -->
         <v-checkbox
+          color="primary"
           v-model="acknowledgments.passwordRecovery"
           :rules="[rules.required()]"
           hide-details
@@ -136,6 +139,7 @@
         </v-checkbox>
 
         <v-checkbox
+          color="primary"
           v-model="acknowledgments.termsAccepted"
           :rules="[rules.required()]"
           hide-details

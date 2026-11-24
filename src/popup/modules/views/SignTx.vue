@@ -295,7 +295,7 @@ import ledger from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, keystoneTxWitnessSet } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
@@ -345,6 +345,8 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 let keystoneApprovalCurrent: (() => boolean) | null = null;
 let keystoneRequestId = '';
+// The hash a tx-hash request asked the Keystone to sign (null for a full-transaction request).
+let keystoneTxHash: string | null = null;
 
 const addresses = computed(() => {
   return new Set([...keys.value.payment, ...keys.value.change].map(el => el.address));
@@ -783,6 +785,7 @@ const sign = () => approval.run(async () => {
           keystoneType.value = signRequestResponse.ur.type;
           keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
           keystoneRequestId = signRequestResponse.requestId;
+          keystoneTxHash = signRequestResponse.txHash ?? null;
 
           // Show overlay with animated QR code
           keystoneApprovalCurrent = approvalCurrent;
@@ -860,13 +863,15 @@ const onKeystoneScan = (ur: UR) => approval.run(async () => {
       existingWitnesses = fullTx.witnessSet();
     }
 
-    const signature = parseSignature(ur);
-    if (!keystoneRequestId || signature.requestId !== keystoneRequestId) {
+    if (!keystoneRequestId) throw new Error('Keystone response does not match the approved request');
+    // A full-transaction answer is wrapped with the request id; a hash-route answer is the bare
+    // witness set, whose signatures must cover keystoneTxHash (keystoneTxWitnessSet).
+    let witnessSetHex: string;
+    try {
+      witnessSetHex = await keystoneTxWitnessSet(ur, { requestId: keystoneRequestId, txHash: keystoneTxHash });
+    } catch {
       throw new Error('Keystone response does not match the approved request');
     }
-    // The SDK unwraps the tagged response in both full-transaction and hash modes.
-    const witnessSetHex = signature.witnessSet;
-    if (!witnessSetHex) throw new Error('Keystone returned empty witness set');
 
     let signatures: Cardano.Signatures;
     try {

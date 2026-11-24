@@ -48,7 +48,7 @@ const chartOptions = computed((): Highcharts.Options => {
       }
     },
     chart: {
-      type: 'line',
+      type: 'column',
       backgroundColor: 'transparent',
       height: 155,
       spacingTop: 15,
@@ -120,19 +120,22 @@ const chartOptions = computed((): Highcharts.Options => {
       opposite: true,
     },
     colors: [chartAccent, '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+    // One column per epoch: a reward is a per-epoch amount, so bars read better than a
+    // line that dips to zero between the epochs that paid.
+    plotOptions: {
+      column: {
+        borderWidth: 0,
+        borderRadius: 2,
+        pointPadding: 0.1,
+        groupPadding: 0.05,
+      },
+    },
     series: [
       {
-        type: 'line',
+        type: 'column',
         name: 'ADA',
         data: Object.values(props.chartData) as number[],
         color: chartAccent,
-        lineWidth: 2,
-        marker: {
-          radius: 2,
-          fillColor: chartAccent,
-          lineColor: chartAccent,
-          lineWidth: 1
-        }
       },
     ],
     time: { useUTC: true },

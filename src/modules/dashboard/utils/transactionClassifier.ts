@@ -169,8 +169,27 @@ export const isPendingTooLong = (item: StoredTransaction, now: number = Date.now
   return now / 1000 - item.tx_timestamp > 60 * 60;
 };
 
+/** The stake key deposit (2 ADA), which a stake deregistration returns to the wallet. */
+const STAKE_KEY_DEPOSIT_LOVELACE = 2_000_000;
+/** A fee bound for telling a returned deposit from rewards: no wallet transaction here costs 1 ADA. */
+const MAX_FEE_LOVELACE = 1_000_000;
+
 export const isWithdrawal = (item: StoredTransaction, ctx: TxClassifyContext): boolean => {
-  if (!isCardanoTx(item)) return false;
+  if (!isCardanoTx(item)) {
+    // A record Gero Sync just pushed is "thin" (no CBOR, so no body) until the background
+    // heal fills it in. Its UTxOs still tell most of it: every input and output the wallet's
+    // own and the wallet richer afterwards means ADA came in from outside the UTxOs, which is
+    // a reward withdrawal or a returned stake deposit. A gain of the deposit less a fee is
+    // read as the deposit (an unstake) and left to the body; anything else as a withdrawal.
+    // Read as a self transfer, it was titled one and its gain labelled the network fee. The
+    // title is the body's again once the heal fills it in.
+    const gain = Number(item.receivedAmount) - Number(item.sentAmount);
+    const returnedDeposit = gain > STAKE_KEY_DEPOSIT_LOVELACE - MAX_FEE_LOVELACE && gain <= STAKE_KEY_DEPOSIT_LOVELACE;
+    return btcType(item) === undefined
+      && isInternalTransfer(item, ctx)
+      && gain > 0
+      && !returnedDeposit;
+  }
   return (
     item.body?.withdrawals?.length > 0 &&
     ctx.stakeAddress &&
@@ -777,6 +796,12 @@ export const addFundTransferStatus = (
     statuses.push(t('transactions.dexOrder'));
     return;
   }
+  // A reward withdrawal: named for it. Paid back to the wallet's own addresses it is
+  // also an internal transfer, and was titled "Self Transfer".
+  if (isWithdrawal(item, ctx)) {
+    statuses.push(t('transactions.withdrawal'));
+    if (isInternalTransfer(item, ctx)) return;
+  }
   // Every input and output is the wallet's own: nothing left the wallet but the
   // fee, so "Sent Funds" would overstate it.
   if (isInternalTransfer(item, ctx)) {
@@ -948,10 +973,12 @@ export const buildTxTags = (item: StoredTransaction, ctx: TxClassifyContext, t: 
   const tags: TxTag[] = [];
   if (isStakeRegistration(item)) tags.push({ key: 'stakeRegistration', label: t('transactions.stakeRegistration') });
   if (isStakeDeRegistration(item)) tags.push({ key: 'stakeDeregistration', label: t('transactions.stakeDeregistration') });
-  if (isWithdrawal(item, ctx)) tags.push({ key: 'withdrawal', label: t('transactions.withdrawal') });
+  // A withdrawal row's title already says it; the tag is for one titled otherwise (an
+  // unstake that also claims the rewards is titled by its certificate).
+  if (kind !== 'withdrawal' && isWithdrawal(item, ctx)) tags.push({ key: 'withdrawal', label: t('transactions.withdrawal') });
   if (isCashback(item)) tags.push({ key: 'cashback', label: t('cashback.cashback') });
-  // A plain self transfer already says so in its title.
-  if (kind !== 'self' && isInternalTransfer(item, ctx)) tags.push({ key: 'internal', label: t('common.internal') });
+  // A plain self transfer already says so in its title, and a withdrawal is paid back to the wallet.
+  if (kind !== 'self' && kind !== 'withdrawal' && isInternalTransfer(item, ctx)) tags.push({ key: 'internal', label: t('common.internal') });
   for (const contact of getTxContacts(item, ctx) ?? []) {
     tags.push(contact.isHandle
       ? { key: `handle-${contact.label}`, label: contact.label.replace(/^\$/, ''), handle: true }

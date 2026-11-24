@@ -138,7 +138,7 @@
             :class="{ 'drep-directory__grid--focus': focusAvailable }"
           >
             <!-- Identity -->
-            <div role="cell" class="drep-directory__col-name drep-directory__identity">
+            <div role="cell" class="drep-directory__col-name drep-directory__identity drep-directory__cell--name">
               <!-- Routed through the in-app ipfs proxy: public gateways answer the
                    extension with 403 + CORP, which is why raw urls rendered blank. -->
               <DRepAvatar class="drep-directory__avatar" :image-url="row.image" :name="row.name" :size="36" />
@@ -163,7 +163,9 @@
             </div>
 
             <!-- Participation -->
-            <div role="cell" class="drep-directory__col-stat">
+            <!-- Each cell names itself in the card layout, where the column header is gone. -->
+            <div role="cell" class="drep-directory__col-stat drep-directory__cell--participation">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.colParticipation') }}</span>
               <template v-if="row.stats.participation.pct !== null">
                 <span class="t-body-lg g-num">{{ row.stats.participation.pct }}%</span>
                 <span class="drep-directory__bar">
@@ -174,7 +176,8 @@
             </div>
 
             <!-- Rationale -->
-            <div role="cell" class="drep-directory__col-stat">
+            <div role="cell" class="drep-directory__col-stat drep-directory__cell--rationale">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.colRationale') }}</span>
               <template v-if="row.stats.rationaleRate.pct !== null">
                 <span class="t-body-lg g-num">{{ row.stats.rationaleRate.pct }}%</span>
                 <span class="t-caption">{{ $t('governance.writesReasons') }}</span>
@@ -183,7 +186,8 @@
             </div>
 
             <!-- Vote pattern -->
-            <div role="cell" class="drep-directory__col-pattern">
+            <div role="cell" class="drep-directory__col-pattern drep-directory__cell--pattern">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.colVotePattern') }}</span>
               <template v-if="row.stats.votePattern.total > 0">
                 <span class="drep-directory__pattern" role="img" :aria-label="row.patternLabel">
                   <span
@@ -203,14 +207,15 @@
 
             <!-- Focus areas. The whole column is hidden when action types are not
                  loaded: inventing a category from a proposal id is not an option. -->
-            <div v-if="focusAvailable" role="cell" class="drep-directory__col-focus">
+            <div v-if="focusAvailable" role="cell" class="drep-directory__col-focus drep-directory__cell--focus">
               <span v-for="area in row.focus" :key="area.type" class="t-caption drep-directory__chip">
                 {{ area.label }}
               </span>
             </div>
 
             <!-- Delegators -->
-            <div role="cell" class="drep-directory__col-num">
+            <div role="cell" class="drep-directory__col-num drep-directory__cell--delegators">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.delegators') }}</span>
               <span v-if="row.stats.delegatorCount !== null" class="t-body g-num">
                 {{ formatInt(row.stats.delegatorCount) }}
               </span>
@@ -218,13 +223,15 @@
             </div>
 
             <!-- Last vote -->
-            <div role="cell" class="drep-directory__col-num">
+            <div role="cell" class="drep-directory__col-num drep-directory__cell--last-vote">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.lastVote') }}</span>
               <span v-if="row.lastVote" class="t-body g-num">{{ row.lastVote }}</span>
               <span v-else class="t-caption">{{ $t('governance.noVoteShort') }}</span>
             </div>
 
             <!-- Voting power -->
-            <div role="cell" class="drep-directory__col-power">
+            <div role="cell" class="drep-directory__col-power drep-directory__cell--power">
+              <span class="t-label drep-directory__cell-label">{{ $t('governance.votingPower') }}</span>
               <span class="t-body-lg g-num">{{ row.power }}</span>
               <span v-if="row.inflow" class="t-caption g-num delta-up">{{ row.inflow }}</span>
             </div>
@@ -232,7 +239,7 @@
             <!-- Action zone. Separated from the data columns by a hairline so the
                  delegate control reads as an action on the row, not a figure in
                  it. -->
-            <div role="cell" class="drep-directory__col-action">
+            <div role="cell" class="drep-directory__col-action drep-directory__cell--action">
               <GButton
                 tier="secondary"
                 compact
@@ -972,6 +979,14 @@ onUnmounted(() => {
   flex-direction: column;
   gap: var(--g-s-4);
   padding: var(--g-s-4);
+  /* The table/card switch below follows the directory's own width, not the window's:
+     beside the navigation drawer the list is much narrower than the viewport. */
+  container-type: inline-size;
+}
+/* A cell's own label: only the card layout shows it, where the column header is gone. */
+.drep-directory__cell-label {
+  display: none;
+  color: var(--g-text-3);
 }
 .drep-directory__header {
   display: flex;
@@ -1153,7 +1168,7 @@ onUnmounted(() => {
 .drep-directory__grid--focus {
   --drep-cols: minmax(0, 2fr) 124px 100px 116px minmax(0, 0.9fr) 76px 76px minmax(0, 1.1fr) 124px;
 }
-@media (max-width: 1180px) {
+@container (max-width: 1060px) {
   /* The header stops being a grid and becomes the page's sort strip: the
      sortable headers are the only sort control, so they must survive the
      collapse even though the columns they label do not. */
@@ -1178,9 +1193,119 @@ onUnmounted(() => {
     width: auto;
     justify-content: flex-start;
   }
+  /* Each row becomes a two-line card, every figure labelled: who, participation,
+     rationale, power and the delegate action on top; the vote pattern, delegators,
+     last vote and focus areas under it. Stacking every cell on its own line left the
+     figures unlabelled ("14,786", "Nov 24") and showed one DRep per screen. */
+  .drep-directory__rows {
+    gap: var(--g-s-1);
+  }
+  .drep-directory__row {
+    grid-template-columns: minmax(0, 2.2fr) repeat(3, minmax(0, 1fr)) auto;
+    grid-template-areas:
+      'name participation rationale power action'
+      'pattern pattern delegators last-vote last-vote';
+    row-gap: var(--g-s-2);
+    padding: var(--g-s-2) var(--g-s-3);
+    /* Top-aligned, so every label on a line sits at the same height. */
+    align-items: start;
+  }
+  /* The participation bar spans its cell (a left-aligned cell would shrink it to nothing). */
+  .drep-directory__row .drep-directory__cell--participation .drep-directory__bar {
+    align-self: stretch;
+    margin-top: 2px;
+  }
+  /* Focus areas take two columns (about 230px holds two whole chips); delegators and
+     last vote move under the power and the action. */
+  .drep-directory__row.drep-directory__grid--focus {
+    grid-template-areas:
+      'name participation rationale power action'
+      'pattern focus focus delegators last-vote';
+  }
+  .drep-directory__cell--name { grid-area: name; }
+  .drep-directory__cell--power { grid-area: power; }
+  .drep-directory__cell--action { grid-area: action; }
+  .drep-directory__cell--participation { grid-area: participation; }
+  .drep-directory__cell--rationale { grid-area: rationale; }
+  .drep-directory__cell--delegators { grid-area: delegators; }
+  .drep-directory__cell--last-vote { grid-area: last-vote; }
+  .drep-directory__cell--pattern { grid-area: pattern; }
+  .drep-directory__cell--focus { grid-area: focus; }
+
+  .drep-directory__row .drep-directory__cell-label {
+    display: block;
+  }
+  /* Compact figures: the label, then the value; no second caption line. */
+  .drep-directory__row .drep-directory__col-stat,
+  .drep-directory__row .drep-directory__col-num,
+  .drep-directory__row .drep-directory__col-power {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .drep-directory__row .drep-directory__col-stat .t-body-lg,
+  .drep-directory__row .drep-directory__col-power .t-body-lg {
+    font-size: inherit;
+  }
+  .drep-directory__row .drep-directory__cell--rationale .t-caption:not(.drep-directory__cell-label) {
+    display: none;
+  }
+  /* The vote pattern: bar and percentages on one line. */
+  .drep-directory__row .drep-directory__cell--pattern {
+    display: grid;
+    grid-template-columns: minmax(48px, 1fr) auto;
+    grid-template-areas: 'label label' 'bar caption';
+    column-gap: var(--g-s-2);
+    row-gap: 2px;
+    align-items: center;
+  }
+  .drep-directory__row .drep-directory__cell--pattern .drep-directory__cell-label { grid-area: label; }
+  .drep-directory__row .drep-directory__cell--pattern .drep-directory__pattern { grid-area: bar; }
+  .drep-directory__row .drep-directory__cell--pattern .t-caption:not(.drep-directory__cell-label) {
+    grid-area: caption;
+    white-space: nowrap;
+  }
+  /* Focus areas: one line of whole chips, the first two, never a chip cut in half
+     or a label broken over two lines. The table layout keeps them all. */
+  .drep-directory__row .drep-directory__cell--focus {
+    flex-wrap: nowrap;
+    overflow: hidden;
+    align-self: end;
+  }
+  .drep-directory__row .drep-directory__cell--focus .drep-directory__chip {
+    flex: none;
+    white-space: nowrap;
+  }
+  .drep-directory__row .drep-directory__cell--focus .drep-directory__chip:nth-child(n + 3) {
+    display: none;
+  }
+  /* The action sits at the end of the first line, not behind a column rule. (One class
+     more than the table's rule, which comes later in this file and otherwise wins.) */
+  .drep-directory__rows .drep-directory__row .drep-directory__col-action {
+    align-self: center;
+    padding-left: 0;
+    border-left: none;
+  }
+}
+
+/* A phone-width list: two figures per line. */
+@container (max-width: 560px) {
   .drep-directory__row,
-  .drep-directory__grid--focus {
-    --drep-cols: minmax(0, 1fr);
+  .drep-directory__row.drep-directory__grid--focus {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      'name name action'
+      'participation rationale power'
+      'pattern delegators last-vote';
+  }
+  .drep-directory__row .drep-directory__cell--focus {
+    display: none;
+  }
+  .drep-directory__row .drep-directory__col-power {
+    align-items: flex-start;
+    text-align: left;
   }
 }
 .drep-directory__col-stat,

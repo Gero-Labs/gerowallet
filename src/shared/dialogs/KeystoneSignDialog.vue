@@ -8,87 +8,54 @@
     :persistent="true"
     :img="assets.keystoneSvg"
   >
-    <v-card-text class="px-3 pb-0 justify-center text-center">
-      <!-- Instructions Alert -->
-      <v-alert
-        color="white"
-        density="compact"
-        variant="outlined"
-        type="info"
-        prominent
-        border="start"
-        v-if="!keystoneScan"
-        class="mt-4 mb-4"
-      >
-        <ul class="text-left" style="line-height: 1.5">
-          <li>{{ $t('wallet.unlockKeystone') }}</li>
-          <li>{{ $t('wallet.selectScanQR') }} <v-icon size="small">mdi-line-scan</v-icon></li>
-          <li>{{ $t('wallet.useKeystoneToScan') }}</li>
-          <li>{{ $t('wallet.approveAndScanNext') }}</li>
-        </ul>
-      </v-alert>
+    <v-card-text class="keystone-sign px-3 pb-0">
+      <!-- The steps, then the QR the device scans; on Next, the camera for its answer. -->
+      <div class="keystone-sign__steps glass-tier">
+        <NumberedSteps :steps="keystoneScan ? scanSteps : showSteps" />
+      </div>
 
-      <v-alert
-        color="white"
-        density="compact"
-        variant="outlined"
-        type="info"
-        prominent
-        border="start"
-        v-else
-        class="mt-4 mb-4"
-      >
-        <ul class="text-left" style="line-height: 1.5">
-          <li>{{ $t('wallet.adjustDistance') }}</li>
-          <li>{{ $t('wallet.useLowDensity') }}</li>
-        </ul>
-      </v-alert>
+      <div class="keystone-sign__qr">
+        <AnimatedQRCode
+          v-if="!keystoneScan && keystoneCbor"
+          :type="keystoneType"
+          :cbor="keystoneCbor"
+          :size="SIGN_QR_SIZE"
+        />
+        <QrViewfinder v-else-if="keystoneScan" :size="SIGN_QR_SIZE">
+          <AnimatedQRScanner
+            purpose="sign"
+            :urTypes="urTypes"
+            width="100%"
+            height="100%"
+            @scan="handleScan"
+            @error="handleError"
+            @progress="handleProgress"
+          />
+        </QrViewfinder>
+      </div>
 
-      <!-- Animated QR Code -->
-      <AnimatedQRCode
-        v-if="!keystoneScan && keystoneCbor"
-        :type="keystoneType"
-        :cbor="keystoneCbor"
-      />
-      <AnimatedQRScanner
-        v-else
-        purpose="sign"
-        :urTypes="urTypes"
-        width="100%"
-        height="350px"
-        @scan="handleScan"
-        @error="handleError"
-        @progress="handleProgress"
-        style="height: 374px"
-      />
-
-      <!-- Actions -->
-      <div class="text-center pt-4">
-        <v-btn
-          variant="text"
-          @click="handleBack"
-          class="mr-2"
-        >
+      <div class="keystone-sign__actions">
+        <GButton tier="tertiary" @click="handleBack()">
           {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
-        </v-btn>
-        <v-btn
-          v-if="!keystoneScan"
-          class="geroButton"
-          @click="keystoneScan = true"
-        >
+        </GButton>
+        <v-spacer />
+        <GButton v-if="!keystoneScan" tier="primary" @click="keystoneScan = true">
           {{ $t('common.next') }}
-        </v-btn>
+        </GButton>
       </div>
     </v-card-text>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from './BaseDialog.vue';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import NumberedSteps, { type NumberedStep } from '@/shared/components/NumberedSteps.vue';
+import QrViewfinder from '@/shared/components/QrViewfinder.vue';
 import assets from '@/utils/assets';
 
 interface Props {
@@ -106,8 +73,22 @@ withDefaults(defineProps<Props>(), {
 });
 const emit = defineEmits(['close', 'scan', 'error', 'progress']);
 
+/** The QR and the camera share one size, so the dialog keeps its height between the two stages. */
+const SIGN_QR_SIZE = 300;
+
 const { t } = useTranslation();
 const keystoneScan = ref(false);
+
+const showSteps = computed<NumberedStep[]>(() => [
+  { text: t('wallet.unlockKeystone') },
+  { text: t('wallet.selectScanQR'), icon: 'mdi-line-scan' },
+  { text: t('wallet.useKeystoneToScan') },
+  { text: t('wallet.approveAndScanNext') },
+]);
+const scanSteps = computed<NumberedStep[]>(() => [
+  { text: t('wallet.adjustDistance') },
+  { text: t('wallet.useLowDensity') },
+]);
 
 const handleClose = () => {
   keystoneScan.value = false;
@@ -135,6 +116,30 @@ const handleProgress = (progress: number) => {
 };
 </script>
 
-<style scoped>
-/* .geroButton lives in src/shared/styles/baseline.css (one definition, chain-aware). */
+<style scoped lang="scss">
+.keystone-sign {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  padding-top: var(--g-s-4);
+
+  &__steps {
+    padding: var(--g-s-3) var(--g-s-4);
+    border-radius: var(--g-r-card);
+  }
+
+  &__qr {
+    display: flex;
+    justify-content: center;
+  }
+
+  // Back or Cancel on the left, Next on the right, as in onboarding.
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-3);
+    padding-top: var(--g-s-4);
+    border-top: 1px solid var(--g-hairline-1);
+  }
+}
 </style>

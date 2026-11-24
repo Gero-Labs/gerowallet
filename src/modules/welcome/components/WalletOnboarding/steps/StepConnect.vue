@@ -1,6 +1,6 @@
 <template>
   <div class="step-connect" style="text-align: -webkit-center;">
-    <div class="step-scroll">
+    <div class="step-scroll" :class="{ 'step-scroll--center': isKeystone }">
     <img
       style="width: 400px; align-self: center;"
       v-if="walletType === WalletType.Ledger"
@@ -13,13 +13,27 @@
       :src="assets.connectTrezorSvg"
       :alt="t('wallet.connectTrezor')"
     />
-    <img
-      v-if="walletType === WalletType.Keystone && !keystoneScan"
-      :src="assets.connectKeystoneSvg"
-      style="width: 230px; height: 126px; align-self: center;"
-      :alt="t('wallet.connectKeystone')"
-    />
-    <div :class="{ 'keystone-pair-row': walletType === WalletType.Keystone && !keystoneScan }">
+    <!-- Keystone, both stages: the device and its steps beside the QR it scans,
+         then beside the camera that scans its answer. -->
+    <div v-if="isKeystone" class="keystone-pair">
+      <div class="keystone-pair__guide">
+        <img class="keystone-pair__device" :src="assets.connectKeystoneSvg" :alt="t('wallet.connectKeystone')" />
+        <NumberedSteps :steps="keystoneScan ? keystoneScanSteps : keystoneShowSteps" />
+      </div>
+      <div v-if="!keystoneScan" id="qr-code" ref="qrCodeRef" class="keystone-pair__qr" />
+      <QrViewfinder v-else :size="PAIRING_QR_SIZE + 16">
+        <AnimatedQRScanner
+          purpose="sync"
+          :urTypes="['crypto-multi-accounts']"
+          width="100%"
+          height="100%"
+          @scan="onKeystoneScan"
+          @error="onKeystoneError"
+          @progress="onKeystoneProgress"
+        />
+      </QrViewfinder>
+    </div>
+    <template v-else>
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="connect-steps t-body">
@@ -39,20 +53,6 @@
           <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
         </ul>
       </div>
-      <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
-        <ul class="connect-steps t-body">
-          <li>{{ $t('welcome.unlockKeystone') }}</li>
-          <li>{{ $t('welcome.selectScanQR') }} <v-icon size="small">mdi-line-scan</v-icon></li>
-          <li>{{ $t('welcome.scanQRWithKeystone') }}</li>
-          <li>{{ $t('welcome.approveOnKeystone') }}</li>
-        </ul>
-      </div>
-      <div v-else-if="walletType === WalletType.Keystone && keystoneScan">
-        <ul class="connect-steps t-body">
-          <li>{{ $t('welcome.adjustDistance') }}</li>
-          <li>{{ $t('welcome.lowDensitySetting') }}</li>
-        </ul>
-      </div>
     </v-alert>
 
     <div style="display: flex; justify-content: center;" v-if="walletType === WalletType.Ledger">
@@ -64,19 +64,7 @@
         v-model="isBluetooth"
       />
     </div>
-    <div id="qr-code" ref="qrCodeRef" v-else-if="walletType === WalletType.Keystone && !keystoneScan" />
-    <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px; width: 100%">
-      <AnimatedQRScanner
-        purpose="sync"
-        :urTypes="['crypto-multi-accounts']"
-        width="100%"
-        height="334px"
-        @scan="onKeystoneScan"
-        @error="onKeystoneError"
-        @progress="onKeystoneProgress"
-      />
-    </div>
-    </div>
+    </template>
     </div>
 
     <!-- Navigation buttons -->
@@ -106,6 +94,8 @@ import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import NumberedSteps, { type NumberedStep } from '@/shared/components/NumberedSteps.vue';
+import QrViewfinder from '@/shared/components/QrViewfinder.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import snackbar from '@/plugins/snackbar';
@@ -175,6 +165,21 @@ const qrCodeRef = ref<HTMLElement | null>(null);
 const qrCode = ref<InstanceType<typeof QRCodeStyling> | undefined>(undefined);
 
 const isBitcoin = computed(() => props.network?.blockchain === Blockchain.BITCOIN);
+/** Keystone's two stages (the QR it scans, then the camera for its answer) share one card. */
+const isKeystone = computed(() => props.walletType === WalletType.Keystone);
+const keystoneShowSteps = computed<NumberedStep[]>(() => [
+  { text: t('welcome.unlockKeystone') },
+  { text: t('welcome.selectScanQR'), icon: 'mdi-line-scan' },
+  { text: t('welcome.scanQRWithKeystone') },
+  { text: t('welcome.approveOnKeystone') },
+]);
+const keystoneScanSteps = computed<NumberedStep[]>(() => [
+  { text: t('welcome.adjustDistance') },
+  { text: t('welcome.lowDensitySetting') },
+]);
+
+/** The pairing QR has the right half of the Keystone card to itself, so it is drawn larger than the signing QRs (190). */
+const PAIRING_QR_SIZE = 230;
 
 const initKeystoneQR = (): void => {
   if (props.walletType !== WalletType.Keystone) return;
@@ -193,7 +198,14 @@ const initKeystoneQR = (): void => {
     qrOptions = generateBitcoinSyncQR(props.network.network, 'segwit', 0);
   }
   if (qrOptions) {
-    qrCode.value = new QRCodeStyling(qrOptions);
+    qrCode.value = new QRCodeStyling({
+      ...qrOptions,
+      width: PAIRING_QR_SIZE,
+      height: PAIRING_QR_SIZE,
+      // Rounded down to whole pixels, ~80 modules came out 2 px each at 190 and at 230 alike,
+      // leaving the rest as white margin. Fractional modules fill the size asked.
+      dotsOptions: { ...qrOptions.dotsOptions, roundSize: false },
+    });
     nextTick(() => {
       if (qrCodeRef.value) qrCode.value?.append(qrCodeRef.value);
     });
@@ -384,32 +396,58 @@ const walletCreationStep2 = async (): Promise<void> => {
   line-height: 1.5;
 }
 
-// Keystone pairing: the steps beside the QR, so the illustration, the steps and
-// the QR fit the card without scrolling (issue 1656). Stacked again on a phone.
-.keystone-pair-row {
+// The Keystone card sits in the middle of the free height. Auto margins, not
+// justify-content: when the window is too short they drop to 0 and the card
+// scrolls from its top instead of being clipped.
+.step-scroll--center {
+  display: flex;
+  flex-direction: column;
+
+  > .keystone-pair {
+    margin-block: auto;
+  }
+}
+
+// Keystone pairing: one tier card, the device and numbered steps on the left and
+// the QR it scans on the right, so it fits the onboarding card without
+// scrolling (issue 1656). Stacked on a phone.
+.keystone-pair {
+  @include g-glass-tier;
   display: flex;
   align-items: center;
-  gap: var(--g-s-4);
+  gap: var(--g-s-5);
+  padding: var(--g-s-5);
+  border-radius: var(--g-r-card);
+  text-align: left;
 
-  .connect-info {
+  &__guide {
     flex: 1 1 auto;
     min-width: 0;
-    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--g-s-4);
   }
 
-  #qr-code {
+  // Centered over the steps: it heads the column instead of sitting in its corner.
+  &__device {
+    align-self: center;
+    width: 200px;
+    height: auto;
+    margin-bottom: var(--g-s-2);
+  }
+
+  // A QR needs a light quiet zone to scan, so this box stays solid white.
+  // (The steps are NumberedSteps; the camera stage is QrViewfinder, the QR box's size.)
+  &__qr {
     flex: none;
+    padding: var(--g-s-2);
+    background: white;
+    border-radius: var(--g-r-control);
+    line-height: 0;
   }
 
   @media (max-width: 600px) {
     flex-direction: column;
   }
-}
-
-.qr-scanner {
-  text-align: center;
-  border: 1px solid white;
-  border-radius: var(--g-r-control);
-  width: 100%;
 }
 </style>

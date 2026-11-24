@@ -24,7 +24,14 @@ vi.mock('@cardano-sdk/tx-construction', () => ({ computeMinimumCoinQuantity: () 
 vi.mock('@/api/nexus-tx-api', () => ({ nexusTxApi: { buildTransferTx: mocks.build }, walletUtxosToNexusInputs: () => [], txOutToNexusOutput: (v: unknown) => v, requiredAssetsFromOutputs: () => [] }));
 vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: mocks.ledger, ledgerErrorHandling: vi.fn() } }));
 vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: mocks.trezor }));
-vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: mocks.qr, parseSignature: mocks.parseQr }));
+vi.mock('@/shared/utils/keystone', () => ({ createKeystoneSignRequest: mocks.qr, parseSignature: mocks.parseQr,
+  // The real reader's request-id binding, over the parseQr stub (hash binding: keystoneTxWitnessSet.spec.ts).
+  keystoneTxWitnessSet: async (ur: unknown, ctx: { requestId?: string }) => {
+    const signature = mocks.parseQr(ur) as { requestId?: string; witnessSet?: string } | undefined;
+    if (!signature?.witnessSet || (ctx.requestId && signature.requestId !== ctx.requestId)) throw new Error('Invalid Keystone signature');
+    return signature.witnessSet;
+  },
+}));
 vi.mock('@/shared/utils/resolver', () => ({ applyTokenImageOverride: () => '' }));
 vi.mock('@/api/ada-handle.api', () => ({ default: { resolve: vi.fn() } }));
 vi.mock('@/utils/assets', () => ({ default: { resolveIcon: () => '' } }));

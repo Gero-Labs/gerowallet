@@ -12,7 +12,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, keystoneTxWitnessSet } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import hardwareLoading from '@/plugins/hardwareLoading';
@@ -179,7 +179,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   let authorizationEpoch = 0;
   let disposed = false;
   let authorizedAttempt: SigningAttempt | null = null;
-  let keystoneApproval: { attempt: SigningAttempt; requestId: string } | null = null;
+  let keystoneApproval: { attempt: SigningAttempt; requestId: string; txHash: string | null } | null = null;
   let submitting = false;
   // A sweep's merge witnesses, aligned with the attempt's prerequisites, and the merges
   // already submitted: signing again after a failure does not send those twice.
@@ -540,7 +540,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
       const signRequestResponse: KeystoneSignRequestResponse = await createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
       if (!attempt.current()) return false;
-      keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
+      keystoneApproval = { attempt, requestId: signRequestResponse.requestId, txHash: signRequestResponse.txHash ?? null };
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
       keystoneType.value = signRequestResponse.ur.type;
@@ -564,18 +564,16 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     const attempt = qr?.attempt;
     if (!attempt?.current() || authorizedAttempt !== attempt || !overlay.value) return;
     try {
-      const signature = parseSignature(ur);
-      if (!qr.requestId || signature?.requestId !== qr.requestId) {
+      if (!qr.requestId) throw new Error(t('wallet.invalidKeystoneSignature'));
+      // Wrapped answer: checked by request id. Hash-route answer (bare witness set): its
+      // signatures must cover qr.txHash (keystoneTxWitnessSet).
+      let witnessSet: string;
+      try {
+        witnessSet = await keystoneTxWitnessSet(ur, { requestId: qr.requestId, txHash: qr.txHash });
+      } catch {
         throw new Error(t('wallet.invalidKeystoneSignature'));
       }
-
-      // Validate witness set before using it
-      if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-        throw new Error(t('wallet.invalidKeystoneSignature'));
-      }
-
-      // Get witness set from signature (already a hex string)
-      txWitnesses.value = signature.witnessSet;
+      txWitnesses.value = witnessSet;
       keystoneApproval = null;
 
       // Close overlay
