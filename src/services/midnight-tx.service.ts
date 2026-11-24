@@ -1051,11 +1051,14 @@ export async function registerNightForDust(
     ttlMs?: number;
   },
   credentials: MidnightSendCredentials,
+  current: () => boolean = () => true,
 ): Promise<DustRegistrationOutcome> {
   try {
     await assertMidnightWritesOpen(network);
+    assertCurrentApproval(current);
     const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
 
+    assertCurrentApproval(current);
     const api = getMidnightApi(network);
     const built = await api.buildNightDustRegistrationTx({
       fromAddress: args.fromAddress,
@@ -1069,6 +1072,7 @@ export async function registerNightForDust(
     // BG handler. Wrap the single payload as a one-element segments array;
     // role is always NightExternal for DUST registration (per the Midnight
     // reference implementation's `signDustRegistration` callback).
+    assertCurrentApproval(current);
     const signed = await signSegments(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,
@@ -1079,6 +1083,7 @@ export async function registerNightForDust(
       throw new Error('Expected exactly one signature for DUST registration');
     }
 
+    assertCurrentApproval(current);
     const res = await api.submitNightDustRegistrationTx({
       unprovenTxHex: built.unprovenTxHex,
       signatureHex: signed[0].signatureHex,

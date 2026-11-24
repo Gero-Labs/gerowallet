@@ -69,6 +69,12 @@ export function markDustRegistrationPending(address: string, txHash: string, now
   writeAll(all);
 }
 
+/** A cached or earlier native reading cannot confirm a newly submitted registration. */
+export function confirmDustRegistrationPending(address: string, observedAt: number): void {
+  const record = readAll()[address];
+  if (record && observedAt > record.submittedAt) clearDustRegistrationPending(address);
+}
+
 /** The registration for `address` is on chain, dismissed, or gone. */
 export function clearDustRegistrationPending(address: string): void {
   if (!address) return;

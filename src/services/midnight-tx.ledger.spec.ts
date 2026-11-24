@@ -383,6 +383,25 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(result).toEqual({ status: 'submitted', txHash: '0xfeed', submitStatus: 'Submitted' });
   });
 
+  it.each(['build', 'sign'] as const)('does not submit DUST registration if the wallet changes during %s', async stage => {
+    let current = true;
+    const submit = vi.fn();
+    const build = vi.fn(async () => {
+      if (stage === 'build') current = false;
+      return { unprovenTxHex: 'aabb', signaturePayloadHex: '0xcc' };
+    });
+    mocks.api.mockReturnValue({ buildNightDustRegistrationTx: build, submitNightDustRegistrationTx: submit });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } })
+      .mockImplementationOnce(async () => {
+        current = false;
+        return { data: { success: true, signatures: [{ index: 1, signatureHex: 'ff' }] } };
+      });
+    const result = await registerNightForDust('Preprod', { fromAddress: 'sender', dustReceiverAddressBech32: 'receiver' }, {}, () => current);
+    expect(result.status).toBe('failed');
+    expect(mocks.send).toHaveBeenCalledTimes(stage === 'build' ? 1 : 2);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('passes the registration envelope to background validation and never submits a rejected payload', async () => {
     const submit = vi.fn();
     mocks.api.mockReturnValue({
