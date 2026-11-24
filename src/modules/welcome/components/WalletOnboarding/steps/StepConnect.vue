@@ -19,6 +19,7 @@
       style="width: 230px; height: 126px; align-self: center;"
       :alt="t('wallet.connectKeystone')"
     />
+    <div :class="{ 'keystone-pair-row': walletType === WalletType.Keystone && !keystoneScan }">
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="connect-steps t-body">
@@ -72,6 +73,7 @@
         @error="onKeystoneError"
         @progress="onKeystoneProgress"
       />
+    </div>
     </div>
     </div>
 
@@ -339,6 +341,28 @@ const walletCreationStep2 = async (): Promise<void> => {
 .connect-steps {
   text-align: left;
   line-height: 1.5;
+}
+
+// Keystone pairing: the steps beside the QR, so the illustration, the steps and
+// the QR fit the card without scrolling (issue 1656). Stacked again on a phone.
+.keystone-pair-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-4);
+
+  .connect-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+
+  #qr-code {
+    flex: none;
+  }
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+  }
 }
 
 .qr-scanner {
