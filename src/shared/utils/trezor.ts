@@ -75,6 +75,28 @@ interface TrezorTxTransformerContext {
 const connectError = (result: { success: boolean; error?: { message?: string; code?: string } }): { message: string; code?: string } =>
   ({ message: result.error?.message ?? '', code: result.error?.code });
 
+/**
+ * How soon a `Method_Interrupted` ("Popup closed") answer counts as the previous call's popup
+ * closing rather than the user's. Without Suite desktop, Connect closes its Suite Web popup when a
+ * call ends; a call sent straight after goes to that closing tab and fails within milliseconds
+ * (issue 1653). Nobody closes the popup on purpose this fast.
+ */
+export const POPUP_CLOSE_RACE_MS = 1500;
+
+/**
+ * Run a Connect call that follows another one, sending it again once if it met the previous
+ * call's popup closing. A popup the user closes, or any other failure, is answered as it came.
+ */
+export async function callAfterPopup<T extends { success: boolean; error?: { message?: string; code?: string } }>(
+  call: () => Promise<T>,
+  now: () => number = Date.now,
+): Promise<T> {
+  const sentAt = now();
+  const result = await call();
+  const metClosingPopup = !result.success && connectError(result).code === 'Method_Interrupted' && now() - sentAt <= POPUP_CLOSE_RACE_MS;
+  return metClosingPopup ? call() : result;
+}
+
 // Trezor Connect manifest. Connect 10 requires appName; Suite shows it, the icon
 // and the origin in its permission prompt.
 const TREZOR_MANIFEST = {
@@ -389,7 +411,7 @@ export default {
   async getDeviceInfo(): Promise<Trezor.Features> {
     await this.init();
 
-    const result = await TrezorConnect.getFeatures();
+    const result = await callAfterPopup(() => TrezorConnect.getFeatures());
     if (!result.success) {
       throw new Error(connectError(result).message || 'Failed to get device features');
     }
@@ -419,11 +441,11 @@ export default {
       const deviceName = features['label'] || 'Trezor';
       const model = features['model'];
 
-      // Get public key from Trezor
-      const res = await TrezorConnect.cardanoGetPublicKey({
+      // Get public key from Trezor. It follows getFeatures, so it can meet that call's popup closing (issue 1653).
+      const res = await callAfterPopup(() => TrezorConnect.cardanoGetPublicKey({
         path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'`,
         showOnTrezor: false, // Don't show on device during pairing
-      } as Trezor.CardanoGetPublicKey);
+      } as Trezor.CardanoGetPublicKey));
 
       if (!res.success) {
         const errorMessage = connectError(res).message || 'Failed to get Trezor public key';
@@ -469,9 +491,10 @@ export default {
     await this.init();
     const paths = assertAccountIndices(accountIndices).map(cardanoAccountPath);
     const features: Trezor.Features = await this.getDeviceInfo();
-    const res = await TrezorConnect.cardanoGetPublicKey({
+    // It follows getFeatures, so it can meet that call's popup closing (issue 1653).
+    const res = await callAfterPopup(() => TrezorConnect.cardanoGetPublicKey({
       bundle: paths.map((path) => ({ path, showOnTrezor: false })),
-    } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>);
+    } as unknown as Trezor.BundledParams<Trezor.CardanoGetPublicKey>));
     if (!res.success) {
       throw new Error(connectError(res).message || 'Failed to get Trezor public keys');
     }
@@ -620,11 +643,12 @@ export default {
       if (isMultiSigMode && witnessesArray.length > 0) {
         // The stored xpub is 1852', so it cannot identify the 1854' witness.
         // Export this account's multisig xpub and keep the same strict filter.
-        const exported = await TrezorConnect.cardanoGetPublicKey({
+        // It follows the signature, so it can meet that call's popup closing (issue 1653).
+        const exported = await callAfterPopup(() => TrezorConnect.cardanoGetPublicKey({
           path: `m/1854'/1815'/${accountIndex}'`,
           showOnTrezor: false,
           derivationType: fullTrezorParams.derivationType,
-        });
+        }));
         if (!exported.success) {
           throw new errors.TransportError('Failed to export multisig account public key', connectError(exported));
         }
@@ -906,7 +930,7 @@ export default {
     }
 
     // Get device features for device info
-    const features = await TrezorConnect.getFeatures();
+    const features = await callAfterPopup(() => TrezorConnect.getFeatures());
     const deviceLabel = features.success ? features.payload.label : 'Trezor';
     const firmwareVersion = features.success
       ? `${features.payload.major_version}.${features.payload.minor_version}.${features.payload.patch_version}`
