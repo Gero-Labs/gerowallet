@@ -7,7 +7,7 @@ import { join } from 'node:path';
 // Cancel, expiry) are unit-tested in src/services/midnightBusyRetry.spec.ts and
 // at service level in src/services/midnight-tx.ledger.spec.ts.
 const src = join(__dirname, '../../..');
-const read = (path: string) => readFileSync(join(src, path), 'utf8');
+const read = (path: string) => readFileSync(join(src, path), 'utf8').replace(/\r\n/g, '\n');
 
 describe.each([
   ['dashboard dialog', 'modules/dashboard/dialogs/MidnightSendDialog.vue'],
