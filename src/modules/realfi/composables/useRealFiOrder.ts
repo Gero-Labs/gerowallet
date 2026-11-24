@@ -13,6 +13,7 @@
 import { ref } from 'vue';
 import type { Cardano } from '@cardano-sdk/core';
 import { Messaging } from '@/chrome/messaging';
+import { submittedTxId, UnconfirmedTxSubmission } from '@/shared/utils/submitTxReceipt';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
@@ -115,6 +116,7 @@ export function useRealFiOrder(signer: RealFiOrderSigner) {
     let witnessHex: string;
     try {
       witnessHex = await signer.signTx(built.txCbor, realfiSpendBound(req, wallet.network));
+      if (typeof witnessHex !== 'string' || !witnessHex.trim()) throw new Error('Missing transaction witness');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof SigningCancelled || DISMISSED.has(message)) {
@@ -127,17 +129,13 @@ export function useRealFiOrder(signer: RealFiOrderSigner) {
 
     stage.value = 'submitting';
     try {
-      const res = (await Messaging.sendToBackgroundFromOptions({
+      txId.value = await submittedTxId(Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
         data: { txCbor: built.txCbor, witnessHex, utxos },
-      })) as { data?: { txId?: string; error?: string } };
-      if (!res?.data?.txId) {
-        return fail(new RealFiOrderError('submit-failed', null, res?.data?.error));
-      }
-      txId.value = res.data.txId;
+      }));
     } catch (err) {
       return fail(
-        new RealFiOrderError('submit-failed', null, err instanceof Error ? err.message : undefined),
+        new RealFiOrderError(err instanceof UnconfirmedTxSubmission ? 'submit-unconfirmed' : 'submit-failed', null, err instanceof Error ? err.message : undefined),
       );
     }
 

@@ -57,6 +57,7 @@ import {
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_DUST_COINS_SHORT, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
+import { MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { markBuildStep, withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
 import {
   helperPreflightReason,
@@ -145,7 +146,7 @@ export function backgroundError(error: string | undefined, fallback: string): Er
   }
   // Whichever wallet pays the fee, the sender's own or a sponsor: the copy names neither.
   if (error && DUST_SHORTFALL.test(error.trim())) {
-    return new Error(String(i18n.t('midnight.errors.dustInsufficient')));
+    return new MidnightDustFeeShortfall(String(i18n.t('midnight.errors.dustInsufficient')));
   }
   return new Error(error || fallback);
 }
@@ -1050,11 +1051,14 @@ export async function registerNightForDust(
     ttlMs?: number;
   },
   credentials: MidnightSendCredentials,
+  current: () => boolean = () => true,
 ): Promise<DustRegistrationOutcome> {
   try {
     await assertMidnightWritesOpen(network);
+    assertCurrentApproval(current);
     const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
 
+    assertCurrentApproval(current);
     const api = getMidnightApi(network);
     const built = await api.buildNightDustRegistrationTx({
       fromAddress: args.fromAddress,
@@ -1068,6 +1072,7 @@ export async function registerNightForDust(
     // BG handler. Wrap the single payload as a one-element segments array;
     // role is always NightExternal for DUST registration (per the Midnight
     // reference implementation's `signDustRegistration` callback).
+    assertCurrentApproval(current);
     const signed = await signSegments(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,
@@ -1078,6 +1083,7 @@ export async function registerNightForDust(
       throw new Error('Expected exactly one signature for DUST registration');
     }
 
+    assertCurrentApproval(current);
     const res = await api.submitNightDustRegistrationTx({
       unprovenTxHex: built.unprovenTxHex,
       signatureHex: signed[0].signatureHex,

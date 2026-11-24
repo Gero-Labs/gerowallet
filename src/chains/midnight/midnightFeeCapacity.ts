@@ -1,5 +1,8 @@
 import { dustShortForFee } from './midnightFeeEstimate';
 
+/** The wallet SDK tried to balance a send and could not pay its fee in DUST. */
+export class MidnightDustFeeShortfall extends Error {}
+
 /**
  * Can this wallet pay a Midnight transaction fee at all?
  *
