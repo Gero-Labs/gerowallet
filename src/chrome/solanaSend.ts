@@ -212,6 +212,8 @@ export async function prepareSolanaHardwareSend(
   } catch (error) {
     throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
   }
+  // Drop sends no account came back for (another account's, or one abandoned before signing).
+  for (const [key, pending] of pendingHardwareSends) if (pending.expires <= now) pendingHardwareSends.delete(key);
   pendingHardwareSends.set(pendingKey(sender), { message, expires: now + SOLANA_HARDWARE_SEND_TTL_MS });
   return { message: Array.from(message) };
 }

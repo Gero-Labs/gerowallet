@@ -83,6 +83,8 @@ export function useSolanaHardwareSigner(opts: { getIsBT?: () => boolean } = {}) 
     const address = wallet.publicKey;
 
     if (wallet.type === WalletType.Keystone) {
+      // One QR round trip at a time: a request still showing is cancelled, so its promise settles.
+      if (keystoneReject) cancelKeystone();
       const request = keystoneSolanaSignRequest({ bytes, kind, accountIndex, xfp: (wallet as { xfp?: string }).xfp ?? '', address });
       keystoneRequestId = request.requestId;
       keystoneType.value = request.type;

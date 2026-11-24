@@ -24,7 +24,7 @@ async function assertSolanaAppOpen(app: Solana): Promise<void> {
   }
 }
 
-/** The accounts at `accountIndices`, one device confirmation each is not needed (no display). */
+/** The accounts at `accountIndices`. The addresses are read without showing them on the device, so nothing needs confirming. */
 export async function getLedgerSolanaAccounts(isBluetooth: boolean, accountIndices: number[]): Promise<{
   productName: string;
   btSupported: boolean;
