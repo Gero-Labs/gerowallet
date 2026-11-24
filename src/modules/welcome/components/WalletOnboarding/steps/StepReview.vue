@@ -1,11 +1,11 @@
 <template>
   <div class="step-review">
     <div class="step-scroll">
-    <v-form ref="form3" v-model="valid3">
-      <v-card flat class="transparent" :disabled="creatingWalletLoader">
+    <div class="review-form">
+      <div>
 
         <!-- Wallet summary card -->
-        <v-card class="glass-tier mb-3" flat>
+        <v-card class="glass-tier mb-2" flat>
           <v-card-text class="pa-3">
             <div class="d-flex align-center mb-2">
               <v-avatar size="32" class="mr-2">
@@ -18,6 +18,7 @@
                   variant="plain"
                   density="compact"
                   hide-details
+                  :disabled="creatingWalletLoader"
                   class="wallet-name-field mt-0 pt-0"
                   :placeholder="$t('welcome.walletNamePlaceholder')"
                 />
@@ -25,50 +26,90 @@
               <div v-else class="flex-grow-1 t-body">{{ $t('accounts.addingTo', { name: groupWallet?.name ?? '' }) }}</div>
             </div>
             <v-divider class="my-2" style="border-color: var(--g-hairline-2);"></v-divider>
-            <v-row no-gutters>
-              <v-col cols="6" class="pr-3">
-                <div class="d-flex align-center">
-                  <v-icon color="primary" size="20" class="mr-2">mdi-shield-lock-outline</v-icon>
-                  <div>
-                    <div class="summary-label t-caption">{{ $t('welcome.type') }}</div>
-                    <div class="summary-value t-body font-weight-medium">{{ walletType }}</div>
-                  </div>
+            <!-- One row of facts: type, network, and the device's firmware and fingerprint when it reports them. -->
+            <div class="review-facts">
+              <div class="review-fact">
+                <v-icon color="primary" size="20">mdi-shield-lock-outline</v-icon>
+                <div class="review-fact__text">
+                  <div class="summary-label t-caption">{{ $t('welcome.type') }}</div>
+                  <div class="summary-value t-body font-weight-medium">{{ walletType }}</div>
                 </div>
-              </v-col>
-              <v-divider vertical style="border-color: var(--g-hairline-2);"></v-divider>
-              <v-col cols="6" class="pl-3">
-                <div class="d-flex align-center">
-                  <v-avatar size="20" class="mr-2">
-                    <v-img :src="network ? network.icon : ''" ></v-img>
-                  </v-avatar>
-                  <div>
-                    <div class="summary-label t-caption">{{ $t('common.network') }}</div>
-                    <div class="summary-value t-body font-weight-medium">{{ network ? network.title : '' }}</div>
-                  </div>
+              </div>
+              <div class="review-fact">
+                <v-avatar size="20">
+                  <v-img :src="network ? network.icon : ''" ></v-img>
+                </v-avatar>
+                <div class="review-fact__text">
+                  <div class="summary-label t-caption">{{ $t('common.network') }}</div>
+                  <div class="summary-value t-body font-weight-medium">{{ network ? network.title : '' }}</div>
                 </div>
-              </v-col>
-            </v-row>
-            <div v-if="accounts" class="t-body mt-2">{{ $t('accounts.reviewList', { list: accountList }) }}</div>
+              </div>
+              <div v-if="connection?.firmwareVersion" class="review-fact">
+                <v-icon color="primary" size="20">mdi-chip</v-icon>
+                <div class="review-fact__text">
+                  <div class="summary-label t-caption">{{ $t('welcome.reviewFirmware') }}</div>
+                  <div class="summary-value t-body font-weight-medium g-num">{{ connection.firmwareVersion }}</div>
+                </div>
+              </div>
+              <div v-if="connection?.xfp" class="review-fact">
+                <v-icon color="primary" size="20">mdi-fingerprint</v-icon>
+                <div class="review-fact__text">
+                  <div class="summary-label t-caption">{{ $t('welcome.reviewFingerprint') }}</div>
+                  <div class="summary-value t-body font-weight-medium g-mono">{{ connection.xfp }}</div>
+                </div>
+              </div>
+            </div>
           </v-card-text>
         </v-card>
 
-        <v-checkbox
-          class="mt-0 mb-2"
-          hide-details
-          v-model="termsChecked"
-          :rules="[termsChecked]"
-          :disabled="creatingWalletLoader"
-        >
-          <template v-slot:label>
-            <span class="t-body">
-              {{ $t('welcome.agreeToTerms') }}
-              <a @click.stop href="https://gerowallet.io/legal/terms/" target="_blank">{{ $t('navigation.termsOfService') }}</a>.
-            </span>
-          </template>
-        </v-checkbox>
+        <!-- What each account will be: its path, first addresses and balance. -->
+        <v-card v-if="accountRows.length" class="glass-tier" flat>
+          <v-card-text class="pa-3">
+            <div class="summary-label t-caption mb-1">{{ $t('accounts.stepTitle') }}</div>
+            <div v-for="row in accountRows" :key="row.accountIndex" class="review-account">
+              <div class="review-account__head">
+                <span class="summary-value t-body font-weight-medium">{{ row.label }}</span>
+                <span v-if="row.path" class="review-account__path t-caption g-mono">{{ row.path }}</span>
+                <v-spacer />
+                <span v-if="row.balance" class="summary-value t-body-sm g-num">{{ row.balance }}</span>
+                <span v-if="row.status" class="t-caption">{{ row.status }}</span>
+              </div>
+              <div v-if="row.address || row.stakeAddress" class="review-account__addresses t-caption">
+                <div v-if="row.address" class="review-account__line">
+                  <span>{{ $t('bitcoin.receiveAddress') }}</span>
+                  <span class="review-account__value g-mono" :title="row.address">{{ shortAddress(row.address) }}</span>
+                </div>
+                <div v-if="row.stakeAddress" class="review-account__line">
+                  <span>{{ $t('wallet.stakeAddress') }}</span>
+                  <span class="review-account__value g-mono" :title="row.stakeAddress">{{ shortAddress(row.stakeAddress) }}</span>
+                </div>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
 
-      </v-card>
-    </v-form>
+      </div>
+    </div>
+    </div>
+
+    <!-- The terms stay above the actions, outside the scroll, so however many
+         accounts are listed the box that enables Create is always in view. -->
+    <div class="terms-row glass-tier">
+      <v-checkbox
+        color="primary"
+        class="mt-0"
+        hide-details
+        density="compact"
+        v-model="termsChecked"
+        :disabled="creatingWalletLoader"
+      >
+        <template v-slot:label>
+          <span class="t-body">
+            {{ $t('welcome.agreeToTerms') }}
+            <a class="terms-link" @click.stop href="https://gerowallet.io/legal/terms/" target="_blank" rel="noopener">{{ $t('navigation.termsOfService') }}</a>.
+          </span>
+        </template>
+      </v-checkbox>
     </div>
 
     <!-- Navigation buttons -->
@@ -78,7 +119,7 @@
       <GButton
         tier="primary"
         :loading="creatingWalletLoader"
-        :disabled="!valid3 || creatingWalletLoader"
+        :disabled="!termsChecked || creatingWalletLoader"
         @click="walletCreationStep3()"
         class="step-next"
       >
@@ -90,8 +131,11 @@
 
 <script setup lang="ts">
 import { ref, computed, getCurrentInstance, nextTick, watch } from 'vue';
-import { Theme } from '@/models/types';
+import { Blockchain, Theme } from '@/models/types';
 import GeroStore from '@/stores/geroStore';
+import { discoverAccounts, discoveredBalance, type DiscoveredAccount } from '@/shared/utils/accountDiscovery';
+import { formatBalance } from '@/shared/utils/format';
+import { debugLog } from '@/utils/debug';
 import { DuplicateWalletError, findExistingWallet } from '@/db/gero-db';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
 import type { Wallet } from '@/models/types';
@@ -133,8 +177,6 @@ const emit = defineEmits<{
 const vmProxy = getCurrentInstance()!.proxy;
 const router = vmProxy?.$router;
 
-const form3 = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
-const valid3 = ref(false);
 const creatingWalletLoader = ref(false);
 // Wallet name is owned by the orchestrator (single source); edit two-way.
 const walletName = computed<string>({
@@ -158,7 +200,41 @@ watch(() => [props.accounts, props.groupPublicKey], async () => {
   groupWallet.value = createsFirstAccount.value || !props.groupPublicKey ? null
     : await findExistingWallet({ chain: props.network?.blockchain, network: props.network?.network, publicKey: props.groupPublicKey });
 }, { immediate: true });
-const accountList = computed(() => (props.accounts ?? []).map((account) => t('accounts.label', { index: account.accountIndex })).join(', '));
+/** The accounts this step creates: the chosen ones, or the single account a device paired (#0). */
+const reviewAccounts = computed<AccountXpub[]>(() => props.accounts
+  ?? (props.connection ? [{ accountIndex: 0, publicKey: props.connection.publicKey, keys: props.connection.keys }] : []));
+
+// Addresses and balances are extras for the review, read the way the Accounts step
+// reads them (Cardano only). Without them the accounts and paths still show.
+const discovered = ref<Record<number, DiscoveredAccount>>({});
+watch(reviewAccounts, async (accounts) => {
+  const { blockchain: chain, network } = props.network ?? {};
+  if (chain !== Blockchain.CARDANO || !network || !accounts.length) return;
+  try {
+    const found = await discoverAccounts(chain, network, accounts);
+    discovered.value = Object.fromEntries(found.map((account) => [account.accountIndex, account]));
+  } catch (error) {
+    debugLog('StepReview: account lookup failed', { chain, network, error });
+  }
+}, { immediate: true });
+
+const accountRows = computed(() => [...reviewAccounts.value]
+  .sort((a, b) => a.accountIndex - b.accountIndex)
+  .map((account) => {
+    const found = discovered.value[account.accountIndex];
+    const used = found?.activity === 'used';
+    return {
+      accountIndex: account.accountIndex,
+      label: t('accounts.label', { index: account.accountIndex }),
+      path: account.keys[0]?.path ?? '',
+      address: found?.address ?? '',
+      stakeAddress: found?.stakeAddress ?? '',
+      balance: used && found?.balance != null ? `${formatBalance(discoveredBalance(found) ?? 0)} ${props.network.currencySymbol}` : '',
+      status: used ? t('accounts.used') : found?.activity === 'unused' ? t('miniGero.new') : '',
+    };
+  }));
+
+const shortAddress = (address: string): string => (address.length > 30 ? `${address.slice(0, 15)}…${address.slice(-8)}` : address);
 
 const recordFields = () => ({
   type: props.walletType,
@@ -221,7 +297,8 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
   };
   creatingWalletLoader.value = true;
   try {
-    if ((await form3.value?.validate())?.valid && current()) {
+    // The terms are the step's one required answer (they used to be a form rule).
+    if (termsChecked.value && current()) {
       const wallet = props.accounts ? await createAccountRecords(props.accounts) : await GeroStore.createNewHardwareWallet(approved);
       if (!current()) return;
       if (!wallet) {
@@ -273,6 +350,98 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
 // only set line height and lift each value to the primary tone.
 .summary-label { line-height: 1.2; }
 .summary-value { color: var(--g-text-1); line-height: 1.3; }
+
+// Type, network, firmware and fingerprint in one row (two on a phone), instead
+// of a row of two per pair with dividers.
+.review-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--g-s-3);
+
+  @media (max-width: 600px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.review-fact {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  min-width: 0;
+
+  &__text {
+    min-width: 0;
+  }
+}
+
+// One block per account: name, path, balance and status on a line, then its
+// first receive and stake addresses. Hairlines between accounts.
+.review-account {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--g-s-1) 0;
+
+  & + & {
+    border-top: 1px solid var(--g-hairline-1);
+  }
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--g-s-3);
+  }
+
+  &__path {
+    color: var(--g-text-3);
+  }
+
+  // Receive and stake address side by side, so an account takes two lines.
+  &__addresses {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--g-s-4);
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+      gap: var(--g-s-1);
+    }
+  }
+
+  &__line {
+    display: flex;
+    gap: var(--g-s-2);
+    min-width: 0;
+  }
+
+  &__value {
+    color: var(--g-text-2);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+  }
+}
+
+// The terms line is a tier card like the summary, pinned between the scrolling
+// content and the action row.
+.terms-row {
+  flex-shrink: 0;
+  margin-top: var(--g-s-3);
+  padding: var(--g-s-1) var(--g-s-2);
+  border-radius: var(--g-r-card);
+}
+
+// The accent, not the browser's purple link colour.
+.terms-link {
+  color: var(--g-accent);
+  text-underline-offset: 2px;
+
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}
 
 .wallet-name-field {
   :deep(input) {

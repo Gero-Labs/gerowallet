@@ -28,13 +28,14 @@
         </li>
       </ul>
       <p v-if="firstAccountRequired" class="accounts-hint t-caption">{{ t('accounts.firstAccountIncluded') }}</p>
-      <GButton tier="tertiary" compact :disabled="probing" :loading="busy" @click="$emit('scan-more')">
-        {{ t('accounts.scanMore', { count: ACCOUNTS_PER_SCAN }) }}
-      </GButton>
     </div>
 
+    <!-- Scan more lives in the action row, so it never sits below the fold of a long list. -->
     <div class="onboarding-actions d-flex">
       <GButton tier="tertiary" @click="$emit('back')">{{ $t('common.back') }}</GButton>
+      <GButton tier="tertiary" :disabled="probing" :loading="busy" @click="$emit('scan-more')">
+        {{ t('accounts.scanMore', { count: ACCOUNTS_PER_SCAN }) }}
+      </GButton>
       <v-spacer />
       <GButton tier="primary" class="step-next" :disabled="probing || busy || !selectedAccounts.length" @click="$emit('next', selectedAccounts)">
         {{ $t('common.continue') }}
@@ -192,7 +193,7 @@ const shortAddress = (address: string) => (address.length > 30 ? `${address.slic
   gap: var(--g-s-3);
   width: 100%;
   min-height: var(--g-row-h-panel);
-  padding: var(--g-s-3);
+  padding: var(--g-s-2) var(--g-s-3);
   text-align: left;
   color: var(--g-text-1);
   transition: border-color var(--g-dur-fast) var(--g-ease), background-color var(--g-dur-fast) var(--g-ease);
@@ -204,11 +205,14 @@ const shortAddress = (address: string) => (address.length > 30 ? `${address.slic
 }
 .account-row__check { color: var(--g-text-3); flex: none; }
 .account-row--selected .account-row__check { color: var(--g-accent); }
-.account-row__text { display: flex; flex-direction: column; gap: var(--g-s-1); flex: 1; min-width: 0; }
-.account-row__name { color: var(--g-text-1); font-weight: 500; }
+// One line per account (name, then the short address; balance and status on the
+// right), so five accounts and the hint fit the card without scrolling.
+.account-row__text { display: flex; align-items: baseline; gap: var(--g-s-3); flex: 1; min-width: 0; }
+.account-row__name { color: var(--g-text-1); font-weight: 500; flex: none; }
+.account-row__address { color: var(--g-text-2); min-width: 0; }
 // One truncated line, so the mono recipe's break-all wrapping is switched off.
 .account-row__address { line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
-.account-row__meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--g-s-1); flex: none; }
+.account-row__meta { display: flex; align-items: baseline; gap: var(--g-s-3); flex: none; }
 .account-row__balance { color: var(--g-text-1); }
 .accounts-hint { margin: 0 0 var(--g-s-2); text-align: left; }
 </style>
