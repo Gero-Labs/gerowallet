@@ -12,9 +12,30 @@ export const swapAxiosInstance: AxiosInstance = axios.create({
 // gero-backend relays Nexus and signs what it relays (build-time mode; off by default).
 installSignedResponses(swapAxiosInstance, 'gero-backend');
 
+/** One pool of a two-hop route (nexus two-hop client contract, 2026-11-23). */
+export interface SwapRouteLeg {
+  poolId: string;
+  dex: string;
+  type: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  expectedOut: string;
+  priceImpact?: number;
+  lpFeePercent?: number;
+  poolTvlAda?: number | string;
+}
+
+/**
+ * A route as /api/aggregator/quote returns it. /build-tx needs it back unchanged: a two-hop
+ * route is refused when `legs`, `intermediateToken` or `executionModel` are dropped, so pass
+ * the object through rather than rebuilding it from these fields. Quotes without `maxHops`
+ * (every quote this app sends itself) never return a two-hop route.
+ */
 export interface SwapRoute {
   dex: string;
-  bestPoolId?: string;
+  /** Null on a two-hop route, which has no single pool. */
+  bestPoolId?: string | null;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
@@ -24,6 +45,14 @@ export interface SwapRoute {
   batcherFeeLovelace?: string;
   aggregatorFeeLovelace?: string;
   estimatedTxFeeLovelace?: string;
+  /** 'BATCHER_MULTI_HOP' on a two-hop route. */
+  executionModel?: string;
+  /** The middle asset of a two-hop route ('lovelace' today). */
+  intermediateToken?: string;
+  /** The two pools of a two-hop route; absent or empty otherwise. */
+  legs?: SwapRouteLeg[];
+  verified?: boolean;
+  queuedOrdersAhead?: number | null;
 }
 
 export interface QuoteRequest {

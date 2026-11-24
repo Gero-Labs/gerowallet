@@ -214,6 +214,21 @@ describe('Quick Send Max over the request limit', () => {
     return { promise, resolve };
   }
 
+  it.each(['[data-address]', '[data-amount]'])('keeps the reviewed Max payment after a queued edit to %s', async edit => {
+    await openSend();
+    await dialog().get('[data-address]').trigger('click');
+    await dialog().get(edit).trigger('click');
+    await dialog().get('[data-max]').trigger('click');
+    await flushPromises();
+    const reviewed = mocks.signingOptions?.tx.value;
+    expect(reviewed).toBeDefined();
+    expect(requests().filter(request => !isMerge(request))).toHaveLength(1);
+    await settle();
+    expect(mocks.signingOptions?.tx.value).toBe(reviewed);
+    expect(requests().filter(request => !isMerge(request))).toHaveLength(1);
+    expect(dialog().get('.continue-button').attributes('disabled')).toBeUndefined();
+  });
+
   it('builds the merges once when Max is pressed twice', async () => {
     await openSend();
     await dialog().get('[data-address]').trigger('click');
