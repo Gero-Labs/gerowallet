@@ -57,7 +57,7 @@ export function midnightEndpointsFor(network: string): MidnightNetworkEndpoints 
   const direct = getMidnightEndpoints(network);
   if (direct) return direct;
   const key = midnightLedgerKey(network);
-  for (const name of ['Mainnet', 'Preprod', 'Preview', 'Stagenet']) {
+  for (const name of ['Mainnet', 'Preprod', 'Preview']) {
     const endpoints = getMidnightEndpoints(name);
     if (endpoints?.sdkNetworkId === key) return endpoints;
   }

@@ -21,16 +21,16 @@ import { Network } from '@/models/types';
 import { notIncludedAfterReset, pendingLookupDeadline } from '@/chains/midnight/midnightPendingSends';
 import { REFRESH_QUIET_MS } from '@/chains/midnight/midnightRefresh';
 
-const ME = 'mn_addr_stagenet1test';
+const ME = 'mn_addr_preview1test';
 const GENESIS = `0x${'cd'.repeat(32)}`;
 const identity = (generation: number, genesis = GENESIS) => ({
-  midnight_network: 'midnight-stagenet', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
+  midnight_network: 'midnight-preview', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
 });
 const SENT = 'aa'.repeat(32);
 const transfer = (hash: string, mine: 'in' | 'out', value = '40000000') => ({
   tx_hash: hash, tx_timestamp: 1_700_000_000_000,
   utxo: mine === 'out'
-    ? { unshielded_created_outputs: [{ owner: 'mn_addr_stagenet1other', value, token_type: '0'.repeat(64), intent_hash: 'i', output_index: 0 }],
+    ? { unshielded_created_outputs: [{ owner: 'mn_addr_preview1other', value, token_type: '0'.repeat(64), intent_hash: 'i', output_index: 0 }],
       unshielded_spent_outputs: [{ owner: ME, value, token_type: '0'.repeat(64), intent_hash: 'p', output_index: 0 }] }
     : { unshielded_created_outputs: [{ owner: ME, value, token_type: '0'.repeat(64), intent_hash: `r-${hash.slice(0, 4)}`, output_index: 0 }],
       unshielded_spent_outputs: [] },
@@ -41,7 +41,7 @@ const notIndexed = () => ({ transactions: [], block: { height: 10, timestamp: Da
 const sentRow = () => midnightStore.transactions.find((t) => t.hash === SENT);
 const sync = async (data: Record<string, unknown>) => { await h.connect.mock.lastCall![4].onSync({ type: 'SYNC', ...data }); await flush(); };
 const pending = (ledgerHash: boolean) => midnightActions.applyTransaction({
-  hash: SENT, type: 'send', token: 'NIGHT', amount: 40_000_000n, counterparty: 'mn_addr_stagenet1other',
+  hash: SENT, type: 'send', token: 'NIGHT', amount: 40_000_000n, counterparty: 'mn_addr_preview1other',
   timestamp: Date.now(), status: 'pending', fee: 0n, isShielded: false, ...(ledgerHash ? { ledgerHash: true } : {}),
 });
 
@@ -49,13 +49,13 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-11-10T00:00:00Z'));
   service.stop();
-  midnightActions.resetChainState({ network: 'midnight-stagenet', generation: 1, genesisHash: GENESIS });
+  midnightActions.resetChainState({ network: 'midnight-preview', generation: 1, genesisHash: GENESIS });
   midnightActions.endRefresh();
   midnightStore.transactions = [];
   midnightStore.chainIdentity = null;
   h.connect.mockClear();
   h.graphql.mockReset().mockImplementation(async () => notIndexed());
-  service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
+  service.start(Network.PREVIEW, { unshielded: ME, shielded: '', dust: '' });
   await flush();
   await sync({ ...identity(1), transactions: [transfer('bb'.repeat(32), 'in')] });
 });

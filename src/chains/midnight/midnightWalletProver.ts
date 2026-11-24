@@ -27,7 +27,7 @@ function isHelperProving(request: WalletProvingRequest): request is { helper: tr
 export async function walletProvingProvider(
   proving: WalletProvingRequest,
   options: {
-    /** SDK network id ('preprod', 'mainnet', 'stagenet'). */
+    /** SDK network id ('preprod', 'mainnet', 'preview'). */
     sdkNetworkId: string;
     /**
      * The transaction's own ledger, when the caller decoded it. Otherwise the

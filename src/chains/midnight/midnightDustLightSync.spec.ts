@@ -196,13 +196,13 @@ describe('compact DUST sync with the real ledger', () => {
   it('supports an empty ledger-9 wallet without a replay or negative index', async () => {
     const key = ledger9.DustSecretKey.fromSeed(new Uint8Array(32).fill(17));
     const state = new ledger9.DustLocalState(ledger9.LedgerParameters.initialParameters().dust);
-    const transport = { snapshot: async () => ({ version: 1, network: 'midnight-stagenet', generations: [], block: {
+    const transport = { snapshot: async () => ({ version: 1, network: 'midnight-preview', generations: [], block: {
       hash: 'bb'.repeat(32), height: 0, timestamp: Date.now(), protocolVersion: 2_001_100,
       ledgerParameters: encoded(ledger9.LedgerParameters.initialParameters().serialize()),
       dustGenerationEndIndex: 0, dustCommitmentEndIndex: 0, dustGenerationMerkleTreeRoot: null, dustCommitmentMerkleTreeRoot: null,
     } }), spends: vi.fn(), commitments: vi.fn() };
     try {
-      const result = await reconstructDustState(dustLedger9, key, 'stagenet', transport);
+      const result = await reconstructDustState(dustLedger9, key, 'preview', transport);
       expect(dustLedger9.roots(result.state)).toEqual(dustLedger9.roots(state));
       expect(transport.spends).not.toHaveBeenCalled();
       expect(transport.commitments).not.toHaveBeenCalled();

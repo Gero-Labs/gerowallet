@@ -1,7 +1,7 @@
 /**
  * Why Midnight Send and Register for DUST are held, if they are, as one reason:
- * update required, then the network upgrade (midnightWriteGate.ts), then a
- * rebuild in progress (midnightRefresh.ts). Every held control shows this one
+ * a network read-only in GeroWallet, update required, then the network upgrade
+ * (midnightWriteGate.ts), then a rebuild in progress (midnightRefresh.ts). Every held control shows this one
  * reason under it and links it with one `aria-describedby`.
  */
 import { computed, type ComputedRef } from 'vue';
@@ -10,7 +10,7 @@ import { useMidnightRefresh } from './useMidnightRefresh';
 import { useTranslation } from './useTranslation';
 import { midnightNetworkDisplayName } from '@/api/midnightApiError';
 
-export type MidnightSendHold = 'updateRequired' | 'networkUpgrading' | 'refreshing';
+export type MidnightSendHold = 'readOnly' | 'updateRequired' | 'networkUpgrading' | 'refreshing';
 
 export interface MidnightSendHoldView {
   readonly hold: ComputedRef<MidnightSendHold | null>;
@@ -36,6 +36,7 @@ export function useMidnightSendHold(network: () => string | undefined | null): M
     held: computed(() => hold.value !== null),
     sendText: computed(() => {
       switch (hold.value) {
+        case 'readOnly': return t('midnight.readOnly.sendHeld', { network: name() });
         case 'updateRequired': return t('midnight.errors.updateRequired');
         case 'networkUpgrading': return t('midnight.upgrade.sendPaused', { network: name() });
         case 'refreshing': return t('midnight.refresh.sendHeld');
@@ -44,6 +45,7 @@ export function useMidnightSendHold(network: () => string | undefined | null): M
     }),
     sendTextShort: computed(() => {
       switch (hold.value) {
+        case 'readOnly': return t('midnight.readOnly.label');
         case 'updateRequired': return t('midnight.update.sendHeld');
         case 'networkUpgrading': return t('midnight.upgrade.sendPaused', { network: name() });
         case 'refreshing': return t('midnight.refresh.sendHeld');
@@ -52,12 +54,16 @@ export function useMidnightSendHold(network: () => string | undefined | null): M
     }),
     registrationText: computed(() => {
       switch (hold.value) {
+        case 'readOnly': return t('midnight.readOnly.registrationHeld', { network: name() });
         case 'updateRequired': return t('midnight.update.registrationHeld');
         case 'networkUpgrading': return t('midnight.upgrade.registrationPaused', { network: name() });
         case 'refreshing': return t('midnight.refresh.sendHeld');
         default: return '';
       }
     }),
-    icon: computed(() => (hold.value === 'refreshing' ? 'mdi-refresh' : 'mdi-pause-circle-outline')),
+    icon: computed(() => {
+      if (hold.value === 'refreshing') return 'mdi-refresh';
+      return hold.value === 'readOnly' ? 'mdi-eye-outline' : 'mdi-pause-circle-outline';
+    }),
   };
 }

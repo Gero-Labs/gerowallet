@@ -478,7 +478,7 @@ describe('prepareLegacyCancel', () => {
   });
 
   describe('the network', () => {
-    it.each([Network.PREPROD, Network.PREVIEW, Network.TESTNET, Network.STAGENET, 'unknown'])('refuses %s: Nexus is never asked', async (network) => {
+    it.each([Network.PREPROD, Network.PREVIEW, Network.TESTNET, 'Stagenet', 'unknown'])('refuses %s: Nexus is never asked', async (network) => {
       const e = env({ network });
       expect((await refusal(prepareLegacyCancel(REQUEST, e))).code).toBe('NETWORK_UNSUPPORTED');
       neverCalled(e);

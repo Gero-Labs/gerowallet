@@ -15,7 +15,7 @@ function dustWallet(rewards: bigint[]) {
   const key = ledger.DustSecretKey.fromSeed(new Uint8Array(32).fill(91));
   const nightKey = ledger.signatureVerifyingKey(ledger.sampleSigningKey());
   let time = new Date((Math.floor(Date.now() / 1000) - 3600) * 1000);
-  let chain = ledger.LedgerState.blank('stagenet');
+  let chain = ledger.LedgerState.blank('preview');
   let local = new ledger.DustLocalState(chain.parameters.dust);
   const apply = (tx: ledger.Transaction<ledger.Signaturish, ledger.Proofish, ledger.Bindingish>) => {
     // Only fixture manufacture bypasses proof/signature/fee validation.
@@ -34,10 +34,10 @@ function dustWallet(rewards: bigint[]) {
   const registration = ledger.Intent.new(new Date(time.getTime() + 300000));
   registration.dustActions = new ledger.DustActions('signature', 'pre-proof', time, [],
     [new ledger.DustRegistration('signature', nightKey, key.publicKey, 0n)]);
-  apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, registration));
+  apply(ledger.Transaction.fromParts('preview', undefined, undefined, registration));
   rewards.forEach((amount, index) => {
     chain = chain.testingDistributeNight(ledger.addressFromKey(nightKey), amount, time);
-    apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
+    apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'preview', amount,
       nightKey, index.toString(16).padStart(2, '0').repeat(32), new ledger.SignatureErased())));
   });
   // Let both coins generate.
@@ -60,7 +60,7 @@ function spends(tx: ledger.UnprovenTransaction): ledger.DustSpend<ledger.PreProo
 describe('connector fees paid with two or more DUST spends', () => {
   const amount = 1_000_000_000_000_000n;
   const fee = (w: ReturnType<typeof dustWallet>, minimumSpends?: number) => balanceLightDust9(
-    w.local, w.key, 'stagenet', [ledger.Transaction.fromParts('stagenet')],
+    w.local, w.key, 'preview', [ledger.Transaction.fromParts('preview')],
     new Date(w.now.getTime() + 300_000), w.now, w.parameters, { minimumSpends });
 
   it('takes one coin by default, two when asked, from a wallet with two coins', () => {
@@ -74,7 +74,7 @@ describe('connector fees paid with two or more DUST spends', () => {
       // The two spends still pay at least what the single one did (the fee only grows with each spend).
       expect(spread.reduce((sum, spend) => sum + spend.vFee, 0n)).toBeGreaterThanOrEqual(spends(fee(w))[0].vFee);
       // And the ledger finds both balanced (and an unpaid transaction not).
-      const unpaid = ledger.Transaction.fromParts('stagenet', undefined, undefined, ledger.Intent.new(new Date(w.now.getTime() + 300_000)));
+      const unpaid = ledger.Transaction.fromParts('preview', undefined, undefined, ledger.Intent.new(new Date(w.now.getTime() + 300_000)));
       expect(() => w.balanced(unpaid)).toThrow();
       expect(() => w.balanced(fee(w))).not.toThrow();
       expect(() => w.balanced(fee(w, 2))).not.toThrow();
@@ -95,9 +95,9 @@ describe('ledger 9 fees for an unshielded send', () => {
   it.each([1, 2])('a %i-input NIGHT transfer costs well over the old "< 0.000001" and under 1 DUST', (count) => {
     const w = dustWallet([1_000_000_000_000_000n]);
     try {
-      const vector = signing.transfers.find(t => t.network === 'stagenet' && t.count === count && t.token === '00'.repeat(32))!;
+      const vector = signing.transfers.find(t => t.network === 'preview' && t.count === count && t.token === '00'.repeat(32))!;
       const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(vector.unprovenTxHex, 'hex'));
-      const paid = spends(balanceLightDust9(w.local, w.key, 'stagenet', [tx], new Date(w.now.getTime() + 300_000), w.now, preview.ledgerParameters))
+      const paid = spends(balanceLightDust9(w.local, w.key, 'preview', [tx], new Date(w.now.getTime() + 300_000), w.now, preview.ledgerParameters))
         .reduce((sum, spend) => sum + spend.vFee, 0n);
       const DUST = 10n ** 15n;
       expect(paid).toBeGreaterThan(DUST / 1_000_000n);

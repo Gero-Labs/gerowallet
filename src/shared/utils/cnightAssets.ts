@@ -8,13 +8,14 @@ import { Network } from '@/models/types';
  * cNIGHT asset identity, keyed by network. Values verified 2026-07-14 from
  * the official DUST Generator portal's baked config (Next.js bundle) —
  * mainnet name is `NIGHT` (`4e49474854`); the testnet asset has an empty
- * asset name. Preview, preprod and stagenet share one policy (same token
- * deployment), which is also what Nexus pins as `stagenet-cnight-unit`.
+ * asset name. Preview and preprod share one policy (same token deployment);
+ * the Preview entry was re-checked on Cardano preview on 2026-11-24, after
+ * Midnight Preview's relaunch (the policy's empty-name asset is live there).
  *
- * Keyed by network NAME, and read with either vocabulary: a Cardano wallet
- * looks up its own network, a Midnight wallet looks up its Midnight network
- * (see `useDustSources`). `Network.PREVIEW` therefore stays here for Cardano
- * preview even though Midnight preview is gone.
+ * Keyed by Cardano network NAME. A Cardano wallet looks up its own network; a
+ * Midnight wallet looks up its Midnight network's Cardano twin
+ * (`cardanoTwinNetwork`), which for Mainnet, Preprod and Preview is the network
+ * of the same name. A network with no entry has no cNIGHT (`cnightUnit` is '').
  */
 export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: string }> = {
   [Network.MAINNET]: {
@@ -26,10 +27,6 @@ export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: str
     assetNameHex: '',
   },
   [Network.PREVIEW]: {
-    policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
-    assetNameHex: '',
-  },
-  [Network.STAGENET]: {
     policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
     assetNameHex: '',
   },

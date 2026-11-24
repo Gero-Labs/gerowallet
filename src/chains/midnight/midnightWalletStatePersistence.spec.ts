@@ -125,11 +125,11 @@ describe('Midnight provider checkpoint migration', () => {
     expect(await loadWalletState('mainnet', 'dust', seed)).toBe('mainnet-state');
   });
 
-  it('retains stagenet checkpoints', async () => {
-    await saveWalletState('stagenet', 'dust', seed, 'stagenet-state');
+  it('retains preview checkpoints', async () => {
+    await saveWalletState('preview', 'dust', seed, 'preview-state');
     const [row] = await midnightWalletStatesForTest().toArray();
     expect(row.schemaVersion).toBe(1);
-    expect(await loadWalletState('stagenet', 'dust', seed)).toBe('stagenet-state');
+    expect(await loadWalletState('preview', 'dust', seed)).toBe('preview-state');
   });
 });
 

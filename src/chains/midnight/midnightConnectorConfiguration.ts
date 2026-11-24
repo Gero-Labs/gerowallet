@@ -25,7 +25,7 @@ export function connectorConfiguration(
   // connector `getProvingProvider()` delegation is a separate, later
   // phase). Only report the user's own local proof server once they've
   // actually opted into local mode (WP-P1/P4), and the one for this
-  // network's circuit family: a ledger-8 server cannot prove stagenet
+  // network's circuit family: a ledger-8 server cannot prove ledger 9
   // circuits. zkPaaS mode deliberately ALSO reports the default: the
   // Arkhia endpoint is useless to a dApp without the user's API key, and a
   // user-pasted override URL may embed that key as a path segment —

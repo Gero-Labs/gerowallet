@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getDustAccountState: mocks.get }) }));
 vi.mock('@/utils/debug', () => ({ debugLog: mocks.log }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Stagenet' } }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Preview' } }) }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: reactive({
   addresses: { unshielded: 'wallet-a' }, dustState: null, balances: {},
 }) }));
@@ -57,7 +57,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.get.mockReset().mockResolvedValue(state());
   mocks.log.mockClear();
-  walletStore.loggedWallet.network = Network.STAGENET;
+  walletStore.loggedWallet.network = Network.PREVIEW;
   Object.assign(midnightStore, { balances: {}, dustState: null, networkStatus: 'disconnected', refreshing: null, tip: null });
   mocks.pathBRegistered.value = false;
   mocks.pathBIsDestinationWide.value = false;

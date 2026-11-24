@@ -192,7 +192,7 @@ describe('ledger-8 private sync', () => {
 
   it('ignores non-ledger-8 networks', async () => {
     const input = args();
-    await startMidnightPrivateSync8({ ...input, network: 'Stagenet', endpoints: { ...input.endpoints, sdkNetworkId: 'stagenet' } });
+    await startMidnightPrivateSync8({ ...input, network: 'Preview', endpoints: { ...input.endpoints, sdkNetworkId: 'preview' } });
     expect(h.factory).not.toHaveBeenCalled();
   });
 });

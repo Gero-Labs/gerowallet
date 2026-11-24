@@ -44,15 +44,15 @@ export interface MidnightNetworkEndpoints {
    * API (`/prove`, `/check`) under this base, so the wallet's hand-rolled
    * ProvingProvider works against it unchanged apart from `x-api-key` /
    * `x-api-secret` auth headers. Arkhia only distinguishes mainnet vs
-   * testnet in the documented default URLs. Stagenet and Preprod now use
-   * different ledger generations, so a reachable shared URL does not establish
-   * compatibility. Stagenet requires a ledger-9-capable service; override its
-   * URL per device via `midnightStore.proofServer.zkpaasUrl` as needed.
+   * testnet in the documented default URLs, so Preview and Preprod share the
+   * testnet URL. A reachable URL does not establish that the service proves
+   * the chain's ledger; override it per device via
+   * `midnightStore.proofServer.zkpaasUrl` as needed.
    */
   zkpaasProofServerUrl: string;
   /**
-   * Indexer endpoint (HTTP GraphQL) the wallet SDKs sync against. For mainnet
-   * and preprod this is gero-sync's restricted indexer relay, which forwards
+   * Indexer endpoint (HTTP GraphQL) the wallet SDKs sync against. On every
+   * network this is gero-sync's restricted indexer relay, which forwards
    * only the operations the SDKs use to Gero's self-hosted (in-cluster)
    * indexer. The indexer itself is never exposed publicly.
    */
@@ -60,8 +60,8 @@ export interface MidnightNetworkEndpoints {
   /** Indexer endpoint (WebSocket GraphQL subscriptions, graphql-transport-ws). */
   publicIndexerWsUrl: string;
   /**
-   * Public Substrate RPC. Only stagenet still has one (third-party, while
-   * stagenet self-hosting is parked); it is not advertised to dApps.
+   * Public Substrate RPC. No network sets one today (every network's data
+   * goes through Nexus and the gero-sync relay); it is never advertised to dApps.
    */
   publicRpcUrl?: string;
   /** Faucet URL (testnets only). */
@@ -72,7 +72,17 @@ export interface MidnightNetworkEndpoints {
    * SDK NetworkId — the string the `@midnightntwrk/wallet-sdk-*` packages use
    * internally for serialization and address-format selection. Lowercase.
    */
-  sdkNetworkId: 'mainnet' | 'preprod' | 'stagenet' | 'undeployed';
+  sdkNetworkId: 'mainnet' | 'preprod' | 'preview' | 'undeployed';
+  /**
+   * Whether Gero's servers accept this network's writes: sends (public and
+   * private), DUST registration, and the transactions a dApp asks the wallet to
+   * build, balance or submit. False makes the network read-only in GeroWallet
+   * (balances, history, receive and sync only): the write gate holds every
+   * write before anything is asked (`writeBlockIn`, midnightWriteGate.ts), and
+   * the network picker and Send say so. The one switch to flip once Nexus opens
+   * the network's writes (its MIDNIGHT_WRITES_ENABLED list).
+   */
+  writesSupported: boolean;
 }
 
 /**
@@ -99,7 +109,7 @@ const GERO_SYNC_WS = `${GERO_SYNC_BASE}/ws/sync`;
  * (`/midnight/{network}/graphql`, WebSocket at `.../graphql/ws`). The wallet
  * SDKs sync through it; Gero's indexers stay in-cluster.
  */
-function geroSyncIndexerRelay(network: 'mainnet' | 'preprod'): { publicIndexerUrl: string; publicIndexerWsUrl: string } {
+function geroSyncIndexerRelay(network: 'mainnet' | 'preprod' | 'preview'): { publicIndexerUrl: string; publicIndexerWsUrl: string } {
   const wsBase = `${GERO_SYNC_BASE}/midnight/${network}/graphql`;
   return { publicIndexerUrl: wsBase.replace(/^ws/, 'http'), publicIndexerWsUrl: `${wsBase}/ws` };
 }
@@ -114,35 +124,38 @@ function geroSyncIndexerRelay(network: 'mainnet' | 'preprod'): { publicIndexerUr
 const ARKHIA_ZKPAAS_MAINNET = 'https://starter.arkhia.io/midnight/zkpaas/mainnet';
 const ARKHIA_ZKPAAS_TESTNET = 'https://starter.arkhia.io/midnight/zkpaas/testnet';
 
+/**
+ * Midnight Preview's public tNIGHT faucet (Midnight's networks guide). Preview
+ * is a new chain, so a wallet moved there from Stagenet starts with nothing and
+ * is pointed here for new tNIGHT (MidnightPreviewMoveNotice.vue).
+ */
+export const MIDNIGHT_PREVIEW_FAUCET_URL = 'https://midnight-tmnight-preview.nethermind.dev';
+
 const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
   /**
-   * Stagenet — the network that replaced preview. Nexus retired the
-   * `midnight-preview` slug on 2026-09-06 (its `Network.fromString` now 400s
-   * on it), so preview is gone from this map rather than kept alongside.
-   *
-   * Stagenet is the ledger-9 pre-release network and is NOT hosted under
-   * `*.midnight.network` — the Foundation serves it from `shielded.tools`.
-   * These URLs match the `MIDNIGHT_STAGENET_*` values Nexus itself is
-   * deployed with, so the wallet's direct-access fallback and the Nexus proxy
-   * talk to the same chain.
-   *
-   * Read paths (blocks, transactions, DUST status) work today. The Nexus tx
-   * sidecar is still pinned to `@midnight-ntwrk/ledger-v8` and answers 501 for
-   * stagenet on `tx/build-unshielded`, `tx/submit` and the DUST registration
-   * routes until its ledger-9 port lands — see issue #1024.
+   * Preview — Midnight's ledger 9 test network, relaunched as a new chain on
+   * 2026-11-06 with the network id `preview` (it replaced Stagenet, whose
+   * wallets the GeroWalletDatabase v18 upgrade moves here). Reached the same
+   * way as preprod and mainnet: Nexus under `midnight-preview`, and the SDKs'
+   * indexer through gero-sync's relay (Nexus serves Preview's indexer
+   * server-side), so no third-party host is contacted from the extension and
+   * there is no public RPC. Explorer and faucet as listed in Midnight's
+   * networks guide (docs.midnight.network/networks/preview).
    */
-  [Network.STAGENET]: {
-    network: Network.STAGENET,
+  [Network.PREVIEW]: {
+    network: Network.PREVIEW,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
-    get defaultProofServerUrl() { return defaultLocalProofServerUrl(Network.STAGENET); },
+    get defaultProofServerUrl() { return defaultLocalProofServerUrl(Network.PREVIEW); },
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
-    publicIndexerUrl: 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
-    publicIndexerWsUrl: 'wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws',
-    publicRpcUrl: 'https://rpc.stagenet.shielded.tools',
-    faucetUrl: 'https://faucet.stagenet.shielded.tools',
-    blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.stagenet.shielded.tools#/explorer',
-    sdkNetworkId: 'stagenet',
+    ...geroSyncIndexerRelay('preview'),
+    faucetUrl: MIDNIGHT_PREVIEW_FAUCET_URL,
+    blockExplorerUrl: 'https://preview.midnightexplorer.com',
+    sdkNetworkId: 'preview',
+    // Nexus serves Preview's reads (from Blockfrost, nexus PR 1761) but not its
+    // writes: `midnight-preview` is in neither MIDNIGHT_WRITES_ENABLED nor
+    // DUST_SNAPSHOT_NETWORKS. Read-only until it is.
+    writesSupported: false,
   },
   [Network.PREPROD]: {
     network: Network.PREPROD,
@@ -156,6 +169,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     // link rode on rpc.preprod.midnight.network, which is on its retired list.
     blockExplorerUrl: 'https://preprod.midnightexplorer.com',
     sdkNetworkId: 'preprod',
+    writesSupported: true,
   },
   [Network.MAINNET]: {
     network: Network.MAINNET,
@@ -167,31 +181,36 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     // explorer.mainnet.cloudwalk.io now 301s to Cloudwalk's homepage.
     blockExplorerUrl: 'https://midnightexplorer.com',
     sdkNetworkId: 'mainnet',
+    writesSupported: true,
   },
 };
 
 /**
- * Midnight Preview's public tNIGHT faucet. Stagenet wallets are told to get new
- * tNIGHT here before they move to Preview (issue 1477). Preview has no entry in
- * the endpoint map above yet; when it gets one, its `faucetUrl` is this value.
- */
-export const MIDNIGHT_PREVIEW_FAUCET_URL = 'https://midnight-tmnight-preview.nethermind.dev';
-
-/**
- * The Cardano network a Midnight network's cNIGHT lives on.
- *
- * Until stagenet these two vocabularies happened to coincide — Midnight
- * "Preview"/"Preprod"/"Mainnet" all named a Cardano network too, so every
- * cNIGHT lookup could pass the Midnight network straight through. Stagenet
- * has no Cardano namesake, and its cNIGHT policy + DUST mapping validator are
- * the ones deployed on Cardano **preprod** (identical to preprod's, per
- * Nexus's `midnight.dust.*.stagenet-*` pins), so it maps there.
- *
- * Both are testnet (`networkId` 0), so a wallet's derived Cardano twin address
- * is byte-identical before and after this mapping — only the lookup changes.
+ * The Cardano network a Midnight network's cNIGHT lives on, and where its DUST
+ * registrations are made: Midnight Mainnet, Preprod and Preview each pair with
+ * the Cardano network of the same name (the cNIGHT policy and the DUST mapping
+ * validator listed for Cardano Preview in cnightAssets.ts and
+ * dustMappingValidator.ts are live there). The one place the pairing is
+ * decided, so a future Midnight network without a Cardano namesake maps here
+ * rather than in every caller. Anything else passes through unchanged, and the
+ * cNIGHT and validator tables have no entry for it: those lookups fail closed.
  */
 export function cardanoTwinNetwork(midnightNetwork: string): string {
-  return midnightNetwork === Network.STAGENET ? Network.PREPROD : midnightNetwork;
+  return midnightNetwork;
+}
+
+/**
+ * True when `network` is read-only in GeroWallet: its endpoints say Gero's
+ * servers take none of its writes (`writesSupported: false`). Accepts the wallet
+ * `Network` value, the SDK id or the `midnight-<id>` slug. A network the wallet
+ * has no endpoints for is not judged here (every write path refuses it anyway).
+ */
+export function isMidnightReadOnlyNetwork(network: string | null | undefined): boolean {
+  if (!network) return false;
+  const direct = MIDNIGHT_NETWORK_ENDPOINTS[network];
+  const key = network.trim().toLowerCase().replace(/^midnight-/, '');
+  const endpoints = direct ?? Object.values(MIDNIGHT_NETWORK_ENDPOINTS).find((entry) => entry.sdkNetworkId === key);
+  return !!endpoints && !endpoints.writesSupported;
 }
 
 /**
@@ -206,8 +225,8 @@ export function getMidnightEndpoints(network: string): MidnightNetworkEndpoints 
 /**
  * Compose the full Nexus URL for a per-network Midnight REST resource.
  *
- * Example: `nexusUrlFor(Network.STAGENET, 'dust/status')` →
- * `https://nexus.gerowallet.io/api/midnight/midnight-stagenet/dust/status`
+ * Example: `nexusMidnightPathFor(Network.PREVIEW, 'dust/status')` →
+ * `https://nexus.gerowallet.io/api/midnight/midnight-preview/dust/status`
  *
  * Network slug mapping mirrors what Nexus expects in its `?network=` parameter
  * for chain-agnostic endpoints, and the `{network}` path segment for Midnight-only

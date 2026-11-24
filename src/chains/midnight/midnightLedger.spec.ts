@@ -24,18 +24,18 @@ function fixture(registration = false) {
       new ledger.DustRegistration('signature', key, undefined, 0n),
     ]);
   }
-  const tx = ledger.Transaction.fromParts('stagenet', undefined, undefined, intent);
+  const tx = ledger.Transaction.fromParts('preview', undefined, undefined, intent);
   return Buffer.from(tx.serialize()).toString('hex');
 }
 
 describe('Midnight ledger isolation with real WASM', () => {
-  it.each([['Mainnet', 8], ['Preprod', 8], ['Stagenet', 9]])('follows %s\'s chain (test chains: mainnet/preprod pre-upgrade)', (network, version) => {
+  it.each([['Mainnet', 8], ['Preprod', 8], ['Preview', 9]])('follows %s\'s chain (test chains: mainnet/preprod pre-upgrade)', (network, version) => {
     expect(midnightLedgerVersion(network as string)).toBe(version);
   });
 
   it('fails closed before a read and names the wallet\'s own network and ledger in guards', () => {
-    expect(() => midnightLedgerVersion('preview')).toThrow(MidnightLedgerUnknownError);
-    expect(() => requireMidnightLedger8('stagenet', 'Shielding')).toThrow('Shielding is not supported on Midnight Stagenet (ledger 9) in this version');
+    expect(() => midnightLedgerVersion('undeployed')).toThrow(MidnightLedgerUnknownError);
+    expect(() => requireMidnightLedger8('preview', 'Shielding')).toThrow('Shielding is not supported on Midnight Preview (ledger 9) in this version');
     expect(() => requireMidnightLedger8('preprod', 'Shielding')).not.toThrow();
     expect(() => deserializeLedger9Transaction('mainnet', fixture())).toThrow('Midnight Mainnet runs ledger 8');
     noteMidnightProtocolVersion('Preprod', 2_001_100);
@@ -44,7 +44,7 @@ describe('Midnight ledger isolation with real WASM', () => {
 
   it('preserves legacy Schnorr public key/address identity with tagged v9 keys', async () => {
     const old = await midnightKeystore(secret, 'mainnet');
-    const current = await midnightKeystore(secret, 'stagenet');
+    const current = await midnightKeystore(secret, 'preview');
     expect(schnorrHex(current.getPublicKey())).toBe(schnorrHex(old.getPublicKey()));
     expect(current.getAddress()).toBe(old.getAddress());
     expect(schnorrHex(current.getPublicKey())).toBe('1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f');
@@ -52,7 +52,7 @@ describe('Midnight ledger isolation with real WASM', () => {
   });
 
   it('signs the canonical v9 envelope and rejects a tampered payload', () => {
-    const signed = deserializeLedger9Transaction('stagenet', signLedger9Transaction('stagenet', fixture(), secret));
+    const signed = deserializeLedger9Transaction('preview', signLedger9Transaction('preview', fixture(), secret));
     const intent = signed.intents!.get(1)!;
     const signature = intent.guaranteedUnshieldedOffer!.signatures[0].value;
     const payload = intent.signatureData(1);
@@ -62,31 +62,31 @@ describe('Midnight ledger isolation with real WASM', () => {
   });
 
   it('retains an existing signature without duplicating it', () => {
-    const first = signLedger9Transaction('stagenet', fixture(), secret);
-    expect(signLedger9Transaction('stagenet', first, secret)).toBe(first);
+    const first = signLedger9Transaction('preview', fixture(), secret);
+    expect(signLedger9Transaction('preview', first, secret)).toBe(first);
   });
 
   it('refuses to sign another key\'s unsigned input', () => {
-    expect(() => signLedger9Transaction('stagenet', fixture(), new Uint8Array(32).fill(2))).toThrow('another key');
+    expect(() => signLedger9Transaction('preview', fixture(), new Uint8Array(32).fill(2))).toThrow('another key');
   });
 
   it('rejects a ledger-9 envelope carrying another network ID before signing', async () => {
     const tx = ledger.Transaction.fromParts('mainnet');
     const hex = Buffer.from(tx.serialize()).toString('hex');
-    expect(() => signLedger9Transaction('stagenet', hex, secret)).toThrow('network');
-    await expect(validateMidnightSigningSegments('stagenet', hex, [])).rejects.toThrow('network');
+    expect(() => signLedger9Transaction('preview', hex, secret)).toThrow('network');
+    await expect(validateMidnightSigningSegments('preview', hex, [])).rejects.toThrow('network');
   });
 
   it('validates supplied DUST signing payloads against their transaction', async () => {
     const hex = fixture(true);
-    const payload = Buffer.from(deserializeLedger9Transaction('stagenet', hex).intents!.get(1)!.signatureData(1)).toString('hex');
+    const payload = Buffer.from(deserializeLedger9Transaction('preview', hex).intents!.get(1)!.signatureData(1)).toString('hex');
     const segments = [{ index: 1, role: 'NightExternal' as const, dataHex: payload }];
-    await expect(validateMidnightSigningSegments('stagenet', hex, segments)).resolves.toBeUndefined();
-    await expect(validateMidnightSigningSegments('stagenet', undefined, segments)).rejects.toThrow('requires');
-    await expect(validateMidnightSigningSegments('stagenet', hex, [{ ...segments[0], dataHex: '00' }])).rejects.toThrow('does not match');
-    await expect(validateMidnightSigningSegments('stagenet', hex, [segments[0], segments[0]])).rejects.toThrow('Duplicate');
-    await expect(validateMidnightSigningSegments('stagenet', hex, [])).rejects.toThrow('one native DUST');
-    await expect(validateMidnightSigningSegments('stagenet', fixture(), segments)).rejects.toThrow('one native DUST');
+    await expect(validateMidnightSigningSegments('preview', hex, segments)).resolves.toBeUndefined();
+    await expect(validateMidnightSigningSegments('preview', undefined, segments)).rejects.toThrow('requires');
+    await expect(validateMidnightSigningSegments('preview', hex, [{ ...segments[0], dataHex: '00' }])).rejects.toThrow('does not match');
+    await expect(validateMidnightSigningSegments('preview', hex, [segments[0], segments[0]])).rejects.toThrow('Duplicate');
+    await expect(validateMidnightSigningSegments('preview', hex, [])).rejects.toThrow('one native DUST');
+    await expect(validateMidnightSigningSegments('preview', fixture(), segments)).rejects.toThrow('one native DUST');
   });
 
   it('rejects the wrong ledger line in both directions and still signs legacy envelopes', async () => {
@@ -97,7 +97,7 @@ describe('Midnight ledger isolation with real WASM', () => {
     ], [{ value: 10n, owner: legacy.addressFromKey(oldKey), type: '00'.repeat(32) }], []);
     const oldTx = legacy.Transaction.fromParts('preprod', undefined, undefined, oldIntent);
     const oldHex = Buffer.from(oldTx.serialize()).toString('hex');
-    expect(() => deserializeLedger9Transaction('stagenet', oldHex)).toThrow();
+    expect(() => deserializeLedger9Transaction('preview', oldHex)).toThrow();
     expect(() => legacy.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(fixture(), 'hex'))).toThrow();
     const payload = oldIntent.signatureData(1);
     const sig = legacy.signData(hexSecret, payload);

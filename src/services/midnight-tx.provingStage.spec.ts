@@ -69,7 +69,7 @@ describe('a wallet-side send says it is proving only once the background proves'
     progress(null);
     mocks.health.mockResolvedValue(true);
     mocks.version.mockResolvedValue({ status: 'unknown' });
-    useMidnightChains({ preprod: [L9, L9], stagenet: [L9, L9], mainnet: [L8, L8] });
+    useMidnightChains({ preprod: [L9, L9], preview: [L9, L9], mainnet: [L8, L8] });
     mocks.api.mockReturnValue({
       buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
       submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0x1', status: 'InBlock' }),

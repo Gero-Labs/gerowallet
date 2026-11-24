@@ -49,15 +49,15 @@ describe('validateConnectorIntentRequest', () => {
   describe('the chain\'s ledger', () => {
     afterEach(() => useDefaultMidnightChainsForTests());
 
-    it('accepts a public swap on a ledger 9 chain: born on it (Stagenet) or crossed to it (Preprod)', () => {
-      expect(validateConnectorIntentRequest(request({}, 'stagenet'), 'Stagenet')).toMatchObject({ ok: true, intentId: 'random' });
+    it('accepts a public swap on a ledger 9 chain: born on it (Preview) or crossed to it (Preprod)', () => {
+      expect(validateConnectorIntentRequest(request({}, 'preview'), 'Preview')).toMatchObject({ ok: true, intentId: 'random' });
       useMidnightChains({ preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION] });
       expect(validateConnectorIntentRequest(request(), 'Preprod')).toMatchObject({ ok: true });
     });
 
     it('refuses a chain whose ledger has not been read, before anything else, and never guesses from the name', () => {
       forgetMidnightLedgersForTests();
-      for (const network of ['Preprod', 'Mainnet', 'Stagenet']) {
+      for (const network of ['Preprod', 'Mainnet', 'Preview']) {
         expect(validateConnectorIntentRequest(request({}, network.toLowerCase()), network))
           .toMatchObject({ ok: false, reason: expect.stringContaining(`Could not read which ledger Midnight ${network} runs`) });
       }

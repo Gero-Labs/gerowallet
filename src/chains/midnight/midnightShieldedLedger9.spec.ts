@@ -20,7 +20,7 @@ vi.mock('./midnightWalletStatePersistence', () => ({
 }));
 vi.mock('./midnightChainIdentity', () => ({
   readVerifiedMidnightChainIdentity: mocks.identity,
-  midnightCheckpointNamespace: (identity: { chain_generation: number }) => `verified-stagenet-${identity.chain_generation}`,
+  midnightCheckpointNamespace: (identity: { chain_generation: number }) => `verified-preview-${identity.chain_generation}`,
   assertMidnightChainIdentityUnchanged: mocks.unchanged,
 }));
 
@@ -35,16 +35,16 @@ function args(): BuildAndSignShieldedTransferArgs {
   const recipient = ledger.ZswapSecretKeys.fromSeed(recipientSeed);
   try {
     return {
-      sdkNetworkId: 'stagenet',
-      endpoints: { sdkNetworkId: 'stagenet', publicIndexerUrl: 'https://indexer.invalid', publicIndexerWsUrl: 'wss://indexer.invalid' } as BuildAndSignShieldedTransferArgs['endpoints'],
+      sdkNetworkId: 'preview',
+      endpoints: { sdkNetworkId: 'preview', publicIndexerUrl: 'https://indexer.invalid', publicIndexerWsUrl: 'wss://indexer.invalid' } as BuildAndSignShieldedTransferArgs['endpoints'],
       zswapSecretKeySeed: seed, dustSecretSeed: new Uint8Array(32).fill(5),
-      outputs: [{ receiverAddress: ShieldedAddress.codec.encode('stagenet', address(recipient)).toString(), amount: 60n, tokenType: token }],
+      outputs: [{ receiverAddress: ShieldedAddress.codec.encode('preview', address(recipient)).toString(), amount: 60n, tokenType: token }],
     };
   } finally { recipient.clear(); }
 }
 
 let stamp = 0n;
-function realWallet(network = 'stagenet') {
+function realWallet(network = 'preview') {
   const keys = ledger.ZswapSecretKeys.fromSeed(seed);
   const coin = { nonce: '11'.repeat(32), type: token, value: 100n };
   const output = ledger.ZswapOutput.new(coin, 0, keys.coinPublicKey, keys.encryptionPublicKey);
@@ -81,7 +81,7 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
     vi.resetAllMocks();
     wallet = realWallet();
     mocks.factory.mockReturnValue({ startWithSecretKeys: () => wallet, restore: () => wallet });
-    mocks.fees.mockResolvedValue(ledger.Transaction.fromParts('stagenet'));
+    mocks.fees.mockResolvedValue(ledger.Transaction.fromParts('preview'));
     mocks.load.mockResolvedValue(null);
     mocks.save.mockResolvedValue(undefined);
     mocks.clear.mockResolvedValue(undefined);
@@ -98,13 +98,13 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
     expect(tx.guaranteedOffer?.outputs).toHaveLength(2);
     const recipient = ledger.ZswapSecretKeys.fromSeed(recipientSeed);
     try {
-      const received = CoreWallet.apply(CoreWallet.initEmpty(recipient, 'stagenet'), recipient, tx.guaranteedOffer!);
+      const received = CoreWallet.apply(CoreWallet.initEmpty(recipient, 'preview'), recipient, tx.guaranteedOffer!);
       expect([...received.state.coins].map(coin => coin.value)).toEqual([60n]);
     } finally { recipient.clear(); }
     expect(wallet.waitForSyncedState).toHaveBeenCalledWith();
     // SDK 2 starts with one ledger's keys per variant; this wallet runs the ledger 9 one only.
     expect(wallet.start).toHaveBeenCalledWith({ v9: expect.anything() });
-    expect(mocks.load).toHaveBeenCalledWith('verified-stagenet-7', 'shielded', seed);
+    expect(mocks.load).toHaveBeenCalledWith('verified-preview-7', 'shielded', seed);
     expect(mocks.fees).toHaveBeenCalledOnce();
     expect(mocks.unchanged).toHaveBeenCalledTimes(2);
     expect(wallet.stop).toHaveBeenCalledOnce();
@@ -155,7 +155,7 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
     mocks.load.mockResolvedValue('checkpoint');
     wallet.waitForSyncedState.mockResolvedValue({ coinPublicKey: { toHexString: () => 'wrong' } });
     await expect(buildAndSignShieldedLedger9Transfer(args())).rejects.toThrow('different wallet');
-    expect(mocks.clear).toHaveBeenCalledWith('verified-stagenet-7', 'shielded', seed);
+    expect(mocks.clear).toHaveBeenCalledWith('verified-preview-7', 'shielded', seed);
     expect(mocks.fees).not.toHaveBeenCalled();
   });
 
@@ -177,10 +177,10 @@ describe('ledger-9 shielded send orchestration with real SDK note construction',
     try {
       const raw = '00'.repeat(32);
       const output = ledger.ZswapOutput.new({ nonce: '11'.repeat(32), type: raw, value: 100n }, 0, keys.coinPublicKey, keys.encryptionPublicKey);
-      const privateTx = ledger.Transaction.fromParts('stagenet', ledger.ZswapOffer.fromOutput(output, raw, 100n));
+      const privateTx = ledger.Transaction.fromParts('preview', ledger.ZswapOffer.fromOutput(output, raw, 100n));
       const intent = ledger.Intent.new(new Date('2030-01-01'));
       intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new([{ value: 100n, owner: ledger.signatureVerifyingKey({ tag: 'schnorr', value: '01'.repeat(32) }), type: raw, intentHash: '22'.repeat(32), outputNo: 0 }], [], []);
-      const combined = privateTx.merge(ledger.Transaction.fromParts('stagenet', undefined, undefined, intent));
+      const combined = privateTx.merge(ledger.Transaction.fromParts('preview', undefined, undefined, intent));
       expect([...combined.imbalances(0)].map(([type, value]) => [type.tag, value])).toEqual(expect.arrayContaining([
         ['unshielded', 100n], ['shielded', -100n],
       ]));

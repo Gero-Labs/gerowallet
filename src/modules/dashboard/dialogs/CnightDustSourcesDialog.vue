@@ -20,6 +20,13 @@
         </div>
       </div>
 
+      <!-- A network read-only in GeroWallet (midnightConfig.ts): registering or
+           redirecting a source is a write its servers refuse, so both are held,
+           with this reason linked to them. -->
+      <GNote v-if="readOnly" id="dust-sources-read-only" icon="mdi-eye-outline" role="status" class="mb-3" data-test="dust-sources-read-only">
+        {{ t('midnight.readOnly.registrationHeld', { network: midnightNetworkDisplayName(walletStore.loggedWallet?.network) }) }}
+      </GNote>
+
       <!-- Source rows: every Cardano identity the user controls on this network. -->
       <div v-if="loading && sources.length === 0" class="empty-note">
         <v-progress-circular indeterminate size="16" width="2" class="mr-2" color="var(--g-accent)" />
@@ -80,7 +87,8 @@
                  relayed, so we can't see where): redirect, never register. -->
             <v-btn
               v-else-if="rowState(source) === 'registeredElsewhere'"
-              size="small" variant="outlined" :disabled="working"
+              size="small" variant="outlined" :disabled="working || readOnly"
+              :aria-describedby="readOnly ? 'dust-sources-read-only' : undefined"
               @click="openAuth(source, 'redirect')"
             >
               <v-icon size="small" start>mdi-swap-horizontal</v-icon>
@@ -90,7 +98,8 @@
             <v-btn
               v-else
               size="small" class="geroButton"
-              :disabled="working || !source.nightBalance"
+              :disabled="working || readOnly || !source.nightBalance"
+              :aria-describedby="readOnly ? 'dust-sources-read-only' : undefined"
               @click="openAuth(source, 'register')"
             >
               {{ t('midnight.dustSourcesGenerateHere') }}
@@ -190,7 +199,9 @@ import {
 } from '@/shared/composables/useDustSources';
 import { getDustPending } from '@/shared/composables/useDustPending';
 import { useExplorer } from '@/shared/composables/useExplorer';
-import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
+import { cardanoTwinNetwork, isMidnightReadOnlyNetwork } from '@/chains/midnight/midnightConfig';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import GNote from '@/shared/components/GNote.vue';
 import timeAgo from '@/plugins/time';
 import snackbar from '@/plugins/snackbar';
 
@@ -225,6 +236,8 @@ const stageLabel = computed(() => {
 });
 
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
+/** Read-only in GeroWallet: no source can be registered or redirected here (midnightConfig.ts). */
+const readOnly = computed(() => isMidnightReadOnlyNetwork(walletStore.loggedWallet?.network));
 const nightTicker = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
 
 const authEncryption = computed<'password' | 'prf'>(() => {
@@ -267,7 +280,7 @@ function pendingTxHash(source: DustSource): string {
 }
 const { explorerUrl } = useExplorer();
 // The registration is a Cardano transaction on the Midnight network's Cardano
-// twin (Stagenet registers on Preprod), not on the Midnight network itself.
+// twin (cardanoTwinNetwork), not on the Midnight network itself.
 function pendingTxUrl(source: DustSource): string {
   return explorerUrl('tx', pendingTxHash(source), {
     chain: Blockchain.CARDANO,
@@ -293,6 +306,7 @@ function middleTruncate(s: string, head = 16, tail = 8): string {
 }
 
 function openAuth(source: DustSource, action: 'register' | 'redirect') {
+  if (readOnly.value) return;
   authFor.value = source.key;
   authAction.value = action;
   authPassword.value = '';

@@ -73,15 +73,16 @@ async function encodeViewingKey(network: string, seed: Uint8Array): Promise<stri
  * is `'mainnet' | 'testnet' | 'devnet' | 'qanet' | 'undeployed' | 'preview' |
  * 'preprod'`, and any other string passes through as the bech32m network
  * segment (see `@midnightntwrk/wallet-sdk-abstractions/dist/NetworkId.d.ts`
- * and `wallet-sdk-address-format`'s `Bech32mCodec.createContext`). That
- * pass-through is what carries `'stagenet'`, which predates neither list.
+ * and `wallet-sdk-address-format`'s `Bech32mCodec.createContext`).
+ * Stagenet is retired: its wallets were moved to Preview (GeroWalletDatabase
+ * v18, midnightPreviewMove.ts), so it is refused like any unknown network.
  */
 function midnightNetworkId(network: string): string {
   switch (network) {
     case Network.MAINNET:
       return 'mainnet';
-    case Network.STAGENET:
-      return 'stagenet';
+    case Network.PREVIEW:
+      return 'preview';
     case Network.PREPROD:
       return 'preprod';
     case Network.TESTNET:
@@ -174,9 +175,10 @@ async function deriveCardanoMaterial(
   const cardanoXpub = bech32.encode('xpub', words, 120);
 
   // The Cardano helpers resolve a NETWORK ID out of the Cardano network table,
-  // so they need a Cardano network name — `Network.STAGENET` has none. Both
-  // stagenet and preprod resolve to testnet (id 0), so the derived addresses
-  // are byte-identical to what preview produced before the rename.
+  // so they need a Cardano network name: the Midnight network's Cardano twin.
+  // Every testnet twin resolves to network id 0, so a wallet moved from
+  // Stagenet (twin preprod) to Preview (twin preview) keeps byte-identical
+  // Cardano addresses.
   const cardanoNetwork = cardanoTwinNetwork(network);
   const cardanoBaseAddress = getAddress(cardanoXpub, Blockchain.CARDANO, cardanoNetwork, 0).toBech32();
   const cardanoStakeAddress = getRewardAddress(cardanoXpub, Blockchain.CARDANO, cardanoNetwork).toBech32();
@@ -199,7 +201,7 @@ async function deriveCardanoMaterial(
  *   - unknown network passed in → "Unsupported Midnight network: ..."
  *
  * @param mnemonic BIP39 phrase (24 words for new wallets; 12/15/24 supported)
- * @param network  One of `Network.STAGENET | PREPROD | MAINNET | TESTNET`
+ * @param network  One of `Network.PREVIEW | PREPROD | MAINNET | TESTNET`
  * @param account  HD account index (defaults to 0)
  */
 export async function deriveMidnightKeys(

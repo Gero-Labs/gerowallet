@@ -129,9 +129,9 @@ describe('balanceDappTransaction', () => {
     expect(deps.startUnshieldedWallet).not.toHaveBeenCalled();
   });
 
-  it('refuses Stagenet outright', async () => {
+  it('refuses Preview outright', async () => {
     const { deps } = fakeDeps();
-    await expect(balanceDappTransaction({ ...base, sdkNetworkId: 'stagenet', txHex: '00' }, deps)).rejects.toThrow(/Stagenet/);
+    await expect(balanceDappTransaction({ ...base, sdkNetworkId: 'preview', txHex: '00' }, deps)).rejects.toThrow(/Preview/);
     expect(deps.startUnshieldedWallet).not.toHaveBeenCalled();
   });
 

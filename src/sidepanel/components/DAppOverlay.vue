@@ -3643,7 +3643,7 @@ async function buildMidnightTransferTx(
 
 // The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer):
 // in Gero Cloud mode its DUST fee is proven on this device. A remote prover
-// (zkPaaS, or Gero Cloud on Stagenet, which this device cannot prove) receives
+// (zkPaaS) receives
 // the DUST-fee proof inputs, so it needs the same consent the wallet's own
 // sends require. The consent dialog records it asynchronously, so the user
 // approves the transfer again afterwards (a PassKey popup must open inside
@@ -3809,9 +3809,13 @@ const midnightWriteBlock = useMidnightWriteBlock(() => (
   loggedWallet.value?.chain === Blockchain.MIDNIGHT ? loggedWallet.value?.network : ''
 ));
 const midnightWritesPaused = computed(() => midnightWriteBlock.value !== null);
-const midnightWritesPausedReason = computed(() => (midnightWriteBlock.value === 'updateRequired'
-  ? t('midnight.errors.updateRequired')
-  : t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(loggedWallet.value?.network) })));
+const midnightWritesPausedReason = computed(() => {
+  const network = midnightNetworkDisplayName(loggedWallet.value?.network);
+  if (midnightWriteBlock.value === 'readOnly') return t('midnight.readOnly.sendHeld', { network });
+  return midnightWriteBlock.value === 'updateRequired'
+    ? t('midnight.errors.updateRequired')
+    : t('midnight.errors.networkUpgrading', { network });
+});
 function declineMidnightWhilePaused() {
   approval.invalidate();
   spendingPassword.value = '';

@@ -229,8 +229,8 @@ function bigintRecord(raw: Record<string, string>): Record<TokenType, bigint> {
  * Build a purposefully imbalanced swap intent: the wallet gives
  * `desiredInputs` and asks for `desiredOutputs`. The wallet prompts in its
  * side panel and returns the SEALED tx hex for a counterparty to balance.
- * Public (unshielded) legs only; shielded legs, Stagenet and give-only
- * intents reject with InvalidRequest. `options` is required, as in the type.
+ * Public (unshielded) legs only; shielded legs and give-only intents
+ * reject with InvalidRequest. `options` is required, as in the type.
  */
 export const midnightMakeIntent = async (
   desiredInputs: DesiredInput[],

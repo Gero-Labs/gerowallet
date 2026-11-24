@@ -20,7 +20,9 @@ describe('isOnSupportedNetwork', () => {
   });
 
   it('refuses a known chain on a network it does not have, and a record naming none', () => {
-    expect(isOnSupportedNetwork({ chain: Blockchain.MIDNIGHT, network: Network.PREVIEW })).toBe(false);
+    // Stagenet left the build (issue 1453); gero-db v18 moves its records to Preview.
+    expect(isOnSupportedNetwork({ chain: Blockchain.MIDNIGHT, network: 'Stagenet' })).toBe(false);
+    expect(isOnSupportedNetwork({ chain: Blockchain.MIDNIGHT, network: Network.PREVIEW })).toBe(true);
     expect(isOnSupportedNetwork({ chain: Blockchain.CARDANO })).toBe(false);
     expect(isOnSupportedNetwork({})).toBe(false);
     expect(isOnSupportedNetwork(null)).toBe(false);

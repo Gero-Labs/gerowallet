@@ -4,7 +4,7 @@ import type { UnprovenTransaction as Ledger9UnprovenTransaction } from '@midnigh
 
 /**
  * Which proof server this device serves to paired phones, by ledger, never by
- * network: `ledger9` (mainnet, preprod, Preview and Stagenet all run ledger 9)
+ * network: `ledger9` (mainnet, preprod and Preview all run ledger 9)
  * or `legacy` (ledger 8, for a phone still building ledger 8 transactions).
  * The wire carries only the server's release tag (`proverLedgerVersion`).
  */
@@ -20,7 +20,11 @@ export function localProverTag(profile: LocalProverProfile): string {
   return midnightProofServerTagForLedger(profile === 'ledger9' ? 9 : 8);
 }
 
-/** The networks a served transaction may belong to. Its own bytes say which. */
+/**
+ * The networks a served transaction may belong to. Its own bytes say which.
+ * `stagenet` stays for a paired phone that may still build Stagenet
+ * transactions; this wallet's own Stagenet wallets moved to Preview.
+ */
 const NETWORKS = ['mainnet', 'preprod', 'preview', 'stagenet'] as const;
 
 /** Validate actual serialized bytes, not the peer's advertised version string. */

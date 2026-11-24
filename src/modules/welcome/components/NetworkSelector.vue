@@ -34,11 +34,19 @@
           class="net-pill glass-tier t-body-sm"
           :class="{ 'net-pill--active': isNetActive(net), 'net-pill--disabled': net.comingSoon }"
           :disabled="net.comingSoon"
+          :title="isReadOnly(net) ? $t('midnight.readOnly.label') : undefined"
+          :aria-describedby="isReadOnly(net) && isNetActive(net) ? 'network-read-only-note' : undefined"
           @click="selectNet(net)"
         >
+          <v-icon v-if="isReadOnly(net)" size="14" class="net-pill__read-only" aria-hidden="true">mdi-eye-outline</v-icon>
           {{ optionLabel(net) }}
         </button>
       </div>
+      <!-- A network GeroWallet can only read for now (Midnight Preview): said
+           before a wallet is made on it (writesSupported, midnightConfig.ts). -->
+      <p v-if="activeReadOnly" id="network-read-only-note" class="net-note t-caption" data-test="network-read-only">
+        {{ $t('midnight.readOnly.label') }}
+      </p>
     </template>
   </div>
 </template>
@@ -49,6 +57,7 @@ import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Blockchain } from '@/models/types';
+import { isMidnightReadOnlyNetwork } from '@/chains/midnight/midnightConfig';
 
 interface Family {
   name: string;
@@ -101,6 +110,11 @@ const isFamilySelectable = (fam: Family): boolean => {
 
 const isNetActive = (net: NetworkInfo): boolean =>
   props.network?.blockchain === net.blockchain && props.network?.network === net.network;
+
+/** A Midnight network GeroWallet can only read for now (its sends and registrations are held). */
+const isReadOnly = (net: NetworkInfo | undefined): boolean =>
+  net?.blockchain === Blockchain.MIDNIGHT && isMidnightReadOnlyNetwork(net.network);
+const activeReadOnly = computed<boolean>(() => isReadOnly(props.network));
 
 // Strip the family prefix so labels stay short: "Cardano Mainnet" -> "Mainnet".
 const optionLabel = (net: NetworkInfo): string => {
@@ -268,5 +282,15 @@ watch(
     opacity: 0.4;
     cursor: not-allowed;
   }
+}
+
+.net-pill__read-only {
+  margin-right: var(--g-s-1);
+  vertical-align: -2px;
+}
+
+.net-note {
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 </style>

@@ -12,7 +12,7 @@ import { PROOF_SERVER_DOCKER_COMMAND, midnightProofServerCommand } from './midni
  */
 
 /** Every network the Settings → Proof server page can be opened on, plus "no wallet". */
-const NETWORKS: Array<string | undefined> = [Network.MAINNET, Network.PREPROD, Network.STAGENET, 'midnight-stagenet', undefined];
+const NETWORKS: Array<string | undefined> = [Network.MAINNET, Network.PREPROD, Network.PREVIEW, 'midnight-preview', undefined];
 
 /** Built from parts so this file does not match its own guard. */
 const VERBOSE_FLAG = new RegExp(['midnight-proof-server', '\\s+(?:-v|--verbose)\\b'].join(''));

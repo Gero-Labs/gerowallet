@@ -114,6 +114,7 @@ export function refreshMidnightWriteStatus(network: string, options: { force?: b
 export async function assertMidnightWritesOpen(network: string, options: { refresh?: boolean } = {}): Promise<void> {
   if (options.refresh) await refreshMidnightWriteStatus(network);
   const block = await midnightWriteBlock(network);
+  if (block === 'readOnly') throw new MidnightApiError('readOnly', {}, network);
   if (block === 'updateRequired') {
     throw new MidnightApiError('updateRequired', { errorCode: MIDNIGHT_NETWORK_UPGRADING, reason: CLIENT_UPDATE_REQUIRED }, network);
   }

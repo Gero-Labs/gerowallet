@@ -20,10 +20,10 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
 import { notIncludedAfterReset, pendingLookupDeadline } from '@/chains/midnight/midnightPendingSends';
 
-const ME = 'mn_addr_stagenet1test';
+const ME = 'mn_addr_preview1test';
 const GENESIS = `0x${'cd'.repeat(32)}`;
 const identity = (generation: number, genesis = GENESIS) => ({
-  midnight_network: 'midnight-stagenet', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
+  midnight_network: 'midnight-preview', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
 });
 const SENT = 'aa'.repeat(32);
 const TARGET = 'bb'.repeat(32);
@@ -38,7 +38,7 @@ let sentAt = 0;
 const pending = (shielded = false) => {
   sentAt = Date.now();
   midnightActions.applyTransaction({
-    hash: SENT, type: 'send', token: 'NIGHT', amount: 40_000_000n, counterparty: 'mn_addr_stagenet1other',
+    hash: SENT, type: 'send', token: 'NIGHT', amount: 40_000_000n, counterparty: 'mn_addr_preview1other',
     timestamp: sentAt, status: 'pending', fee: 0n, isShielded: shielded, ledgerHash: true,
   });
 };
@@ -56,13 +56,13 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-11-10T00:00:00Z'));
   service.stop();
-  midnightActions.resetChainState({ network: 'midnight-stagenet', generation: 1, genesisHash: GENESIS });
+  midnightActions.resetChainState({ network: 'midnight-preview', generation: 1, genesisHash: GENESIS });
   midnightActions.endRefresh();
   midnightStore.transactions = [];
   midnightStore.chainIdentity = null;
   h.connect.mockClear();
   h.graphql.mockReset().mockImplementation(async () => answer(null));
-  service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
+  service.start(Network.PREVIEW, { unshielded: ME, shielded: '', dust: '' });
   await flush();
   await sync({ ...identity(1), transactions: [transfer(TARGET)] });
   h.graphql.mockClear();
@@ -201,7 +201,7 @@ describe('the retry timer', () => {
     await vi.advanceTimersByTimeAsync(30_000 + 60_000 + 1_000); // two retries in
     expect(h.graphql).toHaveBeenCalledTimes(3);
     service.stop();
-    service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
+    service.start(Network.PREVIEW, { unshielded: ME, shielded: '', dust: '' });
     await flush(); await flush(); await flush();
     expect(h.graphql).toHaveBeenCalledTimes(4); // start looks it up once
     await vi.advanceTimersByTimeAsync(29_000);
@@ -214,7 +214,7 @@ describe('the retry timer', () => {
     h.graphql.mockRejectedValue(new Error('down'));
     pending();
     await resetAndRebuild();
-    service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
+    service.start(Network.PREVIEW, { unshielded: ME, shielded: '', dust: '' });
     await flush(); await flush(); await flush();
     const after = h.graphql.mock.calls.length;
     await vi.advanceTimersByTimeAsync(3 * 60 * 60_000);

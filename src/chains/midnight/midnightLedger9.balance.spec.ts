@@ -22,19 +22,19 @@ function args() {
   intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new([
     { value: 10n, owner: key, type: '00'.repeat(32), intentHash: '11'.repeat(32), outputNo: 0 },
   ], [{ value: 10n, owner: ledger.addressFromKey(key), type: '00'.repeat(32) }], []);
-  return { sdkNetworkId: 'stagenet', endpoints: getMidnightEndpoints('Stagenet')!,
+  return { sdkNetworkId: 'preview', endpoints: getMidnightEndpoints('Preview')!,
     unshieldedSecretKey: new Uint8Array(32).fill(1), dustSecretSeed: new Uint8Array(32).fill(2), ttl,
-    unprovenTxHex: Buffer.from(ledger.Transaction.fromParts('stagenet', undefined, undefined, intent).serialize()).toString('hex') };
+    unprovenTxHex: Buffer.from(ledger.Transaction.fromParts('preview', undefined, undefined, intent).serialize()).toString('hex') };
 }
 
-describe('Stagenet compact DUST balancing', () => {
+describe('Preview compact DUST balancing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.identity.mockResolvedValue({ network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.identity.mockResolvedValue({ network: 'midnight-preview', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
     mocks.recheck.mockResolvedValue(undefined);
     mocks.transport.mockReturnValue({});
     mocks.reconstruct.mockResolvedValue({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
-    mocks.balance.mockReturnValue(ledger.Transaction.fromParts('stagenet'));
+    mocks.balance.mockReturnValue(ledger.Transaction.fromParts('preview'));
   });
 
   it('signs the transfer after compact state verification and fee preparation', async () => {
@@ -149,7 +149,7 @@ describe('unshielded send on a ledger 9 mainnet or preprod', () => {
     for (const signature of offer.signatures) {
       expect(ledger.verifySignature({ tag: 'schnorr', value: fixture.publicKey }, intent.signatureData(1), signature.value)).toBe(true);
     }
-    // The DUST state is rebuilt and balanced for the wallet's own network, never 'stagenet'.
+    // The DUST state is rebuilt and balanced for the wallet's own network, never 'preview'.
     expect(mocks.reconstruct.mock.calls[0][2]).toBe(network);
     expect(mocks.balance.mock.calls[0][2]).toBe(network);
   });
@@ -168,7 +168,7 @@ describe('unshielded send on a ledger 9 mainnet or preprod', () => {
 describe('a fee spread inside the wallet\'s own intent', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.identity.mockResolvedValue({ network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.identity.mockResolvedValue({ network: 'midnight-preview', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
     mocks.recheck.mockResolvedValue(undefined);
     mocks.transport.mockReturnValue({});
     mocks.reconstruct.mockResolvedValue({ state: {}, block: { timestamp: Date.now(), ledgerParameters: 'params' } });
@@ -176,18 +176,18 @@ describe('a fee spread inside the wallet\'s own intent', () => {
 
   it('hands the sealed parts and the carrier to the spread, and builds no fee transaction of its own', async () => {
     const ttl = new Date(Date.now() + 300_000);
-    const carrier = ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 1 }, ledger.Intent.new(ttl));
-    const sealed = (await ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 2 }, ledger.Intent.new(ttl))
+    const carrier = ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 1 }, ledger.Intent.new(ttl));
+    const sealed = (await ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 2 }, ledger.Intent.new(ttl))
       .prove({ check: async () => [], prove: async () => new Uint8Array(), lookupKey: async () => undefined }, ledger.CostModel.initialCostModel())).bind();
     mocks.spread.mockReturnValue(carrier);
     const sign = (tx: ledger.UnprovenTransaction) => tx;
     const fee = await balanceLedger9Fees({
-      sdkNetworkId: 'stagenet', endpoints: getMidnightEndpoints('Stagenet')!, dustSecretSeed: new Uint8Array(32).fill(2), ttl, spread: { carrier, sign },
+      sdkNetworkId: 'preview', endpoints: getMidnightEndpoints('Preview')!, dustSecretSeed: new Uint8Array(32).fill(2), ttl, spread: { carrier, sign },
     }, [sealed]);
     expect(fee).toBe(carrier);
     expect(mocks.spread).toHaveBeenCalledOnce();
     const call = mocks.spread.mock.calls[0];
-    expect(call[2]).toBe('stagenet');
+    expect(call[2]).toBe('preview');
     expect(call[3]).toEqual([sealed]);
     expect(call[4]).toBe(carrier);
     expect(call[7]).toBe('params');

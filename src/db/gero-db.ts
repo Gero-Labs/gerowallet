@@ -7,6 +7,7 @@ import { bech32, bech32m } from 'bech32';
 import { clearDbCache, getDb as getWalletDb } from '@/db/wallet-db';
 import { deleteStoreCacheScope } from '@/utils/storeCache';
 import { withoutViewingKey } from '@/chains/midnight/midnightRecordScrub';
+import { previewMoveOf, RETIRED_STAGENET } from '@/chains/midnight/midnightPreviewMove';
 import { sealKeySecret, sealTextSecret } from '@/shared/utils/secretWriters';
 import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -130,6 +131,9 @@ export async function getDb() {
   // resolve to testnet). The Midnight bech32m addresses do change HRP
   // (`mn_addr_preview…` → `mn_addr_stagenet…`), which is correct — they name a
   // different chain.
+  //
+  // Reversed by v18: Stagenet was retired in turn and Midnight Preview relaunched
+  // as a new chain, so a profile upgrading from before v16 ends on Preview.
   db.version(16).stores(geroDBSchema).upgrade(async (tx) => {
     debugLog('Upgrading GeroWalletDatabase to v16: Midnight preview → stagenet...');
     try {
@@ -156,7 +160,7 @@ export async function getDb() {
   // by applyPendingBackupRecheck(), which lives here because the backup flag is
   // in the per-wallet database this transaction cannot reach. Wallets created
   // after this upgrade are never stamped: their flag is already right.
-  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+  db.version(17).stores(geroDBSchema).upgrade(async (tx) => {
     debugLog('Upgrading GeroWalletDatabase to v17: Midnight backup recheck...');
     try {
       const wallets = await tx.table('wallets').toArray();
@@ -173,12 +177,61 @@ export async function getDb() {
     }
   });
 
+  // Version 18: Midnight Stagenet → Preview (issue 1453).
+  // Stagenet is retired; Preview, relaunched as a new ledger 9 chain, replaced
+  // it. Every Midnight Stagenet wallet moves to Preview: `network` becomes
+  // Preview and the addresses in `publicKey` are re-encoded for it, which needs
+  // no secret (midnightPreviewMove.ts). Cardano Preview wallets and every other
+  // record are untouched. The record keeps `previewMovePending` until its next
+  // login, which drops the old chain's local state (midnightPreviewMoveCleanup.ts):
+  // that lives in other databases, which this transaction cannot reach. The same
+  // move also runs after every open (moveStagenetWalletsToPreview below), so a
+  // Stagenet record written after this upgrade is moved too.
+  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+    debugLog('Upgrading GeroWalletDatabase to v18: Midnight Stagenet → Preview...');
+    try {
+      const moved = await moveStagenetRecords(tx.table('wallets'));
+      debugLog(`GeroWalletDatabase v18 migration complete (${moved} Midnight wallet(s) moved to Preview)`);
+    } catch (error) {
+      debugLog('GeroWalletDatabase v18 migration failed:', error);
+      throw error;
+    }
+  });
+
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
   });
 
+  if (db.isOpen()) await moveStagenetWalletsToPreview(db);
+
   cachedDb = db;
   return db;
+}
+
+/** Apply {@link previewMoveOf} to every Midnight Stagenet record of `wallets`. Returns how many moved. */
+async function moveStagenetRecords(wallets: Dexie.Table): Promise<number> {
+  const stagenet = (await wallets.toArray()).filter((wallet) => previewMoveOf(wallet) !== null);
+  for (const wallet of stagenet) {
+    const update = previewMoveOf(wallet);
+    if (update) await wallets.update(wallet.id, { ...update });
+  }
+  return stagenet.length;
+}
+
+/**
+ * The v18 move, run after every open: idempotent (a moved record is a Preview
+ * one), and a no-op without a Stagenet record. Never throws: a failure leaves
+ * the records for the next open, and the database stays usable.
+ */
+async function moveStagenetWalletsToPreview(db: Dexie): Promise<void> {
+  try {
+    const wallets = db.table('wallets');
+    if (!(await wallets.where('network').equals(RETIRED_STAGENET).count())) return;
+    const moved = await db.transaction('rw', wallets, () => moveStagenetRecords(wallets));
+    if (moved) debugLog(`GeroWalletDatabase: ${moved} Midnight Stagenet wallet(s) moved to Preview`);
+  } catch (error) {
+    debugLog('GeroWalletDatabase: moving Stagenet wallets to Preview deferred:', error);
+  }
 }
 
 export async function setConfiguration(key, value) {

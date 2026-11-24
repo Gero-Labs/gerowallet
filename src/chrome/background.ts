@@ -59,7 +59,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
+import { Blockchain, coin_type, Paginate, purpose } from '@/models/types';
 import { canReplaceWalletKey } from '@/db/walletIdentity';
 import networks from '@/utils/networks';
 import { isOnRemovedNetwork } from '@/shared/utils/supportedWallet';
@@ -135,6 +135,8 @@ import { midnightStore as midnightStoreSync } from '@/stores/midnightStore';
 import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format';
 import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
 import { connectorConfiguration } from '@/chains/midnight/midnightConnectorConfiguration';
+import { isMidnightNetworkMismatch, midnightSdkNetworkId } from '@/chains/midnight/midnightSdkNetwork';
+import { isMidnightReadOnlyNetwork } from '@/chains/midnight/midnightConfig';
 import {
   connectorBalancePrompt,
   classifyConnectorSubmission,
@@ -7631,19 +7633,16 @@ function recordMidnightPermissionDenial(tabId: number | undefined, method: strin
 }
 
 /**
- * Gero `Network` enum → Midnight SDK's lowercase networkId string. The same
- * mapping is duplicated at every other Midnight SDK call site in this
- * codebase (signMidnightSegments, balanceAndSignUnshieldedTransfer, ...) —
- * kept local here rather than centralized, matching that established pattern.
+ * A network read-only in GeroWallet (`writesSupported: false`, midnightConfig.ts):
+ * a dapp's transaction request (build, balance, intent) is answered before any
+ * prompt, as while sends are paused: InternalError with the sentence the wallet
+ * shows, since it is the wallet's state, not a request the dapp got wrong.
+ * submitTransaction gets the same answer through the write gate.
  */
-function midnightSdkNetworkId(network: string): string {
-  switch (network) {
-    case Network.MAINNET: return 'mainnet';
-    case Network.STAGENET: return 'stagenet';
-    case Network.PREPROD: return 'preprod';
-    case Network.TESTNET: return 'testnet';
-    default: throw new Error(`Unsupported Midnight network: ${network}`);
-  }
+function refuseMidnightReadOnly(network: string, reply: (opts: ReplyOpts) => void): boolean {
+  if (!isMidnightReadOnlyNetwork(network)) return false;
+  reply({ error: midnightApiError(MidnightErrorCode.InternalError, readableMidnightError('readOnly', {}, network)) });
+  return true;
 }
 
 /**
@@ -7696,15 +7695,16 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   // The connector spec only formally standardizes 'mainnet' as a well-known
   // network id (SPECIFICATION.md §Initial API point 13) — non-mainnet ids
   // aren't governed by a canonical registry across dapps/wallets. But our
-  // own SDK networkId vocabulary ('mainnet'/'stagenet'/'preprod'/'testnet',
+  // own SDK networkId vocabulary ('mainnet'/'preview'/'preprod'/'testnet',
   // via midnightSdkNetworkId) is exactly what a Gero-aware dapp — or any
   // dapp using the same SDK convention — would send. Reject on ANY mismatch
   // against the active wallet's actual network, not just a mainnet-specific
-  // special case: silently accepting e.g. a 'stagenet' request while the
-  // wallet is on 'preprod' would connect the dapp to the wrong chain without
-  // it ever knowing. Better to over-reject an unusual-but-valid networkId
-  // string than to silently cross-connect networks.
-  if (networkId && networkId !== midnightSdkNetworkId(currentWallet.network)) {
+  // special case: silently accepting e.g. a 'preprod' request while the
+  // wallet is on 'preview' would connect the dapp to the wrong chain without
+  // it ever knowing. The retired 'stagenet' is no network of ours: a dapp still
+  // asking for it is refused like any other mismatch. Better to over-reject an
+  // unusual-but-valid networkId string than to silently cross-connect networks.
+  if (isMidnightNetworkMismatch(networkId, currentWallet.network)) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, `Wallet is on ${currentWallet.network}, not ${networkId}`) });
     return true;
   }
@@ -8259,6 +8259,7 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  if (refuseMidnightReadOnly(currentWallet.network, reply)) return true;
   // The wallet the site's permission was checked against, as in balanceSealedTransaction below:
   // the checks await, and the prompt is stamped with whichever wallet is active when it is parked.
   const { id: walletId, network: walletNetwork } = currentWallet;
@@ -8320,6 +8321,7 @@ app.add(MIDNIGHT_METHOD.balanceSealedTransaction, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  if (refuseMidnightReadOnly(currentWallet.network, reply)) return true;
   // The wallet the site's permission was checked against. The checks below
   // await, and the prompt is stamped with whichever wallet is active when it
   // is parked (sendToMiniGero), so a switch in between would show another
@@ -8618,6 +8620,7 @@ app.add(MIDNIGHT_METHOD.makeIntent, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  if (refuseMidnightReadOnly(currentWallet.network, reply)) return true;
   // Synchronous (the dapp's gesture): the chain's ledger as last read. A
   // session reads it when it starts and every few minutes; read it now too,
   // so a retry after "could not read" works.
@@ -8686,6 +8689,7 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
+  if (refuseMidnightReadOnly(currentWallet.network, reply)) return true;
   const validation = validateMakeTransferInputs(data, currentWallet.network);
   if (validation.ok === false) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });

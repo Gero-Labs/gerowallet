@@ -988,7 +988,7 @@ const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // Name the server that was not found. Each ledger has its own local server
 // (different circuit families, different default ports), and the wallet
 // picks by network — so "not detected" must say WHICH one, or a user with
-// the ledger-8 server running on stagenet is told to start something that
+// the ledger-8 server running is told to start something that
 // is already up. Gero Cloud stays on offer: the sidecar proves both lines.
 const proverFallbackText = computed(() => {
   // Gero Prover is missing, not allowed or another release: nothing was sent.

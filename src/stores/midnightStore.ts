@@ -1049,7 +1049,7 @@ function isValidProofServerUrl(value: unknown): value is string {
 export function hydrateChainIdentity(stored: unknown): MidnightSyncIdentity | null {
   if (!stored || typeof stored !== 'object') return null;
   const { network, generation, genesisHash } = stored as Record<string, unknown>;
-  if (typeof network !== 'string' || !/^midnight-(mainnet|preprod|stagenet)$/.test(network)) return null;
+  if (typeof network !== 'string' || !/^midnight-(mainnet|preprod|preview)$/.test(network)) return null;
   if (!Number.isSafeInteger(generation) || (generation as number) < 1) return null;
   if (typeof genesisHash !== 'string' || !/^0x[0-9a-f]{64}$/.test(genesisHash)) return null;
   return { network, generation: generation as number, genesisHash };

@@ -21,12 +21,11 @@ import {
 } from './midnightBuiltTxGuard';
 import { LEDGER8_PROTOCOL_VERSION, LEDGER9_PROTOCOL_VERSION_SAMPLE, useMidnightChains } from '@test/helpers/midnightChains';
 
-/** Mainnet and preprod crossed the upgrade; Preview and Stagenet were born on ledger 9. */
+/** Mainnet and preprod crossed the upgrade; Preview was born on ledger 9. */
 const onLedger9 = () => useMidnightChains({
   mainnet: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
   preprod: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER8_PROTOCOL_VERSION],
   preview: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER9_PROTOCOL_VERSION_SAMPLE],
-  stagenet: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER9_PROTOCOL_VERSION_SAMPLE],
 });
 
 // Nexus-built fixtures (synthetic key, nonexistent UTxOs): each transfer sends 10
@@ -45,8 +44,12 @@ const input = (value: bigint, owner: unknown = OWN_KEY) => ({ owner, type: NIGHT
 const output = (owner: string, value: bigint, type = NIGHT) => ({ owner, type, value });
 const send = (recipientHex: string, amount: bigint) => [{ recipientHex, tokenRaw: NIGHT, amount }];
 
+// The fixture still carries Stagenet builds; the wallet moved its Stagenet wallets
+// to Preview (issue 1453) and reads no Stagenet transaction any more.
+const onWalletNetwork = (vector: { network: string }) => vector.network !== 'stagenet';
+
 describe('Nexus-built Midnight send check', () => {
-  for (const vector of fixture.transfers) {
+  for (const vector of fixture.transfers.filter(onWalletNetwork)) {
     it(`accepts the real ledger 9 ${vector.network} build of ${vector.count} input(s) (${vector.token.slice(0, 4)})`, async () => {
       onLedger9();
       const tx = await decodeUnprovenMidnightTransaction(vector.network, vector.unprovenTxHex);
@@ -96,7 +99,7 @@ describe('Nexus-built Midnight send check', () => {
 });
 
 describe('Nexus-built native NIGHT DUST registration check', () => {
-  for (const vector of fixture.registrations) {
+  for (const vector of fixture.registrations.filter(onWalletNetwork)) {
     it(`accepts the real ledger 9 ${vector.network} registration build`, async () => {
       onLedger9();
       const tx = await decodeUnprovenMidnightTransaction(vector.network, vector.unprovenTxHex);
@@ -104,6 +107,15 @@ describe('Nexus-built native NIGHT DUST registration check', () => {
       expect(verifyMidnightDustRegistration(tx, own, REGISTERED_DUST_KEY + 1n)).toEqual(['registrationMismatch']);
     });
   }
+
+  it('reads no build of the retired Stagenet: its ledger is never known', async () => {
+    onLedger9();
+    const stagenet = [...fixture.transfers, ...fixture.registrations].filter((vector) => !onWalletNetwork(vector));
+    expect(stagenet.length).toBeGreaterThan(0);
+    for (const vector of stagenet) {
+      await expect(decodeUnprovenMidnightTransaction(vector.network, vector.unprovenTxHex)).rejects.toThrow('MIDNIGHT_LEDGER_UNKNOWN');
+    }
+  });
 
   const registration = (nightKey: unknown = OWN_KEY, dustAddress = 7n) => ({ registrations: [{ nightKey, dustAddress }], spends: [] });
   it('refuses a registration that moves NIGHT away or registers someone else\'s key', () => {
@@ -123,7 +135,7 @@ describe('Midnight address and token decoding for the check', () => {
     // walletBg checks against derived.publicKeyHex / derived.addressHex, which come
     // from this keystore; they must equal an input's owner key and an output's owner.
     const { midnightKeystore, schnorrHex } = await import('./midnightLedger');
-    for (const network of ['preprod', 'stagenet']) {
+    for (const network of ['preprod', 'preview']) {
       const keystore = await midnightKeystore(Uint8Array.from(Buffer.from(fixture.secret, 'hex')), network);
       expect(schnorrHex(keystore.getPublicKey()).toLowerCase()).toBe(OWN_KEY.toLowerCase());
       expect(String(keystore.getAddress()).toLowerCase()).toBe(OWN_ADDRESS.toLowerCase());
@@ -189,7 +201,7 @@ describe('a built transaction that cannot be read is refused apart from one that
       .rejects.toThrow(MIDNIGHT_BUILT_TX_MISMATCH);
   });
 
-  it.each(['mainnet', 'preprod', 'stagenet'])('%s: bytes no ledger reads are MIDNIGHT_BUILT_TX_UNREADABLE', async (network) => {
+  it.each(['mainnet', 'preprod', 'preview'])('%s: bytes no ledger reads are MIDNIGHT_BUILT_TX_UNREADABLE', async (network) => {
     await expect(assertMidnightTransferMatches(network, 'deadbeef', own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
     await expect(assertMidnightTransferMatches(network, 'not hex', own, toSelf(network))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
   });
@@ -201,7 +213,7 @@ describe('a built transaction that cannot be read is refused apart from one that
   });
 
   it('a ledger-9 transaction for another network is not read as an upgrade', async () => {
-    const hex = hexOf(ledger9.Transaction.fromParts('stagenet').serialize());
+    const hex = hexOf(ledger9.Transaction.fromParts('preview').serialize());
     await expect(assertMidnightTransferMatches('mainnet', hex, own, toSelf('mainnet'))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
   });
 
@@ -211,8 +223,8 @@ describe('a built transaction that cannot be read is refused apart from one that
   });
 
   it('a DUST registration that cannot be read is MIDNIGHT_BUILT_TX_UNREADABLE', async () => {
-    await expect(assertMidnightDustRegistrationMatches('stagenet', 'deadbeef', own, dustAddress('stagenet'))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
-    await expect(assertMidnightDustRegistrationMatches('stagenet', registration9('stagenet').unprovenTxHex, own, dustAddress('stagenet')))
+    await expect(assertMidnightDustRegistrationMatches('preview', 'deadbeef', own, dustAddress('preview'))).rejects.toThrow(MIDNIGHT_BUILT_TX_UNREADABLE);
+    await expect(assertMidnightDustRegistrationMatches('preview', registration9('preview').unprovenTxHex, own, dustAddress('preview')))
       .resolves.toBeUndefined();
   });
 

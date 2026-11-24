@@ -73,16 +73,12 @@ function buildCSP(dev: boolean): string {
     // overridable per environment and the intent should be visible here.
     'https://support.gerowallet.io',
     'wss://support.gerowallet.io',
-    // Midnight mainnet/preprod: the SDK's UnshieldedWallet/DustWallet/
+    // Midnight mainnet/preprod/preview: the SDK's UnshieldedWallet/DustWallet/
     // ShieldedWallet sync goes through gero-sync's indexer relay
     // (sync.gerowallet.io, covered by *.gerowallet.io above). Gero's indexer
     // and node are private, and the extension no longer talks to the
-    // Foundation (*.midnight.network) or Blockfrost Midnight endpoints.
-    // Stagenet moved off midnight.network; keep the direct SDK endpoints usable.
-    'https://rpc.stagenet.shielded.tools',
-    'wss://rpc.stagenet.shielded.tools',
-    'https://indexer.stagenet.shielded.tools',
-    'wss://indexer.stagenet.shielded.tools',
+    // Foundation (*.midnight.network) or Blockfrost Midnight endpoints. The
+    // retired Stagenet's direct hosts (shielded.tools) are gone with it.
     // Arkhia zkPaaS (hosted Midnight proof server) — extension-page health
     // checks + BG proving fetches. Wildcard covers the starter tier plus any
     // other plan subdomain a user's project lands on; .network is Arkhia's

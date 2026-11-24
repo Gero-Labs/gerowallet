@@ -9,7 +9,7 @@ import { MIDNIGHT_LEDGER_QUERY, readMidnightChainLedger, resolveMidnightChain, r
 import { deserializeLedger9Transaction, signLedger9Transaction } from './midnightLedger9';
 import { isLedger9Network, midnightProofServerTag, midnightProofServerTagForLedger } from './midnightConfig';
 
-const networks = ['mainnet', 'Mainnet', 'midnight-mainnet', 'preprod', 'Preprod', 'preview', 'stagenet', 'Stagenet', 'testnet', 'undeployed'];
+const networks = ['mainnet', 'Mainnet', 'midnight-mainnet', 'preprod', 'Preprod', 'preview', 'Preview', 'midnight-preview', 'testnet', 'undeployed'];
 const endpoints = { publicIndexerUrl: 'https://indexer.invalid/graphql', sdkNetworkId: 'preprod' as const };
 
 function indexerAnswer(body: unknown, status = 200) {
@@ -53,7 +53,7 @@ describe('ledger selection by protocol version, never by network name', () => {
     noteMidnightProtocolVersion('Mainnet', 1_999_999);
     expect(isLedger9Network('Mainnet')).toBe(false);
     expect(midnightProofServerTag('Mainnet')).toBe(midnightProofServerTagForLedger(8));
-    expect(midnightProofServerTag('Stagenet')).toBe(midnightProofServerTagForLedger(9));
+    expect(midnightProofServerTag('Preview')).toBe(midnightProofServerTagForLedger(9));
   });
 });
 
@@ -131,7 +131,7 @@ describe('the ledger 9 path on every network', () => {
     return Buffer.from(ledger.Transaction.fromParts(network, undefined, undefined, intent).serialize()).toString('hex');
   }
 
-  it.each(['mainnet', 'preprod', 'preview', 'stagenet'])('%s on ledger 9 signs its own ledger 9 transaction', (network) => {
+  it.each(['mainnet', 'preprod', 'preview'])('%s on ledger 9 signs its own ledger 9 transaction', (network) => {
     noteMidnightProtocolVersion(network, 2_001_100);
     const signed = deserializeLedger9Transaction(network, signLedger9Transaction(network, transfer(network), secret));
     const intent = signed.intents!.get(1)!;
@@ -143,6 +143,6 @@ describe('the ledger 9 path on every network', () => {
     noteMidnightProtocolVersion('mainnet', 1_999_999);
     expect(() => signLedger9Transaction('preprod', transfer('mainnet'), secret)).toThrow();
     expect(() => deserializeLedger9Transaction('mainnet', transfer('mainnet'))).toThrow('Midnight Mainnet runs ledger 8');
-    expect(() => deserializeLedger9Transaction('mainnet', transfer('mainnet'))).not.toThrow(/Stagenet/);
+    expect(() => deserializeLedger9Transaction('mainnet', transfer('mainnet'))).not.toThrow(/Preview/);
   });
 });

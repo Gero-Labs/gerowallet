@@ -71,6 +71,13 @@ export interface Wallet {
    */
   backupRecheckPending?: boolean;
   /**
+   * Set by the GeroWalletDatabase v18 upgrade on Midnight wallets it moved from
+   * the retired Stagenet to Preview (issue 1453), and cleared at login by
+   * applyPendingPreviewMove(), which drops the old chain's local state. Holds
+   * the Stagenet unshielded address that state was scoped by. Non-indexed.
+   */
+  previewMovePending?: { stagenetUnshielded: string };
+  /**
    * Keystone (Cardano and Bitcoin): the firmware version the device reported when it was
    * paired, e.g. "3.2.0". Firmware 1.7.2 and later report it; older firmware answers with
    * a fixed "1.1.0", which keystoneFirmwareVersion() does not record. A Keystone paired
@@ -175,9 +182,6 @@ const Network = {
   PREVIEW: 'Preview',
   PREPROD: 'Preprod',
   TESTNET: 'Testnet',
-  // Midnight-only. Nexus retired `midnight-preview` on 2026-09-06; stagenet is
-  // the network that replaced it. No Cardano network carries this name.
-  STAGENET: 'Stagenet',
   // Solana-only. Solana mainnet uses MAINNET; no Cardano network carries this name.
   DEVNET: 'Devnet',
 };

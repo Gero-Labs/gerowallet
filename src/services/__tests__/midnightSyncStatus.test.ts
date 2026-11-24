@@ -9,11 +9,11 @@ import { Network } from '@/models/types';
 import { isMidnightDataPaused } from '@/chains/midnight/midnightDataFreshness';
 
 const block = { height: 392767, hash: 'ab'.repeat(32), time: 1788996846001 };
-const identity = { midnight_network: 'midnight-stagenet', midnight_chain_generation: 1,
+const identity = { midnight_network: 'midnight-preview', midnight_chain_generation: 1,
   midnight_genesis_hash: '0x' + 'cd'.repeat(32) };
-const addresses = { unshielded: 'mn_addr_stagenet1test', shielded: '', dust: '' };
+const addresses = { unshielded: 'mn_addr_preview1test', shielded: '', dust: '' };
 const flush = () => vi.advanceTimersByTimeAsync(0);
-const start = () => service.start(Network.STAGENET, addresses);
+const start = () => service.start(Network.PREVIEW, addresses);
 const sync = (data: Record<string, unknown> = {}) => h.connect.mock.lastCall![4].onSync({ type: 'SYNC', ...identity, ...data });
 function deferred() {
   let resolve!: (value: typeof block) => void;
@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
   service.stop();
-  midnightActions.resetChainState({ network: 'midnight-stagenet', generation: 1, genesisHash: identity.midnight_genesis_hash });
+  midnightActions.resetChainState({ network: 'midnight-preview', generation: 1, genesisHash: identity.midnight_genesis_hash });
   midnightStore.chainIdentity = null;
   h.connect.mockClear();
   h.latest.mockReset().mockResolvedValue(block);

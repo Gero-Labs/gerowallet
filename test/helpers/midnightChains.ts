@@ -16,7 +16,8 @@ export function useMidnightChains(chains: Record<string, readonly [number, numbe
 
 /**
  * The chains most specs were written against: mainnet and preprod before the
- * ledger 9 upgrade, stagenet born on ledger 9. Specs about ledger selection,
+ * ledger 9 upgrade, Preview born on ledger 9 (as Stagenet, which it replaced,
+ * was). Specs about ledger selection,
  * or about mainnet and preprod on ledger 9, set their own with
  * `useMidnightChains` or clear it with `forgetMidnightLedgersForTests`.
  */
@@ -25,6 +26,6 @@ export function useDefaultMidnightChainsForTests(): void {
     mainnet: [LEDGER8_PROTOCOL_VERSION, LEDGER8_PROTOCOL_VERSION],
     preprod: [LEDGER8_PROTOCOL_VERSION, LEDGER8_PROTOCOL_VERSION],
     testnet: [LEDGER8_PROTOCOL_VERSION, LEDGER8_PROTOCOL_VERSION],
-    stagenet: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER9_PROTOCOL_VERSION_SAMPLE],
+    preview: [LEDGER9_PROTOCOL_VERSION_SAMPLE, LEDGER9_PROTOCOL_VERSION_SAMPLE],
   });
 }

@@ -262,7 +262,7 @@ export const DAPP_PROVING_TIMEOUT_MS = 300_000;
 export interface DappProvingContext {
   origin: string;
   network: string;
-  /** SDK network id (`mainnet` / `preprod` / `stagenet`). */
+  /** SDK network id (`mainnet` / `preprod` / `preview`). */
   sdkNetworkId: string;
   /** The ledger the chain runs, read by the caller: selects the ledger 8 vs 9 payload codec. */
   ledger?: MidnightLedger;

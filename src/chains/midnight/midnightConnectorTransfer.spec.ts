@@ -5,7 +5,7 @@ import { UnshieldedAddress } from 'midnight-v9-address-format';
 import { syncedMidnightShieldedBalances, transferOutputTotals, validateMidnightConnectorTransfer } from './midnightConnectorTransfer';
 import { NIGHT_RAW_TOKEN_TYPE, uncoveredIntentInput } from './midnightConnectorIntent';
 
-function output(network = 'stagenet') {
+function output(network = 'preview') {
   return {
     kind: 'unshielded', type: 'aB'.repeat(32), value: '12345678901234567890',
     recipient: UnshieldedAddress.codec.encode(network, new UnshieldedAddress(Buffer.alloc(32, 1))).toString(),
@@ -13,35 +13,35 @@ function output(network = 'stagenet') {
 }
 
 describe('Midnight connector public-token transfer validation', () => {
-  it.each(['Mainnet', 'Preprod', 'Stagenet'])('accepts real SDK %s public addresses and preserves exact custom-token units', network => {
+  it.each(['Mainnet', 'Preprod', 'Preview'])('accepts real SDK %s public addresses and preserves exact custom-token units', network => {
     const input = output(network.toLowerCase());
     expect(validateMidnightConnectorTransfer({ desiredOutputs: [input] }, network)).toEqual({
       ok: true, outputs: [{ ...input, type: 'ab'.repeat(32) }],
     });
   });
   it.each([undefined, '', '00'.repeat(32)])('preserves native NIGHT compatibility %#', type => {
-    const result = validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), type }] }, 'Stagenet');
+    const result = validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), type }] }, 'Preview');
     expect(result).toMatchObject({ ok: true, outputs: [{ type: '00'.repeat(32) }] });
   });
   it.each(['0', '-1', '1.5', '0x20', ' 1 ', true, 42, '9'.repeat(81)])('rejects malformed or unbounded amounts %# before approval', value => {
-    expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), value }] }, 'Stagenet').ok).toBe(false);
+    expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), value }] }, 'Preview').ok).toBe(false);
   });
   it.each(['nothex', 'a'.repeat(63), '0'.repeat(65), '__proto__', false])('rejects invalid token colors %#', type => {
-    expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), type }] }, 'Stagenet').ok).toBe(false);
+    expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...output(), type }] }, 'Preview').ok).toBe(false);
   });
   it('rejects wrong networks, tampered checksums, shielded HRPs and truncated payloads', () => {
     const valid = output();
     const tampered = valid.recipient.slice(0, -1) + (valid.recipient.endsWith('q') ? 'p' : 'q');
     for (const recipient of [output('preprod').recipient, tampered,
-      bech32m.encode('mn_shield-addr_stagenet', bech32m.toWords(Buffer.alloc(64)), 1024),
-      bech32m.encode('mn_addr_stagenet', bech32m.toWords(Buffer.alloc(31)), 1024)]) {
-      expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...valid, recipient }] }, 'Stagenet').ok).toBe(false);
+      bech32m.encode('mn_shield-addr_preview', bech32m.toWords(Buffer.alloc(64)), 1024),
+      bech32m.encode('mn_addr_preview', bech32m.toWords(Buffer.alloc(31)), 1024)]) {
+      expect(validateMidnightConnectorTransfer({ desiredOutputs: [{ ...valid, recipient }] }, 'Preview').ok).toBe(false);
     }
   });
   it('keeps mixed/private outputs and unsupported fee delegation outside this contract', () => {
-    expect(validateMidnightConnectorTransfer({ desiredOutputs: [output(), { ...output(), kind: 'shielded' }] }, 'Stagenet').ok).toBe(false);
-    expect(validateMidnightConnectorTransfer({ desiredOutputs: [output()], options: { payFees: false } }, 'Stagenet').ok).toBe(false);
-    expect(validateMidnightConnectorTransfer({ desiredOutputs: Array.from({ length: 101 }, () => output()) }, 'Stagenet').ok).toBe(false);
+    expect(validateMidnightConnectorTransfer({ desiredOutputs: [output(), { ...output(), kind: 'shielded' }] }, 'Preview').ok).toBe(false);
+    expect(validateMidnightConnectorTransfer({ desiredOutputs: [output()], options: { payFees: false } }, 'Preview').ok).toBe(false);
+    expect(validateMidnightConnectorTransfer({ desiredOutputs: Array.from({ length: 101 }, () => output()) }, 'Preview').ok).toBe(false);
   });
 });
 

@@ -155,17 +155,17 @@ describe('ProofServerRestartNotice', () => {
 
   it('copies the new command for the open wallet\'s ledger from inside the command block', async () => {
     stores.midnight.proofServer = { ...stores.midnight.proofServer, mode: 'local' };
-    stores.wallet.loggedWallet = { id: 2, network: 'Stagenet' };
+    stores.wallet.loggedWallet = { id: 2, network: 'Preview' };
     const w = await mountNotice();
     await w.find('[data-test="command-block-copy"]').trigger('click');
-    expect(writeText).toHaveBeenCalledWith(midnightProofServerCommand('Stagenet'));
+    expect(writeText).toHaveBeenCalledWith(midnightProofServerCommand('Preview'));
   });
 
   it('shows both commands to someone who saved custom URLs for both ledgers', async () => {
     stores.midnight.proofServer = { mode: 'local', localUrl: 'http://127.0.0.1:7000', localUrlLedger9: 'http://127.0.0.1:7001' };
     const w = await mountNotice();
     expect(w.findAll('[data-test="command-block-code"]').map((c) => c.text()))
-      .toEqual([midnightProofServerCommand('Mainnet'), midnightProofServerCommand('Stagenet')]);
+      .toEqual([midnightProofServerCommand('Mainnet'), midnightProofServerCommand('Preview')]);
   });
 
   it('waits while suppressed and while locked', async () => {
