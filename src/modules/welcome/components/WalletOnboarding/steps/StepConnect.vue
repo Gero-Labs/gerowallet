@@ -19,7 +19,6 @@
       style="width: 230px; height: 126px; align-self: center;"
       :alt="t('wallet.connectKeystone')"
     />
-    <!-- Keystone pairing puts the steps beside the QR: stacked, they overflowed the card (issue 1656). -->
     <div :class="{ 'keystone-pair-row': walletType === WalletType.Keystone && !keystoneScan }">
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
