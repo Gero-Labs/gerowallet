@@ -29,7 +29,8 @@
       <SwapHint :text="t('midnight.swap.hint.yours')" />
     </div>
     <p v-if="!rows.length" class="t-caption swap-yours__empty">{{ t('midnight.swap.yoursEmpty') }}</p>
-    <table v-else class="swap-table t-body-sm">
+    <div v-else class="swap-table-wrap">
+    <table class="swap-table t-body-sm">
       <thead>
         <tr>
           <th scope="col" class="t-caption">{{ t('midnight.swap.youGive') }}</th>
@@ -59,6 +60,7 @@
         </tr>
       </tbody>
     </table>
+    </div>
   </section>
 </template>
 
@@ -161,13 +163,19 @@ function settledText(record: MidnightSwapOfferRecord): string {
   border-collapse: collapse;
 }
 
+.swap-table-wrap {
+  overflow-x: auto;
+}
+
 .swap-table th {
+  white-space: nowrap;
   text-align: left;
   font-weight: 550;
   padding: 0 var(--g-s-3) var(--g-s-2);
 }
 
 .swap-table td {
+  white-space: nowrap;
   height: var(--g-row-h-table);
   padding: 0 var(--g-s-3);
   border-top: 1px solid var(--g-hairline-1);

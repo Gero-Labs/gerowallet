@@ -92,7 +92,8 @@ export function useMidnightSwap() {
       now.value = Date.now();
       // Statuses come from the coins; a slow re-read also catches an expiry.
       if (now.value - lastRefresh > 20_000) { lastRefresh = now.value; void refreshOffers(); }
-      if (now.value - lastOpenRefresh > 60_000) { lastOpenRefresh = now.value; void refreshOpenOffers(); }
+      // Every minute once Nexus answered; sooner until then (a first read can fail while the device signs in).
+      if (now.value - lastOpenRefresh > (geroListAvailable.value ? 60_000 : 15_000)) { lastOpenRefresh = now.value; void refreshOpenOffers(); }
     }, 1_000);
   });
   onBeforeUnmount(() => { if (ticker) clearInterval(ticker); cancelPopups(); });

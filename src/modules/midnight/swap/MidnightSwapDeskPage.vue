@@ -304,6 +304,9 @@ async function onDrop(event: DragEvent) {
 
 .dswap__drop-text {
   flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
 .dswap__dialog {
