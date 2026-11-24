@@ -56,7 +56,12 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
 import { useOrderTracking } from '@/modules/wallet/composables/useOrderTracking';
 import { loadSentFeePayments, sentFeePayment } from '@/modules/wallet/utils/cardFeePayments';
-import { deliveryPaymentState, orderTracker, type OrderTrackerView } from '@/modules/wallet/utils/cardOrderTracker';
+import {
+  deliveryPaymentState,
+  keepsPhysicalSlot,
+  orderTracker,
+  type OrderTrackerView,
+} from '@/modules/wallet/utils/cardOrderTracker';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import PromotionModal from './PromotionModal.vue';
@@ -147,12 +152,9 @@ const cardsWithOrderSlot = computed<CardInfo[]>(() => {
   );
   if (virtualCards.length) add(virtualCards.find(card => card.cardData.card_uuid) || virtualCards[0]);
 
-  const physicalCards = cards.value.filter(card => {
-    if (card.cardData?.own_type !== 'physical' || isRejected(card)) return false;
-    if (card.cardData.delivery?.payment_status === 'expired') return false;
-    if (card.cardData.card_uuid) return true;
-    return !!card.cardData.order_uuid && snapshotOf(card.cardData.order_uuid)?.payment !== 'rejected';
-  });
+  const physicalCards = cards.value.filter(
+    card => card.cardData?.own_type === 'physical' && keepsPhysicalSlot(card.cardData, snapshotOf(card.cardData.order_uuid)),
+  );
   const activePhysical = physicalCards.find(card => card.cardData.card_uuid);
   if (activePhysical) add(activePhysical);
   physicalCards.filter(isOrderOnly).forEach(add);

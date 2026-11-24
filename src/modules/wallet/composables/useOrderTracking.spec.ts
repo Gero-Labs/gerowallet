@@ -123,3 +123,23 @@ describe('order tracking backoff', () => {
     expect(checks()).toBe(1);
   });
 });
+
+describe('order tracking past the delivery fee', () => {
+  it('keeps checking a dispatched order whose fee endpoint answers 404 (read as rejected)', async () => {
+    store.getOrderDetails.mockResolvedValue({ status: 'dispatched' });
+    store.getDeliveryPayment.mockResolvedValue({ status: 'rejected' });
+    track([order('2026-10-22T09:59:00Z')]);
+    await elapse(0);
+    await elapse(10_000);
+    expect(checks()).toBe(2);
+  });
+
+  it('stops checking an unpaid order whose fee was rejected', async () => {
+    store.getOrderDetails.mockResolvedValue({ status: 'new' });
+    store.getDeliveryPayment.mockResolvedValue({ status: 'rejected' });
+    track([order('2026-10-22T09:59:00Z')]);
+    await elapse(0);
+    await elapse(10 * MINUTE);
+    expect(checks()).toBe(1);
+  });
+});

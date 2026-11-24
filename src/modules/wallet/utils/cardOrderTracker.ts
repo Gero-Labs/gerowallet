@@ -4,6 +4,8 @@
  * unknown) and, for physical cards, GET /cards/delivery-payment/{uuid} (`status`).
  */
 
+import type { CardData } from '@/models/card';
+
 /**
  * How long to wait before checking again on an order that has no card yet, by the order's age:
  * every 10 s for the first five minutes (a virtual card usually appears within them), every
@@ -38,7 +40,33 @@ export function deliveryPaymentState(status: string | null | undefined): Deliver
   }
 }
 
-export type OrderStageId = 'placed' | 'paid' | 'dispatched' | 'activated' | 'ready';
+/**
+ * The order itself is past its delivery fee: the card is dispatched, activating or done.
+ * From then on the fee decides nothing. Its endpoint can answer 404 (which the card store
+ * reads as rejected) or show a stale deposit address as expired, and letting either end the
+ * order hid a card already in the customer's hands, and its activation, behind "Order new card".
+ */
+export function orderPastPayment(orderStatus: string | null | undefined): boolean {
+  return ['dispatched', 'activating', 'done'].includes((orderStatus || '').toLowerCase());
+}
+
+/**
+ * Whether the card page keeps a physical card or order in its carousel: an issued card always,
+ * an order unless the provider rejected it or its delivery fee ended it (never past the fee).
+ */
+export function keepsPhysicalSlot(
+  data: Pick<CardData, 'status' | 'card_uuid' | 'order_uuid' | 'delivery'>,
+  snapshot?: { status: string | null; payment: DeliveryPaymentState } | null,
+): boolean {
+  if (data.status?.toLowerCase() === 'rejected') return false;
+  if (data.card_uuid) return true;
+  if (!data.order_uuid) return false;
+  if (orderPastPayment(snapshot?.status ?? data.status)) return true;
+  if (data.delivery?.payment_status === 'expired') return false;
+  return snapshot?.payment !== 'rejected';
+}
+
+export type OrderStageId ='placed' | 'paid' | 'dispatched' | 'activated' | 'ready';
 export type OrderStageState = 'done' | 'current' | 'todo';
 
 export interface OrderTrackerView {
@@ -101,7 +129,7 @@ export function orderTracker(input: {
   }
   view.stages = withCurrent(PHYSICAL, current);
 
-  if (status === 'rejected' || payment === 'rejected') view.ended = 'rejected';
+  if (status === 'rejected' || (payment === 'rejected' && !orderPastPayment(status))) view.ended = 'rejected';
   else if (payment === 'expired' && current <= 1) view.ended = 'expired';
   if (view.ended) {
     view.needsPayment = false;

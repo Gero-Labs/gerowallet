@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deliveryPaymentState, orderTracker } from './cardOrderTracker';
+import { deliveryPaymentState, keepsPhysicalSlot, orderTracker } from './cardOrderTracker';
 
 const states = (view: ReturnType<typeof orderTracker>) => view.stages.map(s => `${s.id}:${s.state}`).join(' ');
 
@@ -66,5 +66,42 @@ describe('orderTracker, virtual card', () => {
     expect(states(view)).toBe('placed:done ready:current');
     expect(view.needsPayment).toBe(false);
     expect(view.canActivate).toBe(false);
+  });
+});
+
+describe('an order already past its delivery fee', () => {
+  it('stays activatable when the fee endpoint reads rejected (404) or expired', () => {
+    for (const payment of ['rejected', 'expired'] as const) {
+      const view = orderTracker({ physical: true, orderStatus: 'dispatched', payment });
+      expect(view.ended).toBeNull();
+      expect(view.canActivate).toBe(true);
+    }
+    expect(orderTracker({ physical: true, orderStatus: 'activating', payment: 'rejected' }).ended).toBeNull();
+  });
+
+  it('still ends an unpaid order whose fee was rejected', () => {
+    expect(orderTracker({ physical: true, orderStatus: 'new', payment: 'rejected' }).ended).toBe('rejected');
+  });
+});
+
+describe('keepsPhysicalSlot', () => {
+  const order = (data: Record<string, unknown>) =>
+    ({ order_uuid: 'o1', card_uuid: '', status: 'new', ...data }) as unknown as Parameters<typeof keepsPhysicalSlot>[0];
+
+  it('keeps a dispatched order whose fee reads rejected or expired', () => {
+    expect(keepsPhysicalSlot(order({}), { status: 'dispatched', payment: 'rejected' })).toBe(true);
+    expect(keepsPhysicalSlot(order({ status: 'dispatched', delivery: { payment_status: 'expired' } }))).toBe(true);
+    expect(keepsPhysicalSlot(order({ delivery: { payment_status: 'expired' } }), { status: 'dispatched', payment: 'expired' })).toBe(true);
+  });
+
+  it('keeps an issued card whatever its delivery record says', () => {
+    expect(keepsPhysicalSlot(order({ card_uuid: 'c1', delivery: { payment_status: 'expired' } }))).toBe(true);
+  });
+
+  it('drops an unpaid order the fee ended, and a rejected order', () => {
+    expect(keepsPhysicalSlot(order({ delivery: { payment_status: 'expired' } }))).toBe(false);
+    expect(keepsPhysicalSlot(order({}), { status: 'new', payment: 'rejected' })).toBe(false);
+    expect(keepsPhysicalSlot(order({ status: 'rejected' }))).toBe(false);
+    expect(keepsPhysicalSlot(order({}), { status: 'new', payment: 'paid' })).toBe(true);
   });
 });
