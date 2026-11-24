@@ -15,7 +15,7 @@
     "midnightLocalProver{checkProofServerHealth,isProverNetworkError,makeLocalProvingProvider}",
     "midnightPrivateSync8{PRIVATE_SYNC_CHECKPOINT_MS,PRIVATE_SYNC_MAX_BARREN_RESTARTS,PRIVATE_SYNC_MAX_RESTARTS,PRIVATE_SYNC_STALL_MS,SHIELDED_INDEXER_BUFFER,startMidnightPrivateSync8,stopMidnightPrivateSync8}",
     "midnightShieldedBuilder{LocalProvingError,buildAndSignShieldedTransfer,startAndSyncShieldedWallet,startShieldedWallet}",
-    "midnightShieldedLedger9{buildAndSignShieldedLedger9Transfer}",
+    "midnightShieldedLedger9{buildAndSignShieldedLedger9Transfer,withSyncedShieldedWallet9}",
     "midnightSignDataCodec{decodeSignDataPayload,decodedPayloadHexPreview}",
     "midnightUnshieldedProver{proveUnshieldedTransfer}",
     "midnightViewingKeySession{clearSessionViewingKey}",
