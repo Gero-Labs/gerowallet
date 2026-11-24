@@ -31,6 +31,8 @@ export interface SolanaNft {
   description: string | null;
   externalUrl: string | null;
   collection: { address: string; verified: boolean } | null;
+  /** A programmable NFT's authorization rule set (its transfers are checked against it), or null. */
+  ruleSet: string | null;
   attributes: Array<{ traitType: string | null; value: string }>;
   sellerFeeBasisPoints: number | null;
   /** The off-chain JSON was read (image, description, attributes). */
@@ -117,6 +119,7 @@ export function parseSolanaNftRows(body: unknown, mints: readonly string[], now:
       collection: collection && isValidSolanaAddress(collection['address'])
         ? { address: collection['address'] as string, verified: collection['verified'] === true }
         : null,
+      ruleSet: isValidSolanaAddress(r['ruleSet']) ? r['ruleSet'] as string : null,
       attributes: attributes.slice(0, MAX_ATTRIBUTES).flatMap((a) => {
         const value = text(a?.['value'], MAX_NAME);
         return value ? [{ traitType: text(a?.['traitType'], MAX_NAME), value }] : [];
@@ -129,9 +132,9 @@ export function parseSolanaNftRows(body: unknown, mints: readonly string[], now:
   });
 }
 
-/** Whether Gero's Send can move this NFT: a programmable NFT needs the Token Metadata program. */
-export function isSendableSolanaNft(nft: Pick<SolanaNft, 'standard'>): boolean {
-  return nft.standard !== 'programmableNonFungible' && nft.standard !== 'programmableNonFungibleEdition';
+/** A programmable NFT: sent through Token Metadata, under its creator's transfer rules. */
+export function isProgrammableSolanaNft(nft: Pick<SolanaNft, 'standard'>): boolean {
+  return nft.standard === 'programmableNonFungible' || nft.standard === 'programmableNonFungibleEdition';
 }
 
 /** The NFT's display name: its own, else its shortened mint. */
