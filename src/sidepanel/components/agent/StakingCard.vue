@@ -91,6 +91,7 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
 import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { submittedTxId, UnconfirmedTxSubmission } from '@/shared/utils/submitTxReceipt';
 import { Blockchain } from '@/models/types';
 import type { Keys } from '@/models/types';
 
@@ -362,30 +363,27 @@ export default defineComponent({
           },
         }) as BackgroundResponse<{ witnesses?: string; error?: string }>;
 
-        if (signResult.data.error) {
+        if (signResult?.data?.error) {
           throw new Error(signResult.data.error);
         }
 
-        const witnessHex = signResult.data.witnesses;
-        if (!witnessHex) throw new Error('No witness returned from signing.');
+        const witnessHex = signResult?.data?.witnesses;
+        if (typeof witnessHex !== 'string' || !witnessHex.trim()) throw new Error(t('errors.unknownError'));
 
         // 2. Submit via background SUBMIT_TX (merges witness into the CBOR)
-        const submitRes = await (Messaging as typeof Messaging).sendToBackgroundFromOptions({
+        await submittedTxId(Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.SUBMIT_TX,
           data: {
             txCbor: cbor,
             witnessHex,
           },
-        }) as BackgroundResponse<{ success?: boolean; error?: string }>;
-
-        if (submitRes.data.error) {
-          throw new Error(submitRes.data.error);
-        }
+        }));
 
         submitResult.value = 'submitted';
       } catch (e) {
         submitResult.value = 'failed';
-        submitError.value = e instanceof Error ? e.message : 'Signing or submit failed.';
+        submitError.value = e instanceof UnconfirmedTxSubmission ? t('errors.submitUnconfirmed')
+          : e instanceof Error ? e.message : t('errors.unknownError');
       } finally {
         signing.value = false;
       }

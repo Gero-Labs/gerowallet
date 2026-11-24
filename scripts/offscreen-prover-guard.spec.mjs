@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { build } from 'vite';
@@ -14,7 +14,7 @@ const MODULE_SCRIPT = '<script type="module" src="./main.js"></script>';
  * `withProver` is false, the prover page, each with its own `main.js`.
  */
 async function buildPages({ proverJs = 'document.title = "prover";\n', appJs = 'document.title = "app";\n', withProver = true, polyfill } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'offscreen-prover-guard-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'offscreen-prover-guard-')));
   const pages = { [APP_PAGE]: appJs, ...(withProver ? { [OFFSCREEN_PROVER_PAGE]: proverJs } : {}) };
   for (const [page, js] of Object.entries(pages)) {
     mkdirSync(join(root, dirname(page)), { recursive: true });

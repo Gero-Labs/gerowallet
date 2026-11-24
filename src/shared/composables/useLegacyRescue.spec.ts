@@ -231,6 +231,21 @@ describe('useLegacyRescue', () => {
     expect(flow.stage.value).toBe('idle');
   });
 
+  it('keeps a whitespace-only receipt unconfirmed', async () => {
+    respond({
+      [MessageTypes.LEGACY_LISTING_PREPARE_CANCEL]: prepared(),
+      [MessageTypes.SIGN_TX]: () => ({ witnesses: 'WITNESSES' }),
+      [MessageTypes.SUBMIT_TX]: () => ({ txId: '   ' }),
+    });
+    const flow = useLegacyRescue();
+    await flow.prepare(REFS);
+    expect(await flow.signAndSubmit()).toBe(false);
+    expect(methods()).toContain(MessageTypes.SUBMIT_TX);
+    expect(flow.failure.value?.code).toBe('SUBMIT_FAILED');
+    expect(flow.submittedTxId.value).toBeFalsy();
+    expect(flow.stage.value).not.toBe('done');
+  });
+
   it('cannot sign before anything was prepared', async () => {
     const flow = useLegacyRescue();
     expect(await flow.signAndSubmit()).toBe(false);

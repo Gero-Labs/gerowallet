@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  clearDustRegistrationPending, dustRegistrationPendingRevision, dustRegistrationPendingState, markDustRegistrationPending,
+  clearDustRegistrationPending, confirmDustRegistrationPending, dustRegistrationPendingRevision, dustRegistrationPendingState, markDustRegistrationPending,
   pruneDustRegistrationPending,
 } from './midnightDustRegistrationPending';
 import { PENDING_EXPIRY_MS } from './midnightPendingSends';
@@ -53,7 +53,7 @@ describe('the registration dialog', () => {
 
   it('reports "submitted", keeps the pending state in Register\'s place, and keeps Path B and the portal', () => {
     expect(dialog).toContain("if (result.status === 'submitted') {");
-    expect(dialog).toContain('markDustRegistrationPending(wallet.baseAddress, result.txHash ?? \'\');');
+    expect(dialog).toContain('markDustRegistrationPending(fromAddress, result.txHash ?? \'\');');
     // The pending block stands in for Register only; Path B and the portal follow it either way.
     expect(dialog).toMatch(/<template v-if="registrationPending \|\| !inSigningPhase">[\s\S]*?<div\s+v-if="registrationPending"[\s\S]*?<template v-else>[\s\S]*?data-test="dust-register"[\s\S]*?<\/template>\s*<!-- Path B/);
     expect(dialog).toContain('if (!dustAddress.value || writesPaused.value || registrationPending.value) return;');
@@ -64,7 +64,13 @@ describe('the registration dialog', () => {
     expect(dialog).toMatch(/<GButton\s+v-if="registrationPending === 'unconfirmed'"\s+tier="tertiary"\s+compact/);
   });
 
-  it('clears the record once the chain shows the registration', () => {
-    expect(dialog).toContain("if (status === 'Registered' || status === 'Pending') clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');");
+  it('keeps a new receipt until a native registration read starts after submission', () => {
+    markDustRegistrationPending(ADDR, 'ab', 1_000);
+    confirmDustRegistrationPending(ADDR, 990);
+    confirmDustRegistrationPending(ADDR, 1_000);
+    confirmDustRegistrationPending('a different wallet', 1_100);
+    expect(dustRegistrationPendingState(ADDR, 1_100)).toBe('pending');
+    confirmDustRegistrationPending(ADDR, 1_100);
+    expect(dustRegistrationPendingState(ADDR, 1_101)).toBeNull();
   });
 });

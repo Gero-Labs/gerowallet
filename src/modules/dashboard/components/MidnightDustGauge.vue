@@ -60,6 +60,12 @@
       </div>
     </div>
 
+    <MidnightDustUpgradeNotice
+      v-if="showRefillNotice && loggedWallet?.baseAddress"
+      network="mainnet"
+      :address="loggedWallet.baseAddress"
+    />
+
     <!-- Sponsorship, both directions. Lives on the battery because that is
          where a user looks to answer "can this wallet pay a fee". -->
     <MidnightSponsorStatus :revision="sponsorRevision" @choose="feeWalletOpen = true" />
@@ -77,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, ref, toRefs, watch } from 'vue';
 import MidnightFeeWalletDialog from '@/modules/dashboard/dialogs/MidnightFeeWalletDialog.vue';
 import MidnightSponsorStatus from '@/modules/dashboard/components/MidnightSponsorStatus.vue';
 import MidnightBattery from '@/modules/dashboard/components/MidnightBattery.vue';
@@ -86,6 +92,9 @@ import { midnightStore } from '@/stores/midnightStore';
 import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
+import MidnightDustUpgradeNotice from '@/shared/components/MidnightDustUpgradeNotice.vue';
+import { walletPredatesMainnetDustReset } from '@/chains/midnight/midnightDustUpgradeNotice';
+import { MIDNIGHT_LEDGER9_FIRST_BLOCK } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -113,6 +122,13 @@ const {
   estimate: dustEstimate,
 } = useMidnightDustLive();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
+const activeView = ref(true);
+onActivated(() => { activeView.value = true; });
+onDeactivated(() => { activeView.value = false; });
+const showRefillNotice = computed(() => activeView.value && isMainnet.value && pathBRegistered.value && pathBStakes.value.length > 0
+  && !midnightStore.refreshing && midnightStore.networkStatus === 'connected' && midnightStore.lastSync != null
+  && midnightStore.tip.height >= MIDNIGHT_LEDGER9_FIRST_BLOCK['mainnet'].height
+  && walletPredatesMainnetDustReset(loggedWallet.value?.createdAt, midnightStore.transactions));
 
 const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');

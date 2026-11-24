@@ -46,7 +46,8 @@ export type RealFiOrderFailure =
   | 'build-failed'
   | 'wrong-password'
   | 'sign-failed'
-  | 'submit-failed';
+  | 'submit-failed'
+  | 'submit-unconfirmed';
 
 export class RealFiOrderError extends Error {
   constructor(

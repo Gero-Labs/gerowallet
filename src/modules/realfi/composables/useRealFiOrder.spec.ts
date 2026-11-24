@@ -119,6 +119,25 @@ describe('useRealFiOrder', () => {
     expect(order.error.value?.reason).toBe('submit-failed');
   });
 
+  it.each([undefined, { error: 'Message port closed' }, { data: {} }, { data: { txId: '   ' } }])(
+    'retains an unconfirmed outcome without a usable worker receipt', async reply => {
+      send.mockResolvedValueOnce(reply);
+      const order = useRealFiOrder({ signTx });
+      await expect(order.run(STAKE)).resolves.toBeNull();
+      expect(order.stage.value).toBe('error');
+      expect(order.error.value?.reason).toBe('submit-unconfirmed');
+      expect(order.txId.value).toBeNull();
+    },
+  );
+
+  it('stops before submission when signing returns no usable witness', async () => {
+    signTx.mockResolvedValueOnce(' ');
+    const order = useRealFiOrder({ signTx });
+    await expect(order.run(STAKE)).resolves.toBeNull();
+    expect(order.error.value?.reason).toBe('sign-failed');
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('builds nothing without the wallet address', async () => {
     wallet.loggedWallet = { network: 'Preprod' };
     const order = useRealFiOrder({ signTx });
