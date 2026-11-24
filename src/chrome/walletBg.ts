@@ -124,7 +124,7 @@ import { helperProofProcessor } from '@/chains/midnight/midnightHelperProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
 import {
-  assertMidnightDustRegistrationMatches, assertMidnightTransferMatches, assertSpendsNoReservedCoins, MIDNIGHT_SEND_SPENDS_OFFERED_COINS,
+  assertMidnightDustRegistrationMatches, assertMidnightTransferMatches, assertSpendsNoReservedCoins, MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS,
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { reservedSwapCoinsFor, reservedSwapNullifiersFor } from '@/chrome/midnightSwapOfferStore';
 import { withoutReservedCoins } from '@/chains/midnight/midnightSwapRecords';
@@ -3970,7 +3970,7 @@ export class WalletBg {
             })),
             proving,
             checkSpends: offered.size ? ({ nullifiers }) => {
-              if (nullifiers.some(nullifier => offered.has(nullifier))) throw new Error(MIDNIGHT_SEND_SPENDS_OFFERED_COINS);
+              if (nullifiers.some(nullifier => offered.has(nullifier))) throw new Error(MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS);
             } : undefined,
           });
         } catch (err) {

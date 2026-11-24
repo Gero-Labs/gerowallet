@@ -6746,6 +6746,7 @@ export default {
   'midnight.swap.hint.openOffers': 'Ofertas que otras personas publicaron en Gero. Gero lee cada oferta por sí mismo antes de que puedas aceptarla.',
   'midnight.swap.error.dustSlow': 'La sincronización de DUST tardó demasiado. No se envió nada. Inténtalo de nuevo.',
   'midnight.swap.error.sendUsesOffer': 'Este envío usaría monedas de tu oferta de intercambio abierta. Retira la oferta o espera a que termine.',
+  'midnight.swap.error.sendUsesPrivateOffer': 'Este envío usaría monedas de tu oferta de intercambio privada abierta. Envía menos o espera a que la oferta termine.',
   'midnight.swap.privateToken': 'Token privado',
   'midnight.swap.visibleSideOnly': 'Solo el lado de {token}',
   'midnight.swap.visibleNone': 'Ningún lado',

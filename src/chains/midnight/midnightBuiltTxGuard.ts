@@ -294,6 +294,12 @@ export async function assertMidnightDustRegistrationMatches(
  */
 export const MIDNIGHT_SEND_SPENDS_OFFERED_COINS = 'MIDNIGHT_SEND_SPENDS_OFFERED_COINS';
 
+/**
+ * The same for a private (shielded) send and a private offer's coins, which
+ * cannot be withdrawn from the swap screens: the copy says to wait instead.
+ */
+export const MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS = 'MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS';
+
 type SpendView = { readonly intentHash: string; readonly outputNo: number };
 
 /** Every unshielded coin `tx` spends, `intentHash#outputNo` (lower-case hash). */

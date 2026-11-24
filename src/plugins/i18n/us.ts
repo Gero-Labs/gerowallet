@@ -6978,6 +6978,7 @@ export default {
   'midnight.swap.hint.openOffers': 'Offers other people listed with Gero. Gero reads each offer itself before you can take it.',
   'midnight.swap.error.dustSlow': 'DUST sync timed out. Nothing was sent. Try again.',
   'midnight.swap.error.sendUsesOffer': 'This send would use coins in your open swap offer. Withdraw the offer or wait until it ends.',
+  'midnight.swap.error.sendUsesPrivateOffer': 'This send would use coins in your open private swap offer. Send less, or wait until the offer ends.',
   'midnight.swap.privateToken': 'Private token',
   'midnight.swap.visibleSideOnly': '{token} side only',
   'midnight.swap.visibleNone': 'Neither side',

@@ -54,6 +54,7 @@ import {
   MIDNIGHT_BUILT_TX_MISMATCH,
   MIDNIGHT_BUILT_TX_UNREADABLE,
   MIDNIGHT_SEND_SPENDS_OFFERED_COINS,
+  MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS,
   type MidnightBuiltTxRefusal,
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
@@ -120,6 +121,7 @@ const LEDGER_REFUSAL_COPY: Record<string, string> = {
   [MIDNIGHT_DUST_COINS_SHORT]: 'midnight.errors.dustCoinsShort',
   // Nexus chose a coin set aside for one of the wallet's open swap offers (midnightSwapRecords.ts).
   [MIDNIGHT_SEND_SPENDS_OFFERED_COINS]: 'midnight.swap.error.sendUsesOffer',
+  [MIDNIGHT_SEND_SPENDS_PRIVATE_OFFER_COINS]: 'midnight.swap.error.sendUsesPrivateOffer',
 };
 
 /**
