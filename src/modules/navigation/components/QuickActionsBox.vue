@@ -80,6 +80,31 @@
           <span>{{ $t('navigation.receive') }}</span>
         </v-tooltip>
       </div>
+      <!-- Midnight P2P swap (preprod only, midnightSwapConfig.ts): its own page, not the DEX swap dialog. -->
+      <div v-if="isMidnightSwap && !isSwapSupportedByNetwork" class="action-button-wrapper">
+        <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-btn
+              :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
+              color="error"
+              height="28"
+              data-test="quick-action-midnight-swap"
+              @click="router.push('/midnight-swap')"
+              v-bind="activatorProps"
+            >
+              <v-avatar rounded="0" size="14">
+                <v-img
+                  :src="assets.swapSvg"
+                  :alt="$t('swap.swap')"
+                  style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
+                ></v-img>
+              </v-avatar>
+              <span v-if="!compact" class="button-text">{{ $t('swap.swap') }}</span>
+            </v-btn>
+          </template>
+          <span>{{ $t('swap.swap') }}</span>
+        </v-tooltip>
+      </div>
       <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
         <v-tooltip location="bottom"  :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ props: activatorProps }">
@@ -163,6 +188,8 @@
 </template>
 <script setup lang="ts">
 import { toRefs, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
 import { cssUrl } from '@/shared/utils/cssUrl';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
@@ -198,6 +225,9 @@ const dialogs = {
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 const isSolana = computed(() => loggedWallet.value?.chain === Blockchain.SOLANA);
+const isMidnightSwap = computed(() =>
+  loggedWallet.value?.chain === Blockchain.MIDNIGHT && isMidnightSwapNetwork(loggedWallet.value?.network));
+const router = useRouter();
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {

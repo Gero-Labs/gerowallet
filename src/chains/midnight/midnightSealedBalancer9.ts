@@ -132,6 +132,10 @@ export interface BalanceSealedTransaction9Args {
   readonly sync: { readonly lastSync: number | null; readonly addresses: { readonly unshielded?: string | null } };
   /** Where the DUST fee proof is made: this device, or the user's proof server. */
   readonly proving: WalletProvingRequest;
+  /** DUST fee sync progress (0-100, or -1 when unknown), for a progress screen. */
+  readonly onDustSyncProgress?: (percent: number, detail: string) => void;
+  /** Called once, when proving starts. */
+  readonly onProving?: () => void;
 }
 
 export interface BalanceSealedTransaction9Result {
@@ -244,6 +248,7 @@ export async function balanceSealedTransaction9(
 
     const withFee = await timer.time('dustFee', () => deps.balanceFees({
       sdkNetworkId: network, endpoints: args.endpoints, dustSecretSeed: args.dustSecretSeed, ttl,
+      onDustSyncProgress: args.onDustSyncProgress,
       // Signed inside the spread, after its DUST actions are in and before the limit check.
       spread: { carrier: balancing, sign: unproven => signLedger9Intents(unproven, keystore) },
     }, [tx]));
@@ -251,6 +256,7 @@ export async function balanceSealedTransaction9(
 
     debugLog('🌙 sealed balance (ledger 9): proving the wallet\'s part', { prover: describeWalletProving(args.proving), dustSpends });
     const proveStart = Date.now();
+    args.onProving?.();
     const provider = await timer.time('proverSetup', () => deps.provingProvider(args.proving, network));
     const proven = await timer.time('prove', () => withFee.prove(provider, ledger.CostModel.initialCostModel()));
     const proveDurationMs = Date.now() - proveStart;

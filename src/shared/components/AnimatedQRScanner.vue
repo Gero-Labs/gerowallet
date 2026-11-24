@@ -84,6 +84,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Keystone mode only: a plain-text QR whose text starts with this prefix
+  // (case-insensitive) is emitted as text, beside animated UR codes. A Midnight
+  // swap offer is one QR when it fits and an animated UR when it does not.
+  textPrefix: {
+    type: String,
+    default: '',
+  },
 });
 
 // Emits
@@ -267,6 +274,12 @@ async function startScanning() {
 
         if (result) {
           const qrText = result.getText();
+          if (props.textPrefix && qrText.toLowerCase().startsWith(props.textPrefix.toLowerCase())) {
+            isDone.value = true;
+            emit('scan', qrText);
+            cleanup();
+            return;
+          }
           handleScanSuccess(qrText);
         }
         if (error && error.name !== 'NotFoundException') {

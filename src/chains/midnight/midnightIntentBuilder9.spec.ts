@@ -146,6 +146,20 @@ describe('makeIntent on a ledger 9 chain', () => {
     await expect(buildConnectorIntent9(args({ utxos: [{ ...foreign, value: 1_000n }] }), deps)).rejects.toBeInstanceOf(IntentInsufficientFundsError);
   });
 
+  it('selects only the coins the caller allows: an open swap offer\'s coins stay out, a withdrawal spends exactly its own', async () => {
+    const offered = utxo(50n, 0);
+    const other = utxo(40n, 1, { intentHash: '22'.repeat(32) });
+    const ref = (coin: MidnightUnshieldedUtxo) => `${coin.intentHash}#${coin.outputIndex}`;
+    const inputsOf = (hex: string) => sealed(hex).intents!.get(7)!.guaranteedUnshieldedOffer!.inputs.map(input => input.value);
+
+    const excluding = await buildConnectorIntent9(args({ utxos: [offered, other], coinFilter: { exclude: new Set([ref(offered)]) } }), deps);
+    expect(inputsOf(excluding.txHex)).toEqual([40n]);
+    const only = await buildConnectorIntent9(args({ utxos: [offered, other], coinFilter: { only: new Set([ref(offered)]) } }), deps);
+    expect(inputsOf(only.txHex)).toEqual([50n]);
+    await expect(buildConnectorIntent9(args({ utxos: [offered], coinFilter: { exclude: new Set([ref(offered)]) } }), deps))
+      .rejects.toBeInstanceOf(IntentInsufficientFundsError);
+  });
+
   it('a give the wallet cannot cover is InsufficientFunds, before any fee work', async () => {
     await expect(buildConnectorIntent9(args({ utxos: [utxo(29n)], request: { ...REQUEST, payFees: true } }), deps))
       .rejects.toBeInstanceOf(IntentInsufficientFundsError);

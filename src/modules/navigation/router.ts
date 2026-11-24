@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordNormalized, type RouteRecordRaw } from 'vue-router';
 import { Blockchain } from '@/models/types';
+import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
 import { lazyPage } from './lazyPage';
 import HelpLayout from '@/modules/help/HelpLayout.vue';
 import { blogHelpRedirect } from './helpAccess';
@@ -51,6 +52,7 @@ const PoolOperator = lazyPage(() => import('@/modules/pool-operator/PoolOperator
 const RealFi = lazyPage(() => import('@/modules/realfi/RealFi.vue'));
 const NexusPage = lazyPage(() => import('@/modules/nexus/NexusPage.vue'));
 const ProofServerPage = lazyPage(() => import('@/modules/midnight/ProofServerPage.vue'));
+const MidnightSwapDeskPage = lazyPage(() => import('@/modules/midnight/swap/MidnightSwapDeskPage.vue'));
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -209,6 +211,16 @@ const routes: RouteRecordRaw[] = [
     path: '/proof-server',
     name: 'proofServer',
     component: ProofServerPage,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    // Midnight P2P swap, preprod only: the guard below sends any other wallet home.
+    path: '/midnight-swap',
+    name: 'midnightSwap',
+    component: MidnightSwapDeskPage,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -599,6 +611,8 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
       // Proof server settings only apply to Midnight wallets (shielded-proving
       // config). Direct-URL visits from a non-Midnight wallet redirect home.
       proofServer: (c) => c === Blockchain.MIDNIGHT,
+      // Midnight P2P swap: a Midnight wallet on a network of MIDNIGHT_SWAP_NETWORKS (build time).
+      midnightSwap: (c, n) => c === Blockchain.MIDNIGHT && isMidnightSwapNetwork(n),
     };
     const guard = routeNetworkGuards[String(to.name)];
     if (guard && !guard(chain, network)) {

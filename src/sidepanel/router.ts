@@ -2,6 +2,8 @@ import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-rou
 import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
+import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: () => import('./pages/HomePage.vue') },
@@ -11,6 +13,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/vaults', name: 'vaults', component: () => import('./pages/VaultsPage.vue') },
   { path: '/activity', name: 'activity', component: () => import('./pages/ActivityPage.vue') },
   { path: '/feed', name: 'feed', component: () => import('./pages/FeedPage.vue') },
+  // Midnight P2P swap: preprod only (midnightSwapConfig.ts); the guard below sends any other wallet home.
+  { path: '/midnight-swap', name: 'midnightSwap', component: () => import('./pages/MidnightSwapPage.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
@@ -29,6 +33,10 @@ router.beforeEach((to, _from, next) => {
   // load, isCopilotEnabled() is false via the getFlag fallback, so /feed redirects
   // home until gero-sync turns it on.
   if (to.name === 'feed' && !featureFlagsStore.isCopilotEnabled()) {
+    next({ name: 'home' });
+    return;
+  }
+  if (to.name === 'midnightSwap' && !(chain === Blockchain.MIDNIGHT && isMidnightSwapNetwork(walletStore.loggedWallet?.network))) {
     next({ name: 'home' });
     return;
   }

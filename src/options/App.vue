@@ -47,6 +47,7 @@ import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import NotifyPendingOpen from '@/shared/components/NotifyPendingOpen.vue';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
+import { useMidnightTokenCatalog } from '@/shared/composables/useMidnightTokenCatalog';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
@@ -59,6 +60,8 @@ useNotifyPresent('dashboard');
 // rather than in ContentLayout because ContentLayout unmounts on the welcome
 // route, which would strand the module-level latch as a permanent no-op.
 useChainAccent();
+// Token names on Midnight screens come from Nexus's catalog (midnightTokenCatalog.ts).
+useMidnightTokenCatalog();
 // Same root, same reason: the CIP-149 hydration must be live from login, not
 // from the first governance-view mount, so a withdrawal built on the dashboard
 // still carries the committed donation.

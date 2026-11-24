@@ -288,6 +288,39 @@ export async function assertMidnightDustRegistrationMatches(
 }
 
 /**
+ * Thrown before signing a send that would spend a coin of one of the wallet's
+ * open swap offers (midnightSwapRecords.ts): spending it cancels the offer, so
+ * those coins are set aside while it is open. Nothing was signed.
+ */
+export const MIDNIGHT_SEND_SPENDS_OFFERED_COINS = 'MIDNIGHT_SEND_SPENDS_OFFERED_COINS';
+
+type SpendView = { readonly intentHash: string; readonly outputNo: number };
+
+/** Every unshielded coin `tx` spends, `intentHash#outputNo` (lower-case hash). */
+export function spentCoinRefs(tx: MidnightTxView): string[] {
+  const refs: string[] = [];
+  for (const raw of tx.intents?.values() ?? []) {
+    const intent = raw as { guaranteedUnshieldedOffer?: { inputs: readonly SpendView[] }; fallibleUnshieldedOffer?: { inputs: readonly SpendView[] } };
+    for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {
+      for (const input of offer?.inputs ?? []) refs.push(`${String(input.intentHash).toLowerCase()}#${input.outputNo}`);
+    }
+  }
+  return refs;
+}
+
+/**
+ * Throws {@link MIDNIGHT_SEND_SPENDS_OFFERED_COINS} when the Nexus-built
+ * `unprovenTxHex` spends a coin in `reserved` (the coins of the wallet's open
+ * swap offers). Nexus picks a send's coins and cannot be told to skip some, so
+ * the wallet refuses here instead of cancelling an offer without asking.
+ */
+export async function assertSpendsNoReservedCoins(sdkNetworkId: string, unprovenTxHex: string, reserved: ReadonlySet<string>): Promise<void> {
+  if (!reserved.size) return;
+  const tx = await decodeForCheck('send', sdkNetworkId, unprovenTxHex);
+  if (spentCoinRefs(tx).some(ref => reserved.has(ref))) throw new Error(MIDNIGHT_SEND_SPENDS_OFFERED_COINS);
+}
+
+/**
  * Decode an unproven transaction under `sdkNetworkId`'s ledger and prove it
  * belongs to that network. Bytes that do not decode throw
  * {@link MidnightBuiltTxUnreadableError}; on a ledger-8 network it says whether

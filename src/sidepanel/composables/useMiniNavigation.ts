@@ -2,6 +2,8 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useChainContext } from './useChainContext';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { walletStore } from '@/stores/walletStore';
+import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
 
 export interface NavTab {
   name: string;
@@ -32,12 +34,21 @@ const HOME_ACTIVITY_TABS: NavTab[] = [
   { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
 ];
 
+// Midnight on a swap network (midnightSwapConfig.ts): the P2P swap takes the center slot, as a route.
+const MIDNIGHT_SWAP_TABS: NavTab[] = [
+  { name: 'home', icon: 'mdi-home-outline', activeIcon: 'mdi-home', route: '/' },
+  { name: 'midnightSwap', icon: 'mdi-swap-horizontal', activeIcon: 'mdi-swap-horizontal', route: '/midnight-swap', center: true },
+  { name: 'activity', icon: 'mdi-history', activeIcon: 'mdi-history', route: '/activity' },
+];
+
 export function useMiniNavigation() {
   const route = useRoute();
   const { isMidnight, isSolana, networkInfo } = useChainContext();
 
   const navTabs = computed<NavTab[]>(() => {
-    const base = isMidnight.value || isSolana.value ? HOME_ACTIVITY_TABS : CARDANO_TABS;
+    const base = isMidnight.value && isMidnightSwapNetwork(walletStore.loggedWallet?.network)
+      ? MIDNIGHT_SWAP_TABS
+      : isMidnight.value || isSolana.value ? HOME_ACTIVITY_TABS : CARDANO_TABS;
     return base.filter((tab) => {
       // Gero Copilot feed tab gated by the master flag (ships dark)
       if (tab.name === 'feed') return featureFlagsStore.isCopilotEnabled();

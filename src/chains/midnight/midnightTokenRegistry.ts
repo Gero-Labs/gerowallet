@@ -1,28 +1,21 @@
 /**
- * Hand-curated metadata for Midnight unshielded tokens.
+ * Metadata for Midnight unshielded tokens: Nexus's token catalog first
+ * (midnightTokenCatalog.ts loads it into {@link setMidnightCatalogTokens}),
+ * this file's hand-curated list as the fallback when Nexus is unreachable.
+ * Only a VERIFIED catalog token gets a name here: the catalog also carries
+ * names a token's issuer asserted on chain (MIP-0018), which anyone can claim,
+ * so those never stand in for a listed token.
  *
- * INTERIM — DELETE THIS FILE when the foundation ships token MIPs.
+ * The built-in list is the fallback: it predates the catalog (when Midnight
+ * had no token metadata to look up anywhere) and keeps USDM named, and priced,
+ * when Nexus cannot be reached.
  *
- * Midnight has no resolvable token metadata today. Verified 2026-08-26: the
- * mainnet indexer's entire query surface is `block`, `transactions`,
- * `contractAction`, the `dust*` family, `dParameterHistory`,
- * `termsAndConditionsHistory` and `spoIdentities` — there is no asset or token
- * query of any kind. Nexus has no `chain=MIDNIGHT` branch either
- * (`POST /api/assets/info?chain=MIDNIGHT` returns 400 where `chain=CARDANO`
- * returns 200). So a name, a symbol and a decimal exponent cannot be looked up
- * from anywhere; they can only be asserted.
- *
- * That is why this is a literal in the extension rather than a registry served
- * by Nexus. With one listed token, a backend resolver would buy nothing and
- * cost a deploy coupling, and MIP-0011-style standards will replace the whole
- * mechanism rather than extend it. One file to delete beats one endpoint to
- * unpick.
- *
- * A color that is NOT listed here is not an error. It renders with a truncated
+ * A color that is listed nowhere is not an error. It renders with a truncated
  * color as its ticker and its raw base-unit amount, explicitly labelled as
- * unscaled. That path is permanent, not a stopgap: with manual curation, every
- * new token starts unlisted.
+ * unscaled.
  */
+
+import { shallowRef } from 'vue';
 
 /** Metadata we assert for a known token color. */
 export interface MidnightTokenMeta {
@@ -61,7 +54,43 @@ export const MIDNIGHT_TOKENS: Readonly<Record<string, MidnightTokenMeta>> = {
   },
 };
 
-/** Asserted metadata for a token color, or `undefined` when it is not listed. */
+/**
+ * Verified tokens of the catalog of the network last loaded (lower-case
+ * colour → metadata). A shallow ref so every row re-renders when it arrives.
+ */
+const catalog = shallowRef<{ network: string | null; tokens: ReadonlyMap<string, MidnightTokenMeta> }>({ network: null, tokens: new Map() });
+
+/** Replace the catalog with `network`'s verified tokens (a token without decimals is shown in base units). */
+export function setMidnightCatalogTokens(
+  network: string,
+  tokens: ReadonlyArray<{ tokenType: string; symbol: string | null; name: string | null; decimals: number | null; verified: boolean }>,
+): void {
+  const verified = new Map<string, MidnightTokenMeta>();
+  for (const token of tokens) {
+    if (!token.verified || !token.symbol) continue;
+    verified.set(token.tokenType.toLowerCase(), { symbol: token.symbol, name: token.name ?? token.symbol, decimals: token.decimals ?? 0 });
+  }
+  catalog.value = { network, tokens: verified };
+}
+
+/** Which network's catalog is loaded, if any. */
+export function midnightCatalogNetwork(): string | null {
+  return catalog.value.network;
+}
+
+/**
+ * Metadata for a token color: the catalog's verified entry, else the built-in
+ * one, else `undefined` (shown as a truncated colour in base units). A
+ * built-in token keeps its price unit whatever the catalog says.
+ */
 export function midnightTokenMeta(tokenType: string): MidnightTokenMeta | undefined {
-  return MIDNIGHT_TOKENS[tokenType];
+  const builtIn = MIDNIGHT_TOKENS[tokenType] ?? MIDNIGHT_TOKENS[tokenType.toLowerCase()];
+  const listed = catalog.value.tokens.get(tokenType.toLowerCase());
+  if (listed) return builtIn?.cardanoPriceUnit ? { ...listed, cardanoPriceUnit: builtIn.cardanoPriceUnit } : listed;
+  return builtIn;
+}
+
+/** Whether a token is listed: verified in the catalog, or built in. */
+export function isListedMidnightToken(tokenType: string): boolean {
+  return midnightTokenMeta(tokenType) !== undefined;
 }

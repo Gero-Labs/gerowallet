@@ -246,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
 import { isPublicRoute } from '@/modules/navigation/helpAccess';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
@@ -439,6 +440,8 @@ const items = computed((): NavigationItemUnion[] => {
     { header: t('navigation.financialHub'), enabled: true },
     // Midnight and Solana histories live in their own stores (walletStore.transactions is Cardano/Bitcoin).
     { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionHistorySupport(loggedWallet.value?.chain, loggedWallet.value?.network) && historyCount.value > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
+    // Midnight P2P swap: a Midnight wallet on a swap network only (midnightSwapConfig.ts), as the route guard.
+    { title: t('midnight.swap.title'), icon: 'mdi-swap-horizontal', link: '/midnight-swap', enabled: isMidnight.value && isMidnightSwapNetwork(loggedWallet.value?.network), new: true },
     { title: t('navigation.midnightProofServer'), icon: 'mdi-server-security', link: '/proof-server', enabled: isMidnight.value },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     // RealFi Earn — a yield product, so it sits beside Staking in Financial Hub.
