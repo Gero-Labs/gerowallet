@@ -40,7 +40,7 @@ const holdings: SolanaHolding[] = [{ mint: MINT, amount: '5000000', decimals: 6,
 const request = { mint: MINT, recipientAddress: TO, amount: '1250000', feeLevel: 'fast' };
 
 /** Nexus answers from `chain`; the simulation moves `amount` and keeps `fee` back from it. */
-function api(chain: Record<string, SolanaRemoteAccount>, sim: { success?: boolean; fee?: bigint; tamper?: bigint } = {}) {
+function api(chain: Record<string, SolanaRemoteAccount>, sim: { success?: boolean; fee?: bigint; tamper?: bigint; senderSpent?: bigint } = {}) {
   const read = (address: string) => chain[address] ?? missing(address);
   return {
     getFees: vi.fn(async () => ({ baseFeeLamportsPerSignature: 5000, slotsSampled: 150,
@@ -56,7 +56,7 @@ function api(chain: Record<string, SolanaRemoteAccount>, sim: { success?: boolea
       return {
         success: true, err: null, logs: [], unitsConsumed: 30_000, before: [from, source, destination],
         after: [
-          from,
+          { ...from, lamports: (from.lamports ?? 0n) - (sim.senderSpent ?? 0n) },
           tokenAccount(accounts[1], FROM, BigInt(srcInfo.tokenAmount.amount) - amount + (sim.tamper ?? 0n), { program: source.owner as string }),
           tokenAccount(accounts[2], TO, dstBefore + amount - (sim.fee ?? 0n), { program: source.owner as string }),
         ],
@@ -180,6 +180,12 @@ describe('planning a token send', () => {
     }
   });
 
+  it('refuses a simulation in which the sender pays more SOL than the review shows', async () => {
+    // Fee 7000 + deposit 2039280.
+    await expect(plan(chain(), request, { senderSpent: 2_046_280n })).resolves.toBeTruthy();
+    await expect(plan(chain(), request, { senderSpent: 2_046_281n })).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
+  });
+
   it('says LOOKUP_FAILED when Nexus cannot be read', async () => {
     const a = api(chain());
     a.getAccounts.mockRejectedValueOnce(new Error('down'));
@@ -206,7 +212,7 @@ describe('planning a programmable NFT send', () => {
   const nftHoldings: SolanaHolding[] = [{ mint: NFT, amount: '1', decimals: 0, tokenAccount: SRC, programId: TOKEN_PROGRAM_ID }];
   const pnftRequest = { mint: NFT, recipientAddress: TO, amount: '1', feeLevel: 'standard' };
 
-  function pnftApi(chain: Record<string, SolanaRemoteAccount>, opts: { standard?: string; ruleSet?: string | null; success?: boolean; delivered?: bigint } = {}) {
+  function pnftApi(chain: Record<string, SolanaRemoteAccount>, opts: { standard?: string; ruleSet?: string | null; success?: boolean; delivered?: bigint; senderSpent?: bigint } = {}) {
     const read = (a: string) => chain[a] ?? missing(a);
     return {
       getFees: vi.fn(async () => ({ baseFeeLamportsPerSignature: 5000, slotsSampled: 1, prioritizationFeeMicroLamports: { min: 0, median: 0, p75: 0, p90: 0, max: 0 } })),
@@ -223,7 +229,7 @@ describe('planning a programmable NFT send', () => {
         return {
           success: true, err: null, logs: [], unitsConsumed: 180_000, before: [],
           after: [
-            read(FROM),
+            { ...read(FROM), lamports: (read(FROM).lamports ?? 0n) - (opts.senderSpent ?? 0n) },
             nftAccount(accounts[1], FROM, 0n),
             { ...nftAccount(accounts[2], TO, BigInt(before ?? '0') + (opts.delivered ?? 1n)), lamports: 2_039_280n },
             missing(accounts[3]), // the sender's token record is closed
@@ -275,6 +281,15 @@ describe('planning a programmable NFT send', () => {
   it('holds the send to the reviewed cost', async () => {
     await expect(planPnft(pnftChain(), {}, { ...pnftRequest, maxSolCost: String(5000n + 2_039_280n + 1_447_680n) })).resolves.toBeTruthy();
     await expect(planPnft(pnftChain(), {}, { ...pnftRequest, maxSolCost: '5000' })).rejects.toMatchObject({ code: 'COST_CHANGED' });
+  });
+
+  it('shows rent as returned only when the simulated SOL shows it came back', async () => {
+    // Fee 5000 + deposits 2039280 + 1447680; the record's 1447680 came back: spent = 2044280.
+    await expect(planPnft(pnftChain(), { senderSpent: 2_044_280n })).resolves.toMatchObject({ refundLamports: 1_447_680n });
+    // Paid every deposit and got nothing back: no "returned" line.
+    await expect(planPnft(pnftChain(), { senderSpent: 3_491_960n })).resolves.toMatchObject({ refundLamports: 0n });
+    // More than the review allows.
+    await expect(planPnft(pnftChain(), { senderSpent: 3_491_961n })).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
   });
 
   it('falls back to the plain path when Nexus cannot say', async () => {

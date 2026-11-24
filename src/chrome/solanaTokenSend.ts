@@ -17,7 +17,7 @@
  */
 import type { SolanaApi } from '@/api/solana-api';
 import { isOnCurveSolanaAddress, isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
-import { tokenAccountInfo, type SolanaRemoteAccount } from '@/chains/solana/solanaNexusAccounts';
+import { tokenAccountInfo, type SolanaRemoteAccount, type SolanaRemoteSimulation } from '@/chains/solana/solanaNexusAccounts';
 import { parseRawAmount } from '@/chains/solana/solanaAmount';
 import { SYSTEM_PROGRAM_ID } from '@/chains/solana/solanaTransaction';
 import {
@@ -312,12 +312,28 @@ export async function planSolanaTokenSend(
     throw new SolanaTokenSendError('SIMULATION_FAILED');
   }
 
+  senderPaysAtMost(simulation, senderAccount, feeLamports + rentLamports);
   holdToReview(request, feeLamports + rentLamports, received);
 
   return {
     message, mint, tokenProgram, decimals, amount, received, recipient, destination, createsAccount, rentLamports, feeLamports,
     programmable: false, refundLamports: 0n,
   };
+}
+
+/**
+ * The sender's SOL as simulated: it may drop by at most `bound` (the fee and the deposits the
+ * review shows), so the reviewed cost is a simulated limit, not only an estimate. Returns the drop
+ * (negative when the sender gains, e.g. a refund larger than what it paid). Whether the simulated
+ * state already has the fee taken off does not matter: the bound includes it.
+ */
+function senderPaysAtMost(simulation: SolanaRemoteSimulation, senderAccount: SolanaRemoteAccount, bound: bigint): bigint {
+  const before = simulation.before[0]?.lamports ?? senderAccount.lamports;
+  const after = simulation.after?.[0]?.lamports;
+  if (before === null || before === undefined || after === null || after === undefined) throw new SolanaTokenSendError('SIMULATION_FAILED');
+  const spent = before - after;
+  if (spent > bound) throw new SolanaTokenSendError('SIMULATION_FAILED');
+  return spent;
 }
 
 /** The limits from the review the user approved: never more SOL, never less received. */
@@ -447,7 +463,10 @@ async function planPnftSend(ctx: PnftContext): Promise<SolanaTokenPlan> {
     + (destinationRecordAccount.exists ? 0n : createdRent(simulation.after[4]));
   // The sender's token record is closed; its rent returns to the payer (the sender).
   const ownerRecordAfter = simulation.after[3];
-  const refundLamports = !ownerRecordAfter.exists || (ownerRecordAfter.lamports ?? 0n) === 0n ? ownerRecordAccount.lamports ?? 0n : 0n;
+  const recordRent = !ownerRecordAfter.exists || (ownerRecordAfter.lamports ?? 0n) === 0n ? ownerRecordAccount.lamports ?? 0n : 0n;
+  const spent = senderPaysAtMost(simulation, ctx.senderAccount, feeLamports + rentLamports);
+  // Shown as returned only when the simulated SOL shows it came back to the sender.
+  const refundLamports = recordRent > 0n && spent <= feeLamports + rentLamports - recordRent ? recordRent : 0n;
 
   holdToReview(ctx.request, feeLamports + rentLamports, 1n);
   return {
