@@ -143,7 +143,8 @@ function go(next: View) {
  * under the panel's sticky header.
  */
 const root = ref<HTMLElement | null>(null);
-watch(() => view.value, async () => {
+// A take's review, progress and result are one view: its heading changing is a new screen too.
+watch(() => [view.value, takeHeading.value.title], async () => {
   await nextTick();
   for (let el = root.value?.parentElement ?? null; el; el = el.parentElement) {
     if (el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY !== 'visible') { el.scrollTop = 0; break; }

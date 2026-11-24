@@ -73,6 +73,7 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
 import { midnightCatalogTokens } from '@/chains/midnight/midnightTokenCatalog';
+import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import {
   MIDNIGHT_SWAP_DEFAULT_TTL, MIDNIGHT_SWAP_PRIVATE_LEGS, MIDNIGHT_SWAP_TTL_MINUTES, type MidnightSwapTtlMinutes,
 } from '@/chains/midnight/midnightSwapConfig';
@@ -106,9 +107,11 @@ const holdText = computed(() => (hold.held.value ? hold.sendTextShort.value : ''
 const giveType = ref(NIGHT_TOKEN_TYPE);
 /** The first listed token that is not NIGHT, else the first held one: a sensible first ask. */
 function defaultWant(): string {
-  const listed = midnightCatalogTokens.value.find(token => token.verified && token.kind === 'UNSHIELDED');
+  // Never NIGHT itself (the catalog lists it too) nor the token given.
+  const other = (type: string) => !isNativeNight(type) && type !== giveType.value;
+  const listed = midnightCatalogTokens.value.find(token => token.verified && token.kind === 'UNSHIELDED' && other(token.tokenType));
   if (listed) return listed.tokenType;
-  for (const type of balances.value.keys()) if (type !== NIGHT_TOKEN_TYPE) return type;
+  for (const type of balances.value.keys()) if (other(type)) return type;
   return '';
 }
 const wantType = ref(defaultWant());

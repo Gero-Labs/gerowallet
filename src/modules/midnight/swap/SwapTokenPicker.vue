@@ -5,10 +5,11 @@
         v-bind="activator"
         type="button"
         class="swap-token swap-token--button"
-        :aria-label="t('midnight.swap.tokenAria', { token: current.symbol })"
+        :aria-label="modelValue ? t('midnight.swap.tokenAria', { token: current.symbol }) : t('midnight.swap.chooseToken')"
         :data-test="`swap-token-${side}`"
       >
-        <span class="swap-token__mark" aria-hidden="true">{{ current.mark }}</span>{{ current.symbol }}
+        <template v-if="modelValue"><span class="swap-token__mark" aria-hidden="true">{{ current.mark }}</span>{{ current.symbol }}</template>
+        <template v-else>{{ t('midnight.swap.chooseToken') }}</template>
         <v-icon size="14" aria-hidden="true">mdi-chevron-down</v-icon>
       </button>
     </template>
