@@ -1,7 +1,7 @@
 // The maker's offer records: status from the wallet's coins, reserved coins, pruning.
 import { describe, expect, it } from 'vitest';
 import {
-  deriveSwapOfferStatus, MIDNIGHT_SWAP_RECORD_KEEP_MS, MIDNIGHT_SWAP_RECORD_MAX, readSwapOfferRecords, refreshSwapOfferRecords,
+  deriveSwapOfferStatus, MIDNIGHT_SWAP_RECORD_KEEP_MS, MIDNIGHT_SWAP_RECORD_MAX, MIDNIGHT_SWAP_SETTLE_GRACE_MS, readSwapOfferRecords, refreshSwapOfferRecords,
   reservedSwapCoins, withoutReservedCoins, type MidnightSwapOfferRecord,
 } from './midnightSwapRecords';
 
@@ -54,8 +54,11 @@ describe('deriveSwapOfferStatus', () => {
     expect(deriveSwapOfferStatus(record(), { lastSync: null, utxos: [] }, NOW + 31 * 60_000)).toBe('expired');
   });
 
-  it('keeps a terminal status', () => {
+  it('keeps a terminal status, but the output of a taken offer wins over a stored cancelled or expired one', () => {
     expect(deriveSwapOfferStatus(record({ status: 'taken' }), synced([coin(OFFERED, 0), coin(OFFERED, 2)]), NOW)).toBe('taken');
+    expect(deriveSwapOfferStatus(record({ status: 'cancelled' }), synced([]), NOW)).toBe('cancelled');
+    expect(deriveSwapOfferStatus(record({ status: 'cancelled' }), synced([coin(MAKER_INTENT, 0)]), NOW)).toBe('taken');
+    expect(deriveSwapOfferStatus(record({ status: 'expired' }), synced([coin(MAKER_INTENT, 1)]), NOW + 60 * 60_000)).toBe('taken');
   });
 });
 
@@ -64,6 +67,17 @@ describe('refreshSwapOfferRecords', () => {
     const { records, changed } = refreshSwapOfferRecords([record()], synced([coin(MAKER_INTENT, 0)]), NOW);
     expect(changed).toBe(true);
     expect(records[0]).toMatchObject({ status: 'taken', settledAt: NOW });
+  });
+
+  it('shows cancelled while the offer could still land, and stores it only once past the TTL and the grace period', () => {
+    // Seen on preprod: after a wallet switch the offered coin was gone before the swap's outputs arrived.
+    const early = refreshSwapOfferRecords([record()], synced([]), NOW);
+    expect(early.records[0].status).toBe('cancelled');
+    expect(early.stored[0].status).toBe('open');
+    expect(early.changed).toBe(false);
+    const late = refreshSwapOfferRecords([record()], synced([]), record().expiresAt + MIDNIGHT_SWAP_SETTLE_GRACE_MS);
+    expect(late.changed).toBe(true);
+    expect(late.stored[0]).toMatchObject({ status: 'expired' });
   });
 
   it('reports no change when nothing moved', () => {

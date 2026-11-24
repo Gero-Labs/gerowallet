@@ -21,14 +21,14 @@ function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
   return next;
 }
 
-/** The offers of wallet `walletId` on `network`, statuses refreshed against `view` (written back when one changed). */
+/** The offers of wallet `walletId` on `network`, with the status to show against `view`; what settled is written back. */
 export function loadSwapOffers(network: string, walletId: number, view: MidnightSwapCoinView, now = Date.now()): Promise<MidnightSwapOfferRecord[]> {
   const key = midnightSwapRecordsKey(network, walletId);
   return serialized(key, async () => {
     const stored = readSwapOfferRecords(await getPrivate(key));
-    const { records, changed } = refreshSwapOfferRecords(stored, view, now);
-    if (changed) await setPrivate(key, records);
-    return records;
+    const refreshed = refreshSwapOfferRecords(stored, view, now);
+    if (refreshed.changed) await setPrivate(key, refreshed.stored);
+    return refreshed.records;
   });
 }
 

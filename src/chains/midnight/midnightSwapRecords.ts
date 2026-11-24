@@ -11,7 +11,12 @@
 //   - every offered coin is still held → OPEN, or EXPIRED once past its TTL;
 //   - an offered coin is gone and nothing arrived → CANCELLED (withdrawn, or
 //     spent by something else), or EXPIRED if that was first seen after expiry.
-// A terminal status is kept once seen: the coins that proved it can move on.
+// TAKEN is stored once seen (the received coins can move on) and wins over
+// any other status. CANCELLED and EXPIRED are only shown until the offer is
+// past its TTL plus a grace period, then stored: right after a wallet switch
+// or a sync the spent coin can be gone before the swap's outputs arrive
+// (seen on preprod), and storing that moment would mark a taken offer
+// cancelled for good.
 //
 // Pure: no ledger, no storage.
 
@@ -76,22 +81,27 @@ export interface MidnightSwapCoinView {
   readonly utxos: ReadonlyArray<Pick<MidnightUnshieldedUtxo, 'intentHash' | 'outputIndex'>>;
 }
 
+/** How long after its TTL a cancelled or expired offer is shown before that status is stored. */
+export const MIDNIGHT_SWAP_SETTLE_GRACE_MS = 10 * 60_000;
+
 /** The status of `record` against the wallet's coins at `now`. */
 export function deriveSwapOfferStatus(record: MidnightSwapOfferRecord, view: MidnightSwapCoinView, now: number): MidnightSwapStatus {
-  if (record.status !== 'open') return record.status;
+  if (record.status === 'taken') return 'taken';
   const expired = now >= record.expiresAt;
   // Before a sync the coins say nothing: only the clock does.
-  if (view.lastSync === null) return expired ? 'expired' : 'open';
+  if (view.lastSync === null) return record.status !== 'open' ? record.status : expired ? 'expired' : 'open';
   const intent = record.intentHash.toLowerCase();
   if (view.utxos.some(utxo => utxo.intentHash.toLowerCase() === intent)) return 'taken';
+  if (record.status !== 'open') return record.status;
   const held = new Set(view.utxos.map(utxoRef));
   if (record.inputs.every(ref => held.has(ref))) return expired ? 'expired' : 'open';
   return expired && !record.withdrawTxHash ? 'expired' : 'cancelled';
 }
 
 /**
- * Re-read every record's status; returns the records (terminal ones stamped
- * with `settledAt`) and whether any changed, so the caller writes only then.
+ * Re-read every record's status against `view`. `records` carry the status to
+ * show; `stored` is what to keep, written only when `changed`: TAKEN at once,
+ * CANCELLED and EXPIRED once {@link MIDNIGHT_SWAP_SETTLE_GRACE_MS} past the TTL.
  * Drops settled records older than {@link MIDNIGHT_SWAP_RECORD_KEEP_MS} and
  * keeps at most {@link MIDNIGHT_SWAP_RECORD_MAX}, newest first.
  */
@@ -99,28 +109,32 @@ export function refreshSwapOfferRecords(
   records: readonly MidnightSwapOfferRecord[],
   view: MidnightSwapCoinView,
   now: number,
-): { records: MidnightSwapOfferRecord[]; changed: boolean } {
+): { records: MidnightSwapOfferRecord[]; stored: MidnightSwapOfferRecord[]; changed: boolean } {
   let changed = false;
-  const next: MidnightSwapOfferRecord[] = [];
+  const shown: MidnightSwapOfferRecord[] = [];
+  const stored: MidnightSwapOfferRecord[] = [];
   for (const record of records) {
     const status = deriveSwapOfferStatus(record, view, now);
-    if (status !== record.status) {
+    const settles = status !== record.status
+      && (status === 'taken' || (status !== 'open' && now >= record.expiresAt + MIDNIGHT_SWAP_SETTLE_GRACE_MS));
+    const kept = settles ? { ...record, status, settledAt: now } : record;
+    if (settles) changed = true;
+    if (kept.status !== 'open' && (kept.settledAt ?? kept.expiresAt) + MIDNIGHT_SWAP_RECORD_KEEP_MS < now) {
       changed = true;
-      next.push({ ...record, status, settledAt: now });
       continue;
     }
-    if (status !== 'open' && (record.settledAt ?? record.expiresAt) + MIDNIGHT_SWAP_RECORD_KEEP_MS < now) {
-      changed = true;
-      continue;
-    }
-    next.push(record);
+    stored.push(kept);
+    shown.push(status === kept.status ? kept : { ...kept, status });
   }
-  next.sort((a, b) => b.createdAt - a.createdAt);
-  if (next.length > MIDNIGHT_SWAP_RECORD_MAX) {
+  const newestFirst = (a: MidnightSwapOfferRecord, b: MidnightSwapOfferRecord) => b.createdAt - a.createdAt;
+  stored.sort(newestFirst);
+  shown.sort(newestFirst);
+  if (stored.length > MIDNIGHT_SWAP_RECORD_MAX) {
     changed = true;
-    next.length = MIDNIGHT_SWAP_RECORD_MAX;
+    stored.length = MIDNIGHT_SWAP_RECORD_MAX;
+    shown.length = Math.min(shown.length, MIDNIGHT_SWAP_RECORD_MAX);
   }
-  return { records: next, changed };
+  return { records: shown, stored, changed };
 }
 
 /**
