@@ -234,3 +234,32 @@ describe('ledger 9 shielded send on a chain that crossed the upgrade', () => {
   });
 });
 
+describe('a private send next to open swap offers (checkSpends)', () => {
+  let wallet: ReturnType<typeof realWallet>;
+  beforeEach(() => {
+    vi.resetAllMocks();
+    wallet = realWallet();
+    mocks.factory.mockReturnValue({ startWithSecretKeys: () => wallet, restore: () => wallet });
+    mocks.fees.mockResolvedValue(ledger.Transaction.fromParts('preview'));
+    mocks.load.mockResolvedValue(null);
+    mocks.save.mockResolvedValue(undefined);
+    mocks.clear.mockResolvedValue(undefined);
+    mocks.identity.mockResolvedValue({ chain_generation: 7 });
+    mocks.unchanged.mockResolvedValue(undefined);
+  });
+
+  it('hands over the nullifiers of the coins the transfer spends, before the fee', async () => {
+    const seen: string[][] = [];
+    const result = await buildAndSignShieldedLedger9Transfer({ ...args(), checkSpends: ({ nullifiers }) => { seen.push([...nullifiers]); } });
+    const tx = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(result.txHex, 'hex'));
+    expect(seen).toEqual([tx.guaranteedOffer!.inputs.map(input => input.nullifier.toLowerCase())]);
+    expect(seen[0][0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('builds nothing further when the check refuses', async () => {
+    await expect(buildAndSignShieldedLedger9Transfer({ ...args(), checkSpends: () => { throw new Error('MIDNIGHT_SEND_SPENDS_OFFERED_COINS'); } }))
+      .rejects.toThrow('MIDNIGHT_SEND_SPENDS_OFFERED_COINS');
+    expect(mocks.fees).not.toHaveBeenCalled();
+    expect(wallet.stop).toHaveBeenCalledOnce();
+  });
+});

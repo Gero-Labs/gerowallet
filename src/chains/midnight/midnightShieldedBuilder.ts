@@ -59,6 +59,13 @@ export interface BuildAndSignShieldedTransferArgs {
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
   /** Called once, just before the wallet-side proof starts (only with {@link proving}). */
   readonly onProving?: () => void;
+  /**
+   * Ledger 9: called with the nullifiers (lower-case hex) of the private coins
+   * the built transfer spends, before its fee is paid, signed or proved. It
+   * throws to refuse the send (one that would spend a coin of an open swap
+   * offer, which cancels that offer: walletBg).
+   */
+  readonly checkSpends?: (spends: { readonly nullifiers: readonly string[] }) => void;
   /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */

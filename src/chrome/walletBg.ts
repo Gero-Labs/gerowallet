@@ -123,8 +123,10 @@ import { localProvingOffersFor } from '@/chains/midnight/midnightProvingFlags';
 import { helperProofProcessor } from '@/chains/midnight/midnightHelperProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
-import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches, assertSpendsNoReservedCoins } from '@/chains/midnight/midnightBuiltTxGuard';
-import { reservedSwapCoinsFor } from '@/chrome/midnightSwapOfferStore';
+import {
+  assertMidnightDustRegistrationMatches, assertMidnightTransferMatches, assertSpendsNoReservedCoins, MIDNIGHT_SEND_SPENDS_OFFERED_COINS,
+} from '@/chains/midnight/midnightBuiltTxGuard';
+import { reservedSwapCoinsFor, reservedSwapNullifiersFor } from '@/chrome/midnightSwapOfferStore';
 import { withoutReservedCoins } from '@/chains/midnight/midnightSwapRecords';
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
@@ -3947,6 +3949,9 @@ export class WalletBg {
             credential: { password: sponsor.password, prfSecret: sponsor.prfSecret },
           }, this.id);
         }
+        // The private coins of the wallet's open swap offers: spending one cancels that offer, so the
+        // send is refused before its fee, signature or proof (the SDK picks the coins and cannot skip some).
+        const offered = await reservedSwapNullifiersFor(network, this.id);
         try {
           assertSession();
           built = await buildAndSignShieldedTransfer({
@@ -3964,6 +3969,9 @@ export class WalletBg {
               tokenType: o.tokenType!,
             })),
             proving,
+            checkSpends: offered.size ? ({ nullifiers }) => {
+              if (nullifiers.some(nullifier => offered.has(nullifier))) throw new Error(MIDNIGHT_SEND_SPENDS_OFFERED_COINS);
+            } : undefined,
           });
         } catch (err) {
           // Only LocalProvingError carries a duration worth recording — any
