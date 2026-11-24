@@ -6827,6 +6827,7 @@ export default {
   'solana.nft.collection': 'Collection',
   'solana.nft.symbol': 'Symbol',
   'solana.nft.programmable': "This is a programmable NFT. Gero can't send these yet: use the marketplace or app you got it from.",
+  'solana.nft.gone': "This NFT is no longer in this wallet, so there's nothing to send.",
   'solana.dapp.warn.assignsWallet': 'Hands control of your Solana account to another program.',
   'solana.dapp.warn.givesTokenAccount': 'Hands one of your token accounts to another address.',
   'solana.dapp.warn.nonceAuthority': 'Hands a nonce account you control to another address.',

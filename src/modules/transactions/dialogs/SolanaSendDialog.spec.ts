@@ -233,6 +233,20 @@ describe('SolanaSendDialog: an NFT', () => {
     });
   });
 
+  it('says the NFT is gone, and sends nothing, when it is no longer held', async () => {
+    (walletStore as unknown as { solana: unknown }).solana = { lamports: '2000000000', tokens: [{ mint: TOKEN, amount: '5000000', decimals: 6 }] };
+    const wrapper = mount(SolanaSendDialog as unknown as Parameters<typeof mount>[0], {
+      props: { modelValue: true, nftMint: NFT },
+      global: { plugins: [createTestVuetify()], mocks: { $t: (key: string) => key } },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-test="sol-nft-gone"]').text()).toBe('solana.nft.gone');
+    expect(wrapper.find('[data-test="sol-asset"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="sol-amount"]').exists()).toBe(false);
+    await wrapper.find('[data-test="sol-recipient"]').setValue(TO);
+    expect(wrapper.find('[data-test="sol-continue"]').attributes('disabled')).toBeDefined();
+  });
+
   it('keeps NFTs out of the token picker', async () => {
     const wrapper = render();
     await flushPromises();

@@ -167,10 +167,6 @@ export class SolanaApi {
   }
 
   /**
-   * Simulates a transaction (base64 wire format; signatures not checked, blockhash replaced)
-   * and reads `accounts` (at most 32) before and after. Broadcasts nothing.
-   */
-  /**
    * `POST /api/sol/nfts/metadata`: one entry per mint, in order (solanaNfts.ts reads it strictly).
    * At most SOLANA_NFT_BATCH mints per call.
    */
@@ -181,6 +177,10 @@ export class SolanaApi {
     return parseSolanaNftRows(data, mints, now);
   }
 
+  /**
+   * Simulates a transaction (base64 wire format; signatures not checked, blockhash replaced)
+   * and reads `accounts` (at most 32) before and after. Broadcasts nothing.
+   */
   async simulate(transactionBase64: string, accounts: string[]): Promise<SolanaRemoteSimulation> {
     accounts.forEach((a) => this.address(a));
     const { data } = await this.http.post<string>(

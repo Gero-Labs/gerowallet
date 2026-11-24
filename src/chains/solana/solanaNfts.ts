@@ -7,9 +7,10 @@
  * wallet re-checks what Nexus returns rather than trusting it: an unexpected URL scheme, an
  * oversized string or a row for another mint is dropped.
  *
- * A collection is VERIFIED only when the NFT's metadata names it and the collection's authority
- * signed for it on chain. Anyone can mint an NFT that claims a famous collection's name, so an
- * unverified NFT stands alone, never grouped with others under a name it chose itself.
+ * A collection is VERIFIED only when Nexus reports the metadata's `collection.verified` flag set
+ * (the Token Metadata program sets it when the collection's authority signs; the wallet does not
+ * re-read that on chain itself). Anyone can mint an NFT that claims a famous collection's name, so
+ * an unverified NFT stands alone, never grouped with others under a name it chose itself.
  */
 import { isValidSolanaAddress } from './solanaKeyManager';
 

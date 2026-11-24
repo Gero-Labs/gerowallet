@@ -32,12 +32,16 @@
       <!-- Step 1: recipient, amount, fee -->
       <div v-if="step === 1" class="sol-send__body">
         <!-- SOL or one of the wallet's SPL tokens (shown by mint: Gero has no token names yet) -->
-        <div v-if="nft" class="glass-tier sol-nft" data-test="sol-nft">
+        <div v-if="nftGone" class="sol-notice sol-notice--error" role="alert" data-test="sol-nft-gone">
+          <v-icon size="small">mdi-alert-circle-outline</v-icon>
+          <span class="sol-notice__text">{{ $t('solana.nft.gone') }}</span>
+        </div>
+        <div v-else-if="nft" class="glass-tier sol-nft" data-test="sol-nft">
           <span class="t-label">{{ $t('solana.nft.sending') }}</span>
           <span class="sol-nft__name">{{ nftName }}</span>
           <span class="g-mono sol-review__address">{{ nft.mint }}</span>
         </div>
-        <div v-else-if="pickerTokens.length" class="sol-field">
+        <div v-else-if="pickerTokens.length && !props.nftMint" class="sol-field">
           <span class="t-label">{{ $t('solana.token.asset') }}</span>
           <v-select
             v-model="asset"
@@ -70,7 +74,7 @@
           <span v-if="addressError" class="sol-field__error">{{ addressError }}</span>
         </label>
 
-        <label v-if="!nft" class="sol-field">
+        <label v-if="!props.nftMint" class="sol-field">
           <span class="t-label">{{ $t('send.amount') }}</span>
           <span :class="['sol-input', { 'sol-input--error': !!amountError }]">
             <span class="sol-input__unit g-mono">{{ unit }}</span>
@@ -87,7 +91,7 @@
           <span v-if="amountError" class="sol-field__error" data-test="sol-amount-error">{{ amountError }}</span>
         </label>
 
-        <div v-if="!nft" class="sol-send__balance t-caption">
+        <div v-if="!props.nftMint" class="sol-send__balance t-caption">
           <span>{{ $t('send.availableBalance') }}</span>
           <span class="g-num sol-send__balance-value">{{ assetBalance === null ? '—' : formatAsset(assetBalance) }} {{ unit }}</span>
         </div>
@@ -363,6 +367,9 @@ const nft = computed(() => {
   return entry && tokenItems.value.some((token) => token.mint === props.nftMint) ? entry : null;
 });
 const nftName = computed(() => (nft.value ? solanaNftName(nft.value) : ''));
+// Opened for an NFT that is no longer here (just sent, or its metadata gone): never fall back
+// to an ordinary send of whatever the form last held.
+const nftGone = computed(() => !!props.nftMint && !nft.value);
 // An NFT is one indivisible unit: the asset and amount are fixed.
 function applyNft(): void {
   if (!nft.value) return;
@@ -432,7 +439,7 @@ const amountError = computed(() => {
 });
 
 const canContinue = computed(() =>
-  !quoting.value && !!recipient.value && !addressError.value && amount.value > 0n && !amountError.value && !!quote.value,
+  !nftGone.value && !quoting.value && !!recipient.value && !addressError.value && amount.value > 0n && !amountError.value && !!quote.value,
 );
 
 // A token send is planned and simulated by the worker before the review shows it.
@@ -486,7 +493,7 @@ const isBluetooth = ref(false);
 const showBluetoothToggle = computed(() => !props.inPanel && loggedWallet.value?.type === WalletType.Ledger && !!loggedWallet.value?.btSupported);
 const { sign: signOnDevice, keystone } = useSolanaHardwareSigner({ getIsBT: () => showBluetoothToggle.value && isBluetooth.value });
 
-const canSign = computed(() => !loading.value
+const canSign = computed(() => !loading.value && !nftGone.value
   && (isHardware.value || (isPrfWallet.value ? !!prfBytes.value : !!password.value)));
 
 const isPrfWallet = computed(() =>

@@ -208,6 +208,24 @@ describe('syncSolanaNfts', () => {
     expect(store.setSolanaNfts).not.toHaveBeenCalled();
   });
 
+  it('reads a token update that came in during a read once that read ends', async () => {
+    const { service } = setup();
+    let finish: () => void = () => undefined;
+    const api = {
+      getNftMetadata: vi.fn((mints: string[]) => new Promise((resolve) => {
+        finish = () => resolve(mints.map((m) => row(m)));
+      })),
+    };
+    const first = service.syncSolanaNfts(held(A), api as never);
+    await service.syncSolanaNfts(held(A, B), api as never); // arrives mid-read: kept, not dropped
+    finish();
+    await vi.waitFor(() => expect(api.getNftMetadata).toHaveBeenCalledTimes(2));
+    finish();
+    await first;
+    expect(api.getNftMetadata.mock.calls.map((c) => c[0])).toEqual([[A], [B]]);
+    expect(store.setSolanaNfts).toHaveBeenLastCalledWith({ [A]: row(A), [B]: row(B) });
+  });
+
   it('does nothing for another chain', async () => {
     const { service } = setup(Blockchain.CARDANO);
     const api = { getNftMetadata: vi.fn() };

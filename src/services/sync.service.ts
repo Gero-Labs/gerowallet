@@ -632,6 +632,8 @@ export class SyncService {
   }
 
   private solanaNftsInFlight = false;
+  /** The newest token snapshot that arrived while a read was running: read once that one ends. */
+  private solanaNftsPending: ReadonlyArray<{ mint: string; amount: string; decimals: number }> | null = null;
 
   /**
    * Keeps `walletStore.solanaNfts` to the account's held NFTs (as syncAssets does for Cardano):
@@ -640,7 +642,11 @@ export class SyncService {
    * read keeps what is known and is tried again with the next token update.
    */
   async syncSolanaNfts(tokens: ReadonlyArray<{ mint: string; amount: string; decimals: number }>, api?: Pick<SolanaApi, 'getNftMetadata'>): Promise<void> {
-    if (this.solanaNftsInFlight || this.walletBg?.chain !== Blockchain.SOLANA) return;
+    if (this.walletBg?.chain !== Blockchain.SOLANA) return;
+    if (this.solanaNftsInFlight) {
+      this.solanaNftsPending = tokens;
+      return;
+    }
     this.solanaNftsInFlight = true;
     const walletId = this.walletBg.id;
     try {
@@ -668,6 +674,9 @@ export class SyncService {
     } finally {
       this.solanaNftsInFlight = false;
     }
+    const pending = this.solanaNftsPending;
+    this.solanaNftsPending = null;
+    if (pending) await this.syncSolanaNfts(pending, api);
   }
 
   /**
