@@ -1,8 +1,8 @@
 // Direct peer-to-peer token swaps on Midnight: the maker seals an offer
 // (makeIntent with payFees false), shares it as a MIP-0005 `swapoffer1…`
 // string, and a taker completes it (balanceSealedTransaction) and pays the
-// DUST fee. Public (unshielded) legs; private legs come from
-// midnightPrivateSwap9.ts once the swap handlers call it (MIDNIGHT_SWAP_PRIVATE_LEGS).
+// DUST fee. Public (unshielded) legs through the connector builders; private
+// (shielded) legs through midnightPrivateSwap9.ts (MIDNIGHT_SWAP_PRIVATE_LEGS).
 //
 // Pure: the build-time network gate, the offer lifetimes and the code → copy
 // table. Used by the worker and the pages.
@@ -21,12 +21,12 @@ export function isMidnightSwapNetwork(network: string | null | undefined): boole
 }
 
 /**
- * Whether the swap screens offer the Public/Private choice. The builders for
- * private legs exist (midnightPrivateSwap9.ts, PRIVATE_SWAP_SUPPORTED); the
- * MIDNIGHT_SWAP_* handlers do not call them yet, so the choice stays hidden
- * until they do, and an offer with a private leg is refused as unsupported.
+ * Whether offers may have private (shielded) legs: the screens offer the
+ * Public/Private choice and the MIDNIGHT_SWAP_* handlers make and take such
+ * offers through midnightPrivateSwap9.ts. Off, an offer with a private leg is
+ * refused as unsupported. Same networks as the swap itself.
  */
-export const MIDNIGHT_SWAP_PRIVATE_LEGS = false;
+export const MIDNIGHT_SWAP_PRIVATE_LEGS = true;
 
 /**
  * How long an offer can be taken, in minutes. 55 is the ceiling: the ledger
@@ -41,6 +41,13 @@ export const MIDNIGHT_SWAP_DEFAULT_TTL: MidnightSwapTtlMinutes = 30;
 export function isMidnightSwapTtl(value: unknown): value is MidnightSwapTtlMinutes {
   return typeof value === 'number' && (MIDNIGHT_SWAP_TTL_MINUTES as readonly number[]).includes(value);
 }
+
+/**
+ * A fully private offer's estimated life, in minutes, as the maker's screen
+ * states it before building: the root window less its margin
+ * (midnightPrivateSwap9.ts PRIVATE_SWAP_ROOT_WINDOW_MS - PRIVATE_SWAP_EXPIRY_MARGIN_MS).
+ */
+export const MIDNIGHT_SWAP_PRIVATE_ESTIMATE_MINUTES = 55;
 
 /** An offer closer to its expiry than this cannot be taken (the taker's proof would likely be wasted). */
 export const MIDNIGHT_SWAP_MIN_TAKE_MS = 2 * 60_000;
@@ -98,18 +105,86 @@ const CODES = {
   SWAP_OFFER_NOT_OPEN: 'midnight.swap.error.notOpen',
   /** The swap is not offered on this network (MIDNIGHT_SWAP_NETWORKS) or the chain is not on ledger 9. */
   SWAP_UNAVAILABLE: 'midnight.swap.error.notEnabled',
+  /** An offer that gives private tokens is withdrawn by spending them, not from the swap screens. */
+  SWAP_PRIVATE_NO_WITHDRAW: 'midnight.swap.error.privateNoWithdraw',
+  /** The chosen prover cannot prove private legs (see canProvePrivateSwap): asked before anything is unlocked. */
+  SWAP_PRIVATE_PROVER: 'midnight.swap.error.privateProver',
 } as const;
 
-export type MidnightSwapCode = keyof typeof CODES;
+/**
+ * Whether `prover` (walletProverFor with kind `shielded`) can prove a swap's
+ * private legs: a proof server, local or Arkhia, always; this computer or Gero
+ * Prover only when the build has the hosted Zswap key set. Gero Cloud proves
+ * only whole wallet-built sends, so never a swap.
+ */
+export function canProvePrivateSwap(prover: string, shieldedKeysHosted: boolean): boolean {
+  if (prover === 'local' || prover === 'zkpaas') return true;
+  return (prover === 'device' || prover === 'helper') && shieldedKeysHosted;
+}
+
+/**
+ * The refusals of midnightPrivateSwap9.ts (`PrivateSwapRefusedError.code`,
+ * the keys of its PRIVATE_SWAP_REFUSALS), as the worker answers them:
+ * `SWAP_PRIVATE_<code>`. Kept here so the pages translate them without
+ * loading the ledger; midnightSwapConfig.spec.ts holds the two lists equal.
+ */
+const PRIVATE_REFUSAL_KEYS = {
+  request: 'midnight.swap.error.private.request',
+  noPrivateLeg: 'midnight.swap.error.private.noPrivateLeg',
+  shieldedNight: 'midnight.swap.error.private.shieldedNight',
+  tooManyLegs: 'midnight.swap.error.private.tooManyLegs',
+  sameToken: 'midnight.swap.error.private.sameToken',
+  decode: 'midnight.swap.error.invalid',
+  size: 'midnight.swap.error.private.size',
+  giveOnly: 'midnight.swap.error.giveOnly',
+  wantOnly: 'midnight.swap.error.private.wantOnly',
+  fallible: 'midnight.swap.error.unsupported',
+  contract: 'midnight.swap.error.private.contract',
+  dust: 'midnight.swap.error.private.dust',
+  transient: 'midnight.swap.error.unsupported',
+  unknownKind: 'midnight.swap.error.unsupported',
+  expiry: 'midnight.swap.error.private.expiry',
+  terms: 'midnight.swap.error.changed',
+  own: 'midnight.swap.error.own',
+} as const;
+
+export type MidnightPrivateSwapRefusal = keyof typeof PRIVATE_REFUSAL_KEYS;
+export const MIDNIGHT_PRIVATE_SWAP_REFUSALS = Object.keys(PRIVATE_REFUSAL_KEYS) as MidnightPrivateSwapRefusal[];
+
+export type MidnightSwapCode = keyof typeof CODES | `SWAP_PRIVATE_${MidnightPrivateSwapRefusal}`;
+
+/** The swap code the worker answers for a private-swap refusal. */
+export function privateSwapRefusalCode(refusal: MidnightPrivateSwapRefusal): MidnightSwapCode {
+  return `SWAP_PRIVATE_${refusal}`;
+}
+
+function privateRefusalOf(value: string): MidnightPrivateSwapRefusal | undefined {
+  if (!value.startsWith('SWAP_PRIVATE_')) return undefined;
+  const refusal = value.slice('SWAP_PRIVATE_'.length);
+  return Object.prototype.hasOwnProperty.call(PRIVATE_REFUSAL_KEYS, refusal) ? refusal as MidnightPrivateSwapRefusal : undefined;
+}
 
 export function isMidnightSwapCode(value: unknown): value is MidnightSwapCode {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(CODES, value);
+  return typeof value === 'string' && (Object.prototype.hasOwnProperty.call(CODES, value) || !!privateRefusalOf(value));
 }
 
 /** The `us.ts` key that says `code` to the user; `undefined` for anything else (the caller shows its general error). */
 export function midnightSwapCopyKey(code: unknown): string | undefined {
-  return isMidnightSwapCode(code) ? CODES[code] : undefined;
+  if (typeof code !== 'string') return undefined;
+  if (Object.prototype.hasOwnProperty.call(CODES, code)) return CODES[code as keyof typeof CODES];
+  const refusal = privateRefusalOf(code);
+  return refusal ? PRIVATE_REFUSAL_KEYS[refusal] : undefined;
 }
+
+/**
+ * How long proving takes on this device, for the progress steps: about ten
+ * seconds for a public swap's one DUST proof, about a minute for private legs
+ * (Zswap spends and outputs; 75-110 s measured on preprod in WASM).
+ */
+export const MIDNIGHT_SWAP_PROVE_COPY = {
+  public: 'midnight.swap.step.aboutSeconds',
+  private: 'midnight.swap.step.aboutMinute',
+} as const;
 
 /** A refusal the worker answers with its code as `error`; the pages map it with {@link midnightSwapCopyKey}. */
 export class MidnightSwapError extends Error {

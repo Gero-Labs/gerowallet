@@ -13,7 +13,7 @@
           {{ t('midnight.swap.saveFile') }}
         </GButton>
       </div>
-      <div v-if="geroListAvailable && record.status === 'open'" class="swap-share__list">
+      <div v-if="geroListAvailable && record.status === 'open' && !hasPrivateLeg(record)" class="swap-share__list">
       <GButton
         block
         :disabled="!!record.listed || listing"
@@ -37,9 +37,10 @@ import { computed, ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { swapOfferFileName } from '@/chains/midnight/midnightSwapOffer';
-import type { MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
+import { hasPrivateLeg, type MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
-import { countdownText, swapLegText } from './swapTokens';
+import { swapVisibleText } from './swapPrivacy';
+import { countdownText, minutesLeft, swapLegText } from './swapTokens';
 import SwapOfferQr from './SwapOfferQr.vue';
 import SwapRows, { type SwapRow } from './SwapRows.vue';
 import SwapBanner from './SwapBanner.vue';
@@ -53,7 +54,15 @@ const { now, network, geroListAvailable } = swap;
 const rows = computed<SwapRow[]>(() => [
   ...props.record.gives.map(leg => ({ label: t('midnight.swap.youGive'), value: swapLegText(leg, network.value) })),
   ...props.record.wants.map(leg => ({ label: t('midnight.swap.youReceive'), value: swapLegText(leg, network.value) })),
-  { label: t('midnight.swap.expiresInRow'), value: countdownText(props.record.expiresAt, now.value), test: 'swap-countdown' },
+  props.record.expiry === 'root-window'
+    ? {
+      label: t('midnight.swap.expiresInRow'),
+      value: t('midnight.swap.expiresAbout', { n: minutesLeft(props.record.expiresAt, now.value) }),
+      hint: t('midnight.swap.hint.estimate'),
+      test: 'swap-countdown',
+    }
+    : { label: t('midnight.swap.expiresInRow'), value: countdownText(props.record.expiresAt, now.value), test: 'swap-countdown' },
+  { label: t('midnight.swap.visible'), value: swapVisibleText([...props.record.gives, ...props.record.wants], network.value, t), tone: 'muted' as const },
 ]);
 
 const copied = ref(false);

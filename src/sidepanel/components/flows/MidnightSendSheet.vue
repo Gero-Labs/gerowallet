@@ -454,7 +454,7 @@ import TransactionDetailsCard, {
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { walletStore } from '@/stores/walletStore';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
-import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
+import { sendProofServerPreference, walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { helperProcessorLabel } from '@/chains/midnight/geroProverState';
 import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { midnightStore } from '@/stores/midnightStore';
@@ -940,7 +940,9 @@ async function acceptConsent() {
  * consent notice.
  */
 function sendProver() {
-  return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere());
+  // A send on preprod proves with the Local proof server only (sendProofServerPreference).
+  const network = loggedWallet.value?.network ?? '';
+  return walletProverFor(network, sendProofServerPreference(network, midnightStore.proofServer), 'unshielded', localProvingOffersHere());
 }
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   if (!current()) { credentials.prfSecret?.fill(0); return; }

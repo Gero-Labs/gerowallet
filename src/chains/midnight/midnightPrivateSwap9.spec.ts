@@ -353,3 +353,45 @@ describe('assertCompletedSwap', () => {
     expect(() => assertCompletedSwap(open, params)).toThrow(/left open/);
   });
 });
+
+describe('what the swap screens rely on', () => {
+  const maker = party(4, [{ type: X, value: 300n }, { type: X, value: 5_000n }], [100n]);
+  const offerOf = (terms: { gives: PrivateSwapLeg[]; wants: PrivateSwapLeg[] }, extra: { avoidNullifiers?: string[]; onProving?: () => void } = {}) =>
+    buildPrivateSwapOffer9({ ...maker.wallet, terms, ...extra }, depsFor(maker));
+
+  it('returns the commitments of the coins the maker receives, as the offer carries them', async () => {
+    const offer = await offerOf({ gives: [shielded(X, 1_000)], wants: [shielded(Y, 1_000)] });
+    const outputs = (read(offer.offerHex).guaranteedOffer?.outputs ?? []).map(output => output.commitment.toLowerCase());
+    expect(offer.commitments).toEqual(outputs);
+    expect(offer.commitments).toHaveLength(2);
+  });
+
+  it('never selects a coin of the wallet\'s other open offers', async () => {
+    const first = await offerOf({ gives: [shielded(X, 200)], wants: [shielded(Y, 1)] });
+    const second = await offerOf({ gives: [shielded(X, 200)], wants: [shielded(Y, 1)] }, { avoidNullifiers: first.nullifiers.map(n => n.toUpperCase()) });
+    expect(second.nullifiers).not.toEqual(first.nullifiers);
+    await expect(offerOf({ gives: [shielded(X, 1_000)], wants: [shielded(Y, 1)] }, { avoidNullifiers: [...first.nullifiers] }))
+      .rejects.toBeInstanceOf(IntentInsufficientFundsError);
+  });
+
+  it('says so when the wallet tries to take its own offer', async () => {
+    const offer = await offerOf({ gives: [shielded(X, 1_000)], wants: [shielded(Y, 1_000)] });
+    await expect(takePrivateSwapOffer9({
+      ...maker.wallet, offerHex: offer.offerHex, dustSecretSeed: new Uint8Array(32),
+      approved: { gives: [shielded(Y, 1_000)], receives: [shielded(X, 1_000)] },
+    }, depsFor(maker))).rejects.toMatchObject({ code: 'own' });
+  });
+
+  it('tells the caller when proving starts, maker and taker', async () => {
+    const makerProving = vi.fn();
+    const offer = await offerOf({ gives: [shielded(X, 1_000)], wants: [unshielded(NIGHT, 50)] }, { onProving: makerProving });
+    expect(makerProving).toHaveBeenCalledOnce();
+    const taker = party(5, [], [80n]);
+    const takerProving = vi.fn();
+    await takePrivateSwapOffer9({
+      ...taker.wallet, offerHex: offer.offerHex, dustSecretSeed: new Uint8Array(32), onProving: takerProving,
+      approved: { gives: [unshielded(NIGHT, 50)], receives: [shielded(X, 1_000)] },
+    }, depsFor(taker));
+    expect(takerProving).toHaveBeenCalledOnce();
+  });
+});

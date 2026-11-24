@@ -410,7 +410,7 @@
               <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="openProofServerSettings">
                 {{ helperFallback ? t('midnight.prover.setUpAgain') : t('midnight.proofServer.openSettings') }}
               </v-btn>
-              <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
+              <v-btn v-if="!localProvingOnly" variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
                 {{ fallbackOnceLabel }}
               </v-btn>
             </div>
@@ -524,7 +524,9 @@ import {
   midnightStore,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
-import { walletProverFor, type WalletProver } from '@/chains/midnight/midnightProvingTarget';
+import {
+  isLocalProvingOnlyNetwork, sendProofServerPreference, walletProverFor, type WalletProver,
+} from '@/chains/midnight/midnightProvingTarget';
 import type { ProofServerFallbackReason } from '@/services/midnight-tx.service';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { browserThreadsLabel, localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
@@ -993,7 +995,7 @@ const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 const proverFallbackText = computed(() => {
   // Gero Prover is missing, not allowed or another release: nothing was sent.
   if (helperFallback.value) return t(HELPER_UNAVAILABLE_COPY[proverFallbackReason.value as HelperUnavailableReason]);
-  if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
+  if (sendProofServerPreference(loggedWallet.value?.network, midnightStore.proofServer).mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
   if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
   if (proverFallbackReason.value === 'local-url-not-loopback') return t('midnight.proofServer.localUrlNotLoopbackSend');
   // The release this network's chain needs, named in both remaining cases.
@@ -1019,6 +1021,8 @@ const localProverUnavailable = ref(false);
 // stored proofServer.mode. Consumed (reset to false) the moment sendShielded
 // reads it.
 const forceRemoteForNextSend = ref(false);
+// This network proves with the Local proof server only: no one-off Gero Cloud fallback.
+const localProvingOnly = computed(() => isLocalProvingOnlyNetwork(loggedWallet.value?.network));
 let pendingAuthorization: (() => boolean) | null = null;
 
 /**
@@ -1028,9 +1032,11 @@ let pendingAuthorization: (() => boolean) | null = null;
  * `forceRemote` is the one-off fallback from a proof server that did not answer.
  */
 function sendProver(forceRemote = false): WalletProver {
+  // A send on preprod proves with the Local proof server only (sendProofServerPreference), with no fallback.
+  const ps = sendProofServerPreference(loggedWallet.value?.network, midnightStore.proofServer);
   return walletProverFor(
     loggedWallet.value?.network ?? '',
-    { mode: forceRemote ? 'remote' : midnightStore.proofServer.mode, localEngine: midnightStore.proofServer.localEngine },
+    { mode: forceRemote && !localProvingOnly.value ? 'remote' : ps.mode, localEngine: ps.localEngine },
     isShielded.value ? 'shielded' : 'unshielded',
     {
       shieldedOnDevice: featureFlagsStore.isMidnightShieldedDeviceProvingEnabled(),

@@ -18,7 +18,13 @@
         <span class="t-body g-num swap-yours__terms" :class="{ 'swap-yours__terms--done': row.status !== 'open' }">{{ row.terms }}</span>
         <SwapStatusChip :status="row.status" />
       </span>
-      <SwapTimeBar v-if="row.status === 'open'" :created-at="row.record.createdAt" :expires-at="row.record.expiresAt" :now="now" />
+      <SwapTimeBar
+        v-if="row.status === 'open'"
+        :created-at="row.record.createdAt"
+        :expires-at="row.record.expiresAt"
+        :now="now"
+        :estimate="row.record.expiry === 'root-window'"
+      />
     </button>
   </section>
 
@@ -45,13 +51,24 @@
           <td class="g-num">{{ row.wants }}</td>
           <td>
             <SwapStatusChip :status="row.status">
-              <template v-if="row.status === 'open'">{{ t('midnight.swap.status.openFor', { n: minutesLeft(row.record.expiresAt, now) }) }}</template>
+              <template v-if="row.status === 'open'">
+                {{ row.record.expiry === 'root-window'
+                  ? t('midnight.swap.expiresAbout', { n: minutesLeft(row.record.expiresAt, now) })
+                  : t('midnight.swap.status.openFor', { n: minutesLeft(row.record.expiresAt, now) }) }}
+              </template>
             </SwapStatusChip>
           </td>
           <td class="swap-table__actions">
             <template v-if="row.status === 'open'">
               <GButton tier="tertiary" compact @click="emit('show-code', row.record)">{{ t('midnight.swap.showCodeShort') }}</GButton>
-              <GButton tier="tertiary" compact class="swap-table__danger" data-test="swap-row-withdraw" @click="emit('withdraw', row.record)">
+              <GButton
+                v-if="canWithdrawSwapOffer(row.record)"
+                tier="tertiary"
+                compact
+                class="swap-table__danger"
+                data-test="swap-row-withdraw"
+                @click="emit('withdraw', row.record)"
+              >
                 {{ t('midnight.swap.withdrawShort') }}
               </GButton>
             </template>
@@ -71,6 +88,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
 import { swapDisplayStatus } from './swapStatus';
+import { canWithdrawSwapOffer } from './swapPrivacy';
 import { minutesLeft, swapLegText } from './swapTokens';
 import SwapStatusChip from './SwapStatusChip.vue';
 import SwapTimeBar from './SwapTimeBar.vue';

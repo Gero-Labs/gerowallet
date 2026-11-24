@@ -136,10 +136,10 @@ export function swapTakeRefusal(facts: SwapOfferFacts9, ownAddressHex: string, n
   return undefined;
 }
 
-/** Same legs, in any order: what the page showed against what the bytes say. */
+/** Same legs, private or public alike, in any order: what the page showed against what the bytes say. */
 export function sameSwapLegs(a: readonly MidnightSwapLeg[], b: readonly MidnightSwapLeg[]): boolean {
   if (a.length !== b.length) return false;
-  const key = (leg: MidnightSwapLeg) => `${leg.tokenType.toLowerCase()}:${leg.amount}`;
+  const key = (leg: MidnightSwapLeg) => `${leg.shielded === true ? 's' : 'u'}:${leg.tokenType.toLowerCase()}:${leg.amount}`;
   const left = a.map(key).sort();
   const right = b.map(key).sort();
   return left.every((value, i) => value === right[i]);

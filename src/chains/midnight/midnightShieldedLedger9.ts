@@ -140,6 +140,13 @@ export async function buildAndSignShieldedLedger9Transfer(
     if (forking) assertLedger9Handle(handle);
     const transfer = unprovenTransactionFromHandle(handle);
     ledger.Transaction.fromParts(network).merge(transfer);
+    if (args.checkSpends) {
+      const inputs = [
+        ...(transfer.guaranteedOffer?.inputs ?? []),
+        ...[...(transfer.fallibleOffer?.values() ?? [])].flatMap(offer => offer.inputs),
+      ];
+      args.checkSpends({ nullifiers: inputs.map(input => input.nullifier.toLowerCase()) });
+    }
     const fees = await balanceLedger9Fees({
       sdkNetworkId: args.sdkNetworkId,
       endpoints: args.endpoints,
