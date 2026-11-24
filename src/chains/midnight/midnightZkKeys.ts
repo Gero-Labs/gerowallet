@@ -36,6 +36,16 @@
  */
 
 /**
+ * Whether this build has a host for the shielded (Zswap) key set
+ * (`VITE_MIDNIGHT_ZK_KEYS_URL`). Without one nothing on this computer proves a
+ * private transaction, Gero Prover included: only a proof server does.
+ */
+export function midnightShieldedKeysHosted(): boolean {
+  // Dot access, so Vite inlines the build-time value (as the provers read it).
+  return !!(import.meta.env as { VITE_MIDNIGHT_ZK_KEYS_URL?: string }).VITE_MIDNIGHT_ZK_KEYS_URL;
+}
+
+/**
  * Key generation of the hosted (Zswap) set, which names its download cache.
  * Unchanged by ledger 9 (see above).
  */

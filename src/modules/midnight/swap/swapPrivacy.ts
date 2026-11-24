@@ -4,6 +4,11 @@
 
 import { computed, type Ref } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
+import { walletStore } from '@/stores/walletStore';
+import { canProvePrivateSwap } from '@/chains/midnight/midnightSwapConfig';
+import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
+import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
+import { midnightShieldedKeysHosted } from '@/chains/midnight/midnightZkKeys';
 import type { MidnightSwapLeg, MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { swapTokenInfo } from './swapTokens';
 
@@ -30,6 +35,19 @@ export function swapPrivacyNote(legs: readonly MidnightSwapLeg[], network: strin
   if (hidden.length === legs.length) return t('midnight.swap.privateNoteBoth');
   return t('midnight.swap.privateNote', { token: symbols(hidden, network), night: symbols(legs.filter(leg => !isPrivateLeg(leg)), network) });
 }
+
+/**
+ * Whether the chosen prover can prove a private swap, as the worker decides it
+ * (walletBg.withMidnightSwapKeys): a proof server, or this computer with the
+ * hosted Zswap keys. The screens say so before asking for the password.
+ */
+export const privateSwapProverReady = computed(() => {
+  const network = walletStore.loggedWallet?.network;
+  if (!network) return false;
+  const hosted = midnightShieldedKeysHosted();
+  const prover = walletProverFor(network, midnightStore.proofServer, 'shielded', { shieldedOnDevice: hosted, ...localProvingOffersHere() });
+  return canProvePrivateSwap(prover, hosted);
+});
 
 /**
  * Whether the swap screens can withdraw `record`: a self-send of its public

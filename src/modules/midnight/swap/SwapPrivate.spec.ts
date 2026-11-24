@@ -28,6 +28,7 @@ vi.mock('@/stores/midnightStore', async () => ({
   midnightStore: (await import('vue')).reactive({
     lastSync: 1, sendProgress: null, addresses: { unshielded: 'mn_addr_preprod1me' },
     privateSyncStatus: 'synced',
+    proofServer: { mode: 'local', localEngine: 'docker' },
     balances: { dust: 5n * 10n ** 15n, shieldedTokens: { [STK]: 8_000n, [PTK]: 2_000n } },
     utxos: [{ tokenType: NIGHT, value: 50_000_000n, intentHash: '11'.repeat(32), outputIndex: 0 }],
   }),
@@ -44,6 +45,7 @@ vi.mock('@/services/midnight-tx.service', () => ({ backgroundError: (error?: str
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ listOpenSwapOffers: async () => null, getSwapTrades: async () => null }) }));
 
 const { MessageTypes } = await import('@/models/MessageTypes');
+const { midnightStore } = await import('@/stores/midnightStore');
 const { provideMidnightSwap } = await import('./swapContext');
 const SwapTakeFlow = (await import('./SwapTakeFlow.vue')).default;
 const SwapMakeForm = (await import('./SwapMakeForm.vue')).default;
@@ -135,5 +137,23 @@ describe('making a private offer', () => {
     await wrapper.find('[aria-label="midnight.swap.switchSides"]').trigger('click');
     await flushPromises();
     expect(wrapper.findAll('.swap-token__lock')).toHaveLength(1);
+  });
+});
+
+describe('a prover that cannot prove private legs', () => {
+  it('says so before the password and keeps the offer from being made', async () => {
+    const store = midnightStore as unknown as { proofServer: { mode: string } };
+    store.proofServer.mode = 'remote';
+    try {
+      const wrapper = mountWithSwap(SwapMakeForm);
+      await flushPromises();
+      expect(wrapper.find('[data-test="swap-private-prover"]').exists()).toBe(false);
+      await wrapper.findAll('[role="radio"]').find(option => option.text().includes('midnight.swap.kind.private'))!.trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[data-test="swap-private-prover"]').text()).toBe('midnight.swap.error.privateProver');
+      expect(wrapper.find('[data-test="swap-create"]').attributes('disabled')).toBeDefined();
+    } finally {
+      store.proofServer.mode = 'local';
+    }
   });
 });

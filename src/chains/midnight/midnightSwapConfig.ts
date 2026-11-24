@@ -107,7 +107,20 @@ const CODES = {
   SWAP_UNAVAILABLE: 'midnight.swap.error.notEnabled',
   /** An offer that gives private tokens is withdrawn by spending them, not from the swap screens. */
   SWAP_PRIVATE_NO_WITHDRAW: 'midnight.swap.error.privateNoWithdraw',
+  /** The chosen prover cannot prove private legs (see canProvePrivateSwap): asked before anything is unlocked. */
+  SWAP_PRIVATE_PROVER: 'midnight.swap.error.privateProver',
 } as const;
+
+/**
+ * Whether `prover` (walletProverFor with kind `shielded`) can prove a swap's
+ * private legs: a proof server, local or Arkhia, always; this computer or Gero
+ * Prover only when the build has the hosted Zswap key set. Gero Cloud proves
+ * only whole wallet-built sends, so never a swap.
+ */
+export function canProvePrivateSwap(prover: string, shieldedKeysHosted: boolean): boolean {
+  if (prover === 'local' || prover === 'zkpaas') return true;
+  return (prover === 'device' || prover === 'helper') && shieldedKeysHosted;
+}
 
 /**
  * The refusals of midnightPrivateSwap9.ts (`PrivateSwapRefusedError.code`,

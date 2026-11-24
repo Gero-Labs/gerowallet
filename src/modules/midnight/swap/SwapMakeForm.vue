@@ -58,6 +58,7 @@
     <p class="t-caption swap-make__note">{{ t('midnight.swap.spendCancels', { token: giveInfo.symbol }) }}</p>
 
     <SwapBanner v-if="error" tone="error">{{ error }}</SwapBanner>
+    <SwapBanner v-else-if="proverMissing" tone="warning" data-test="swap-private-prover">{{ t('midnight.swap.error.privateProver') }}</SwapBanner>
     <SwapBanner v-else-if="holdText" tone="warning">{{ holdText }}</SwapBanner>
 
     <SwapPasswordField v-model="password" :is-prf-wallet="isPrfWallet" :disabled="busy" @submit="create()" />
@@ -83,7 +84,7 @@ import {
 import type { MidnightSwapLeg, MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
 import { useSwapBalances } from './useSwapBalances';
-import { swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
+import { privateSwapProverReady, swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
 import {
   groupedTokenType, NIGHT_TOKEN_TYPE, parseSwapAmount, shortTokenType, swapBalanceText, swapLegText, swapRateText, swapTokenInfo,
 } from './swapTokens';
@@ -150,6 +151,8 @@ const isPrivate = computed(() => MIDNIGHT_SWAP_PRIVATE_LEGS && privacy.value ===
 const giveShielded = computed(() => isPrivate.value && !giveInfo.value.isNight);
 const wantShielded = computed(() => isPrivate.value && !!wantType.value && !wantInfo.value.isNight);
 const fullyPrivate = computed(() => giveShielded.value && wantShielded.value);
+/** Private legs need a prover that can prove them (a proof server today): said before the password is asked for. */
+const proverMissing = computed(() => isPrivate.value && !privateSwapProverReady.value);
 /** What the pickers list: public balances, or NIGHT's public one beside the private ones. */
 const pickerBalances = computed<ReadonlyMap<string, bigint>>(() => {
   if (!isPrivate.value) return balances.value;
@@ -196,7 +199,7 @@ const summaryRows = computed<SwapRow[]>(() => {
   return rows;
 });
 
-const canCreate = computed(() => !busy.value && !hold.held.value
+const canCreate = computed(() => !busy.value && !hold.held.value && !proverMissing.value
   && giveAmount.value > 0n && !giveTooHigh.value && wantAmount.value > 0n
   && !!wantType.value && wantType.value !== giveType.value
   && (isPrfWallet.value || !!password.value));

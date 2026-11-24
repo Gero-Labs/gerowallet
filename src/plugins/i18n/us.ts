@@ -6978,6 +6978,7 @@ export default {
   'midnight.swap.hint.estimate': 'A fully private offer has no fixed expiry. It stays takeable for about an hour after it was made, sometimes longer, so this time is an estimate.',
   'midnight.swap.hint.visiblePrivate': 'Private tokens: their amounts and owners stay hidden on Midnight. Public tokens: amounts and addresses are visible.',
   'midnight.swap.error.privateNoWithdraw': 'A private offer can\'t be withdrawn here. Spend the offered tokens or let the offer expire.',
+  'midnight.swap.error.privateProver': 'Private swaps need a proof server. Choose Local or Arkhia under Proof Server, then try again.',
   'midnight.swap.error.private.request': 'This swap request isn\'t valid.',
   'midnight.swap.error.private.noPrivateLeg': 'This offer has no private side. Make a public offer instead.',
   'midnight.swap.error.private.shieldedNight': 'Midnight\'s own token is always public, so it can\'t be a private side.',

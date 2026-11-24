@@ -6746,6 +6746,7 @@ export default {
   'midnight.swap.hint.estimate': 'Una oferta totalmente privada no tiene un vencimiento fijo. Se puede aceptar durante alrededor de una hora después de crearla, a veces más, así que este tiempo es una estimación.',
   'midnight.swap.hint.visiblePrivate': 'Tokens privados: sus montos y dueños quedan ocultos en Midnight. Tokens públicos: los montos y las direcciones son visibles.',
   'midnight.swap.error.privateNoWithdraw': 'Una oferta privada no se puede retirar aquí. Gasta los tokens ofrecidos o deja que la oferta expire.',
+  'midnight.swap.error.privateProver': 'Los intercambios privados necesitan un servidor de pruebas. Elige Local o Arkhia en Pruebas criptográficas e inténtalo de nuevo.',
   'midnight.swap.error.private.request': 'Esta solicitud de intercambio no es válida.',
   'midnight.swap.error.private.noPrivateLeg': 'Esta oferta no tiene un lado privado. Crea una oferta pública.',
   'midnight.swap.error.private.shieldedNight': 'El token propio de Midnight siempre es público, así que no puede ser un lado privado.',

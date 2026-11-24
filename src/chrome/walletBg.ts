@@ -135,6 +135,8 @@ import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9'
 // Static: the module keeps its heavy shielded sync lazy (midnightShieldedLedger9), and a
 // production background build with this edge passes the TDZ guard (PR 1651).
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
+import { canProvePrivateSwap, MidnightSwapError } from '@/chains/midnight/midnightSwapConfig';
+import { midnightShieldedKeysHosted } from '@/chains/midnight/midnightZkKeys';
 import {
   buildPrivateSwapOffer9, takePrivateSwapOffer9,
   type BuildPrivateSwapOffer9Result, type PrivateSwapTakerTerms, type PrivateSwapTerms, type TakePrivateSwapOffer9Result,
@@ -3111,9 +3113,10 @@ export class WalletBg {
   /**
    * The keys, coins and prover a private swap (midnightPrivateSwap9.ts) needs,
    * for `use` only: every secret buffer is wiped when it settles. Same
-   * credential handling and prover choice as buildMidnightConnectorIntent: the
-   * Zswap and DUST proofs are made on this device in Gero Cloud mode (Gero
-   * Cloud proves only whole wallet-built sends), else where the user chose.
+   * credential handling as buildMidnightConnectorIntent. The prover is chosen
+   * as for a private send, and refused (SWAP_PRIVATE_PROVER) before anything
+   * is unlocked when it cannot prove Zswap circuits: Gero Cloud proves only
+   * whole wallet-built sends, and this computer only with the hosted key set.
    * Ledger 9 only; the coins come from the wallet's own sync, so nothing is
    * unlocked before that sync has run.
    */
@@ -3135,6 +3138,20 @@ export class WalletBg {
     const { midnightStore } = await import('@/stores/midnightStore');
     if (await resolveMidnightLedger(network) !== 9) throw new Error('A private swap needs a ledger 9 network');
     if (!connectorIntentSyncReady(midnightStore)) throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
+    const keysHosted = midnightShieldedKeysHosted();
+    const prover = walletProverFor(network, midnightStore.proofServer, 'shielded', {
+      shieldedOnDevice: keysHosted, ...await localProvingOffersFor(midnightStore.proofServer),
+    });
+    if (!canProvePrivateSwap(prover, keysHosted)) throw new MidnightSwapError('SWAP_PRIVATE_PROVER');
+    let proving: WalletProvingRequest;
+    if (prover === 'device') {
+      proving = { device: true };
+    } else if (prover === 'helper') {
+      proving = { helper: true };
+    } else {
+      const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+      proving = { url: target.url, headers: target.headers };
+    }
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -3166,18 +3183,6 @@ export class WalletBg {
         const parsed = (() => { try { return this.publicKey ? JSON.parse(this.publicKey) : null; } catch { return null; } })();
         if (typeof parsed?.shielded === 'string' && parsed.shielded !== derived.addresses.shielded) {
           throw new Error('The keys derived for this swap do not match the wallet\'s private address');
-        }
-        let proving: WalletProvingRequest;
-        const prover = walletProverFor(
-          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
-        );
-        if (prover === 'device') {
-          proving = { device: true };
-        } else if (prover === 'helper') {
-          proving = { helper: true };
-        } else {
-          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
-          proving = { url: target.url, headers: target.headers };
         }
         const result = await use({
           sdkNetworkId: endpoints.sdkNetworkId,

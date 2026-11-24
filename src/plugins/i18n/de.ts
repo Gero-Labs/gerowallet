@@ -6871,6 +6871,7 @@ export default {
   'midnight.swap.hint.estimate': 'Ein vollständig privates Angebot hat keinen festen Ablauf. Es bleibt etwa eine Stunde nach dem Erstellen annehmbar, manchmal länger. Diese Zeit ist also eine Schätzung.',
   'midnight.swap.hint.visiblePrivate': 'Private Token: Beträge und Besitzer bleiben auf Midnight verborgen. Öffentliche Token: Beträge und Adressen sind sichtbar.',
   'midnight.swap.error.privateNoWithdraw': 'Ein privates Angebot kann hier nicht zurückgezogen werden. Gib die angebotenen Token aus oder lass das Angebot ablaufen.',
+  'midnight.swap.error.privateProver': 'Private Tauschgeschäfte brauchen einen Proof-Server. Wähle unter Proof-Server „Lokal“ oder „Arkhia“ und versuche es erneut.',
   'midnight.swap.error.private.request': 'Diese Tauschanfrage ist ungültig.',
   'midnight.swap.error.private.noPrivateLeg': 'Dieses Angebot hat keine private Seite. Erstelle stattdessen ein öffentliches Angebot.',
   'midnight.swap.error.private.shieldedNight': 'Der eigene Token von Midnight ist immer öffentlich und kann keine private Seite sein.',

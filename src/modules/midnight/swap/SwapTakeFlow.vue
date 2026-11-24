@@ -46,6 +46,7 @@
             <SwapRows :panel="!wide" :rows="detailRows" :aria-label="t('midnight.swap.review.details')" />
             <SwapBanner v-if="inspection.refusal" tone="error">{{ refusalText }}</SwapBanner>
             <SwapBanner v-else-if="dustShort" tone="error">{{ t('midnight.swap.review.dustShort', { fee: feeText }) }}</SwapBanner>
+            <SwapBanner v-else-if="proverMissing" tone="warning" data-test="swap-private-prover">{{ t('midnight.swap.error.privateProver') }}</SwapBanner>
             <SwapBanner v-else-if="holdText" tone="warning">{{ holdText }}</SwapBanner>
             <SwapBanner v-if="error" tone="error">{{ error }}</SwapBanner>
             <p class="t-caption swap-take__note">{{ privacyNote }}</p>
@@ -115,7 +116,7 @@ import { MIDNIGHT_SWAP_PROVE_COPY } from '@/chains/midnight/midnightSwapConfig';
 import { injectMidnightSwap } from './swapContext';
 import { MidnightSwapCallError, swapErrorText } from './useMidnightSwap';
 import { useSwapBalances } from './useSwapBalances';
-import { swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
+import { privateSwapProverReady, swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
 import {
   countdownText, groupedTokenType, minutesLeft, swapAmountText, swapBalanceText, swapLegText, swapRateText, swapTokenInfo,
 } from './swapTokens';
@@ -166,6 +167,7 @@ const privacyNote = computed(() => {
   return isPrivate.value ? `${note} ${t('midnight.swap.provingMinute')}` : note;
 });
 const estimated = computed(() => inspection.value?.expiry === 'root-window');
+const proverMissing = computed(() => isPrivate.value && !privateSwapProverReady.value);
 const feeText = computed(() => t('midnight.swap.feeAbout', { fee: MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY }));
 const dustShort = computed(() => dustShortForFee(midnightStore.balances.dust));
 const payText = computed(() => inspection.value?.pay.map(leg => swapLegText(leg, network.value)).join(', ') ?? '');
@@ -179,7 +181,7 @@ const unlistedTypes = computed(() => [...new Set([...(inspection.value?.pay ?? [
   .map(leg => leg.tokenType).filter(type => !info(type).listed))]);
 const refusalText = computed(() => (inspection.value?.refusal ? swapErrorText(inspection.value.refusal, t) : ''));
 const takeable = computed(() => !!inspection.value && !inspection.value.refusal);
-const canTake = computed(() => takeable.value && !busy.value && !dustShort.value && !hold.held.value && (isPrfWallet.value || !!password.value));
+const canTake = computed(() => takeable.value && !busy.value && !dustShort.value && !hold.held.value && !proverMissing.value && (isPrfWallet.value || !!password.value));
 
 const shortAddress = (address: string) => (address.length > 24 ? `${address.slice(0, 14)}…${address.slice(-4)}` : address);
 const detailRows = computed<SwapRow[]>(() => {

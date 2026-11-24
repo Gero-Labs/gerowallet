@@ -2,7 +2,7 @@
 // worker can answer has copy in all three languages.
 import { describe, expect, it } from 'vitest';
 import {
-  MIDNIGHT_PRIVATE_SWAP_REFUSALS, MIDNIGHT_SWAP_PRIVATE_ESTIMATE_MINUTES, isMidnightSwapCode, midnightSwapCopyKey, privateSwapRefusalCode,
+  canProvePrivateSwap, MIDNIGHT_PRIVATE_SWAP_REFUSALS, MIDNIGHT_SWAP_PRIVATE_ESTIMATE_MINUTES, isMidnightSwapCode, midnightSwapCopyKey, privateSwapRefusalCode,
 } from './midnightSwapConfig';
 import { PRIVATE_SWAP_EXPIRY_MARGIN_MS, PRIVATE_SWAP_REFUSALS, PRIVATE_SWAP_ROOT_WINDOW_MS } from './midnightPrivateSwap9';
 import us from '@/plugins/i18n/us';
@@ -31,5 +31,18 @@ describe('private-swap refusals', () => {
 
   it('has copy for the wallet\'s own private-swap code', () => {
     expect((us as Record<string, string>)[midnightSwapCopyKey('SWAP_PRIVATE_NO_WITHDRAW')!]).toBeTruthy();
+  });
+});
+
+describe('canProvePrivateSwap', () => {
+  it('takes a proof server always, this computer only with the hosted Zswap keys, never Gero Cloud', () => {
+    expect(canProvePrivateSwap('local', false)).toBe(true);
+    expect(canProvePrivateSwap('zkpaas', false)).toBe(true);
+    expect(canProvePrivateSwap('device', false)).toBe(false);
+    expect(canProvePrivateSwap('helper', false)).toBe(false);
+    expect(canProvePrivateSwap('device', true)).toBe(true);
+    expect(canProvePrivateSwap('helper', true)).toBe(true);
+    expect(canProvePrivateSwap('cloud', true)).toBe(false);
+    expect(midnightSwapCopyKey('SWAP_PRIVATE_PROVER')).toBe('midnight.swap.error.privateProver');
   });
 });
