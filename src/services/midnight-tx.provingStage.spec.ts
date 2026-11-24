@@ -2,7 +2,7 @@
 // proves, in the same call, so the proving stage starts only when the
 // background reports `sendProgress.phase === 'proving'`, never before the call.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LEDGER8_PROTOCOL_VERSION as L8, LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
+import { LEDGER9_PROTOCOL_VERSION_SAMPLE as L9, useMidnightChains } from '@test/helpers/midnightChains';
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
@@ -69,7 +69,9 @@ describe('a wallet-side send says it is proving only once the background proves'
     progress(null);
     mocks.health.mockResolvedValue(true);
     mocks.version.mockResolvedValue({ status: 'unknown' });
-    useMidnightChains({ preprod: [L9, L9], preview: [L9, L9], mainnet: [L8, L8] });
+    // Mainnet on ledger 9 stands in for a network where the stored proving choice applies:
+    // on preprod a send always proves with the Local proof server (sendProofServerPreference).
+    useMidnightChains({ preprod: [L9, L9], preview: [L9, L9], mainnet: [L9, L9] });
     mocks.api.mockReturnValue({
       buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
       submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0x1', status: 'InBlock' }),
@@ -86,7 +88,7 @@ describe('a wallet-side send says it is proving only once the background proves'
     const seen: Seen = {};
     mocks.send.mockResolvedValueOnce(keys).mockImplementationOnce(backgroundCall(stages, seen));
 
-    await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
+    await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, (s) => stages.push(s));
 
     expect(seen.syncing).toEqual(['authorizing', 'building', 'working']);
     expect(seen.proving).toEqual(['authorizing', 'building', 'working', proving]);
@@ -121,7 +123,7 @@ describe('a wallet-side send says it is proving only once the background proves'
     const seen: Seen = {};
     mocks.send.mockImplementationOnce(backgroundCall(stages, seen));
 
-    await sendShieldedNight('Preprod', [{ receiverAddress: 'recipient', amount: 1n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s));
+    await sendShieldedNight('Mainnet', [{ receiverAddress: 'recipient', amount: 1n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s));
 
     expect(seen.syncing).toEqual(['working']);
     expect(seen.proving).toEqual(['working', proving]);
