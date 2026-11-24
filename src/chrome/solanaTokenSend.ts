@@ -119,6 +119,12 @@ export type SolanaTokenSendApi = Pick<SolanaApi, 'getFees' | 'getChainTip' | 'ge
  * failures when the simulation refuses the transfer. The real figure comes from the simulation.
  */
 const TOKEN_ACCOUNT_RENT_ESTIMATE = 2_039_280n;
+/**
+ * The most a new associated token account's deposit can be: a Token-2022 account carrying every
+ * account extension a mint can require stays well under 400 bytes. A simulated deposit above it,
+ * or below a plain account's, is not believed (the review would show a wrong cost).
+ */
+const TOKEN_ACCOUNT_RENT_MAX = 4_000_000n;
 
 /** Token-2022 extensions under which a plain TransferChecked cannot succeed. */
 function blockingExtension(mint: SolanaRemoteAccount): boolean {
@@ -274,6 +280,9 @@ export async function planSolanaTokenSend(
   const received = dstAfter.amount - destinationBefore;
   if (received <= 0n || received > amount) throw new SolanaTokenSendError('SIMULATION_FAILED');
   const rentLamports = createsAccount ? simulation.after[2].lamports ?? 0n : 0n;
+  if (createsAccount && (rentLamports < TOKEN_ACCOUNT_RENT_ESTIMATE || rentLamports > TOKEN_ACCOUNT_RENT_MAX)) {
+    throw new SolanaTokenSendError('SIMULATION_FAILED');
+  }
 
   const { maxSolCost, minReceived } = request;
   if (maxSolCost !== undefined) {

@@ -165,6 +165,19 @@ describe('planning a token send', () => {
     await expect(plan(chain(), { ...request, maxSolCost: '-1' })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
 
+  it('does not believe a new account deposit outside what a token account can cost', async () => {
+    for (const lamports of [1n, 50_000_000n]) {
+      const a = api(chain());
+      const simulate = a.simulate.getMockImplementation()!;
+      a.simulate.mockImplementation(async (tx, accounts) => {
+        const result = await simulate(tx, accounts);
+        result.after![2] = { ...result.after![2], lamports };
+        return result;
+      });
+      await expect(planSolanaTokenSend({ publicKey: FROM }, request, holdings, a)).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
+    }
+  });
+
   it('says LOOKUP_FAILED when Nexus cannot be read', async () => {
     const a = api(chain());
     a.getAccounts.mockRejectedValueOnce(new Error('down'));
