@@ -598,10 +598,12 @@ export async function buildPrivateSwapOffer9(args: BuildPrivateSwapOffer9Args, d
       }
       await assertChainUnchanged();
       const { expiresAt, expiry } = estimatePrivateSwapExpiry(sealed.ttl, rootSeenAt);
+      // Always known here (the root time is), but never hand the UI an offer without an expiry.
+      if (expiresAt === undefined || expiry === 'unknown') throw new Error('The expiry of the offer could not be estimated');
       debugLog('🌙 private swap offer (ledger 9): sealed', { bytes: offerBytes.length, proveDurationMs, expiry });
       outcome = 'ok';
       return {
-        offerHex: Buffer.from(offerBytes).toString('hex'), terms: sealed.terms, expiresAt: expiresAt!, expiry: expiry as 'ttl' | 'root-window',
+        offerHex: Buffer.from(offerBytes).toString('hex'), terms: sealed.terms, expiresAt, expiry,
         nullifiers: sealed.nullifiers, proveDurationMs,
       };
     });
