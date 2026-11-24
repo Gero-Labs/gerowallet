@@ -86,6 +86,41 @@ describe('DUST account-state polling', () => {
     mocks.get.mockResolvedValue(empty);
   }
 
+  it('only retries a cached native preprod registration after the destination is known', async () => {
+    formerNativeRegistration();
+    const live = mount();
+    await settle();
+    expect(live.canRecoverNativeRegistration.value).toBe(false);
+    mocks.pathBBatchAsOfMs.value = Date.now();
+    expect(live.canRecoverNativeRegistration.value).toBe(true);
+    mocks.pathBRegistered.value = true;
+    expect(live.canRecoverNativeRegistration.value).toBe(false);
+    mocks.pathBRegistered.value = false;
+    mocks.pathBIncomingStakes.value = ['relaying'];
+    expect(live.canRecoverNativeRegistration.value).toBe(false);
+    mocks.pathBIncomingStakes.value = [];
+    mocks.get.mockResolvedValue(state());
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(live.canRecoverNativeRegistration.value).toBe(false);
+    expect(live.nativeRegistrationConfirmedAt.value).toBe(Date.now());
+    walletStore.loggedWallet.network = Network.MAINNET;
+    expect(live.canRecoverNativeRegistration.value).toBe(false);
+  });
+
+  it('remembers a native preprod registration cleared by sync before the dialog opened', async () => {
+    formerNativeRegistration();
+    Object.assign(midnightStore, { dustState: { registrationStatus: 'Unregistered' }, balances: { nightRegistered: 0n } });
+    mocks.pathBBatchAsOfMs.value = Date.now();
+    const live = mount();
+    await settle();
+    expect(live.nativeRegistrationCleared.value).toBe(true);
+    mocks.pathBRegistered.value = true;
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+    mocks.pathBRegistered.value = false;
+    midnightStore.addresses.unshielded = 'new-wallet';
+    expect(live.nativeRegistrationCleared.value).toBe(false);
+  });
+
   it('settles a cleared preprod registration at two advancing tips and a subsequent destination read, preserving saved DUST', async () => {
     formerNativeRegistration();
     const live = mount();

@@ -55,9 +55,11 @@ const polledCap = ref<bigint>(0n);
 const polledNightRegistered = ref<bigint>(0n);
 const polledRegistrationStatus = ref<string>('Unregistered');
 const polledAsOfMs = ref<number>(0);
+const nativeRegistrationConfirmedAt = ref(0);
 const nowTickMs = ref<number>(Date.now());
 // A preprod registration can disappear at the ledger 9 upgrade. Two explicit
-// empty readings at advancing tips can retire its status, never its spendable balance.
+// empty REST responses while sync advances are a fallback until REST exposes its block.
+// They can retire a stale status, never its spendable balance.
 let previousEmptyTip: { height: number; hash: string | null } | null = null;
 const nativeClearObservedAt = ref(0);
 
@@ -70,6 +72,27 @@ let unavailableIdentity: string | null = null;
 function pollIdentity(): string {
   return `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`;
 }
+
+// Sync may replace the old native registration before the dialog opens. Remember the transition
+// for this wallet so an ordinary, always-unregistered wallet never gets an upgrade notice.
+let sawNativeRegistration = false;
+const syncClearedRegistration = ref(false);
+watch([pollIdentity, () => midnightStore.dustState?.registrationStatus, () => midnightStore.balances?.nightRegistered],
+  ([identity, status, night], [previousIdentity]) => {
+    if (identity !== previousIdentity) {
+      sawNativeRegistration = false;
+      syncClearedRegistration.value = false;
+      return;
+    }
+    if (walletStore.loggedWallet?.network !== Network.PREPROD) return;
+    if (status === 'Registered' && (night ?? 0n) > 0n) {
+      sawNativeRegistration = true;
+      syncClearedRegistration.value = false;
+    } else if (status === 'Unregistered' && sawNativeRegistration) {
+      syncClearedRegistration.value = true;
+      sawNativeRegistration = false;
+    }
+  }, { flush: 'sync' });
 
 function isUnavailable(error: unknown): boolean {
   // MidnightApi preserves HTTP errors as JSON strings via parseHttpError.
@@ -86,6 +109,7 @@ async function refreshOnce() {
   const identity = pollIdentity();
   if (!network || !address || inFlight || unavailableIdentity === identity) return;
   const request = {};
+  const startedAt = Date.now();
   inFlight = request;
   try {
     const api = getMidnightApi(network);
@@ -97,6 +121,7 @@ async function refreshOnce() {
     polledNightRegistered.value = BigInt(res.night_registered ?? '0');
     polledRegistrationStatus.value = res.dust_registration_status ?? 'Unregistered';
     polledAsOfMs.value = Date.now();
+    nativeRegistrationConfirmedAt.value = res.dust_registration_status === 'Registered' ? startedAt : 0;
     const now = polledAsOfMs.value;
     const tip = midnightStore.tip;
     const age = midnightTipAgeMs(tip, now);
@@ -197,6 +222,7 @@ function forgetPolledIdentity(): void {
   polledNightRegistered.value = 0n;
   polledRegistrationStatus.value = 'Unregistered';
   polledAsOfMs.value = 0;
+  nativeRegistrationConfirmedAt.value = 0;
 }
 
 watch(
@@ -253,6 +279,10 @@ export interface MidnightDustLive {
   readonly registrationStatus: ComputedRef<string>;
   /** A former native preprod registration also reads absent from the DUST destination. */
   readonly nativeRegistrationCleared: ComputedRef<boolean>;
+  /** Recovery may override only a cached native preprod registration with no cNIGHT source. */
+  readonly canRecoverNativeRegistration: ComputedRef<boolean>;
+  /** Time of the last positive native registration reading, excluding cached and cNIGHT status. */
+  readonly nativeRegistrationConfirmedAt: ComputedRef<number>;
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
   /**
@@ -304,11 +334,13 @@ export function useMidnightDustLive(): MidnightDustLive {
   // a registration. Same rule as `pathBSupersedesPathA`, which the background's one-off
   // read uses (`midnightDustBalance.ts`).
   const pathBSupersedesA = computed(() => pathBRegistered.value && pathBIsDestinationWide.value);
-  const nativeRegistrationCleared = computed(() => nativeClearObservedAt.value > 0
-    && walletStore.loggedWallet?.network === Network.PREPROD && midnightStore.dustState?.registrationStatus === 'Registered'
-    && !pathBRegistered.value && pathBIsDestinationWide.value && pathBIncomingStakes.value.length === 0
-    && pathBBatchAsOfMs.value >= nativeClearObservedAt.value
-    && !midnightStore.refreshing && knownMidnightLedger(walletStore.loggedWallet?.network ?? '') === 9);
+  const noCnightSource = computed(() => pathBIsDestinationWide.value && pathBBatchAsOfMs.value > 0
+    && !pathBRegistered.value && pathBIncomingStakes.value.length === 0);
+  const nativeRegistrationCleared = computed(() => walletStore.loggedWallet?.network === Network.PREPROD
+    && noCnightSource.value && !midnightStore.refreshing && knownMidnightLedger(walletStore.loggedWallet?.network ?? '') === 9
+    && ((syncClearedRegistration.value && midnightStore.dustState?.registrationStatus === 'Unregistered')
+      || (nativeClearObservedAt.value > 0 && midnightStore.dustState?.registrationStatus === 'Registered'
+        && pathBBatchAsOfMs.value >= nativeClearObservedAt.value)));
 
   // While Midnight data is paused, extrapolating from the local clock would
   // show a battery rising on data that is not moving: hold the last reading.
@@ -366,6 +398,10 @@ export function useMidnightDustLive(): MidnightDustLive {
       return (a === 'Registered' || pathBRegistered.value) ? 'Registered' : a;
     }),
     nativeRegistrationCleared,
+    canRecoverNativeRegistration: computed(() => walletStore.loggedWallet?.network === Network.PREPROD
+      && noCnightSource.value
+      && !(pathAPollHasSignal() && polledRegistrationStatus.value === 'Registered')),
+    nativeRegistrationConfirmedAt: computed(() => nativeRegistrationConfirmedAt.value),
     // Path B has its own independent poll — a pure-Path-B wallet whose
     // Path-A poll keeps 404ing (or never had a store snapshot) still needs
     // `hasData` to flip true once Path B has a reading, otherwise consumers

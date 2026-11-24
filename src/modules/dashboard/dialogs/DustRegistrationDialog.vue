@@ -155,7 +155,7 @@
          The CTA changes per status so the user always sees the right next step. -->
     <v-card-actions class="px-0 pt-0" style="display: block">
       <!-- Unregistered / Invalid: Midnight-native register (Path A) flow -->
-      <template v-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid' || (recoverFee && registrationStatus === 'Registered')">
+      <template v-if="registrationPending || canRegister">
         <!-- Stage 1: pre-build CTA. For PRF wallets `startRegistration` skips
              straight to the PassKey gesture; password wallets get the input. -->
         <template v-if="registrationPending || !inSigningPhase">
@@ -316,15 +316,17 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
 import { useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
+import { useApprovalFreshness, awaitFreshApproval } from '@/shared/composables/useApprovalFreshness';
+import { useRawPrfPopup } from '@/shared/composables/useRawPrfPopup';
 import { useNow } from '@/shared/composables/useNow';
 import {
-  clearDustRegistrationPending, dustRegistrationPendingRevision, dustRegistrationPendingState, markDustRegistrationPending,
+  clearDustRegistrationPending, confirmDustRegistrationPending, dustRegistrationPendingRevision, dustRegistrationPendingState, markDustRegistrationPending,
   pruneDustRegistrationPending,
 } from '@/chains/midnight/midnightDustRegistrationPending';
 import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
-const props = defineProps<{ isOpen: boolean; recoverFee?: boolean }>();
+const props = defineProps<{ isOpen: boolean; recoverFee?: boolean; sidePanel?: boolean }>();
 defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
@@ -408,11 +410,15 @@ const dustGenerating = computed(() => {
 const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid'>(
   () => dustLive.registrationStatus.value as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid',
 );
-// Seen on chain: the submitted registration's record has done its job.
-watch(registrationStatus, (status) => {
-  // When recovering a fee failure, a cached Registered status can predate the new submission.
-  if (status === 'Pending' || (status === 'Registered' && !props.recoverFee)) clearDustRegistrationPending(loggedWallet.value?.baseAddress ?? '');
-}, { immediate: true });
+const canRegister = computed(() => registrationStatus.value === 'Unregistered' || registrationStatus.value === 'Invalid'
+  || (props.recoverFee && registrationStatus.value === 'Registered' && dustLive.canRecoverNativeRegistration.value));
+// Portfolio and recovery share a receipt. A cached Registered status can predate its submission.
+watch([() => loggedWallet.value?.baseAddress, registrationStatus, () => dustLive.nativeRegistrationConfirmedAt.value],
+  ([address, status, confirmedAt]) => {
+    if (!address) return;
+    if (status === 'Pending') clearDustRegistrationPending(address);
+    else if (confirmedAt) confirmDustRegistrationPending(address, confirmedAt);
+  }, { immediate: true });
 
 // Live DUST balance + cap — composable handles polling + 1s tick. Fall back
 // to gero-sync's AccountInfo snapshot before the first poll completes.
@@ -490,8 +496,9 @@ function middleTruncate(s: string, head = 16, tail = 8): string {
 }
 
 async function runUpgrade() {
+  const current = registrationApproval.capture();
+  if (upgradeBusy.value || !current()) return;
   upgradeError.value = null;
-  if (upgradeBusy.value) return;
   const wallet = loggedWallet.value;
   if (!wallet) {
     upgradeError.value = 'No wallet logged in';
@@ -508,17 +515,25 @@ async function runUpgrade() {
       if (!wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet missing credential ID. Re-pair your PassKey or re-restore.');
       }
-      const { decryptMnemonicWithPrf } = await import('@/shared/utils/webauthn-prf');
+      let prf: Uint8Array | undefined;
       try {
-        // An added account's phrase is account #0's, encrypted under that id.
-        mnemonic = await decryptMnemonicWithPrf(
-          wallet.prfEncryptedMnemonic,
-          wallet.webAuthnCredentialId,
-          secretsWalletId(wallet).toString(),
-        );
+        if (props.sidePanel) {
+          prf = await requestRawPrf(current, wallet.id);
+          const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+          if (!current()) return;
+          mnemonic = await decryptMnemonicWithPrfOutput(wallet.prfEncryptedMnemonic, prf,
+            wallet.webAuthnCredentialId, secretsWalletId(wallet).toString());
+        } else {
+          const { decryptMnemonicWithPrf } = await import('@/shared/utils/webauthn-prf');
+          if (!current()) return;
+          mnemonic = await decryptMnemonicWithPrf(wallet.prfEncryptedMnemonic, wallet.webAuthnCredentialId,
+            secretsWalletId(wallet).toString());
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(`PassKey authorization failed: ${msg}`);
+      } finally {
+        prf?.fill(0);
       }
     } else {
       if (!wallet.encryptedMnemonic) {
@@ -533,10 +548,12 @@ async function runUpgrade() {
     }
 
     const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
+    if (!current()) return;
     const derived = await deriveMidnightAddresses(mnemonic, wallet.network, resolveAccountIndex(wallet));
 
     const { Messaging } = await import('@/chrome/messaging');
     const { MessageTypes } = await import('@/models/MessageTypes');
+    if (!current()) return;
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY,
       data: {
@@ -549,13 +566,14 @@ async function runUpgrade() {
     }
 
     const { midnightActions } = await import('@/stores/midnightStore');
+    if (!current()) return;
     midnightActions.setActive(derived);
 
     upgradePassword.value = '';
   } catch (e) {
-    upgradeError.value = e instanceof Error ? e.message : String(e);
+    if (current()) upgradeError.value = e instanceof Error ? e.message : String(e);
   } finally {
-    upgradeBusy.value = false;
+    if (current()) upgradeBusy.value = false;
   }
 }
 
@@ -612,6 +630,19 @@ watch(writesPaused, (paused) => {
 });
 
 const isPrfWalletForSign = computed(() => isPrfWallet.value);
+const { requestRawPrf, cancelPopups } = useRawPrfPopup();
+const registrationApproval = useApprovalFreshness(
+  () => [loggedWallet.value?.id, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId,
+    loggedWallet.value?.baseAddress, dustAddress.value, writesPaused.value, canRegister.value],
+  () => props.isOpen && !walletStore.isLocked,
+  () => {
+    cancelPopups();
+    resetRegistrationState();
+    upgradeBusy.value = false;
+    upgradePassword.value = '';
+    upgradeError.value = null;
+  },
+);
 
 function resetRegistrationState() {
   submitBusy.value = false;
@@ -622,6 +653,7 @@ function resetRegistrationState() {
 
 function startRegistration() {
   if (!dustAddress.value || writesPaused.value || registrationPending.value) return;
+  if (!canRegister.value || submitBusy.value) return;
   // For PRF wallets, kick straight into the PassKey gesture (no input field).
   // For password wallets, show the inline password field first.
   inSigningPhase.value = true;
@@ -639,7 +671,8 @@ const canConfirmRegistration = computed(() => {
 
 async function confirmRegistration() {
   const wallet = loggedWallet.value;
-  if (!wallet || writesPaused.value) return;
+  const current = registrationApproval.capture();
+  if (!wallet || !current() || !canRegister.value || registrationPending.value || submitBusy.value || writesPaused.value) return;
   if (!dustAddress.value) return;
   if (!wallet.baseAddress) {
     submitError.value = 'Wallet missing Midnight address';
@@ -647,30 +680,35 @@ async function confirmRegistration() {
     return;
   }
 
+  const { baseAddress: fromAddress, network } = wallet;
+  const receiver = dustAddress.value;
+  const password = isPrfWalletForSign.value ? undefined : localPassword.value;
+  let prfSecret: Uint8Array | undefined;
   submitBusy.value = true;
   submitError.value = null;
   try {
-    let prfSecret: Uint8Array | undefined;
     if (isPrfWalletForSign.value) {
       if (!wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet missing credential ID');
       }
-      const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
-      const prfBuf = await evaluateWalletPrf(wallet);
-      prfSecret = new Uint8Array(prfBuf);
+      if (props.sidePanel) {
+        prfSecret = await requestRawPrf(current, wallet.id);
+      } else {
+        const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+        prfSecret = await awaitFreshApproval(async () => new Uint8Array(await evaluateWalletPrf(wallet)), current);
+      }
     }
 
     const { registerNightForDust } = await import('@/services/midnight-tx.service');
+    if (!current()) return;
     const result = await registerNightForDust(
-      wallet.network,
+      network,
       {
-        fromAddress: wallet.baseAddress,
-        dustReceiverAddressBech32: dustAddress.value,
+        fromAddress,
+        dustReceiverAddressBech32: receiver,
       },
-      {
-        password: isPrfWalletForSign.value ? undefined : localPassword.value,
-        prfSecret,
-      },
+      { password, prfSecret },
+      current,
     );
 
     // Branch on the typed outcome (Dynamic.xyz-style status enum) so the user
@@ -678,8 +716,10 @@ async function confirmRegistration() {
     if (result.status === 'submitted') {
       // Submitted, not registered: the dialog shows "Waiting for confirmation"
       // and offers no second Register until the chain shows it.
-      markDustRegistrationPending(wallet.baseAddress, result.txHash ?? '');
-      resetRegistrationState();
+      markDustRegistrationPending(fromAddress, result.txHash ?? '');
+      if (current()) resetRegistrationState();
+    } else if (!current()) {
+      return;
     } else if (result.status === 'no_night_utxos') {
       // Not a failure — the wallet just needs funding first. Keep the dialog
       // open with actionable guidance rather than a scary error toast.
@@ -693,13 +733,15 @@ async function confirmRegistration() {
       snackbar.setError(submitError.value);
     }
   } catch (e) {
+    if (!current()) return;
     // registerNightForDust only throws for truly unexpected errors now
     // (credential decrypt, PRF ceremony) — expected states come back as a
     // typed outcome above.
     submitError.value = e instanceof Error ? e.message : String(e);
     snackbar.setError(submitError.value);
   } finally {
-    submitBusy.value = false;
+    prfSecret?.fill(0);
+    if (current()) submitBusy.value = false;
   }
 }
 
