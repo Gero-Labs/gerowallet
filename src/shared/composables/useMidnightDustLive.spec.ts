@@ -57,7 +57,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.get.mockReset().mockResolvedValue(state());
   mocks.log.mockClear();
-  walletStore.loggedWallet.network = Network.STAGENET;
+  walletStore.loggedWallet.network = Network.PREVIEW;
   Object.assign(midnightStore, { balances: {}, dustState: null, networkStatus: 'disconnected', refreshing: null, tip: null });
   mocks.pathBRegistered.value = false;
   mocks.pathBIsDestinationWide.value = false;
