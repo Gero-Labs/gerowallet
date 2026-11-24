@@ -146,3 +146,23 @@ describe('Solana relay and panel', () => {
     expect(read('connectApproval.ts')).toContain("'solana_connect'");
   });
 });
+
+describe('Solana prompts on a hardware wallet', () => {
+  it('a device signs only message bytes the panel kept after the transaction refusal', () => {
+    // solanaMessageBytes is null for bytes solanaSignMessageRefusal refuses (the worker refused
+    // them before the prompt opened too), and the device signer reads nothing else.
+    expect(overlay).toContain('return bytes && !solanaSignMessageRefusal(bytes) ? bytes : null;');
+    const body = overlay.slice(overlay.indexOf('function signSolanaMessageHardware'), overlay.indexOf('function signSolanaTransactionHardware'));
+    expect(body).toContain('const bytes = solanaMessageBytes.value;');
+    expect(body).toContain("solanaHw.sign(bytes, 'message')");
+  });
+
+  it('a device signature reaches the dApp only through the worker checks', () => {
+    const signIn = handler('app.add(SOLANA_METHOD.signIn,');
+    expect(signIn).toContain('verifySolanaSignature(signature, bytes, base58Decode(wallet.publicKey))');
+    expect(background).toContain('isSignedByWalletOnly(prepared, signed, wallet.publicKey)');
+    const submit = handler('app.addToOptions(MessageTypes.SUBMIT_SOLANA_SEND,');
+    expect(submit).toContain('isSolanaHardware(');
+    expect(read('solanaSend.ts')).toContain('verifySolanaSignature(signature, pending.message, base58Decode(sender.publicKey))');
+  });
+});
