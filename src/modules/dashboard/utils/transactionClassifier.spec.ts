@@ -101,6 +101,13 @@ describe('transaction titles and types', () => {
       expect(buildTxTitle(item, ctx, t)).toBe('transactions.withdrawal');
     });
 
+    it('does not call a thin unstake a withdrawal: its gain is the 2 ADA deposit less the fee', () => {
+      // Review on PR 1663: a deregistration also returns ADA to the wallet's own addresses.
+      const item = tx({ ada: 1_820_000, receivedAmount: 1_820_000, sentAmount: 0, utxo });
+      expect(classifyTxKind(item, ctx)).not.toBe('withdrawal');
+      expect(buildTxTitle(item, ctx, t)).not.toBe('transactions.withdrawal');
+    });
+
     it('keeps an all-own transaction that only cost the fee a self transfer', () => {
       const item = tx({ ada: -180_000, sentAmount: 180_000, utxo });
       expect(classifyTxKind(item, ctx)).toBe('self');

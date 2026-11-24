@@ -169,16 +169,26 @@ export const isPendingTooLong = (item: StoredTransaction, now: number = Date.now
   return now / 1000 - item.tx_timestamp > 60 * 60;
 };
 
+/** The stake key deposit (2 ADA), which a stake deregistration returns to the wallet. */
+const STAKE_KEY_DEPOSIT_LOVELACE = 2_000_000;
+/** A fee bound for telling a returned deposit from rewards: no wallet transaction here costs 1 ADA. */
+const MAX_FEE_LOVELACE = 1_000_000;
+
 export const isWithdrawal = (item: StoredTransaction, ctx: TxClassifyContext): boolean => {
   if (!isCardanoTx(item)) {
     // A record Gero Sync just pushed is "thin" (no CBOR, so no body) until the background
-    // heal fills it in. Its UTxOs still tell: every input and output the wallet's own, and
-    // the wallet richer afterwards, can only be a reward withdrawal (nothing else adds ADA
-    // to a transaction). Read as a self transfer, it was titled one and its gain labelled
-    // the network fee.
+    // heal fills it in. Its UTxOs still tell most of it: every input and output the wallet's
+    // own and the wallet richer afterwards means ADA came in from outside the UTxOs, which is
+    // a reward withdrawal or a returned stake deposit. A gain of the deposit less a fee is
+    // read as the deposit (an unstake) and left to the body; anything else as a withdrawal.
+    // Read as a self transfer, it was titled one and its gain labelled the network fee. The
+    // title is the body's again once the heal fills it in.
+    const gain = Number(item.receivedAmount) - Number(item.sentAmount);
+    const returnedDeposit = gain > STAKE_KEY_DEPOSIT_LOVELACE - MAX_FEE_LOVELACE && gain <= STAKE_KEY_DEPOSIT_LOVELACE;
     return btcType(item) === undefined
       && isInternalTransfer(item, ctx)
-      && Number(item.receivedAmount) - Number(item.sentAmount) > 0;
+      && gain > 0
+      && !returnedDeposit;
   }
   return (
     item.body?.withdrawals?.length > 0 &&
