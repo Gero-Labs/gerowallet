@@ -44,7 +44,9 @@ import { getMidnightApi } from '@/api/midnight-api';
 import { debugLog } from '@/utils/debug';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
 import { dustAccountStateHasSignal } from '@/chains/midnight/midnightDustBalance';
-import { isMidnightDataPaused } from '@/chains/midnight/midnightDataFreshness';
+import { isMidnightDataPaused, midnightTipAgeMs, MIDNIGHT_DATA_PAUSED_AFTER_MS } from '@/chains/midnight/midnightDataFreshness';
+import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
+import { Network } from '@/models/types';
 
 // Shared module-scope state — one source of truth across all consumers.
 const polledBalance = ref<bigint>(0n);
@@ -54,6 +56,10 @@ const polledNightRegistered = ref<bigint>(0n);
 const polledRegistrationStatus = ref<string>('Unregistered');
 const polledAsOfMs = ref<number>(0);
 const nowTickMs = ref<number>(Date.now());
+// A preprod registration can disappear at the ledger 9 upgrade. Two explicit
+// empty readings at advancing tips can retire its status, never its spendable balance.
+let previousEmptyTip: { height: number; hash: string | null } | null = null;
+const nativeClearObservedAt = ref(0);
 
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -91,8 +97,29 @@ async function refreshOnce() {
     polledNightRegistered.value = BigInt(res.night_registered ?? '0');
     polledRegistrationStatus.value = res.dust_registration_status ?? 'Unregistered';
     polledAsOfMs.value = Date.now();
+    const now = polledAsOfMs.value;
+    const tip = midnightStore.tip;
+    const age = midnightTipAgeMs(tip, now);
+    const explicitEmpty = res.dust_registration_status === 'Unregistered' && res.dust_generation_status === 'empty'
+      && [res.dust_balance, res.dust_generating, res.dust_cap, res.night_registered].every(value => value === '0');
+    const eligible = network === Network.PREPROD && knownMidnightLedger(network) === 9
+      && midnightStore.dustState?.registrationStatus === 'Registered' && (midnightStore.balances?.nightRegistered ?? 0n) > 0n
+      && !midnightStore.refreshing && midnightStore.networkStatus === 'connected'
+      && age !== null && age <= MIDNIGHT_DATA_PAUSED_AFTER_MS && tip.height > 0;
+    if (eligible && explicitEmpty) {
+      if (previousEmptyTip && (tip.height < previousEmptyTip.height || (tip.height === previousEmptyTip.height && tip.hash !== previousEmptyTip.hash))) {
+        nativeClearObservedAt.value = 0;
+      } else if (previousEmptyTip && tip.height > previousEmptyTip.height && !nativeClearObservedAt.value) {
+        nativeClearObservedAt.value = now;
+      }
+      previousEmptyTip = { height: tip.height, hash: tip.hash };
+    } else {
+      previousEmptyTip = null;
+      if (!explicitEmpty || midnightStore.refreshing) nativeClearObservedAt.value = 0;
+    }
   } catch (e) {
     if (inFlight !== request || identity !== pollIdentity()) return;
+    previousEmptyTip = null;
     if (isUnavailable(e)) {
       unavailableIdentity = identity;
       forgetPolledIdentity();
@@ -117,6 +144,7 @@ function start() {
 }
 
 function stop() {
+  previousEmptyTip = null;
   inFlight = null;
   unavailableIdentity = null;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -161,6 +189,8 @@ function stop() {
  * `setActive`.
  */
 function forgetPolledIdentity(): void {
+  previousEmptyTip = null;
+  nativeClearObservedAt.value = 0;
   polledBalance.value = 0n;
   polledGenerating.value = 0n;
   polledCap.value = 0n;
@@ -221,6 +251,8 @@ export interface MidnightDustLive {
   readonly nightRegistered: ComputedRef<bigint>;
   /** "Registered" / "Unregistered" / ... — 'Registered' when either path is. */
   readonly registrationStatus: ComputedRef<string>;
+  /** A former native preprod registration also reads absent from the DUST destination. */
+  readonly nativeRegistrationCleared: ComputedRef<boolean>;
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
   /**
@@ -263,7 +295,7 @@ export function useMidnightDustLive(): MidnightDustLive {
   // registered at module load, above — see its comment.
 
   const {
-    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBIsDestinationWide,
+    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBIsDestinationWide, pathBIncomingStakes,
     pathBAsOfMs, pathBBatchAsOfMs,
   } = useDustPathB();
 
@@ -272,6 +304,11 @@ export function useMidnightDustLive(): MidnightDustLive {
   // a registration. Same rule as `pathBSupersedesPathA`, which the background's one-off
   // read uses (`midnightDustBalance.ts`).
   const pathBSupersedesA = computed(() => pathBRegistered.value && pathBIsDestinationWide.value);
+  const nativeRegistrationCleared = computed(() => nativeClearObservedAt.value > 0
+    && walletStore.loggedWallet?.network === Network.PREPROD && midnightStore.dustState?.registrationStatus === 'Registered'
+    && !pathBRegistered.value && pathBIsDestinationWide.value && pathBIncomingStakes.value.length === 0
+    && pathBBatchAsOfMs.value >= nativeClearObservedAt.value
+    && !midnightStore.refreshing && knownMidnightLedger(walletStore.loggedWallet?.network ?? '') === 9);
 
   // While Midnight data is paused, extrapolating from the local clock would
   // show a battery rising on data that is not moving: hold the last reading.
@@ -321,12 +358,14 @@ export function useMidnightDustLive(): MidnightDustLive {
       return (pathBSupersedesA.value ? 0n : a) + pathBNight.value;
     }),
     registrationStatus: computed(() => {
+      if (nativeRegistrationCleared.value) return 'Unregistered';
       const a = pathAPollHasSignal()
         ? polledRegistrationStatus.value
         : (midnightStore.dustState?.registrationStatus ?? 'Unregistered');
       // Either path being registered is enough, even when Path B supersedes Path A's figures.
       return (a === 'Registered' || pathBRegistered.value) ? 'Registered' : a;
     }),
+    nativeRegistrationCleared,
     // Path B has its own independent poll — a pure-Path-B wallet whose
     // Path-A poll keeps 404ing (or never had a store snapshot) still needs
     // `hasData` to flip true once Path B has a reading, otherwise consumers

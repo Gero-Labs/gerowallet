@@ -7,7 +7,7 @@ import { join } from 'node:path';
 // unit-tested in midnightWriteGate.spec.ts and midnightWriteStatus.spec.ts; the
 // service-level refusals before keys, sync and proving in midnight-tx.ledger.spec.ts.
 const src = join(__dirname, '../../..');
-const read = (path: string) => readFileSync(join(src, path), 'utf8');
+const read = (path: string) => readFileSync(join(src, path), 'utf8').replace(/\r\n/g, '\n');
 
 describe('Midnight network upgrade wiring', () => {
   it('send dialog: Continue held (aria-disabled) with the reason linked, step 2 never opens, and backs out if it turns on', () => {

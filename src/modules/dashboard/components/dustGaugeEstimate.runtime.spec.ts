@@ -10,6 +10,7 @@ import { createTestVuetify } from '@test/helpers/vuetify';
 const live = vi.hoisted(() => ({
   status: 'Unregistered' as string,
   paused: false,
+  cnightRegistered: false,
 }));
 
 vi.mock('@/shared/composables/useMidnightDustLive', () => ({
@@ -26,7 +27,10 @@ vi.mock('@/shared/composables/useMidnightDataFreshness', () => ({
   useMidnightDataFreshness: () => ({ heightLabel: ref('1,000'), ageLabel: ref('12 min') }),
 }));
 vi.mock('@/shared/composables/useDustPathB', () => ({
-  useDustPathB: () => ({ pathBRegistered: ref(false), pathBStakes: ref([]), pathBIncomingStakes: ref([]) }),
+  useDustPathB: () => ({
+    pathBRegistered: computed(() => live.cnightRegistered),
+    pathBStakes: computed(() => live.cnightRegistered ? ['active-stake'] : []), pathBIncomingStakes: ref([]),
+  }),
 }));
 vi.mock('@/shared/composables/useDustPending', () => ({
   getDustPendingForDestination: () => [],
@@ -47,9 +51,16 @@ vi.mock('@/shared/components/DustParticleCanvas.vue', () => ({ default: { templa
 
 import MiniDustGauge from '@/sidepanel/components/MiniDustGauge.vue';
 import MidnightDustGauge from './MidnightDustGauge.vue';
+import { midnightStore } from '@/stores/midnightStore';
+import { walletStore } from '@/stores/walletStore';
 
 enableAutoUnmount(afterEach);
-beforeEach(() => { live.status = 'Unregistered'; live.paused = false; });
+beforeEach(() => {
+  live.status = 'Unregistered';
+  live.paused = false;
+  live.cnightRegistered = false;
+  Object.assign(walletStore.loggedWallet, { network: 'Preprod', baseAddress: '', createdAt: undefined });
+});
 
 async function render(component: typeof MiniDustGauge | typeof MidnightDustGauge) {
   const wrapper = mount(component, {
@@ -61,6 +72,19 @@ async function render(component: typeof MiniDustGauge | typeof MidnightDustGauge
   await flushPromises();
   return wrapper;
 }
+
+describe('dashboard DUST upgrade notice', () => {
+  it('shows the mainnet refill notice to a synced, older cNIGHT wallet once', async () => {
+    Object.assign(walletStore.loggedWallet, { network: 'Mainnet', baseAddress: 'refill-gauge', createdAt: '2026-11-01' });
+    Object.assign(midnightStore, { networkStatus: 'connected', lastSync: Date.now(), tip: { height: 3_400_000 }, transactions: [] });
+    live.cnightRegistered = true;
+    const view = await render(MidnightDustGauge);
+    expect(view.text()).toContain('midnight.dustUpgrade.cnightRefill');
+    view.unmount();
+    const reopened = await render(MidnightDustGauge);
+    expect(reopened.text()).not.toContain('midnight.dustUpgrade.cnightRefill');
+  });
+});
 
 describe('side panel DUST battery while data is paused', () => {
   it('an unregistered wallet still reads "Not registered", not an estimate', async () => {

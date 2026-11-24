@@ -5439,6 +5439,8 @@ export default {
   'realfi.claim.from': 'Disponible para cobrar el {date}',
   'realfi.cancel.cta': 'Cancelar',
   'midnight.registerForDust': 'Registrarse para generar DUST',
+  'midnight.dustUpgrade.nativeCleared': 'La actualización de preprod eliminó los registros de tNIGHT nativo. Vuelve a registrarte para generar DUST con el tNIGHT de esta cartera.',
+  'midnight.dustUpgrade.cnightRefill': 'Al actualizar al ledger 9, Midnight repuso el DUST de los registros de cNIGHT que ya estaban activos.',
   'midnight.registerForDustSubtitle': 'Firma con tu billetera para empezar a generar DUST a partir de tu NIGHT',
   'midnight.dustRecipientAddress': 'Tu dirección receptora de DUST (Midnight)',
   'midnight.nightRegistered': 'NIGHT registrado',

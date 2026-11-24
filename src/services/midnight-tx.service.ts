@@ -57,6 +57,7 @@ import {
 } from '@/chains/midnight/midnightBuiltTxGuard';
 import { MIDNIGHT_LEDGER_CHANGED, MIDNIGHT_LEDGER_UNKNOWN, midnightLedgerOrNewest, type MidnightLedger } from '@/chains/midnight/midnightLedger';
 import { MIDNIGHT_DUST_COINS_SHORT, MIDNIGHT_WALLET_NOT_SYNCED } from '@/chains/midnight/midnightConnectorIntent';
+import { MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { markBuildStep, withBuildFailure } from '@/chains/midnight/midnightBuildFailure';
 import {
   helperPreflightReason,
@@ -145,7 +146,7 @@ export function backgroundError(error: string | undefined, fallback: string): Er
   }
   // Whichever wallet pays the fee, the sender's own or a sponsor: the copy names neither.
   if (error && DUST_SHORTFALL.test(error.trim())) {
-    return new Error(String(i18n.t('midnight.errors.dustInsufficient')));
+    return new MidnightDustFeeShortfall(String(i18n.t('midnight.errors.dustInsufficient')));
   }
   return new Error(error || fallback);
 }

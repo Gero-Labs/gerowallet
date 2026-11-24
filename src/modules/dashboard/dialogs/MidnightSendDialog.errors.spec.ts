@@ -41,7 +41,7 @@ describe('Midnight send dialog errors', () => {
   it('the note and Try again do not outlive the dialog, the wallet or the network they were for', () => {
     // The dialog stays mounted while closed and keeps its step, so a note left
     // set would greet the next open, even for another wallet, with a disabled CTA.
-    expect(source).toMatch(/function clearSendOutcome\(\) \{\s+sendBlock\.value = null;\s+sendBlockText\.value = '';\s+ledgerMismatch\.value = false;\s+\}/);
+    expect(source).toMatch(/function clearSendOutcome\(\) \{\s+recoverDustFee\.value = false;\s+sendBlock\.value = null;\s+sendBlockText\.value = '';\s+ledgerMismatch\.value = false;\s+\}/);
     const body = (name: string) => source.match(new RegExp(`function ${name}\\(\\) \\{[\\s\\S]*?\\n\\}`))?.[0] ?? '';
     for (const name of ['onDialogClose', 'resetForm', 'prevStep']) expect(body(name)).toContain('clearSendOutcome();');
     // The approval invalidates on a change of wallet, chain, network, lock,
