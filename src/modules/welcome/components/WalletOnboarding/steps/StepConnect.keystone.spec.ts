@@ -133,3 +133,30 @@ describe('pairing a Keystone as a Cardano wallet', () => {
     expect(payload.accounts).toHaveLength(2);
   });
 });
+
+describe('pairing a Keystone as a Solana wallet', () => {
+  /** A Solana key at m/44'/501'/account'/0' (synthetic 32 bytes, sent with SLIP-0010's leading zero). */
+  const solanaAnswer = (...accounts: number[]) => {
+    const keys = accounts.map((account) => new CryptoHDKey({
+      isMaster: false, key: NodeBuffer.concat([NodeBuffer.alloc(1), NodeBuffer.alloc(32, account + 1)]),
+      origin: new CryptoKeypath([44, 501, account, 0].map((index) => new PathComponent({ index, hardened: true })), FINGERPRINT),
+    }));
+    return { type: 'crypto-multi-accounts', cbor: new CryptoMultiAccounts(FINGERPRINT, keys, 'Keystone 3 Pro').toCBOR().toString('hex') };
+  };
+  type Payload = { publicKey: string; xfp: string; keys: Array<{ path: string; publicKey: string }>; accounts?: Array<{ accountIndex: number }> };
+
+  it('pairs account #0 by its address, at the Solana path', async () => {
+    const wrapper = await scanWithKeystone(solanaAnswer(0), Network.DEVNET, Blockchain.SOLANA);
+    const [[payload]] = wrapper.emitted('connected') as [[Payload]];
+    expect(payload.xfp).toBe(FINGERPRINT.toString('hex'));
+    expect(payload.publicKey).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(payload.keys).toEqual([{ publicKey: payload.publicKey, chainCode: '', path: "m/44'/501'/0'/0'" }]);
+    expect(payload).not.toHaveProperty('accounts');
+  });
+
+  it('pairs the accounts the multi-account step asked for', async () => {
+    const wrapper = await scanWithKeystone(solanaAnswer(0, 1, 2), Network.DEVNET, Blockchain.SOLANA, [0, 1]);
+    const [[payload]] = wrapper.emitted('connected') as [[Payload]];
+    expect(payload.accounts?.map((a) => a.accountIndex)).toEqual([0, 1]);
+  });
+});

@@ -5,9 +5,19 @@ const store = vi.hoisted(() => ({ state: { solana: { lamports: '2000000000' as s
 vi.mock('@/stores/walletStore', () => ({ default: store }));
 vi.mock('@/api/solana-api', () => ({ SolanaApi: class {} }));
 
-import { quoteSolanaSend, sendSolana, solanaSendErrorCode, SolanaSendError, type SolanaSendWallet } from './solanaSend';
+import {
+  clearSolanaHardwareSends,
+  prepareSolanaHardwareSend,
+  quoteSolanaSend,
+  sendSolana,
+  SOLANA_HARDWARE_SEND_TTL_MS,
+  solanaSendErrorCode,
+  SolanaSendError,
+  submitSolanaHardwareSend,
+  type SolanaSendWallet,
+} from './solanaSend';
 import { deriveSolanaKeypairFromMnemonic } from '@/chains/solana/solanaKeyManager';
-import { buildSignedSolTransfer } from '@/chains/solana/solanaTransaction';
+import { buildSignedSolTransfer, buildSolTransferMessage, signSolanaBytes } from '@/chains/solana/solanaTransaction';
 
 const MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const FROM = 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk';
@@ -118,5 +128,58 @@ describe('SOL send in the worker', () => {
     expect(solanaSendErrorCode(submitErr)).toBe('SUBMIT_FAILED');
     expect(solanaSendErrorCode(new Error('anything'))).toBe('BUILD_FAILED');
     expect(new SolanaSendError('SAME_ADDRESS').message).toBe('SAME_ADDRESS');
+  });
+});
+
+describe('SOL send from a hardware wallet', () => {
+  const keypair = () => deriveSolanaKeypairFromMnemonic(MNEMONIC, 0);
+  const signWith = (message: number[], secret = keypair().secretKey) => Array.from(signSolanaBytes(Uint8Array.from(message), secret));
+
+  beforeEach(() => {
+    store.state.solana.lamports = '2000000000';
+    clearSolanaHardwareSends();
+  });
+
+  it('builds the message the worker checked, and submits it with the device signature', async () => {
+    const w = wallet();
+    const { message } = await prepareSolanaHardwareSend(w, request, api());
+    expect(Uint8Array.from(message)).toEqual(buildSolTransferMessage({
+      from: FROM, to: TO, lamports: 1_000_000_000n, recentBlockhash: BLOCKHASH, computeUnitPriceMicroLamports: 20000n,
+    }));
+    const a = api();
+    await expect(submitSolanaHardwareSend(w, { signature: signWith(message) }, a)).resolves.toEqual({ signature: 'sig-from-nexus' });
+    const sent = Uint8Array.from(atob((a.submit.mock.calls as unknown as string[][])[0][0]), (c) => c.charCodeAt(0));
+    expect(sent[0]).toBe(1);
+    expect(Array.from(sent.subarray(1, 65))).toEqual(signWith(message));
+    expect(Array.from(sent.subarray(65))).toEqual(message);
+    expect(w.signSolanaTransfer).not.toHaveBeenCalled();
+    // Used up: the same signature is not sent twice.
+    await expect(submitSolanaHardwareSend(w, { signature: signWith(message) }, api())).rejects.toMatchObject({ code: 'SEND_EXPIRED' });
+  });
+
+  it('runs the same checks before building anything', async () => {
+    await expect(prepareSolanaHardwareSend(wallet(), { ...request, recipientAddress: FROM }, api())).rejects.toMatchObject({ code: 'SAME_ADDRESS' });
+    await expect(prepareSolanaHardwareSend(wallet('Bitcoin'), request, api())).rejects.toMatchObject({ code: 'NOT_SOLANA' });
+    await expect(submitSolanaHardwareSend(wallet(), { signature: new Array(64).fill(0) }, api())).rejects.toMatchObject({ code: 'SEND_EXPIRED' });
+  });
+
+  it('refuses a signature that is not the account’s over that message, and keeps the send for a retry', async () => {
+    const w = wallet();
+    const { message } = await prepareSolanaHardwareSend(w, request, api());
+    const other = deriveSolanaKeypairFromMnemonic(MNEMONIC, 1).secretKey;
+    const a = api();
+    await expect(submitSolanaHardwareSend(w, { signature: signWith(message, other) }, a)).rejects.toMatchObject({ code: 'BAD_SIGNATURE' });
+    await expect(submitSolanaHardwareSend(w, { signature: signWith([...message, 0]) }, a)).rejects.toMatchObject({ code: 'BAD_SIGNATURE' });
+    await expect(submitSolanaHardwareSend(w, { signature: [1, 2, 3] }, a)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(submitSolanaHardwareSend(w, { signature: 'ab'.repeat(64) }, a)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(a.submit).not.toHaveBeenCalled();
+    await expect(submitSolanaHardwareSend(w, { signature: signWith(message) }, a)).resolves.toEqual({ signature: 'sig-from-nexus' });
+  });
+
+  it('lets a prepared send expire', async () => {
+    const w = wallet();
+    const { message } = await prepareSolanaHardwareSend(w, request, api(), 1_000);
+    await expect(submitSolanaHardwareSend(w, { signature: signWith(message) }, api(), 1_000 + SOLANA_HARDWARE_SEND_TTL_MS))
+      .rejects.toMatchObject({ code: 'SEND_EXPIRED' });
   });
 });

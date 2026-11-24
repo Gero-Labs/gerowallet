@@ -203,7 +203,15 @@ import {
 } from '@/chrome/mpcWalletHandlers';
 import type { DeviceShareSecret } from '@/shared/utils/mpc';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
-import { quoteSolanaSend, sendSolana, solanaSendErrorCode } from '@/chrome/solanaSend';
+import {
+  prepareSolanaHardwareSend,
+  quoteSolanaSend,
+  sendSolana,
+  SolanaSendError,
+  solanaSendErrorCode,
+  submitSolanaHardwareSend,
+} from '@/chrome/solanaSend';
+import { isSolanaHardware } from '@/chains/solana/solanaHardwarePolicy';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -4082,6 +4090,31 @@ app.addToOptions(MessageTypes.SEND_SOLANA, async (request, sendResponse) => {
     sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     console.error('Solana send failed:', solanaSendErrorCode(error));
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+// Hardware Solana send (chrome/solanaSend.ts): the worker builds the message, the page has the
+// device sign it, and the worker checks that signature over its own message before submitting.
+app.addToOptions(MessageTypes.PREPARE_SOLANA_SEND, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    if (!isSolanaHardware(WalletStore.state.loggedWallet?.type)) throw new SolanaSendError('NOT_SOLANA');
+    const result = await prepareSolanaHardwareSend(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.SUBMIT_SOLANA_SEND, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    if (!isSolanaHardware(WalletStore.state.loggedWallet?.type)) throw new SolanaSendError('NOT_SOLANA');
+    const result = await submitSolanaHardwareSend(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    console.error('Solana hardware send failed:', solanaSendErrorCode(error));
     sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
   }
 });

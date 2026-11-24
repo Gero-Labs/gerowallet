@@ -37,7 +37,8 @@ function solanaNetwork(network: string, title: string, networkId: number, ticker
     title,
     blockchain: Blockchain.SOLANA,
     network,
-    supportedHardware: false,
+    // Ledger, Trezor and Keystone (chains/solana/solanaHardwarePolicy.ts).
+    supportedHardware: true,
     networkId,
     currencySymbol: ticker,
     currencyTicker: ticker,

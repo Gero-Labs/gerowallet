@@ -624,9 +624,11 @@
           :sign-error="signError"
           :can-sign="!!solanaMessage && (!isSolanaSignIn || solanaMessage.kind === 'text')"
           :sign-label="$t(isSolanaSignIn ? 'solana.dapp.signInTitle' : 'miniGero.sign')"
-          :unsupported-text="$t('solana.dapp.walletTypeUnsupported')"
+          :unsupported-text="$t(solanaIsHardware ? 'solana.hardware.cannotSignMessage' : 'solana.dapp.walletTypeUnsupported')"
+          :hardware="solanaHw.canSign('message')"
           @sign-password="signSolanaMessageNormal"
           @sign-prf="signSolanaMessagePrf"
+          @sign-hardware="signSolanaMessageHardware"
           @reject="rejectSolanaSignMessage"
         />
       </div>
@@ -690,8 +692,10 @@
           :can-sign="solanaTxCanSign"
           :sign-label="$t('miniGero.sign')"
           :unsupported-text="$t('solana.dapp.walletTypeUnsupportedTx')"
+          :hardware="solanaHw.canSign('transaction')"
           @sign-password="signSolanaTransactionNormal"
           @sign-prf="signSolanaTransactionPrf"
+          @sign-hardware="signSolanaTransactionHardware"
           @reject="rejectSolanaTransaction"
         />
       </div>
@@ -1258,6 +1262,18 @@
       </div>
     </div>
 
+    <!-- Keystone QR for a Solana prompt (useSolanaHardwareSigner) -->
+    <KeystoneSignSheet
+      v-if="solanaHw.keystone.keystoneShow.value"
+      :isOpen="solanaHw.keystone.keystoneShow.value"
+      :keystoneType="solanaHw.keystone.keystoneType.value"
+      :keystoneCbor="solanaHw.keystone.keystoneCbor.value"
+      :urTypes="['sol-signature']"
+      @scan="solanaHw.keystone.onKeystoneScan"
+      @error="solanaHw.keystone.failKeystone"
+      @close="solanaHw.keystone.cancelKeystone()"
+    />
+
     <!-- Keystone QR dialog -->
     <KeystoneSignSheet
       v-if="showKeystoneDialog"
@@ -1384,7 +1400,10 @@ import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUt
 import { Messaging } from '@/chrome/messaging';
 import { SolanaDappErrorCode, bytesFromWire, encodeSolanaPanelError } from '@/chains/solana/solanaDappProtocol';
 import { SOLANA_SIGN_MESSAGE_MAX_BYTES, describeSolanaMessage, solanaSignMessageRefusal } from '@/chains/solana/solanaSignMessage';
-import { SOLANA_MAX_TRANSACTION_BYTES } from '@/chains/solana/solanaTxWire';
+import { SOLANA_MAX_TRANSACTION_BYTES, decodeSolanaTransaction, withSolanaSignature } from '@/chains/solana/solanaTxWire';
+import { isSolanaHardware } from '@/chains/solana/solanaHardwarePolicy';
+import { debugLog } from '@/utils/debug';
+import { SolanaHardwareSignError, useSolanaHardwareSigner } from '@/shared/composables/useSolanaHardwareSigner';
 import type { SolanaTxPreview } from '@/chains/solana/solanaTxPreview';
 import { solanaChangeRows, solanaWarningRows } from '@/chains/solana/solanaTxPreviewView';
 import { formatSol } from '@/chains/solana/solanaAmount';
@@ -3249,6 +3268,59 @@ function midnightError(code: string, reason: string): string {
 // only answers. A decline is a JSON-encoded Solana error (the port carries a string).
 const solanaDeclined = () => encodeSolanaPanelError(SolanaDappErrorCode.UserRejected, 'User rejected the request.');
 const isSolanaSignIn = computed(() => currentRequest.value?.method === 'solana_signIn');
+
+// Ledger, Trezor and Keystone sign Solana prompts in this panel (Ledger over USB: Bluetooth
+// pairing needs a window of its own here). The worker checks each signature against the
+// account before the dApp gets anything (isSignedByWalletOnly, verifySolanaSignature).
+const solanaHw = useSolanaHardwareSigner();
+const solanaIsHardware = computed(() => isSolanaHardware(walletType.value));
+watch(() => currentRequest.value?.requestId, () => {
+  if (solanaHw.keystone.keystoneShow.value) solanaHw.keystone.cancelKeystone();
+});
+
+/** Runs a device signature for the open Solana prompt; a cancelled Keystone scan shows nothing. */
+async function signSolanaOnDevice(sign: () => Promise<number[] | null>, failedKey: string): Promise<void> {
+  return approval.run(async () => {
+    const approvalCurrent = approval.capture();
+    signing.value = true;
+    signError.value = '';
+    try {
+      const answer = await sign();
+      if (!answer || !approvalCurrent()) return;
+      approve(answer);
+    } catch (e: unknown) {
+      if (e instanceof SolanaHardwareSignError && e.cancelled) return;
+      debugLog('Solana device signing failed', e);
+      signError.value = t(failedKey);
+    } finally {
+      signing.value = false;
+    }
+  });
+}
+
+/** Keystone signs the message's raw bytes; the worker verifies the signature. */
+function signSolanaMessageHardware() {
+  return signSolanaOnDevice(async () => {
+    const bytes = solanaMessageBytes.value;
+    if (!currentRequest.value || !bytes) return null;
+    if (isSolanaSignIn.value && solanaMessage.value?.kind !== 'text') return null;
+    return Array.from(await solanaHw.sign(bytes, 'message'));
+  }, 'solana.hardware.signFailed');
+}
+
+/** The device signs the transaction's message; the panel puts the signature in the wallet's slot. */
+function signSolanaTransactionHardware() {
+  return signSolanaOnDevice(async () => {
+    const bytes = solanaTxBytes.value;
+    const address = loggedWallet.value?.publicKey;
+    if (!currentRequest.value || !bytes || !address || !solanaTxCanSign.value) return null;
+    const tx = decodeSolanaTransaction(bytes);
+    const signerIndex = tx.message.staticKeys.indexOf(address);
+    if (signerIndex < 0 || signerIndex >= tx.message.numRequiredSignatures) throw new Error('This account does not sign this transaction');
+    const signature = await solanaHw.sign(tx.messageBytes, 'transaction');
+    return Array.from(withSolanaSignature(bytes, tx, signerIndex, signature));
+  }, 'solana.hardware.signFailed');
+}
 
 function approveSolanaConnect() {
   approve(connectApproval());

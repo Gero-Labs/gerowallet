@@ -37,6 +37,9 @@ import {
   walletWitnessPaths,
   type TrezorKeyContext,
 } from '@/shared/utils/trezorWitnesses';
+import { solanaAccountPath } from '@/chains/solana/solanaPaths';
+import { solanaDeviceAccount, type SolanaDeviceAccount } from '@/chains/solana/solanaHardwarePolicy';
+import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
 
 /**
@@ -483,6 +486,51 @@ export default {
       btSupported: features['model'].toLowerCase() === 'safe 7',
       accounts: res.payload.map((key, i) => accountXpub(key.node.public_key, key.node.chain_code, paths[i])),
     };
+  },
+
+  /**
+   * Pair Solana accounts: one bundled `solanaGetAddress`, so the user approves the
+   * export once. Each address is at `m/44'/501'/n'/0'` (solanaHardwarePolicy.ts).
+   */
+  async getSolanaAccounts(accountIndices: number[]): Promise<{
+    productName: string;
+    btSupported: boolean;
+    accounts: SolanaDeviceAccount[];
+  }> {
+    await this.init();
+    const indices = assertAccountIndices(accountIndices);
+    const features: Trezor.Features = await this.getDeviceInfo();
+    const res = await TrezorConnect.solanaGetAddress({
+      bundle: indices.map((index) => ({ path: solanaAccountPath(index), showOnTrezor: false })),
+    });
+    if (!res.success) {
+      throw new Error(connectError(res).message || 'Failed to get Trezor Solana addresses');
+    }
+    if (res.payload.length !== indices.length || !res.payload.every((row) => isValidSolanaAddress(row?.address))) {
+      throw new Error('Trezor returned an incomplete Solana address. Please try again.');
+    }
+    return {
+      productName: features['label'] || 'Trezor',
+      btSupported: features['model'].toLowerCase() === 'safe 7',
+      accounts: res.payload.map((row, i) => solanaDeviceAccount(indices[i], row.address)),
+    };
+  },
+
+  /** The ed25519 signature (64 bytes) of a Solana transaction message by the account at `accountIndex`. */
+  async signSolanaTransaction(accountIndex: number, message: Uint8Array, isDevnet: boolean): Promise<Uint8Array> {
+    await this.init();
+    const res = await TrezorConnect.solanaSignTransaction({
+      path: solanaAccountPath(accountIndex),
+      serializedTx: Buffer.from(message).toString('hex'),
+      additionalInfo: isDevnet ? { isDevnet: true } : undefined,
+    });
+    if (!res.success) {
+      throw new Error(connectError(res).message || 'Trezor did not sign the Solana transaction');
+    }
+    if (!/^[0-9a-f]{128}$/i.test(res.payload.signature)) {
+      throw new Error('Trezor returned an unexpected signature');
+    }
+    return new Uint8Array(Buffer.from(res.payload.signature, 'hex'));
   },
 
   /**
