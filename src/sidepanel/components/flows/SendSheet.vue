@@ -572,7 +572,7 @@ import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignSheet from '../KeystoneSignSheet.vue';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneSignRequest, KeystoneSignRequestResponse, keystoneTxWitnessSet } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import adaHandleApi from '@/api/ada-handle.api';
 import assetsUtil from '@/utils/assets';
@@ -749,7 +749,7 @@ interface SendApproval {
   dispatched: boolean;
 }
 let authorizedSend: SendApproval | null = null;
-let keystoneApproval: { attempt: SendApproval; requestId: string } | null = null;
+let keystoneApproval: { attempt: SendApproval; requestId: string; txHash: string | null } | null = null;
 const approval = useApprovalFreshness(() => [
   loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
   loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked,
@@ -1353,7 +1353,7 @@ async function signKeystone() {
       attempt.inputs as Cardano.Utxo[], attempt.addresses,
     ), attempt.current);
     authorizedSend = attempt;
-    keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
+    keystoneApproval = { attempt, requestId: signRequestResponse.requestId, txHash: signRequestResponse.txHash ?? null };
     txCbor.value = attempt.cbor;
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
@@ -1368,13 +1368,17 @@ async function onKeystoneScan(ur: UR) {
   const qr = keystoneApproval;
   if (!qr || !showKeystoneDialog.value || !qr.attempt.current() || submitting.value) return;
   await withSigning(async attempt => {
-    const signature = parseSignature(ur);
-    if (signature.requestId !== qr.requestId || !signature.witnessSet || typeof signature.witnessSet !== 'string') {
+    // Wrapped answer: checked by request id. Hash-route answer (bare witness set): its
+    // signatures must cover qr.txHash (keystoneTxWitnessSet).
+    let witnessSet: string;
+    try {
+      witnessSet = await keystoneTxWitnessSet(ur, { requestId: qr.requestId, txHash: qr.txHash });
+    } catch {
       throw new Error('Keystone signature does not match this approval');
     }
     keystoneApproval = null;
     showKeystoneDialog.value = false;
-    await submitApproved(attempt, signature.witnessSet);
+    await submitApproved(attempt, witnessSet);
   }, qr.attempt);
 }
 

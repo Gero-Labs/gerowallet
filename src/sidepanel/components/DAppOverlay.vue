@@ -1431,7 +1431,7 @@ import SolanaSignControls from './SolanaSignControls.vue';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
-import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, keystoneTxWitnessSet, parseDataSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import hardwareLoading from '@/plugins/hardwareLoading';
@@ -2493,6 +2493,8 @@ watch(
 // Keystone state
 const showKeystoneDialog = ref(false);
 let keystoneRequestId = '';
+// The hash a tx-hash request asked the Keystone to sign (null for a full-transaction request).
+let keystoneTxHash: string | null = null;
 let keystoneApprovalCurrent: (() => boolean) | null = null;
 const keystoneType = ref('');
 const keystoneCbor = ref('');
@@ -2887,6 +2889,7 @@ async function signKeystone() {
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
     keystoneRequestId = signRequestResponse.requestId;
+    keystoneTxHash = signRequestResponse.txHash;
     keystoneSigningRequest = signingRequest;
     keystoneApprovalCurrent = approvalCurrent;
     showKeystoneDialog.value = true;
@@ -2912,14 +2915,13 @@ async function onKeystoneScan(ur: UR) {
   }
   try {
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
-    const signature = parseSignature(ur);
-    if (!keystoneRequestId || signature?.requestId !== keystoneRequestId || !signature?.witnessSet || typeof signature.witnessSet !== 'string') {
-      throw new Error('Invalid Keystone signature');
-    }
+    if (!keystoneRequestId) throw new Error('Invalid Keystone signature');
+    // A hash-route answer carries no request id; its signatures must cover keystoneTxHash instead.
+    const witnessSet = await keystoneTxWitnessSet(ur, { requestId: keystoneRequestId, txHash: keystoneTxHash });
     showKeystoneDialog.value = false;
     await awaitFreshApproval(async () => (validateCip45Signing(signingRequest?.payload)), approvalCurrent);
     if (currentRequest.value !== signingRequest) return;
-    approve(signature.witnessSet);
+    approve(witnessSet);
   } catch (e: unknown) {
     if (e instanceof StaleApprovalError) throw e;
     console.error('[DApp] Keystone scan error:', e);
