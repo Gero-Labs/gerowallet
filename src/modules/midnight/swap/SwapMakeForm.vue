@@ -10,7 +10,7 @@
       :invalid="giveTooHigh"
     >
       <template #token>
-        <SwapTokenPicker v-model="giveType" side="give" :network="network" :balances="balances" />
+        <SwapTokenPicker v-model="giveType" side="give" :network="network" :balances="pickerBalances" :private="isPrivate" />
       </template>
     </SwapAmountBox>
 
@@ -29,10 +29,10 @@
       :input-label="t('midnight.swap.amountWant')"
     >
       <template #token>
-        <SwapTokenPicker v-model="wantType" side="want" :network="network" :balances="balances" />
+        <SwapTokenPicker v-model="wantType" side="want" :network="network" :balances="pickerBalances" :private="isPrivate" />
       </template>
       <template v-if="!wantInfo.isNight" #sub>
-        {{ t('midnight.swap.kind.public') }} · <span class="g-mono">{{ shortTokenType(wantType) }}</span>
+        {{ wantShielded ? t('midnight.swap.kind.private') : t('midnight.swap.kind.public') }} · <span class="g-mono">{{ shortTokenType(wantType) }}</span>
       </template>
     </SwapAmountBox>
 
@@ -47,7 +47,8 @@
       <span class="t-caption">{{ privacyNote }}</span>
     </div>
 
-    <div class="swap-make__field">
+    <!-- A fully private offer has no TTL to choose: its expiry is the chain's root window, an estimate. -->
+    <div v-if="!fullyPrivate" class="swap-make__field">
       <span :id="ttlLabelId" class="t-caption">{{ t('midnight.swap.expiresIn') }} <SwapHint :text="t('midnight.swap.hint.expiry')" /></span>
       <SwapSegmented v-model="ttlMinutes" :options="ttlOptions" :labelledby="ttlLabelId" />
     </div>
@@ -64,6 +65,7 @@
     <GButton tier="primary" block type="submit" :disabled="!canCreate" :loading="busy" data-test="swap-create">
       {{ t('midnight.swap.create') }}
     </GButton>
+    <p v-if="busy && isPrivate" class="t-caption swap-make__note" role="status">{{ t('midnight.swap.makingPrivate') }}</p>
   </form>
 </template>
 
@@ -75,11 +77,13 @@ import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
 import { midnightCatalogTokens } from '@/chains/midnight/midnightTokenCatalog';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import {
-  MIDNIGHT_SWAP_DEFAULT_TTL, MIDNIGHT_SWAP_PRIVATE_LEGS, MIDNIGHT_SWAP_TTL_MINUTES, type MidnightSwapTtlMinutes,
+  MIDNIGHT_SWAP_DEFAULT_TTL, MIDNIGHT_SWAP_PRIVATE_ESTIMATE_MINUTES, MIDNIGHT_SWAP_PRIVATE_LEGS, MIDNIGHT_SWAP_TTL_MINUTES,
+  type MidnightSwapTtlMinutes,
 } from '@/chains/midnight/midnightSwapConfig';
-import type { MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
+import type { MidnightSwapLeg, MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
 import { useSwapBalances } from './useSwapBalances';
+import { swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
 import {
   groupedTokenType, NIGHT_TOKEN_TYPE, parseSwapAmount, shortTokenType, swapBalanceText, swapLegText, swapRateText, swapTokenInfo,
 } from './swapTokens';
@@ -101,17 +105,20 @@ const { t } = useTranslation();
 const swap = injectMidnightSwap();
 const { network, isPrfWallet, offers, now } = swap;
 const balances = useSwapBalances(offers, now);
+const privateBalances = usePrivateSwapBalances(offers, now);
 const hold = useMidnightSendHold(() => network.value);
 const holdText = computed(() => (hold.held.value ? hold.sendTextShort.value : ''));
 
 const giveType = ref(NIGHT_TOKEN_TYPE);
-/** The first listed token that is not NIGHT, else the first held one: a sensible first ask. */
-function defaultWant(): string {
+/** The first listed token that is not NIGHT, else the first held one (privately held too, for a private offer): a sensible first ask. */
+function defaultWant(includePrivate = false): string {
   // Never NIGHT itself (the catalog lists it too) nor the token given.
   const other = (type: string) => !isNativeNight(type) && type !== giveType.value;
-  const listed = midnightCatalogTokens.value.find(token => token.verified && token.kind === 'UNSHIELDED' && other(token.tokenType));
+  const kinds = includePrivate ? ['UNSHIELDED', 'SHIELDED'] : ['UNSHIELDED'];
+  const listed = midnightCatalogTokens.value.find(token => token.verified && kinds.includes(token.kind) && other(token.tokenType));
   if (listed) return listed.tokenType;
   for (const type of balances.value.keys()) if (other(type)) return type;
+  if (includePrivate) for (const type of privateBalances.value?.keys() ?? []) if (other(type)) return type;
   return '';
 }
 const wantType = ref(defaultWant());
@@ -137,24 +144,53 @@ const giveInfo = computed(() => swapTokenInfo(giveType.value, network.value));
 const wantInfo = computed(() => swapTokenInfo(wantType.value || NIGHT_TOKEN_TYPE, network.value));
 const giveAmount = computed(() => parseSwapAmount(giveInput.value, giveInfo.value));
 const wantAmount = computed(() => (wantType.value ? parseSwapAmount(wantInput.value, wantInfo.value) : 0n));
-const giveBalance = computed(() => balances.value.get(giveType.value) ?? 0n);
-const giveTooHigh = computed(() => giveAmount.value > giveBalance.value);
-const giveBalanceText = computed(() => t('midnight.swap.available', { amount: swapBalanceText(giveBalance.value, giveInfo.value) }));
 
-const giveLeg = computed(() => ({ tokenType: giveType.value, amount: giveAmount.value.toString() }));
-const wantLeg = computed(() => ({ tokenType: wantType.value, amount: wantAmount.value.toString() }));
+// Private: every token but NIGHT (always public) is a private leg.
+const isPrivate = computed(() => MIDNIGHT_SWAP_PRIVATE_LEGS && privacy.value === 'private');
+const giveShielded = computed(() => isPrivate.value && !giveInfo.value.isNight);
+const wantShielded = computed(() => isPrivate.value && !!wantType.value && !wantInfo.value.isNight);
+const fullyPrivate = computed(() => giveShielded.value && wantShielded.value);
+/** What the pickers list: public balances, or NIGHT's public one beside the private ones. */
+const pickerBalances = computed<ReadonlyMap<string, bigint>>(() => {
+  if (!isPrivate.value) return balances.value;
+  const merged = new Map(privateBalances.value ?? []);
+  const night = balances.value.get(NIGHT_TOKEN_TYPE);
+  if (night !== undefined) merged.set(NIGHT_TOKEN_TYPE, night);
+  return merged;
+});
+watch([isPrivate, pickerBalances], () => { if (isPrivate.value && !wantType.value) wantType.value = defaultWant(true); });
+const giveBalance = computed(() => pickerBalances.value.get(giveType.value) ?? 0n);
+const privateUnknown = computed(() => giveShielded.value && privateBalances.value === null);
+const giveTooHigh = computed(() => !privateUnknown.value && giveAmount.value > giveBalance.value);
+const giveBalanceText = computed(() => (privateUnknown.value
+  ? t('midnight.swap.privateSyncing')
+  : t('midnight.swap.available', { amount: swapBalanceText(giveBalance.value, giveInfo.value) })));
+
+const leg = (tokenType: string, amount: bigint, shielded: boolean): MidnightSwapLeg =>
+  (shielded ? { tokenType, amount: amount.toString(), shielded: true } : { tokenType, amount: amount.toString() });
+const giveLeg = computed(() => leg(giveType.value, giveAmount.value, giveShielded.value));
+const wantLeg = computed(() => leg(wantType.value, wantAmount.value, wantShielded.value));
 const rateText = computed(() => (giveAmount.value > 0n && wantAmount.value > 0n ? swapRateText(giveLeg.value, wantLeg.value, network.value) : ''));
 
-const privacyNote = computed(() => (privacy.value === 'private'
-  ? t('midnight.swap.privateNote', { token: wantInfo.value.symbol, night: swapTokenInfo(NIGHT_TOKEN_TYPE, network.value).symbol })
-  : t('midnight.swap.publicNote')));
+const privacyNote = computed(() => {
+  const note = swapPrivacyNote([giveLeg.value, ...(wantType.value ? [wantLeg.value] : [])], network.value, t);
+  return isPrivate.value ? `${note} ${t('midnight.swap.provingMinute')}` : note;
+});
 
 const summaryRows = computed<SwapRow[]>(() => {
   const rows: SwapRow[] = [];
   if (giveAmount.value > 0n) rows.push({ label: t('midnight.swap.youGive'), value: swapLegText(giveLeg.value, network.value) });
   if (wantAmount.value > 0n) rows.push({ label: t('midnight.swap.youReceive'), value: swapLegText(wantLeg.value, network.value) });
   rows.push({ label: t('midnight.swap.networkFee'), value: t('midnight.swap.paidByTaker'), tone: 'muted', hint: t('midnight.swap.hint.makerFee') });
-  rows.push({ label: t('midnight.swap.visible'), value: t('midnight.swap.visibleBoth'), tone: 'muted', hint: t('midnight.swap.hint.visible') });
+  if (fullyPrivate.value) {
+    rows.push({ label: t('midnight.swap.expiresInRow'), value: t('midnight.swap.expiresAbout', { n: MIDNIGHT_SWAP_PRIVATE_ESTIMATE_MINUTES }), tone: 'muted', hint: t('midnight.swap.hint.estimate') });
+  }
+  rows.push({
+    label: t('midnight.swap.visible'),
+    value: swapVisibleText([giveLeg.value, wantLeg.value], network.value, t),
+    tone: 'muted',
+    hint: t(isPrivate.value ? 'midnight.swap.hint.visiblePrivate' : 'midnight.swap.hint.visible'),
+  });
   rows.push({ rule: true });
   rows.push({ label: t('midnight.swap.offerFee'), value: t('midnight.swap.none'), tone: 'success' });
   return rows;
@@ -165,7 +201,7 @@ const canCreate = computed(() => !busy.value && !hold.held.value
   && !!wantType.value && wantType.value !== giveType.value
   && (isPrfWallet.value || !!password.value));
 
-watch([giveType, wantType, giveInput, wantInput, ttlMinutes], () => { error.value = ''; });
+watch([giveType, wantType, giveInput, wantInput, ttlMinutes, privacy], () => { error.value = ''; });
 
 function switchSides() {
   const [type, input] = [giveType.value, giveInput.value];

@@ -18,6 +18,7 @@ import {
 import { midnightLedgerKey } from './midnightLedger';
 import { midnightTimer, type MidnightTimer } from './midnightTiming';
 import { privateSyncProgressOf, sameSyncProgress } from './midnightPrivateSyncProgress';
+import { publishMidnightPrivateCoins } from './midnightPrivateCoins';
 
 export interface MidnightPrivateSyncArgs {
   walletId: string;
@@ -181,6 +182,8 @@ class PrivateSync {
     this.subscription?.unsubscribe(); this.subscription = undefined;
     const wallet = this.wallet; const keys = this.keys; const keys8 = this.keys8;
     this.wallet = undefined; this.keys = undefined; this.keys8 = undefined; this.latest = undefined;
+    // The coin view belongs to the running wallet: a stopped or replaced one says nothing.
+    publishMidnightPrivateCoins(undefined);
     this.hasPublished = false; this.pendingImmediatePublication = false; this.candidate = undefined;
     try { if (wallet) await bounded(wallet.stop()); }
     finally { keys?.clear(); keys8?.clear(); }
@@ -372,6 +375,21 @@ class PrivateSync {
         .filter(([color, amount]) => customColor(color) && amount >= 0n)
         .map(([color, amount]) => [color.toLowerCase(), amount]));
       midnightActions.applyPrivateSnapshot(balances, privateHistoryRows(entries));
+      // For the swap records (midnightSwapRecords.ts): the coins held now, by nullifier and commitment.
+      // Coins the wallet only expects (pendingCoins) are left out: they have not arrived.
+      // Never in the way of the sync itself: without a view the swap screens fall back to the clock.
+      try {
+        const available = state.availableCoins ?? [];
+        const reserved = state.reservedCoins ?? [];
+        publishMidnightPrivateCoins(this.owner ? {
+          walletKey: this.owner,
+          nullifiers: new Set([...available, ...reserved].map(coin => coin.nullifier.toLowerCase())),
+          commitments: new Set(available.map(coin => coin.commitment.toLowerCase())),
+          at: Date.now(),
+        } : undefined);
+      } catch {
+        publishMidnightPrivateCoins(undefined);
+      }
       this.hasPublished = true;
       this.syncTimer?.done(); this.syncTimer = undefined;
       // Secret seed is used only to derive the opaque cache key, never stored.

@@ -5,17 +5,29 @@
     </div>
     <div class="swap-time__row t-caption">
       <span>{{ t('midnight.swap.expiresInRow') }}</span>
-      <span class="g-num swap-time__left">{{ countdown ? countdownText(expiresAt, now) : t('midnight.swap.minutes', { n: minutesLeft(expiresAt, now) }) }}</span>
+      <span class="g-num swap-time__left">{{ leftText }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { countdownText, lifeLeftFraction, minutesLeft } from './swapTokens';
 
-withDefaults(defineProps<{ createdAt: number; expiresAt: number; now: number; countdown?: boolean }>(), { countdown: false });
+const props = withDefaults(defineProps<{
+  createdAt: number;
+  expiresAt: number;
+  now: number;
+  countdown?: boolean;
+  /** The expiry is an estimate (a fully private offer): "About N min". */
+  estimate?: boolean;
+}>(), { countdown: false, estimate: false });
 const { t } = useTranslation();
+const leftText = computed(() => {
+  if (props.estimate) return t('midnight.swap.expiresAbout', { n: minutesLeft(props.expiresAt, props.now) });
+  return props.countdown ? countdownText(props.expiresAt, props.now) : t('midnight.swap.minutes', { n: minutesLeft(props.expiresAt, props.now) });
+});
 </script>
 
 <style scoped lang="scss">

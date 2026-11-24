@@ -132,6 +132,13 @@ import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9
 import { balanceSealedTransaction9 } from '@/chains/midnight/midnightSealedBalancer9';
 import { buildConnectorIntent } from '@/chains/midnight/midnightIntentBuilder';
 import { buildConnectorIntent9 } from '@/chains/midnight/midnightIntentBuilder9';
+// Static: the module keeps its heavy shielded sync lazy (midnightShieldedLedger9), and a
+// production background build with this edge passes the TDZ guard (PR 1651).
+import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
+import {
+  buildPrivateSwapOffer9, takePrivateSwapOffer9,
+  type BuildPrivateSwapOffer9Result, type PrivateSwapTakerTerms, type PrivateSwapTerms, type TakePrivateSwapOffer9Result,
+} from '@/chains/midnight/midnightPrivateSwap9';
 // Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
 // in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
 import { sealTransferForStation } from '@/chains/midnight/midnightStationSeal';
@@ -3099,6 +3106,144 @@ export class WalletBg {
     } finally {
       mnemonic = '';
     }
+  }
+
+  /**
+   * The keys, coins and prover a private swap (midnightPrivateSwap9.ts) needs,
+   * for `use` only: every secret buffer is wiped when it settles. Same
+   * credential handling and prover choice as buildMidnightConnectorIntent: the
+   * Zswap and DUST proofs are made on this device in Gero Cloud mode (Gero
+   * Cloud proves only whole wallet-built sends), else where the user chose.
+   * Ledger 9 only; the coins come from the wallet's own sync, so nothing is
+   * unlocked before that sync has run.
+   */
+  private async withMidnightSwapKeys<T>(
+    password: string | undefined,
+    prfSecret: Uint8Array | undefined,
+    use: (keys: {
+      sdkNetworkId: string;
+      endpoints: MidnightNetworkEndpoints;
+      zswapSecretKeySeed: Uint8Array;
+      unshieldedSecretKey: Uint8Array;
+      dustSecretSeed: Uint8Array;
+      proving: WalletProvingRequest;
+    }) => Promise<T>,
+  ): Promise<T> {
+    if (this.chain !== Blockchain.MIDNIGHT) throw new Error('A private swap needs a Midnight wallet');
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    const { midnightStore } = await import('@/stores/midnightStore');
+    if (await resolveMidnightLedger(network) !== 9) throw new Error('A private swap needs a ledger 9 network');
+    if (!connectorIntentSyncReady(midnightStore)) throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.secretsWalletId.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = await this.openMnemonicWithPassword(password);
+    }
+
+    try {
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const derived = await this.deriveMidnightAccountKeys(mnemonic, network);
+      try {
+        assertSession();
+        const endpoints = getMidnightEndpoints(network);
+        if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+        // The keys must be the record's: the private coins the swap spends are found by them.
+        const parsed = (() => { try { return this.publicKey ? JSON.parse(this.publicKey) : null; } catch { return null; } })();
+        if (typeof parsed?.shielded === 'string' && parsed.shielded !== derived.addresses.shielded) {
+          throw new Error('The keys derived for this swap do not match the wallet\'s private address');
+        }
+        let proving: WalletProvingRequest;
+        const prover = walletProverFor(
+          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
+        );
+        if (prover === 'device') {
+          proving = { device: true };
+        } else if (prover === 'helper') {
+          proving = { helper: true };
+        } else {
+          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          proving = { url: target.url, headers: target.headers };
+        }
+        const result = await use({
+          sdkNetworkId: endpoints.sdkNetworkId,
+          endpoints,
+          zswapSecretKeySeed: derived.zswapSecretKey,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          proving,
+        });
+        assertSession();
+        return result;
+      } finally {
+        derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+    }
+  }
+
+  /**
+   * Make a swap offer with at least one private leg (midnightPrivateSwap9.ts):
+   * sealed, no fee (the taker pays it). Public coins come from the wallet's
+   * own sync minus those of its open offers; private coins skip
+   * `avoidNullifiers` (the private coins of its open offers).
+   */
+  async buildMidnightPrivateSwapOffer(
+    args: { terms: PrivateSwapTerms; ttl?: Date; avoidNullifiers: readonly string[]; onProving?: () => void },
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<BuildPrivateSwapOffer9Result> {
+    return this.withMidnightSwapKeys(password, prfSecret, async (keys) => {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const utxos = withoutReservedCoins(midnightStore.utxos, await reservedSwapCoinsFor(this.network, this.id));
+      return buildPrivateSwapOffer9({
+        ...keys, utxos, sync: midnightStore, terms: args.terms, ttl: args.ttl,
+        avoidNullifiers: args.avoidNullifiers, onProving: args.onProving,
+      });
+    });
+  }
+
+  /**
+   * Take a swap offer with at least one private leg: the wallet's mirror, the
+   * DUST fee, proofs, and the completed swap (sealed hex, for submit-proven).
+   * `approved` is what the user was shown (describePrivateSwapOffer9's
+   * `taker`); anything else in the bytes is refused.
+   */
+  async takeMidnightPrivateSwapOffer(
+    args: {
+      offerHex: string;
+      approved: PrivateSwapTakerTerms;
+      avoidNullifiers: readonly string[];
+      onDustSyncProgress?: (percent: number, detail: string) => void;
+      onProving?: () => void;
+    },
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<TakePrivateSwapOffer9Result> {
+    return this.withMidnightSwapKeys(password, prfSecret, async (keys) => {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const utxos = withoutReservedCoins(midnightStore.utxos, await reservedSwapCoinsFor(this.network, this.id));
+      return takePrivateSwapOffer9({
+        ...keys, utxos, sync: midnightStore, offerHex: args.offerHex, approved: args.approved,
+        avoidNullifiers: args.avoidNullifiers, onDustSyncProgress: args.onDustSyncProgress, onProving: args.onProving,
+      });
+    });
   }
 
   async startMidnightPrivateSync(password?: string, prfSecret?: Uint8Array): Promise<void> {

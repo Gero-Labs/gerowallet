@@ -7,12 +7,14 @@
       </div>
       <div class="t-heading g-num" data-test="swap-status-terms">{{ termsText }}</div>
       <div v-if="status === 'open'" class="swap-status__time">
-        <SwapTimeBar :created-at="record.createdAt" :expires-at="record.expiresAt" :now="now" countdown />
+        <SwapTimeBar :created-at="record.createdAt" :expires-at="record.expiresAt" :now="now" countdown :estimate="record.expiry === 'root-window'" />
       </div>
     </section>
 
     <template v-if="status === 'open' || status === 'withdrawing'">
-      <SwapBanner tone="warning">{{ t('midnight.swap.spendCancelsShort', { token: givesSymbol }) }}</SwapBanner>
+      <SwapBanner tone="warning">
+        {{ withdrawable ? t('midnight.swap.spendCancelsShort', { token: givesSymbol }) : t('midnight.swap.privateNoWithdraw', { token: givesSymbol }) }}
+      </SwapBanner>
       <GButton v-if="status === 'open'" block data-test="swap-show-code" @click="emit('show-code')">{{ t('midnight.swap.showCode') }}</GButton>
       <SwapBanner v-if="status === 'withdrawing'" tone="info">{{ t('midnight.swap.withdrawSent') }}</SwapBanner>
     </template>
@@ -28,7 +30,7 @@
 
     <SwapBanner v-else tone="info">{{ t('midnight.swap.error.expired') }}</SwapBanner>
 
-    <GButton v-if="status === 'open'" tier="destructive" block data-test="swap-withdraw" @click="emit('withdraw')">
+    <GButton v-if="status === 'open' && withdrawable" tier="destructive" block data-test="swap-withdraw" @click="emit('withdraw')">
       {{ t('midnight.swap.withdraw') }}
     </GButton>
   </div>
@@ -41,6 +43,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import type { MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
 import { swapDisplayStatus } from './swapStatus';
+import { canWithdrawSwapOffer } from './swapPrivacy';
 import { swapLegText, swapTokenInfo } from './swapTokens';
 import SwapStatusChip from './SwapStatusChip.vue';
 import SwapBanner from './SwapBanner.vue';
@@ -52,6 +55,7 @@ const { t } = useTranslation();
 const { now, network } = injectMidnightSwap();
 
 const status = computed(() => swapDisplayStatus(props.record, now.value));
+const withdrawable = computed(() => canWithdrawSwapOffer(props.record));
 const givesText = computed(() => props.record.gives.map(leg => swapLegText(leg, network.value)).join(', '));
 const wantsText = computed(() => props.record.wants.map(leg => swapLegText(leg, network.value)).join(', '));
 const termsText = computed(() => `${givesText.value} → ${wantsText.value}`);

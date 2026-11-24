@@ -6,7 +6,7 @@
 
 import { getPrivate, setPrivate } from '@/utils/privateStore';
 import {
-  midnightSwapRecordsKey, readSwapOfferRecords, refreshSwapOfferRecords, reservedSwapCoins,
+  midnightSwapRecordsKey, readSwapOfferRecords, refreshSwapOfferRecords, reservedSwapCoins, reservedSwapNullifiers,
   type MidnightSwapCoinView, type MidnightSwapOfferRecord,
 } from '@/chains/midnight/midnightSwapRecords';
 
@@ -63,4 +63,10 @@ export function updateSwapOffer(
 export async function reservedSwapCoinsFor(network: string, walletId: number, now = Date.now()): Promise<Set<string>> {
   const stored = readSwapOfferRecords(await getPrivate(midnightSwapRecordsKey(network, walletId)));
   return reservedSwapCoins(stored, now);
+}
+
+/** Nullifiers of the private coins of wallet `walletId`'s open offers on `network`: a second offer or a take never selects them. */
+export async function reservedSwapNullifiersFor(network: string, walletId: number, now = Date.now()): Promise<Set<string>> {
+  const stored = readSwapOfferRecords(await getPrivate(midnightSwapRecordsKey(network, walletId)));
+  return reservedSwapNullifiers(stored, now);
 }

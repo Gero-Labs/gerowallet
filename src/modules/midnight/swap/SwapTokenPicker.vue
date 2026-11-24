@@ -8,7 +8,10 @@
         :aria-label="modelValue ? t('midnight.swap.tokenAria', { token: current.symbol }) : t('midnight.swap.chooseToken')"
         :data-test="`swap-token-${side}`"
       >
-        <template v-if="modelValue"><span class="swap-token__mark" aria-hidden="true">{{ current.mark }}</span>{{ current.symbol }}</template>
+        <template v-if="modelValue">
+          <span class="swap-token__mark" aria-hidden="true">{{ current.mark }}</span>{{ current.symbol }}
+          <v-icon v-if="lockShown" size="13" class="swap-token__lock" role="img" :aria-label="t('midnight.swap.privateToken')">mdi-lock-outline</v-icon>
+        </template>
         <template v-else>{{ t('midnight.swap.chooseToken') }}</template>
         <v-icon size="14" aria-hidden="true">mdi-chevron-down</v-icon>
       </button>
@@ -68,6 +71,8 @@ const props = defineProps<{
   side: 'give' | 'want';
   /** Spendable base units per token type (offered coins excluded). */
   balances: ReadonlyMap<string, bigint>;
+  /** A private offer: every token but NIGHT is a private leg (lock icon; the catalog's private tokens on the want side). */
+  private?: boolean;
 }>();
 const emit = defineEmits<{ (e: 'update:modelValue', tokenType: string): void }>();
 const { t } = useTranslation();
@@ -75,6 +80,7 @@ const { t } = useTranslation();
 const open = ref(false);
 const query = ref('');
 const current = computed(() => swapTokenInfo(props.modelValue, props.network));
+const lockShown = computed(() => !!props.private && !current.value.isNight);
 
 /** A pasted 64-hex token type (want side only). */
 const typedType = computed(() => {
@@ -88,8 +94,9 @@ const rows = computed(() => {
   for (const [type, value] of props.balances) if (value > 0n) types.add(type);
   if (props.side === 'want') {
     // Listed tokens first; unverified catalog tokens can still be asked for, with the warning.
-    for (const token of midnightCatalogTokens.value) if (token.kind === 'UNSHIELDED' && token.verified) types.add(token.tokenType);
-    for (const token of midnightCatalogTokens.value) if (token.kind === 'UNSHIELDED' && !token.verified) types.add(token.tokenType);
+    const kinds = props.private ? ['UNSHIELDED', 'SHIELDED'] : ['UNSHIELDED'];
+    for (const token of midnightCatalogTokens.value) if (kinds.includes(token.kind) && token.verified) types.add(token.tokenType);
+    for (const token of midnightCatalogTokens.value) if (kinds.includes(token.kind) && !token.verified) types.add(token.tokenType);
   }
   const needle = query.value.trim().toLowerCase();
   return [...types].map((type) => {
@@ -135,6 +142,10 @@ function pickTyped() {
 .swap-token--button:focus-visible {
   outline: 2px solid var(--g-accent);
   outline-offset: 2px;
+}
+
+.swap-token__lock {
+  color: var(--g-accent);
 }
 
 .swap-token__mark {

@@ -113,6 +113,7 @@ export const PRIVATE_SWAP_REFUSALS = {
   unknownKind: 'the offer moves a kind of token this version does not know',
   expiry: `the offer must expire between ${SEALED_MINIMUM_TTL_MS / 60_000} and ${CONNECTOR_INTENT_TTL_MS / 60_000} minutes from now`,
   terms: 'the offer does not give and ask for exactly the approved amounts',
+  own: 'this wallet made the offer: it cannot take its own offer',
 } as const;
 export type PrivateSwapRefusal = keyof typeof PRIVATE_SWAP_REFUSALS;
 
@@ -245,6 +246,8 @@ export interface PrivateSwapOfferAnalysis {
   readonly ttl?: Date;
   /** Nullifiers of the offer's private inputs: the coins it spends (hex). */
   readonly nullifiers: readonly string[];
+  /** Commitments of the offer's private outputs: the coins its maker receives, change included (hex). */
+  readonly commitments: readonly string[];
 }
 
 /**
@@ -275,7 +278,8 @@ export function analyzePrivateSwapOffer9(tx: AnyTx9, now = Date.now()): PrivateS
     if (ahead < SEALED_MINIMUM_TTL_MS || ahead > CONNECTOR_INTENT_TTL_MS + OFFER_TTL_SKEW_MS) throw new PrivateSwapRefusedError('expiry');
   }
   const nullifiers = (tx.guaranteedOffer?.inputs ?? []).map(input => input.nullifier.toLowerCase());
-  return { terms: { gives, wants }, ttl, nullifiers };
+  const commitments = (tx.guaranteedOffer?.outputs ?? []).map(output => output.commitment.toLowerCase());
+  return { terms: { gives, wants }, ttl, nullifiers, commitments };
 }
 
 /**
@@ -511,6 +515,13 @@ interface SwapWalletKeys {
   readonly sync: { readonly lastSync: number | null; readonly addresses: { readonly unshielded?: string | null } };
   /** Where the proofs are made: this device, Gero Prover, or the user's proof server. */
   readonly proving: WalletProvingRequest;
+  /**
+   * Nullifiers of private coins never to select (lower-case hex): those of the
+   * wallet's other open offers, which spending would cancel.
+   */
+  readonly avoidNullifiers?: readonly string[];
+  /** Called once the part is built and proving starts (the long step). */
+  readonly onProving?: () => void;
 }
 
 export interface BuildPrivateSwapOffer9Args extends SwapWalletKeys {
@@ -531,6 +542,8 @@ export interface BuildPrivateSwapOffer9Result {
   readonly expiry: 'ttl' | 'root-window';
   /** Nullifiers of the private coins the offer spends (hex): spending one elsewhere cancels the offer. */
   readonly nullifiers: readonly string[];
+  /** Commitments of the private coins the maker receives once it is taken, change included (hex). */
+  readonly commitments: readonly string[];
   readonly proveDurationMs: number;
 }
 
@@ -570,7 +583,8 @@ export async function buildPrivateSwapOffer9(args: BuildPrivateSwapOffer9Args, d
       const rootSeenAt = deps.now();
       // A fully shielded offer has no TTL; its coins are booked (in memory) for the root window.
       const bookUntil = hasPublic ? ttl : new Date(rootSeenAt + PRIVATE_SWAP_ROOT_WINDOW_MS);
-      const shielded = shieldedSide(network, core, keys, terms.gives, terms.wants, bookUntil, new Set());
+      const avoid = new Set((args.avoidNullifiers ?? []).map(nullifier => nullifier.toLowerCase()));
+      const shielded = shieldedSide(network, core, keys, terms.gives, terms.wants, bookUntil, avoid);
       if (!shielded) throw new PrivateSwapRefusedError('noPrivateLeg');
       let unproven: ledger.UnprovenTransaction = shielded.tx;
       const intent = hasPublic ? unshieldedSide(network, keystore, args.utxos, terms.gives, terms.wants, ttl) : undefined;
@@ -587,6 +601,7 @@ export async function buildPrivateSwapOffer9(args: BuildPrivateSwapOffer9Args, d
       timer.lap('build');
 
       debugLog('🌙 private swap offer (ledger 9): proving', { prover: describeWalletProving(args.proving) });
+      args.onProving?.();
       const proveStart = Date.now();
       const sealedPart = await timer.time('prove', () => deps.seal(signLedger9Intents(unproven, keystore), args.proving, network));
       const proveDurationMs = Date.now() - proveStart;
@@ -604,7 +619,7 @@ export async function buildPrivateSwapOffer9(args: BuildPrivateSwapOffer9Args, d
       outcome = 'ok';
       return {
         offerHex: Buffer.from(offerBytes).toString('hex'), terms: sealed.terms, expiresAt, expiry,
-        nullifiers: sealed.nullifiers, proveDurationMs,
+        nullifiers: sealed.nullifiers, commitments: sealed.commitments, proveDurationMs,
       };
     });
   } finally {
@@ -675,8 +690,12 @@ export async function takePrivateSwapOffer9(args: TakePrivateSwapOffer9Args, dep
   try {
     return await deps.withShieldedWallet(args, async ({ core, keys, assertChainUnchanged }) => {
       timer.lap('shieldedSync');
-      // Never select a private coin the offer itself spends (taking one's own offer).
-      const shielded = shieldedSide(network, core, keys, view.gives, view.receives, ttl, new Set(analysis.nullifiers));
+      // A coin the offer spends is still the wallet's: it made the offer. Said plainly, not as missing funds.
+      const held = new Set([...core.state.coins].map(coin => ledger.coinNullifier(coin, keys.coinSecretKey).toLowerCase()));
+      if (analysis.nullifiers.some(nullifier => held.has(nullifier))) throw new PrivateSwapRefusedError('own');
+      // Never select a private coin the offer spends, nor one of the wallet's own open offers.
+      const avoid = new Set([...analysis.nullifiers, ...(args.avoidNullifiers ?? []).map(nullifier => nullifier.toLowerCase())]);
+      const shielded = shieldedSide(network, core, keys, view.gives, view.receives, ttl, avoid);
       const intent = unshieldedSide(network, keystore, selectable, view.gives, view.receives, ttl) ?? ledger.Intent.new(ttl);
       // The wallet's intent (its public leg, or an empty one to carry the fee) on a segment the offer leaves free.
       const taken = new Set(offer.intents ? [...offer.intents.keys()] : []);
@@ -710,6 +729,7 @@ export async function takePrivateSwapOffer9(args: TakePrivateSwapOffer9Args, dep
       const dustSpends = [...(withFee.intents?.values() ?? [])].reduce((sum, part) => sum + (part.dustActions?.spends.length ?? 0), 0);
 
       debugLog('🌙 private swap take (ledger 9): proving', { prover: describeWalletProving(args.proving), dustSpends });
+      args.onProving?.();
       const proveStart = Date.now();
       const sealedPart = await timer.time('prove', () => deps.seal(signLedger9Intents(withFee, keystore), args.proving, network));
       const proveDurationMs = Date.now() - proveStart;

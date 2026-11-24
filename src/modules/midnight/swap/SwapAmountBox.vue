@@ -22,6 +22,7 @@
       <slot name="token">
         <span class="swap-token">
           <span class="swap-token__mark" aria-hidden="true">{{ token.mark }}</span>{{ token.symbol }}
+          <v-icon v-if="shielded" size="13" class="swap-token__lock" role="img" :aria-label="t('midnight.swap.privateToken')">mdi-lock-outline</v-icon>
         </span>
       </slot>
     </div>
@@ -31,6 +32,7 @@
 
 <script setup lang="ts">
 import { useId } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import type { SwapTokenInfo } from './swapTokens';
 
 withDefaults(defineProps<{
@@ -43,7 +45,10 @@ withDefaults(defineProps<{
   /** The input's accessible name. */
   inputLabel?: string;
   invalid?: boolean;
-}>(), { hint: '', editable: false, inputLabel: '', invalid: false });
+  /** A private (shielded) leg: a lock beside the token. */
+  shielded?: boolean;
+}>(), { hint: '', editable: false, inputLabel: '', invalid: false, shielded: false });
+const { t } = useTranslation();
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>();
 const inputId = useId();
@@ -104,6 +109,10 @@ const inputId = useId();
   border: 1px solid var(--g-hairline-2);
   color: var(--g-text-1);
   font-weight: 600;
+}
+
+.swap-token__lock {
+  color: var(--g-accent);
 }
 
 .swap-token__mark {

@@ -18,19 +18,21 @@
         <div class="swap-take__col">
           <SwapAmountBox
             v-for="leg in inspection.pay"
-            :key="`pay-${leg.tokenType}`"
+            :key="`pay-${leg.shielded ? 's' : 'u'}-${leg.tokenType}`"
             :label="t('midnight.swap.youPay')"
-            :hint="t('midnight.swap.balance', { amount: swapBalanceText(balances.get(leg.tokenType) ?? 0n, info(leg.tokenType)) })"
+            :hint="payBalanceText(leg)"
             :model-value="swapAmountText(BigInt(leg.amount), info(leg.tokenType).decimals)"
             :token="info(leg.tokenType)"
+            :shielded="leg.shielded === true"
           />
           <SwapAmountBox
             v-for="leg in inspection.get"
-            :key="`get-${leg.tokenType}`"
+            :key="`get-${leg.shielded ? 's' : 'u'}-${leg.tokenType}`"
             :label="t('midnight.swap.youGet')"
             :hint="rateText"
             :model-value="swapAmountText(BigInt(leg.amount), info(leg.tokenType).decimals)"
             :token="info(leg.tokenType)"
+            :shielded="leg.shielded === true"
           />
           <SwapBanner v-for="type in unlistedTypes" :key="`unlisted-${type}`" tone="warning">
             <span>{{ t('midnight.swap.review.unlisted', { token: info(type).symbol }) }}</span>
@@ -46,7 +48,7 @@
             <SwapBanner v-else-if="dustShort" tone="error">{{ t('midnight.swap.review.dustShort', { fee: feeText }) }}</SwapBanner>
             <SwapBanner v-else-if="holdText" tone="warning">{{ holdText }}</SwapBanner>
             <SwapBanner v-if="error" tone="error">{{ error }}</SwapBanner>
-            <p class="t-caption swap-take__note">{{ t('midnight.swap.publicNote') }}</p>
+            <p class="t-caption swap-take__note">{{ privacyNote }}</p>
             <SwapPasswordField v-if="takeable" v-model="password" :is-prf-wallet="isPrfWallet" @submit="take()" />
           </template>
 
@@ -108,11 +110,14 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
 import { dustShortForFee, MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY } from '@/chains/midnight/midnightFeeEstimate';
 import type { SwapOfferInspection } from '@/chrome/midnightSwapHandlers';
+import type { MidnightSwapLeg } from '@/chains/midnight/midnightSwapRecords';
+import { MIDNIGHT_SWAP_PROVE_COPY } from '@/chains/midnight/midnightSwapConfig';
 import { injectMidnightSwap } from './swapContext';
 import { MidnightSwapCallError, swapErrorText } from './useMidnightSwap';
 import { useSwapBalances } from './useSwapBalances';
+import { swapPrivacyNote, swapVisibleText, usePrivateSwapBalances } from './swapPrivacy';
 import {
-  countdownText, groupedTokenType, swapAmountText, swapBalanceText, swapLegText, swapRateText, swapTokenInfo,
+  countdownText, groupedTokenType, minutesLeft, swapAmountText, swapBalanceText, swapLegText, swapRateText, swapTokenInfo,
 } from './swapTokens';
 import SwapAmountBox from './SwapAmountBox.vue';
 import SwapRows, { type SwapRow } from './SwapRows.vue';
@@ -134,6 +139,7 @@ const { t } = useTranslation();
 const swap = injectMidnightSwap();
 const { network, isPrfWallet, offers, now } = swap;
 const balances = useSwapBalances(offers, now);
+const privateBalances = usePrivateSwapBalances(offers, now);
 const hold = useMidnightSendHold(() => network.value);
 const holdText = computed(() => (hold.held.value ? hold.sendTextShort.value : ''));
 
@@ -147,6 +153,19 @@ const lastTrade = ref('');
 const sawProving = ref(false);
 
 const info = (tokenType: string) => swapTokenInfo(tokenType, network.value);
+/** The balance beside what the taker pays: private for a private leg (or "still syncing"), else public. */
+function payBalanceText(leg: MidnightSwapLeg): string {
+  if (leg.shielded && !privateBalances.value) return t('midnight.swap.privateSyncing');
+  const held = (leg.shielded ? privateBalances.value?.get(leg.tokenType) : balances.value.get(leg.tokenType)) ?? 0n;
+  return t('midnight.swap.balance', { amount: swapBalanceText(held, info(leg.tokenType)) });
+}
+const isPrivate = computed(() => !!inspection.value?.private);
+const allLegs = computed(() => [...(inspection.value?.pay ?? []), ...(inspection.value?.get ?? [])]);
+const privacyNote = computed(() => {
+  const note = swapPrivacyNote(allLegs.value, network.value, t);
+  return isPrivate.value ? `${note} ${t('midnight.swap.provingMinute')}` : note;
+});
+const estimated = computed(() => inspection.value?.expiry === 'root-window');
 const feeText = computed(() => t('midnight.swap.feeAbout', { fee: MIDNIGHT_DUST_FEE_ESTIMATE_DISPLAY }));
 const dustShort = computed(() => dustShortForFee(midnightStore.balances.dust));
 const payText = computed(() => inspection.value?.pay.map(leg => swapLegText(leg, network.value)).join(', ') ?? '');
@@ -175,8 +194,22 @@ const detailRows = computed<SwapRow[]>(() => {
   if (inspection.value?.maker) {
     rows.push({ label: t('midnight.swap.review.otherWallet'), value: shortAddress(inspection.value.maker), mono: true, hint: t('midnight.swap.hint.otherWallet') });
   }
-  rows.push({ label: t('midnight.swap.offerType'), value: t('midnight.swap.kind.public') });
-  rows.push({ label: t('midnight.swap.visible'), value: t('midnight.swap.visibleBoth'), tone: 'muted' });
+  if (estimated.value && inspection.value?.expiresAt) {
+    rows.push({
+      label: t('midnight.swap.expiresInRow'),
+      value: t('midnight.swap.expiresAbout', { n: minutesLeft(inspection.value.expiresAt, now.value) }),
+      tone: 'muted',
+      hint: t('midnight.swap.hint.estimate'),
+      test: 'swap-expiry-estimate',
+    });
+  }
+  rows.push({ label: t('midnight.swap.offerType'), value: t(isPrivate.value ? 'midnight.swap.kind.private' : 'midnight.swap.kind.public') });
+  rows.push({
+    label: t('midnight.swap.visible'),
+    value: swapVisibleText(allLegs.value, network.value, t),
+    tone: 'muted',
+    hint: t(isPrivate.value ? 'midnight.swap.hint.visiblePrivate' : 'midnight.swap.hint.visible'),
+  });
   if (lastTrade.value) rows.push({ label: t('midnight.swap.review.lastTrade'), value: lastTrade.value, tone: 'muted' });
   return rows;
 });
@@ -193,7 +226,10 @@ const steps = computed(() => {
       key: 'fee', label: t('midnight.swap.step.fee'), state: state(proving, !proving),
       meta: !proving && fee && fee.percent >= 0 ? `${fee.percent}%` : '',
     },
-    { key: 'proving', label: t('midnight.swap.step.proving'), state: state(submitting, proving && !submitting), meta: proving && !submitting ? t('midnight.swap.step.aboutSeconds') : '' },
+    {
+      key: 'proving', label: t('midnight.swap.step.proving'), state: state(submitting, proving && !submitting),
+      meta: proving && !submitting ? t(MIDNIGHT_SWAP_PROVE_COPY[isPrivate.value ? 'private' : 'public']) : '',
+    },
     { key: 'submitting', label: t('midnight.swap.step.submitting'), state: state(false, submitting), meta: '' },
   ];
 });
@@ -210,7 +246,8 @@ const heading = computed(() => {
   }
 });
 const leftText = computed(() => (stage.value === 'review' && inspection.value?.expiresAt
-  ? t('midnight.swap.review.left', { time: countdownText(inspection.value.expiresAt, now.value) }) : ''));
+  ? t(estimated.value ? 'midnight.swap.review.leftAbout' : 'midnight.swap.review.left', { time: countdownText(inspection.value.expiresAt, now.value) })
+  : ''));
 watch([heading, leftText], () => emit('heading', { title: heading.value, left: leftText.value }), { immediate: true });
 
 async function loadLastTrade(value: SwapOfferInspection) {
