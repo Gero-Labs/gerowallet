@@ -12,6 +12,10 @@
  * `SUBMIT_SOLANA_SEND` takes only the signature. The worker checks it is the account's signature
  * over the message it built, assembles the transaction and submits it. The page never supplies
  * the bytes that are sent.
+ *
+ * SPL tokens (`SOLANA_TOKEN_SEND_QUOTE`, `SEND_SOLANA_TOKEN`, and the hardware prepare with a
+ * mint) are planned by solanaTokenSend.ts: the worker picks the source account, reads the mint
+ * and the recipient, builds the transfer and simulates it before anything is signed.
  */
 import { SolanaApi } from '@/api/solana-api';
 import WalletStore from '@/stores/walletStore';
@@ -32,6 +36,18 @@ import {
   type SolanaFeeLevel,
   type SolanaSendRefusal,
 } from '@/chains/solana/solanaSendRules';
+import { singleSignerTransaction } from '@/chains/solana/solanaTokenTransfer';
+import {
+  planSolanaTokenSend,
+  solanaTokenAccountInfos,
+  solanaTokenQuote,
+  SolanaTokenSendError,
+  type SolanaTokenAccountInfo,
+  type SolanaTokenQuote,
+  type SolanaTokenSendApi,
+  type SolanaTokenSendRefusal,
+  type SolanaTokenSendRequest,
+} from '@/chrome/solanaTokenSend';
 
 /** The part of WalletBg this module uses. */
 export interface SolanaSendWallet {
@@ -43,10 +59,13 @@ export interface SolanaSendWallet {
     password?: string,
     prfSecret?: Uint8Array,
   ): Promise<{ signature: string; base64: string }>;
+  /** Signs a message the worker built for Gero's own send (a token transfer). */
+  signSolanaSendMessage?(message: Uint8Array, password?: string, prfSecret?: Uint8Array): Promise<Uint8Array>;
 }
 
 export type SolanaSendErrorCode =
-  | SolanaSendRefusal | 'NOT_SOLANA' | 'INVALID_REQUEST' | 'BUILD_FAILED' | 'SUBMIT_FAILED' | 'SEND_EXPIRED' | 'BAD_SIGNATURE';
+  | SolanaSendRefusal | SolanaTokenSendRefusal
+  | 'NOT_SOLANA' | 'INVALID_REQUEST' | 'BUILD_FAILED' | 'SUBMIT_FAILED' | 'SEND_EXPIRED' | 'BAD_SIGNATURE';
 
 export class SolanaSendError extends Error {
   constructor(readonly code: SolanaSendErrorCode) {
@@ -212,10 +231,84 @@ export async function prepareSolanaHardwareSend(
   } catch (error) {
     throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
   }
+  holdForSignature(sender, message, now);
+  return { message: Array.from(message) };
+}
+
+function holdForSignature(sender: SolanaSendWallet, message: Uint8Array, now: number): void {
   // Drop sends no account came back for (another account's, or one abandoned before signing).
   for (const [key, pending] of pendingHardwareSends) if (pending.expires <= now) pendingHardwareSends.delete(key);
   pendingHardwareSends.set(pendingKey(sender), { message, expires: now + SOLANA_HARDWARE_SEND_TTL_MS });
-  return { message: Array.from(message) };
+}
+
+/** The worker's own holdings (Gero Sync), never the page's word. */
+function holdings() {
+  return WalletStore.state.solana?.tokens ?? null;
+}
+
+/** Plans a token send; any refusal is re-thrown as a SolanaSendError with the same code. */
+async function plannedTokenSend(sender: SolanaSendWallet, request: SolanaTokenSendRequest, api: SolanaTokenSendApi) {
+  try {
+    return await planSolanaTokenSend(sender, request, holdings(), api);
+  } catch (error) {
+    if (error instanceof SolanaTokenSendError) throw new SolanaSendError(error.code);
+    throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
+  }
+}
+
+/** What a token send would do, for the review step (`SOLANA_TOKEN_SEND_QUOTE`). Nothing is held. */
+export async function quoteSolanaTokenSend(
+  wallet: SolanaSendWallet | null | undefined,
+  request: SolanaTokenSendRequest,
+  api: SolanaTokenSendApi = new SolanaApi(requireSolana(wallet).network),
+): Promise<SolanaTokenQuote> {
+  return solanaTokenQuote(await plannedTokenSend(requireSolana(wallet), request, api));
+}
+
+/** A token send from a password or PassKey wallet (`SEND_SOLANA_TOKEN`): plan, sign, submit. */
+export async function sendSolanaToken(
+  wallet: SolanaSendWallet | null | undefined,
+  request: SolanaTokenSendRequest & { password?: unknown; privateKeyBytes?: unknown },
+  api: SolanaTokenSendApi & Pick<SolanaApi, 'submit'> = new SolanaApi(requireSolana(wallet).network),
+): Promise<{ signature: string }> {
+  const sender = requireSolana(wallet);
+  const { password, privateKeyBytes } = request;
+  if (password !== undefined && typeof password !== 'string') throw new SolanaSendError('INVALID_REQUEST');
+  if (privateKeyBytes !== undefined && !Array.isArray(privateKeyBytes)) throw new SolanaSendError('INVALID_REQUEST');
+  if (!sender.signSolanaSendMessage) throw new SolanaSendError('NOT_SOLANA');
+  const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes as number[]) : undefined;
+  let transaction: Uint8Array;
+  let signature: Uint8Array;
+  try {
+    const plan = await plannedTokenSend(sender, request, api);
+    signature = await sender.signSolanaSendMessage(plan.message, password as string | undefined, prfSecret);
+    transaction = singleSignerTransaction(plan.message, signature);
+  } catch (error) {
+    if (error instanceof SolanaSendError) throw error;
+    // A wrong password, a refused PassKey or a mismatched record: the page shows its own text.
+    throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
+  } finally {
+    prfSecret?.fill(0);
+    if (Array.isArray(privateKeyBytes)) privateKeyBytes.fill(0);
+  }
+  if (transaction.length > MAX_TRANSACTION_BYTES) throw new SolanaSendError('BUILD_FAILED');
+  return submitSigned(api, bytesToBase64(transaction), base58Encode(signature));
+}
+
+/**
+ * The token transfer a hardware wallet signs (`PREPARE_SOLANA_SEND` with a mint), held for
+ * `SUBMIT_SOLANA_SEND` like a SOL send. `tokenAccounts` lets Trezor name the recipient's wallet.
+ */
+export async function prepareSolanaHardwareTokenSend(
+  wallet: SolanaSendWallet | null | undefined,
+  request: SolanaTokenSendRequest,
+  api: SolanaTokenSendApi = new SolanaApi(requireSolana(wallet).network),
+  now = Date.now(),
+): Promise<{ message: number[]; tokenAccounts: SolanaTokenAccountInfo[] }> {
+  const sender = requireSolana(wallet);
+  const plan = await plannedTokenSend(sender, request, api);
+  holdForSignature(sender, plan.message, now);
+  return { message: Array.from(plan.message), tokenAccounts: solanaTokenAccountInfos(plan) };
 }
 
 /**
@@ -260,6 +353,6 @@ export function clearSolanaHardwareSends(): void {
 
 /** The code a page sees for a failed quote or send: a known code, or BUILD_FAILED (never raw text). */
 export function solanaSendErrorCode(error: unknown): SolanaSendErrorCode {
-  if (error instanceof SolanaSendError) return error.code;
+  if (error instanceof SolanaSendError || error instanceof SolanaTokenSendError) return error.code;
   return 'BUILD_FAILED';
 }

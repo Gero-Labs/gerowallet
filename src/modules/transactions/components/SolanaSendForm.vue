@@ -31,6 +31,22 @@
 
       <!-- Step 1: recipient, amount, fee -->
       <div v-if="step === 1" class="sol-send__body">
+        <!-- SOL or one of the wallet's SPL tokens (shown by mint: Gero has no token names yet) -->
+        <div v-if="tokenItems.length" class="sol-field">
+          <span class="t-label">{{ $t('solana.token.asset') }}</span>
+          <v-select
+            v-model="asset"
+            :items="assetItems"
+            item-title="title"
+            item-value="value"
+            variant="outlined"
+            density="compact"
+            hide-details
+            attach
+            data-test="sol-asset"
+          />
+        </div>
+
         <label class="sol-field">
           <span class="t-label">{{ $t('send.recipientAddress') }}</span>
           <span :class="['sol-input', { 'sol-input--error': !!addressError, 'sol-input--valid': recipient && !addressError }]">
@@ -52,7 +68,7 @@
         <label class="sol-field">
           <span class="t-label">{{ $t('send.amount') }}</span>
           <span :class="['sol-input', { 'sol-input--error': !!amountError }]">
-            <span class="sol-input__unit g-mono">{{ ticker }}</span>
+            <span class="sol-input__unit g-mono">{{ unit }}</span>
             <input
               v-model.trim="amountText"
               class="sol-input__control sol-input__control--amount g-num"
@@ -61,14 +77,14 @@
               autocomplete="off"
               data-test="sol-amount"
             />
-            <GButton tier="tertiary" compact :disabled="balance === null" @click="setMax()">{{ $t('common.max') }}</GButton>
+            <GButton tier="tertiary" compact :disabled="assetBalance === null" @click="setMax()">{{ $t('common.max') }}</GButton>
           </span>
           <span v-if="amountError" class="sol-field__error" data-test="sol-amount-error">{{ amountError }}</span>
         </label>
 
         <div class="sol-send__balance t-caption">
           <span>{{ $t('send.availableBalance') }}</span>
-          <span class="g-num sol-send__balance-value">{{ balance === null ? '—' : formatSol(balance) }} {{ ticker }}</span>
+          <span class="g-num sol-send__balance-value">{{ assetBalance === null ? '—' : formatAsset(assetBalance) }} {{ unit }}</span>
         </div>
 
         <div class="sol-fees" role="radiogroup" :aria-label="t('send.fee')">
@@ -82,11 +98,16 @@
             @click="feeLevel = level"
           >
             <span class="sol-fee__name">{{ level === 'fast' ? $t('send.fast') : $t('solana.feeStandard') }}</span>
-            <span class="t-caption g-num">{{ quote ? `${formatSol(quote.fees[level])} ${ticker}` : '…' }}</span>
+            <span class="t-caption g-num">{{ quote ? `${formatSol(levelFee(level))} ${ticker}` : '…' }}</span>
           </button>
         </div>
         <span v-if="quote && !quote.live" class="t-caption">{{ $t('solana.feesUnavailable') }}</span>
         <span v-else class="t-caption">{{ $t('solana.feeHint') }}</span>
+
+        <div v-if="quoteError" class="sol-notice sol-notice--error" role="alert" data-test="sol-quote-error">
+          <v-icon size="small">mdi-alert-circle-outline</v-icon>
+          <span class="sol-notice__text">{{ quoteError }}</span>
+        </div>
       </div>
 
       <!-- Step 2: review and sign -->
@@ -94,23 +115,46 @@
         <div class="glass-tier sol-review">
           <span class="t-label">{{ $t('perpetuals.deposit.youSend') }}</span>
           <span class="sol-review__amount">
-            <span class="t-display g-num">{{ formatSol(lamports) }}</span>
-            <span class="sol-review__unit g-mono">{{ ticker }}</span>
+            <span class="t-display g-num">{{ formatAsset(amount) }}</span>
+            <span class="sol-review__unit g-mono">{{ unit }}</span>
           </span>
+          <!-- A token is named by its whole mint, so it can be checked against the explorer -->
+          <span v-if="selectedToken" class="g-mono sol-review__address" data-test="sol-review-mint">{{ selectedToken.mint }}</span>
           <span class="t-label sol-review__to">{{ $t('send.to') }}</span>
           <!-- The whole address, so it can be checked character by character before signing -->
           <span class="g-mono sol-review__address">{{ recipient }}</span>
-          <dl class="sol-summary">
+          <dl v-if="tokenQuote" class="sol-summary" data-test="sol-token-summary">
+            <div v-if="tokenQuote.received !== tokenQuote.amount" class="sol-summary__row">
+              <dt>{{ $t('solana.token.recipientGets') }}</dt>
+              <dd class="g-num">{{ formatAsset(BigInt(tokenQuote.received)) }} {{ unit }}</dd>
+            </div>
+            <div class="sol-summary__row">
+              <dt>{{ $t('send.fee') }}</dt>
+              <dd class="g-num">{{ formatSol(tokenQuote.feeLamports) }} {{ ticker }}</dd>
+            </div>
+            <div v-if="tokenQuote.createsAccount" class="sol-summary__row">
+              <dt>{{ $t('solana.token.newAccount') }}</dt>
+              <dd class="g-num">{{ formatSol(tokenQuote.rentLamports) }} {{ ticker }}</dd>
+            </div>
+            <div class="sol-summary__row sol-summary__row--total">
+              <dt>{{ $t('solana.token.solCost') }}</dt>
+              <dd class="g-num">{{ formatSol(BigInt(tokenQuote.feeLamports) + BigInt(tokenQuote.rentLamports)) }} {{ ticker }}</dd>
+            </div>
+          </dl>
+          <dl v-else class="sol-summary">
             <div class="sol-summary__row">
               <dt>{{ $t('send.fee') }}</dt>
               <dd class="g-num">{{ formatSol(fee) }} {{ ticker }}</dd>
             </div>
             <div class="sol-summary__row sol-summary__row--total">
               <dt>{{ $t('send.total') }}</dt>
-              <dd class="g-num">{{ formatSol(lamports + fee) }} {{ ticker }}</dd>
+              <dd class="g-num">{{ formatSol(amount + fee) }} {{ ticker }}</dd>
             </div>
           </dl>
         </div>
+        <span v-if="tokenQuote?.createsAccount" class="t-caption" data-test="sol-new-account-hint">
+          {{ $t('solana.token.newAccountHint', { amount: formatSol(tokenQuote.rentLamports), ticker }) }}
+        </span>
 
         <template v-if="isHardware">
           <div class="sol-auth" data-test="sol-hardware">
@@ -168,12 +212,12 @@
       </div>
 
       <div class="sol-send__nav">
-        <GButton v-if="step > 1 && !loading" tier="secondary" @click="step = 1">
+        <GButton v-if="step > 1 && !loading" tier="secondary" @click="backToDetails()">
           <v-icon size="small" start>mdi-arrow-left</v-icon>
           {{ $t('common.back') }}
         </GButton>
         <span v-else />
-        <GButton v-if="step === 1" tier="primary" :disabled="!canContinue" data-test="sol-continue" @click="step = 2">
+        <GButton v-if="step === 1" tier="primary" :disabled="!canContinue" :loading="quoting" data-test="sol-continue" @click="toReview()">
           {{ $t('common.continue') }}
           <v-icon size="small" end>mdi-arrow-right</v-icon>
         </GButton>
@@ -221,7 +265,9 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import networks from '@/utils/networks';
-import { formatSol, parseRawAmount, parseSol } from '@/chains/solana/solanaAmount';
+import { formatSol, formatUnits, parseRawAmount, parseSol, parseUnits } from '@/chains/solana/solanaAmount';
+import { estimateTokenTransferFee } from '@/chains/solana/solanaTokenTransfer';
+import type { SolanaTokenAccountInfo, SolanaTokenQuote } from '@/chrome/solanaTokenSend';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import {
   checkSolTransfer,
@@ -258,6 +304,7 @@ const { loggedWallet } = toRefs(walletStore);
 const FEE_LEVELS: SolanaFeeLevel[] = ['standard', 'fast'];
 // A valid address that is never the wallet's own, for checking the amount alone.
 const SYSTEM_PLACEHOLDER = '11111111111111111111111111111111';
+const SOL_ASSET = 'SOL';
 
 const step = ref(1);
 const recipient = ref('');
@@ -284,15 +331,53 @@ const balance = computed<bigint | null>(() => {
 const priority = computed(() => BigInt(quote.value?.prices[feeLevel.value] ?? '0'));
 const fee = computed(() => (quote.value ? BigInt(quote.value.fees[feeLevel.value]) : 0n));
 
-const lamports = computed<bigint>(() => {
+// What is sent: 'SOL', or the mint of one of the wallet's tokens (as Gero Sync reports them).
+const asset = ref<string>(SOL_ASSET);
+const tokenItems = computed(() => (walletStore.solana?.tokens ?? [])
+  .filter((token) => /^\d+$/.test(String(token.amount)) && BigInt(token.amount) > 0n && isValidSolanaAddress(token.mint))
+  // One row per mint: a mint held in several accounts sends from the largest (the worker picks it too).
+  .reduce<Array<{ mint: string; amount: bigint; decimals: number }>>((rows, token) => {
+    const amountHeld = BigInt(token.amount);
+    const row = rows.find((r) => r.mint === token.mint);
+    if (!row) rows.push({ mint: token.mint, amount: amountHeld, decimals: token.decimals });
+    else if (amountHeld > row.amount) row.amount = amountHeld;
+    return rows;
+  }, []));
+const selectedToken = computed(() => (asset.value === SOL_ASSET ? null : tokenItems.value.find((token) => token.mint === asset.value) ?? null));
+const assetItems = computed(() => [
+  { value: SOL_ASSET, title: ticker.value },
+  ...tokenItems.value.map((token) => ({ value: token.mint, title: `${shortMint(token.mint)} · ${formatUnits(token.amount, token.decimals)}` })),
+]);
+const unit = computed(() => (selectedToken.value ? shortMint(selectedToken.value.mint) : ticker.value));
+const assetBalance = computed<bigint | null>(() => (selectedToken.value ? selectedToken.value.amount : balance.value));
+
+function shortMint(mint: string): string {
+  return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+}
+
+/** Raw units of the asset being sent, as a decimal string's value. */
+function formatAsset(raw: bigint | string): string {
+  return selectedToken.value ? formatUnits(raw, selectedToken.value.decimals) : formatSol(raw);
+}
+
+/** The amount in the asset's raw units; -1 for text that is not an amount. */
+const amount = computed<bigint>(() => {
   if (!amountText.value) return 0n;
   try {
     // A decimal comma (German, Spanish keyboards) reads as the point.
-    return parseSol(amountText.value.replace(',', '.'));
+    const text = amountText.value.replace(',', '.');
+    return selectedToken.value ? parseUnits(text, selectedToken.value.decimals) : parseSol(text);
   } catch {
     return -1n;
   }
 });
+
+/** The network fee at `level`: a SOL transfer's, or a token transfer's to an existing account. */
+function levelFee(level: SolanaFeeLevel): bigint {
+  if (!quote.value) return 0n;
+  if (!selectedToken.value) return BigInt(quote.value.fees[level]);
+  return estimateTokenTransferFee(BigInt(quote.value.prices[level]), false);
+}
 
 function errorText(code: string): string {
   return t(solanaSendErrorKey(code), { amount: formatSol(SOLANA_RENT_EXEMPT_MINIMUM), ticker: ticker.value });
@@ -307,12 +392,14 @@ const addressError = computed(() => {
 
 const amountError = computed(() => {
   if (!amountText.value) return '';
-  if (lamports.value <= 0n) return errorText('INVALID_AMOUNT');
+  if (amount.value <= 0n) return errorText('INVALID_AMOUNT');
+  // A token: its own balance here; the SOL for the fee (and a new account) is the worker's check.
+  if (selectedToken.value) return amount.value > selectedToken.value.amount ? errorText('TOKEN_BALANCE') : '';
   const refusal = checkSolTransfer({
     from: ownAddress.value,
     // Only the amount's rules here: the address has its own line.
     to: isValidSolanaAddress(recipient.value) && recipient.value !== ownAddress.value ? recipient.value : SYSTEM_PLACEHOLDER,
-    lamports: lamports.value,
+    lamports: amount.value,
     balance: balance.value,
     priorityMicroLamports: priority.value,
   });
@@ -320,8 +407,53 @@ const amountError = computed(() => {
 });
 
 const canContinue = computed(() =>
-  !!recipient.value && !addressError.value && lamports.value > 0n && !amountError.value && !!quote.value,
+  !quoting.value && !!recipient.value && !addressError.value && amount.value > 0n && !amountError.value && !!quote.value,
 );
+
+// A token send is planned and simulated by the worker before the review shows it.
+const tokenQuote = ref<SolanaTokenQuote | null>(null);
+const quoting = ref(false);
+const quoteError = ref('');
+
+/** The request the worker plans a token send from: never more than the user chose. */
+function tokenRequest(): Record<string, unknown> {
+  return { mint: selectedToken.value?.mint, recipientAddress: recipient.value, amount: amount.value.toString(), feeLevel: feeLevel.value };
+}
+
+async function toReview(): Promise<void> {
+  if (!canContinue.value) return;
+  quoteError.value = '';
+  if (!selectedToken.value) {
+    step.value = 2;
+    return;
+  }
+  quoting.value = true;
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.SOLANA_TOKEN_SEND_QUOTE, data: tokenRequest() }) as
+      { data?: { success?: boolean; error?: string; result?: SolanaTokenQuote } };
+    if (response.data?.success && response.data.result) {
+      tokenQuote.value = response.data.result;
+      step.value = 2;
+    } else {
+      quoteError.value = errorText(response.data?.error ?? '');
+    }
+  } catch (error) {
+    debugLog('Solana token send: quote failed', error);
+    quoteError.value = errorText('LOOKUP_FAILED');
+  } finally {
+    quoting.value = false;
+  }
+}
+
+function backToDetails(): void {
+  step.value = 1;
+  tokenQuote.value = null;
+  sendError.value = '';
+}
+
+// Another asset, recipient, amount or fee level is another plan.
+watch([asset, recipient, amountText, feeLevel], () => { quoteError.value = ''; });
+watch(asset, () => { amountText.value = ''; });
 // Ledger, Trezor and Keystone sign in this page; the worker builds the message and checks
 // the signature (PREPARE_SOLANA_SEND / SUBMIT_SOLANA_SEND).
 const isHardware = computed(() => isSolanaHardware(loggedWallet.value?.type));
@@ -340,8 +472,9 @@ const isPrfWallet = computed(() =>
 const sentUrl = computed(() => solscanUrl('tx', sentSignature.value, loggedWallet.value?.network ?? ''));
 
 function setMax(): void {
-  const max = maxSendableLamports(balance.value, priority.value);
-  amountText.value = max > 0n ? formatSol(max) : '';
+  // A token's whole balance (its fee is paid in SOL); SOL less the fee.
+  const max = selectedToken.value ? selectedToken.value.amount : maxSendableLamports(balance.value, priority.value);
+  amountText.value = max > 0n ? formatAsset(max) : '';
 }
 
 async function pasteAddress(): Promise<void> {
@@ -384,11 +517,12 @@ type SendResponse = { data?: { success?: boolean; error?: string; result?: { sig
 /** The device signs the message the worker built; the worker checks it and submits. */
 async function sendFromDevice(data: Record<string, unknown>): Promise<SendResponse> {
   const prepared = await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.PREPARE_SOLANA_SEND, data }) as
-    { data?: { success?: boolean; error?: string; result?: { message: number[] } } };
+    { data?: { success?: boolean; error?: string; result?: { message: number[]; tokenAccounts?: SolanaTokenAccountInfo[] } } };
   if (!prepared.data?.success || !prepared.data.result) return { data: { success: false, error: prepared.data?.error } };
   let signature: Uint8Array;
   try {
-    signature = await signOnDevice(Uint8Array.from(prepared.data.result.message), 'transaction');
+    const { message, tokenAccounts } = prepared.data.result;
+    signature = await signOnDevice(Uint8Array.from(message), 'transaction', tokenAccounts);
   } catch (error) {
     debugLog('Solana send: device did not sign', error);
     // Cancelled on purpose: no error to show.
@@ -405,20 +539,19 @@ async function confirmSend(): Promise<void> {
   loading.value = true;
   sendError.value = '';
   try {
+    const data: Record<string, unknown> = selectedToken.value
+      ? tokenRequest()
+      : { recipientAddress: recipient.value, lamports: amount.value.toString(), feeLevel: feeLevel.value };
     if (isHardware.value) {
-      const response = await sendFromDevice({ recipientAddress: recipient.value, lamports: lamports.value.toString(), feeLevel: feeLevel.value });
+      const response = await sendFromDevice(data);
       if (response.data?.success && response.data.result) sentSignature.value = response.data.result.signature;
       else if (response.data?.error !== 'CANCELLED') sendError.value = errorText(response.data?.error ?? '');
       return;
     }
-    const data: Record<string, unknown> = {
-      recipientAddress: recipient.value,
-      lamports: lamports.value.toString(),
-      feeLevel: feeLevel.value,
-    };
     if (isPrfWallet.value && prfBytes.value) data['privateKeyBytes'] = Array.from(prfBytes.value);
     else data['password'] = password.value;
-    const response = await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.SEND_SOLANA, data }) as
+    const method = selectedToken.value ? MessageTypes.SEND_SOLANA_TOKEN : MessageTypes.SEND_SOLANA;
+    const response = await Messaging.sendToBackgroundFromOptions({ method, data }) as
       { data?: { success?: boolean; error?: string; result?: { signature: string } } };
     if (response.data?.success && response.data.result) {
       sentSignature.value = response.data.result.signature;
@@ -440,6 +573,10 @@ function reset(): void {
   // A Keystone request still showing is abandoned with the form.
   if (keystone.keystoneShow.value) keystone.cancelKeystone();
   isBluetooth.value = false;
+  asset.value = SOL_ASSET;
+  tokenQuote.value = null;
+  quoteError.value = '';
+  quoting.value = false;
   step.value = 1;
   recipient.value = '';
   amountText.value = '';

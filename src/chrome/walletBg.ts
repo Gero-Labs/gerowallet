@@ -2330,6 +2330,14 @@ export class WalletBg {
   }
 
   /**
+   * Signs a message the worker built for Gero's own send (a token transfer, chrome/solanaSend.ts
+   * `sendSolanaToken`): never a page's or a dApp's bytes.
+   */
+  async signSolanaSendMessage(message: Uint8Array, password?: string, prfSecret?: Uint8Array): Promise<Uint8Array> {
+    return this.withSolanaKeypair(password, prfSecret, (keypair) => signSolanaBytes(message, keypair.secretKey));
+  }
+
+  /**
    * Signs the message of a dApp's Solana transaction (ed25519 over the message bytes) with this
    * record's account. Only the SIGN_SOLANA_TRANSACTION handler calls it, and only after
    * consuming the allowance the worker granted when it decoded and previewed that exact message

@@ -30,6 +30,8 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'SUPPORT_CHAT_AUTH',
   // Signs and submits a SOL transfer from the logged wallet.
   'SEND_SOLANA',
+  'SEND_SOLANA_TOKEN',
+  'SOLANA_TOKEN_SEND_QUOTE',
   'PREPARE_SOLANA_SEND',
   'SUBMIT_SOLANA_SEND',
   'SIGN_SOLANA_MESSAGE',

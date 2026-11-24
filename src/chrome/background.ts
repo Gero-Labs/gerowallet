@@ -205,6 +205,9 @@ import type { DeviceShareSecret } from '@/shared/utils/mpc';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   prepareSolanaHardwareSend,
+  prepareSolanaHardwareTokenSend,
+  quoteSolanaTokenSend,
+  sendSolanaToken,
   quoteSolanaSend,
   sendSolana,
   SolanaSendError,
@@ -4094,13 +4097,41 @@ app.addToOptions(MessageTypes.SEND_SOLANA, async (request, sendResponse) => {
   }
 });
 
+// SPL token send (chrome/solanaTokenSend.ts): the page names the mint, recipient, raw amount and
+// fee level; the worker picks the source, reads the chain, builds and simulates the transfer.
+app.addToOptions(MessageTypes.SOLANA_TOKEN_SEND_QUOTE, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    const result = await quoteSolanaTokenSend(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.SEND_SOLANA_TOKEN, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Solana signing');
+    const result = await sendSolanaToken(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    console.error('Solana token send failed:', solanaSendErrorCode(error));
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
 // Hardware Solana send (chrome/solanaSend.ts): the worker builds the message, the page has the
 // device sign it, and the worker checks that signature over its own message before submitting.
 app.addToOptions(MessageTypes.PREPARE_SOLANA_SEND, async (request, sendResponse) => {
   try {
     if (refuseSettingsWhileLocked(request, sendResponse)) return;
     if (!isSolanaHardware(WalletStore.state.loggedWallet?.type)) throw new SolanaSendError('NOT_SOLANA');
-    const result = await prepareSolanaHardwareSend(walletManager.getWallet(), request.data ?? {});
+    // With a mint it is a token transfer (solanaTokenSend.ts), else a SOL transfer.
+    const data = request.data ?? {};
+    const result = data.mint !== undefined
+      ? await prepareSolanaHardwareTokenSend(walletManager.getWallet(), data)
+      : await prepareSolanaHardwareSend(walletManager.getWallet(), data);
     sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
