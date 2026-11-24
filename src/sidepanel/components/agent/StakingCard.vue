@@ -383,7 +383,7 @@ export default defineComponent({
       } catch (e) {
         submitResult.value = 'failed';
         submitError.value = e instanceof UnconfirmedTxSubmission ? t('errors.submitUnconfirmed')
-          : e instanceof Error ? e.message : 'Signing or submit failed.';
+          : e instanceof Error ? e.message : t('errors.unknownError');
       } finally {
         signing.value = false;
       }
