@@ -1,8 +1,20 @@
 <template>
   <!-- The signing controls of a Solana dApp prompt (sign message, sign in, sign transaction):
-       a spending password, a PassKey, or, for any other wallet type, Reject only. The parent
-       owns the request and the signing; this only collects the password and says which way. -->
-  <template v-if="walletType === WalletType.Normal && !isPrfWallet">
+       a spending password, a PassKey, a hardware wallet that signs this kind of request, or,
+       for any other wallet, Reject only. The parent owns the request and the signing; this only
+       collects the password and says which way. -->
+  <template v-if="hardware">
+    <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('solana.hardware.signOnDevice', { device: walletType }) }}</p>
+    <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+    <div class="action-buttons">
+      <v-btn variant="outlined" rounded theme="dark" @click="emit('reject')">{{ $t('miniGero.reject') }}</v-btn>
+      <v-btn class="geroButton" rounded variant="flat" :loading="signing" :disabled="!canSign" @click="emit('sign-hardware')">
+        {{ signLabel }}
+      </v-btn>
+    </div>
+  </template>
+
+  <template v-else-if="walletType === WalletType.Normal && !isPrfWallet">
     <v-text-field
       :model-value="password"
       :type="showPassword ? 'text' : 'password'"
@@ -56,12 +68,15 @@ const props = defineProps<{
   canSign: boolean;
   signLabel: string;
   unsupportedText: string;
+  /** The wallet signs this request on its device (solanaHardwarePolicy.ts). */
+  hardware?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:password': [value: string];
   'sign-password': [];
   'sign-prf': [];
+  'sign-hardware': [];
   reject: [];
 }>();
 

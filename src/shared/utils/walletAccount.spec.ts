@@ -75,6 +75,10 @@ describe('resolveAccountIndex', () => {
     expect(resolveAccountIndex({ chain: Blockchain.MIDNIGHT, type: WalletType.Normal, encryptionMethod: 'prf', accountIndex: 1 })).toBe(1);
   });
 
+  it.each([WalletType.Ledger, WalletType.Trezor, WalletType.Keystone])('allows another account on a Solana %s', (type) => {
+    expect(resolveAccountIndex({ chain: Blockchain.SOLANA, type, accountIndex: 4 })).toBe(4);
+  });
+
   it.each([-1, 1.5, 0x80000000, Number.NaN, '1'])('refuses %s', (accountIndex) => {
     expect(() => resolveAccountIndex({ ...cardano, accountIndex: accountIndex as number })).toThrow(InvalidAccountIndexError);
   });
@@ -198,6 +202,8 @@ describe('account groups', () => {
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Normal, chain: Blockchain.MIDNIGHT, encryptionMethod: 'prf' }))).toBe(true);
     expect(canAddAccounts(record(2, 'x', { type: WalletType.Watch, chain: Blockchain.MIDNIGHT }))).toBe(false);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Ledger, chain: Blockchain.SOLANA }))).toBe(true);
+    expect(canAddAccounts(record(2, 'x', { type: WalletType.Watch, chain: Blockchain.SOLANA }))).toBe(false);
   });
 });
 
