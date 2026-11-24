@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SOLANA_NFT_RETRY_MS,
-  isSendableSolanaNft,
+  isProgrammableSolanaNft,
   parseSolanaNftRows,
   solanaNftCandidates,
   solanaNftCollections,
@@ -21,7 +21,7 @@ const COLL = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
 function nft(mint: string, fields: Partial<SolanaNft> = {}): SolanaNft {
   return {
     mint, standard: 'nonFungible', name: null, symbol: null, image: null, animationUrl: null, description: null,
-    externalUrl: null, collection: null, attributes: [], sellerFeeBasisPoints: null, offChain: true, fetchedAt: 0, ...fields,
+    externalUrl: null, collection: null, ruleSet: null, attributes: [], sellerFeeBasisPoints: null, offChain: true, fetchedAt: 0, ...fields,
   };
 }
 
@@ -51,7 +51,7 @@ describe('Nexus NFT rows', () => {
         {
           mint: A, nft: true, standard: 'programmableNonFungible', name: '  Lad #1 ', image: 'https://arweave.net/a.png',
           animationUrl: 'javascript:alert(1)', description: 'x'.repeat(3000), externalUrl: 'data:text/html,hi',
-          collection: { address: COLL, verified: true }, sellerFeeBasisPoints: 500, offChain: true,
+          collection: { address: COLL, verified: true }, sellerFeeBasisPoints: 500, offChain: true, ruleSet: COLL,
           attributes: [{ traitType: 'Hat', value: 'Cap' }, { traitType: 'Bad', value: { nested: 1 } }, ...Array.from({ length: 40 }, (_, i) => ({ value: `v${i}` }))],
         },
         { mint: B, nft: false },
@@ -60,7 +60,7 @@ describe('Nexus NFT rows', () => {
     }, [A, B, C], 42);
     const first = rows[0] as SolanaNft;
     expect(first).toMatchObject({
-      mint: A, standard: 'programmableNonFungible', name: 'Lad #1', image: 'https://arweave.net/a.png',
+      mint: A, standard: 'programmableNonFungible', name: 'Lad #1', image: 'https://arweave.net/a.png', ruleSet: COLL,
       animationUrl: null, externalUrl: null, collection: { address: COLL, verified: true }, sellerFeeBasisPoints: 500,
       offChain: true, fetchedAt: 42,
     });
@@ -107,10 +107,10 @@ describe('Solana NFT collections', () => {
     expect(solanaNftName(nft(A))).toBe('DezX…B263');
   });
 
-  it('sends classic NFTs, not programmable ones', () => {
-    expect(isSendableSolanaNft(nft(A))).toBe(true);
-    expect(isSendableSolanaNft(nft(A, { standard: null }))).toBe(true);
-    expect(isSendableSolanaNft(nft(A, { standard: 'programmableNonFungible' }))).toBe(false);
-    expect(isSendableSolanaNft(nft(A, { standard: 'programmableNonFungibleEdition' }))).toBe(false);
+  it('tells programmable NFTs apart', () => {
+    expect(isProgrammableSolanaNft(nft(A))).toBe(false);
+    expect(isProgrammableSolanaNft(nft(A, { standard: null }))).toBe(false);
+    expect(isProgrammableSolanaNft(nft(A, { standard: 'programmableNonFungible' }))).toBe(true);
+    expect(isProgrammableSolanaNft(nft(A, { standard: 'programmableNonFungibleEdition' }))).toBe(true);
   });
 });
