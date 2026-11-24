@@ -33,7 +33,7 @@ describe('staking card submission receipts', () => {
   it('stops after a lost signing reply and succeeds only with a transaction ID', async () => {
     message.mockReset().mockResolvedValueOnce(undefined);
     const failed = await sign();
-    expect(failed.get('.staking-card__failed').text()).toMatch(/witness/i);
+    expect(failed.get('.staking-card__failed').text()).toBe('errors.unknownError');
     expect(message).toHaveBeenCalledTimes(1);
     failed.unmount();
     message.mockReset().mockResolvedValueOnce({ data: { witnesses: 'a10080' } }).mockResolvedValueOnce({ data: { txId: 'confirmed-id' } });
