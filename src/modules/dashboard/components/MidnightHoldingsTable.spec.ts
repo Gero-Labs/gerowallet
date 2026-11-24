@@ -57,6 +57,17 @@ beforeEach(() => {
 afterEach(() => { i18n.locale = 'us'; });
 
 describe('Midnight holdings with the real Vuetify 4 table', () => {
+  it('puts every token mark on the near-black disc, not mid grey', async () => {
+    const wrapper = render();
+    await flushPromises();
+    const discs = wrapper.findAll('tbody .v-avatar');
+    expect(discs).toHaveLength(3);
+    for (const disc of discs) {
+      expect(disc.classes()).toContain('bg-grey-darken-4');
+      expect(disc.classes()).not.toContain('bg-grey');
+    }
+  });
+
   it('renders all nine translated headers and updates them when the locale changes', async () => {
     const wrapper = render();
     await flushPromises();

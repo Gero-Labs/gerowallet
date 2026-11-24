@@ -17,6 +17,7 @@ import {
 } from './midnightShieldedWallet9';
 import { midnightLedgerKey } from './midnightLedger';
 import { midnightTimer, type MidnightTimer } from './midnightTiming';
+import { privateSyncProgressOf, sameSyncProgress } from './midnightPrivateSyncProgress';
 
 export interface MidnightPrivateSyncArgs {
   walletId: string;
@@ -321,6 +322,13 @@ class PrivateSync {
               // Cached amounts are retained, but a disconnected or lagging
               // stream must not remain authoritative for UI/connector reads.
               if (midnightStore.privateSyncStatus !== 'syncing') midnightActions.setPrivateSyncStatus('syncing');
+              // The dashboard's "events applied" line and mini-Gero's scan bar
+              // read these counters. Written only when they move: each write is
+              // broadcast and persisted.
+              const progress = privateSyncProgressOf(state.progress);
+              if (!sameSyncProgress(midnightStore.privateSyncProgress, progress)) {
+                midnightActions.setPrivateSyncProgress(progress);
+              }
               return;
             }
             // Publish the first complete snapshot promptly. Later events only
