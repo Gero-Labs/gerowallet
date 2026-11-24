@@ -44,7 +44,7 @@ export interface MidnightSwapOfferRecord {
   readonly expiresAt: number;
   /** The coins the offer spends, `intentHash#outputNo` (lower-case hash). */
   readonly inputs: string[];
-  /** The maker intent's hash: the outputs it creates (what the maker receives, and change) carry it. */
+  /** The hash the maker intent's outputs (what the maker receives, and change) are created under (midnightSwap9.ts). */
   readonly intentHash: string;
   /** Last status the worker saw; `open` until a terminal one is seen. */
   status: MidnightSwapStatus;

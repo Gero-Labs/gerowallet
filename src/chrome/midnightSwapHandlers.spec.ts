@@ -199,7 +199,9 @@ describe('inspect and take', () => {
     expect(wallet.balanceMidnightConnectorTransaction).not.toHaveBeenCalled();
 
     const taken = await call(MessageTypes.MIDNIGHT_SWAP_TAKE_OFFER, { offer, expect: { pay: [WANT], get: [GIVE] }, password: 'pw' });
-    expect(taken).toMatchObject({ success: true, txHash: 'fe'.repeat(32) });
+    // The ledger hash history shows, read from the submitted bytes; not submit-proven's extrinsic hash.
+    const ledgerHash = ledger.Transaction.deserialize('signature', 'proof', 'binding', decodeSwapOffer(offer)).transactionHash().toLowerCase().replace(/^0x/, '');
+    expect(taken).toMatchObject({ success: true, txHash: ledgerHash });
     const [hex, password, , sealed] = wallet.balanceMidnightConnectorTransaction.mock.calls[0];
     expect(Buffer.from(hex as string, 'hex')).toEqual(Buffer.from(decodeSwapOffer(offer)));
     expect(password).toBe('pw');
@@ -234,7 +236,9 @@ describe('withdraw', () => {
     wallet.buildMidnightConnectorIntent.mockClear();
 
     const answer = await call(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, { offerId: record.offerId, password: 'pw' });
-    expect(answer).toMatchObject({ success: true, txHash: 'fe'.repeat(32) });
+    expect(answer.success).toBe(true);
+    expect(answer.txHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(answer.txHash).not.toBe('fe'.repeat(32));
     const [request, , , opts] = wallet.buildMidnightConnectorIntent.mock.calls[0];
     expect(request).toMatchObject({ payFees: true, outputs: [{ recipient: MAKER, type: NIGHT }] });
     expect([...(opts as { onlyCoins: Set<string> }).onlyCoins]).toEqual(record.inputs);

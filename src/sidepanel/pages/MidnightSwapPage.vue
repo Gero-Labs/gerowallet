@@ -1,5 +1,5 @@
 <template>
-  <div class="mswap">
+  <div ref="root" class="mswap">
     <header class="mswap__header">
       <GButton
         tier="tertiary"
@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -135,6 +135,19 @@ function go(next: View) {
   else history.push(view.value);
   view.value = next;
 }
+
+/**
+ * Each screen starts at its top. The panel scrolls one container for every
+ * page, so a long screen (the make form) would leave the next one scrolled
+ * under the panel's sticky header.
+ */
+const root = ref<HTMLElement | null>(null);
+watch(() => view.value, async () => {
+  await nextTick();
+  for (let el = root.value?.parentElement ?? null; el; el = el.parentElement) {
+    if (el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY !== 'visible') { el.scrollTop = 0; break; }
+  }
+});
 
 function back() {
   if (view.value.name === 'home') { void router.push('/'); return; }

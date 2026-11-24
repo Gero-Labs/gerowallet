@@ -51,7 +51,9 @@ describe('readSwapOffer9 + swapOfferFacts9', () => {
     expect(facts.inputs).toEqual([`${'33'.repeat(32)}#4`]);
     expect(facts.inputOwners).toEqual([String(maker.getAddress()).toLowerCase()]);
     expect(facts.payees).toEqual([String(maker.getAddress()).toLowerCase()]);
-    expect(facts.intentHashes).toEqual([String(tx.intents!.get(7)!.intentHash(7)).toLowerCase()]);
+    // Guaranteed outputs are created under the guaranteed segment's hash, not the intent's own segment id.
+    expect(facts.intentHashes).toEqual([String(tx.intents!.get(7)!.intentHash(0)).toLowerCase()]);
+    expect(facts.intentHashes[0]).not.toBe(String(tx.intents!.get(7)!.intentHash(7)).toLowerCase());
     expect(facts.unsupported).toBeUndefined();
   });
 

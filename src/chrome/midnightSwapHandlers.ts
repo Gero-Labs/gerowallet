@@ -34,7 +34,7 @@ import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
 import { resolveMidnightLedger } from '@/chains/midnight/midnightChainLedger';
 import { midnightSdkNetworkId } from '@/chains/midnight/midnightSdkNetwork';
 import { midnightTxIdentifiers } from '@/chains/midnight/midnightTxIdentifiers';
-import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
+import { finalizedLedgerTxHash, historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { midnightWriteBlock } from '@/chains/midnight/midnightWriteGate';
 import { unshieldedAddressCodec } from '@/chains/midnight/midnightConnectorBalance';
 import {
@@ -167,11 +167,21 @@ async function inspect(offer: unknown, wallet: WalletBg, sdkNetworkId: string): 
   };
 }
 
-/** Submit a sealed transaction through submit-proven; the history hash. */
-async function submitSealed(network: string, sealedHex: string): Promise<string> {
+/**
+ * Submit a sealed transaction through submit-proven; the hash history shows.
+ * submit-proven answers the extrinsic hash only, so the ledger hash (the one
+ * the indexer and history use) is read from the bytes themselves.
+ */
+async function submitSealed(network: string, sdkNetworkId: string, sealedHex: string): Promise<string> {
   const watch = { identifiers: await midnightTxIdentifiers(sealedHex, network, true) };
   const submitted = await getMidnightApi(network).submitProvenMidnightTx({ signedTxHex: sealedHex, waitFor: 'Submitted' }, watch);
-  return historyHashForSubmittedTx(submitted);
+  let ledgerTxHash: string | undefined;
+  try {
+    ledgerTxHash = finalizedLedgerTxHash(decodeSealedTransaction9(sealedHex, sdkNetworkId));
+  } catch {
+    ledgerTxHash = undefined;
+  }
+  return historyHashForSubmittedTx({ txHash: submitted.txHash, ledgerTxHash: submitted.ledgerTxHash ?? ledgerTxHash });
 }
 
 /**
@@ -299,7 +309,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       }
       let txHash: string;
       try {
-        txHash = await submitSealed(wallet.network, sealed);
+        txHash = await submitSealed(wallet.network, sdkNetworkId, sealed);
       } catch (error) {
         if (INPUTS_GONE.test(getErrorMessage(error))) throw new MidnightSwapError('SWAP_OFFER_GONE');
         throw error;
@@ -315,7 +325,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
   app.addToOptions(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, async (request, sendResponse) => {
     let prfBytes: Uint8Array | undefined;
     try {
-      const { wallet } = await swapWallet();
+      const { wallet, sdkNetworkId } = await swapWallet();
       const data = (request.data ?? {}) as RequestData;
       const offerId = typeof data.offerId === 'string' ? data.offerId.toLowerCase() : '';
       if (!HEX64.test(offerId)) throw new MidnightSwapError('SWAP_OFFER_UNKNOWN');
@@ -341,7 +351,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       if (validation.ok === false) throw new Error(validation.reason);
       const { ok: _ok, ...intentRequest } = validation;
       const built = await wallet.buildMidnightConnectorIntent(intentRequest, credential.password, prfBytes, { onlyCoins: wanted });
-      const txHash = await submitSealed(wallet.network, built.tx);
+      const txHash = await submitSealed(wallet.network, sdkNetworkId, built.tx);
       const updated = await updateSwapOffer(wallet.network, wallet.id, offerId, { withdrawTxHash: txHash });
       reply(request, sendResponse, { success: true, txHash, record: updated });
     } catch (error) {

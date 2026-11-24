@@ -37,7 +37,12 @@ export interface SwapOfferFacts9 {
   readonly inputOwners: string[];
   /** Recipients of the offer's outputs, as `UserAddress` hex (lower case, de-duplicated). */
   readonly payees: string[];
-  /** Each intent's hash, in segment order (lower case). */
+  /**
+   * The intent hash each intent's guaranteed outputs are created under, in
+   * segment order (lower case): `intentHash(0)`, the guaranteed segment, not
+   * the intent's own segment id. Checked on preprod: the maker's coins from a
+   * taken offer carry this hash, so it is how the maker sees the offer taken.
+   */
   readonly intentHashes: string[];
   /** Why the wallet cannot take it whatever the time: a private leg, a fallible section, nothing asked or nothing given. */
   readonly unsupported?: 'shielded' | 'fallible' | 'giveOnly' | 'nothingGiven';
@@ -81,8 +86,8 @@ export function swapOfferFacts9(tx: SealedTransaction9, bytes: Uint8Array): Swap
   const payees = new Set<string>();
   const intentHashes: string[] = [];
   let expiresAt: number | null = null;
-  for (const [segment, intent] of [...(tx.intents ?? new Map())].sort(([a], [b]) => a - b)) {
-    intentHashes.push(String(intent.intentHash(segment)).toLowerCase());
+  for (const [, intent] of [...(tx.intents ?? new Map())].sort(([a], [b]) => a - b)) {
+    intentHashes.push(String(intent.intentHash(0)).toLowerCase());
     const ttl = intent.ttl.getTime();
     if (expiresAt === null || ttl < expiresAt) expiresAt = ttl;
     for (const offer of [intent.guaranteedUnshieldedOffer, intent.fallibleUnshieldedOffer]) {

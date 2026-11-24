@@ -86,9 +86,10 @@
           <GButton tier="tertiary" :block="!wide" @click="emit('back')">{{ t('common.cancel') }}</GButton>
         </template>
         <span v-else-if="stage === 'progress'" class="t-caption">{{ t('midnight.swap.keepOpen') }}</span>
+        <!-- The footer runs right to left on the dashboard: the first button is the rightmost. -->
         <template v-else-if="stage === 'done'">
-          <GButton :block="!wide" @click="emit('history')">{{ t('midnight.swap.viewHistory') }}</GButton>
           <GButton tier="primary" :block="!wide" class="swap-take__cta" data-test="swap-done" @click="emit('done')">{{ t('common.done') }}</GButton>
+          <GButton :block="!wide" @click="emit('history')">{{ t('midnight.swap.viewHistory') }}</GButton>
         </template>
         <GButton v-else-if="stage === 'failed'" tier="primary" :block="!wide" @click="stage = 'review'">{{ t('midnight.swap.tryAgain') }}</GButton>
         <GButton v-else :block="!wide" @click="emit('done')">{{ t('midnight.swap.backToSwap') }}</GButton>
