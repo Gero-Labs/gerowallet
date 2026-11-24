@@ -49,7 +49,11 @@ const version = ref<string>(APP_VERSION);
   /* The footer sits on the chain's background image, whose bright areas (Cardano's teal
      at the bottom right) left the links at under 2:1. A canvas scrim rising from the
      bottom edge keeps them readable on every chain's image. */
-  background: linear-gradient(to top, color-mix(in srgb, var(--g-canvas) 88%, transparent), color-mix(in srgb, var(--g-canvas) 70%, transparent));
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--g-canvas) 88%, transparent),
+    color-mix(in srgb, var(--g-canvas) 70%, transparent)
+  );
   padding: 0 var(--g-s-5);
 }
 
