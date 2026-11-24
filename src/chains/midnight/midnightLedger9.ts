@@ -132,6 +132,8 @@ export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshield
 export interface Ledger9FeeSpread {
   readonly carrier?: ledger.UnprovenTransaction;
   readonly sign?: (tx: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
+  /** Told the block the fee was priced at, so the caller can check the final bytes against the same parameters. */
+  readonly onBlock?: (block: { readonly timestamp: number; readonly ledgerParameters: string }) => void;
 }
 
 /**
@@ -187,6 +189,7 @@ export async function balanceLedger9Fees(
     timer.note({ reconstructMs: Date.now() - reconstructStart, resumedBlocks: saved ? block.height - saved.checkedThrough : undefined });
     controller.signal.throwIfAborted();
     timer.lap('reconstructLocal');
+    args.spread?.onBlock?.({ timestamp: block.timestamp, ledgerParameters: block.ledgerParameters });
     const fee = args.spread
       ? spreadLightDust9(state, dustKey, network, transactions as SealedTransaction9[], args.spread.carrier, args.ttl,
         new Date(block.timestamp), block.ledgerParameters, { sign: args.spread.sign })

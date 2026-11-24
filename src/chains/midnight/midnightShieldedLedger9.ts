@@ -31,32 +31,44 @@ async function bounded<T>(work: Promise<T>, milliseconds: number, operation: str
   } finally { if (timer) clearTimeout(timer); }
 }
 
-/** Fully sync the private note set, build the transfer, then fund its DUST fee. */
-export async function buildAndSignShieldedLedger9Transfer(
-  args: BuildAndSignShieldedTransferArgs,
-): Promise<BuildAndSignShieldedTransferResult> {
+/** A synced private wallet, handed to {@link withSyncedShieldedWallet9}'s callback. */
+export interface SyncedShieldedWallet9 {
+  /** Ledger key of the network ('preprod', 'mainnet', ...). */
+  readonly network: string;
+  /** Wallet SDK 2's fork-aware wallet (a chain that crossed the ledger 9 upgrade), or the ledger 9-only one. */
+  readonly forking: boolean;
+  readonly wallet: Ledger9ShieldedWallet | ForkingShieldedWallet;
+  /** The synced state, already checked to belong to these keys. */
+  readonly state: ShieldedWalletState;
+  /** The ledger 9 keys the wallet runs with. Cleared once the callback settles: never keep them. */
+  readonly keys: ledger.ZswapSecretKeys;
+  /** Throws when the chain behind the endpoints changed since the sync began (a reset network). */
+  assertChainUnchanged(): Promise<void>;
+}
+
+/**
+ * Start the private (Zswap) wallet from its saved checkpoint, sync it to the
+ * chain tip, save the new checkpoint and hand it to `use`. The wallet is
+ * stopped and the keys cleared however `use` ends. `beforeSync` runs once the
+ * chain is known to run ledger 9 and before anything is read: the caller's own
+ * request checks go there, so a bad request costs no sync.
+ */
+export async function withSyncedShieldedWallet9<T>(
+  args: Pick<BuildAndSignShieldedTransferArgs, 'sdkNetworkId' | 'endpoints' | 'zswapSecretKeySeed'>,
+  use: (synced: SyncedShieldedWallet9) => Promise<T>,
+  options: { beforeSync?: (network: string) => void; operation?: string } = {},
+): Promise<T> {
   const network = midnightLedgerKey(args.sdkNetworkId);
   if (args.endpoints.sdkNetworkId !== network) throw new Error('Midnight endpoint network mismatch');
   const chain = await resolveMidnightChain(network);
   if (chain.ledger !== 9) {
-    throw new Error(`Midnight ${midnightNetworkName(network)} runs ledger ${chain.ledger}; this is a ledger 9 shielded transfer`);
+    throw new Error(`Midnight ${midnightNetworkName(network)} runs ledger ${chain.ledger}; this is a ledger 9 ${options.operation ?? 'shielded transfer'}`);
   }
   // A chain that crossed the upgrade (mainnet, preprod) keeps notes from
   // before it: only wallet SDK 2's fork-aware wallet reads that ledger 8
   // history (#1452 M9). A chain born on ledger 9 needs the ledger 9 side only.
   const forking = !chain.bornOnLedger9;
-  if (!args.dustSecretSeed || args.dustSecretSeed.length !== 32) throw new Error('Shielded transfers require a DUST fee key');
-  if (!args.outputs.length) throw new Error('At least one shielded output is required');
-  const outputs = args.outputs.map(output => {
-    if (output.amount <= 0n) throw new Error('Shielded transfer amount must be positive');
-    return {
-      amount: output.amount,
-      type: validateShieldedTokenType(output.tokenType),
-      receiverAddress: decodeShieldedAddress9(network, output.receiverAddress),
-    };
-  });
-  const ttl = args.ttl ?? new Date(Date.now() + 30 * 60_000);
-  if (!Number.isFinite(ttl.getTime()) || ttl.getTime() <= Date.now()) throw new Error('Shielded transfer expiry must be in the future');
+  options.beforeSync?.(network);
   const identity = await readVerifiedMidnightChainIdentity(args.endpoints);
   const stateNetwork = midnightCheckpointNamespace(identity);
   const keys = ledger.ZswapSecretKeys.fromSeed(args.zswapSecretKeySeed);
@@ -101,6 +113,25 @@ export async function buildAndSignShieldedLedger9Transfer(
     const snapshot = await bounded<string>(wallet.serializeState(), 10_000, 'shielded checkpoint');
     await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
     await saveWalletState(stateNetwork, 'shielded', args.zswapSecretKeySeed, snapshot).catch(() => {});
+    return await use({
+      network, forking, wallet, state, keys,
+      assertChainUnchanged: () => assertMidnightChainIdentityUnchanged(args.endpoints, identity),
+    });
+  } finally {
+    subscription?.unsubscribe();
+    try { if (wallet) await bounded(wallet.stop(), 30_000, 'shielded wallet shutdown'); }
+    finally { keys.clear(); keys8?.clear(); }
+  }
+}
+
+/** Fully sync the private note set, build the transfer, then fund its DUST fee. */
+export async function buildAndSignShieldedLedger9Transfer(
+  args: BuildAndSignShieldedTransferArgs,
+): Promise<BuildAndSignShieldedTransferResult> {
+  let outputs: Array<{ amount: bigint; type: string; receiverAddress: ReturnType<typeof decodeShieldedAddress9> }> = [];
+  let ttl = new Date(0);
+  let dustSecretSeed: Uint8Array = new Uint8Array(0);
+  return withSyncedShieldedWallet9(args, async ({ network, forking, wallet, assertChainUnchanged }) => {
     type Handle = { readonly protocolVersion: bigint; serialize(): Uint8Array };
     const handle = await bounded<Handle>((wallet as unknown as { transferTransaction(o: typeof outputs): Promise<Handle> })
       .transferTransaction(outputs), 60_000, 'shielded transaction construction');
@@ -112,25 +143,38 @@ export async function buildAndSignShieldedLedger9Transfer(
     const fees = await balanceLedger9Fees({
       sdkNetworkId: args.sdkNetworkId,
       endpoints: args.endpoints,
-      dustSecretSeed: args.dustSecretSeed,
+      dustSecretSeed,
       ttl,
       dustRegisteredAt: args.dustRegisteredAt,
       onDustSyncProgress: args.onDustSyncProgress,
     }, [transfer]);
-    await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
+    await assertChainUnchanged();
     const combined = transfer.merge(fees);
     const txHex = Buffer.from(combined.serialize()).toString('hex');
     if (args.proving) {
       const { provenTxHex, proveDurationMs } = await proveUnshieldedTransfer({
         sdkNetworkId: network, signedTxHex: txHex, proving: args.proving,
       });
-      await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
+      await assertChainUnchanged();
       return { txHex: provenTxHex, proven: true, proveDurationMs };
     }
     return { txHex, proven: false };
-  } finally {
-    subscription?.unsubscribe();
-    try { if (wallet) await bounded(wallet.stop(), 30_000, 'shielded wallet shutdown'); }
-    finally { keys.clear(); keys8?.clear(); }
-  }
+  }, {
+    // The request checks, in the order they always ran: after the chain read, before the sync.
+    beforeSync: (network) => {
+      if (!args.dustSecretSeed || args.dustSecretSeed.length !== 32) throw new Error('Shielded transfers require a DUST fee key');
+      dustSecretSeed = args.dustSecretSeed;
+      if (!args.outputs.length) throw new Error('At least one shielded output is required');
+      outputs = args.outputs.map(output => {
+        if (output.amount <= 0n) throw new Error('Shielded transfer amount must be positive');
+        return {
+          amount: output.amount,
+          type: validateShieldedTokenType(output.tokenType),
+          receiverAddress: decodeShieldedAddress9(network, output.receiverAddress),
+        };
+      });
+      ttl = args.ttl ?? new Date(Date.now() + 30 * 60_000);
+      if (!Number.isFinite(ttl.getTime()) || ttl.getTime() <= Date.now()) throw new Error('Shielded transfer expiry must be in the future');
+    },
+  });
 }
