@@ -153,6 +153,7 @@ import {
   validateConnectorIntentRequest,
 } from '@/chains/midnight/midnightConnectorIntent';
 import { buildFailureReply } from '@/chains/midnight/midnightBuildFailure';
+import { registerMidnightSwapHandlers } from '@/chrome/midnightSwapHandlers';
 // Static, not `await import`: the worker is one iife, and a dynamic import of a module that is
 // in it anyway only adds a load-order hazard (scripts/check-bundle-tdz.mjs).
 import { MidnightStationError } from '@/chains/midnight/midnightStationConfig';
@@ -847,6 +848,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
+// Midnight P2P swap (MIDNIGHT_SWAP_*, extension pages only).
+registerMidnightSwapHandlers(app);
 const cip45Authorization = new Cip45AuthorizationRegistry();
 // Invalidate in the authoritative context, synchronously, including A -> logout -> A.
 watch(() => [walletStore.loggedWallet?.id, walletStore.loggedWallet?.chain,

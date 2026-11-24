@@ -116,6 +116,7 @@ import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { secretsWallet, secretsWalletId } from '@/shared/utils/walletAccount';
 import { useChainContext } from './composables/useChainContext';
+import { useMidnightTokenCatalog } from '@/shared/composables/useMidnightTokenCatalog';
 import { requestSettingsTabOnLoad } from '@/services/notify/notifyStorage';
 
 const { t } = useTranslation();
@@ -125,6 +126,8 @@ useNotifyPresent('sidepanel');
 // Initialize chain context — applies CSS variables for the active wallet's theme.
 // Other components that call useChainContext() reuse the singleton CSS-variable watcher.
 useChainContext();
+// Token names on Midnight screens come from Nexus's catalog (midnightTokenCatalog.ts).
+useMidnightTokenCatalog();
 
 // Panel-lifetime dApp port: must outlive lock/logout so requests park instead
 // of being rejected when the overlay unmounts.

@@ -189,6 +189,17 @@ export enum MessageTypes {
   MIDNIGHT_STATION_STATUS = 'MIDNIGHT_STATION_STATUS',
   MIDNIGHT_STATION_SEAL = 'MIDNIGHT_STATION_SEAL',
   MIDNIGHT_STATION_REDEEM = 'MIDNIGHT_STATION_REDEEM',
+  // Direct P2P swap of public Midnight tokens (midnightSwap9.ts), extension pages only.
+  // MAKE: seal an offer from the logged wallet's coins (payFees false) and record it.
+  // INSPECT: read an offer's terms from its bytes, for the taker. TAKE: complete a reviewed
+  // offer, pay the DUST fee and submit. WITHDRAW: re-send the offered coins to the wallet
+  // itself. LIST: the wallet's own offers with their status. LISTED: note an offer as listed with Gero.
+  MIDNIGHT_SWAP_MAKE_OFFER = 'MIDNIGHT_SWAP_MAKE_OFFER',
+  MIDNIGHT_SWAP_INSPECT_OFFER = 'MIDNIGHT_SWAP_INSPECT_OFFER',
+  MIDNIGHT_SWAP_TAKE_OFFER = 'MIDNIGHT_SWAP_TAKE_OFFER',
+  MIDNIGHT_SWAP_WITHDRAW_OFFER = 'MIDNIGHT_SWAP_WITHDRAW_OFFER',
+  MIDNIGHT_SWAP_LIST_OFFERS = 'MIDNIGHT_SWAP_LIST_OFFERS',
+  MIDNIGHT_SWAP_MARK_LISTED = 'MIDNIGHT_SWAP_MARK_LISTED',
   // Sent by ChangePasswordDialog after a spending-password change. The DB
   // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
   // the background WalletBg (used to sign) and walletStore.loggedWallet (used to

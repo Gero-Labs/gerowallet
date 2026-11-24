@@ -53,6 +53,12 @@ export interface BuildConnectorIntent9Args {
   readonly utxos: readonly MidnightUnshieldedUtxo[];
   /** The sync those UTxOs came from (midnightStore): when, and for which address. */
   readonly sync: { readonly lastSync: number | null; readonly addresses: { readonly unshielded?: string | null } };
+  /**
+   * Which of `utxos` coin selection may use (`intentHash#outputNo`, lower-case
+   * hash): `exclude` keeps the coins of the wallet's open swap offers out,
+   * `only` limits it to exactly these (a swap offer's withdrawal).
+   */
+  readonly coinFilter?: { readonly exclude?: ReadonlySet<string>; readonly only?: ReadonlySet<string> };
   /** Where the DUST fee proof is made; unused when `request.payFees` is false. */
   readonly proving: WalletProvingRequest;
   /** Defaults to now + CONNECTOR_INTENT_TTL_MS. */
@@ -85,6 +91,13 @@ const noCircuitProver: ledger.ProvingProvider = {
   prove: async () => { throw new Error('unexpected proof-server call while proving an intent without circuits'); },
   lookupKey: async () => undefined,
 };
+
+/** `utxos` narrowed by `filter` (see {@link BuildConnectorIntent9Args.coinFilter}). */
+function filterCoins(utxos: readonly MidnightUnshieldedUtxo[], filter: BuildConnectorIntent9Args['coinFilter']): readonly MidnightUnshieldedUtxo[] {
+  if (!filter?.exclude?.size && !filter?.only) return utxos;
+  const ref = (utxo: MidnightUnshieldedUtxo) => `${utxo.intentHash.toLowerCase()}#${utxo.outputIndex}`;
+  return utxos.filter(utxo => (!filter.only || filter.only.has(ref(utxo))) && !filter.exclude?.has(ref(utxo)));
+}
 
 /** Throws `MidnightLedgerChangedError` unless the chain was last read on ledger 9. */
 function requireLedger9(network: string): void {
@@ -127,8 +140,8 @@ export async function buildConnectorIntent9(
     coinsAndBalancesCapability: CoinsAndBalances.makeDefaultCoinsAndBalancesCapability(),
     keysCapability,
   }));
-  // Only rows the indexer reports as this key's address (the owner filter).
-  const swap = capability.initSwap(ledger9WalletState(network, keystore, args.utxos), give, transfers, ttl);
+  // Only rows the indexer reports as this key's address (the owner filter), and only the coins the caller allows.
+  const swap = capability.initSwap(ledger9WalletState(network, keystore, filterCoins(args.utxos, args.coinFilter)), give, transfers, ttl);
   if (swap._tag === 'Left') {
     if (isSdkInsufficientFunds(swap.left)) throw new IntentInsufficientFundsError();
     throw swap.left;

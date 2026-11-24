@@ -123,7 +123,9 @@ import { localProvingOffersFor } from '@/chains/midnight/midnightProvingFlags';
 import { helperProofProcessor } from '@/chains/midnight/midnightHelperProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
 import { assertPsbtSignable, bitcoinOwnAddresses, parsePsbt, reviewBitcoinPsbt } from '@/chains/bitcoin/psbtReview';
-import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches } from '@/chains/midnight/midnightBuiltTxGuard';
+import { assertMidnightDustRegistrationMatches, assertMidnightTransferMatches, assertSpendsNoReservedCoins } from '@/chains/midnight/midnightBuiltTxGuard';
+import { reservedSwapCoinsFor } from '@/chrome/midnightSwapOfferStore';
+import { withoutReservedCoins } from '@/chains/midnight/midnightSwapRecords';
 import { withUnlockThrottle } from '@/chrome/unlockGuards';
 import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
 import { balanceDappTransaction9 } from '@/chains/midnight/midnightDappBalancer9';
@@ -2859,6 +2861,8 @@ export class WalletBg {
     prfSecret?: Uint8Array,
     /** `balanceSealedTransaction`: the tx is another party's sealed part (ledger 9 only). */
     sealed = false,
+    /** Progress of a sealed balance, for the swap screens: the DUST fee sync, then proving. */
+    progress?: { onDustSyncProgress?: (percent: number, detail: string) => void; onProving?: () => void },
   ): Promise<{ tx: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('balanceMidnightConnectorTransaction called on non-Midnight wallet');
@@ -2921,6 +2925,8 @@ export class WalletBg {
         // conservative 90-day lookback.
         // The chain's ledger decides the path, never the network's name.
         if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
+          // The coins of the wallet's open swap offers stay out: spending one cancels that offer.
+          const selectable = withoutReservedCoins(midnightStore.utxos, await reservedSwapCoinsFor(network, this.id));
           if (sealed) {
             const sealed9 = await asBuildStep(() => balanceSealedTransaction9({
               sdkNetworkId: endpoints.sdkNetworkId,
@@ -2928,9 +2934,11 @@ export class WalletBg {
               txHex,
               unshieldedSecretKey: derived.unshieldedSecretKey,
               dustSecretSeed: derived.dustSecretKey,
-              utxos: midnightStore.utxos,
+              utxos: selectable,
               sync: midnightStore,
               proving,
+              onDustSyncProgress: progress?.onDustSyncProgress,
+              onProving: progress?.onProving,
             }));
             assertSession();
             return { tx: sealed9.txHex };
@@ -2942,7 +2950,7 @@ export class WalletBg {
             txHex,
             unshieldedSecretKey: derived.unshieldedSecretKey,
             dustSecretSeed: derived.dustSecretKey,
-            utxos: midnightStore.utxos,
+            utxos: selectable,
             proving,
           }));
           assertSession();
@@ -2986,6 +2994,13 @@ export class WalletBg {
     request: ConnectorIntentRequest,
     password?: string,
     prfSecret?: Uint8Array,
+    /**
+     * Ledger 9 only. `ttl`: the intent's expiry (default: the connector's 55
+     * minutes). `onlyCoins`: the coins to select from (`intentHash#outputNo`),
+     * in place of every synced coin not set aside for an open swap offer (a
+     * withdrawal re-spends exactly the offered coins).
+     */
+    opts: { ttl?: Date; onlyCoins?: ReadonlySet<string> } = {},
   ): Promise<{ tx: string; segmentId: number }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildMidnightConnectorIntent called on non-Midnight wallet');
@@ -3044,6 +3059,10 @@ export class WalletBg {
         // The chain's ledger decides the path, never the network's name.
         if (await resolveMidnightLedger(endpoints.sdkNetworkId) === 9) {
           // The build itself: a failure here is the wallet's, not the user's (midnightBuildFailure.ts).
+          // The coins of the wallet's open swap offers stay out: spending one cancels that offer.
+          const coinFilter = opts.onlyCoins
+            ? { only: opts.onlyCoins }
+            : { exclude: await reservedSwapCoinsFor(network, this.id) };
           const result9 = await asBuildStep(() => buildConnectorIntent9({
             sdkNetworkId: endpoints.sdkNetworkId,
             endpoints,
@@ -3052,7 +3071,9 @@ export class WalletBg {
             dustSecretSeed: derived.dustSecretKey,
             utxos: midnightStore.utxos,
             sync: midnightStore,
+            coinFilter,
             proving,
+            ttl: opts.ttl,
           }));
           assertSession();
           return { tx: result9.txHex, segmentId: result9.segmentId };
@@ -3465,6 +3486,8 @@ export class WalletBg {
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
           intendedOutputs,
         ));
+        // Nexus picks the coins: refuse a send that would spend one set aside for an open swap offer.
+        await assertSpendsNoReservedCoins(sdkNetworkId, unprovenTxHex, await reservedSwapCoinsFor(network, this.id));
 
         // Registration lower bound for the dust snapshot bootstrap: the wallet
         // can't have registered for DUST before it was created. For restored
@@ -3598,6 +3621,8 @@ export class WalletBg {
           { ownKeyHex: derived.publicKeyHex, ownAddressHex: derived.addressHex },
           intendedOutputs,
         );
+        // Nexus picks the coins: refuse a send that would spend one set aside for an open swap offer.
+        await assertSpendsNoReservedCoins(endpoints.sdkNetworkId, unprovenTxHex, await reservedSwapCoinsFor(network, this.id));
         const sealed = await sealTransferForStation({
           sdkNetworkId: endpoints.sdkNetworkId, unprovenTxHex, unshieldedSecretKey: derived.unshieldedSecretKey,
         });

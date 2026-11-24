@@ -35,6 +35,11 @@ import { midnightLedgerKey } from '@/chains/midnight/midnightLedger';
 import { noteMidnightNetworkUpgrading, noteMidnightUpdateRequired, noteMidnightWritesOpen } from '@/chains/midnight/midnightWriteGate';
 import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
+import { isMidnightSwapCode, MidnightSwapError } from '@/chains/midnight/midnightSwapConfig';
+import {
+  nexusErrorCode, readListedOffer, readOpenOffer, readOpenOffers, readSwapTrades, readTokenCatalogPage,
+  type MidnightListedOffer, type MidnightOpenOffer, type MidnightSwapTrade, type MidnightTokenCatalogPage,
+} from './midnightSwapWire';
 
 /**
  * Nexus's `BlockDto`-shaped block response (chain-agnostic — same struct as Cardano,
@@ -1436,6 +1441,76 @@ export class MidnightApi {
     } catch (error) {
       throw toMidnightApiError(error, this.network, 'submit');
     }
+  }
+
+  // ------------------------------------------- Token catalog and P2P swaps
+  //
+  // Read-only helpers for the swap screens. Every one degrades: a route this
+  // Nexus does not serve (404, SWAP_NOT_ENABLED) answers `null`, and the
+  // screens then show built-in names, no trades row and no open-offers list.
+
+  /** One page of the token catalog; `null` when this Nexus has no catalog. */
+  async getTokenCatalog(query: { q?: string; verifiedOnly?: boolean; limit?: number; offset?: number } = {}): Promise<MidnightTokenCatalogPage | null> {
+    const params = new URLSearchParams();
+    if (query.q) params.set('q', query.q);
+    if (query.verifiedOnly !== undefined) params.set('verifiedOnly', String(query.verifiedOnly));
+    params.set('limit', String(query.limit ?? 200));
+    params.set('offset', String(query.offset ?? 0));
+    const { data, status } = await this.axiosInstance.get(`${nexusMidnightPathFor(this.network, 'tokens')}?${params}`, {
+      timeout: 15_000, validateStatus: s => s === 200 || s === 404,
+    });
+    return status === 404 ? null : readTokenCatalogPage(data);
+  }
+
+  /** The newest settled swaps of a pair (any order); `null` when swaps are not enabled here. */
+  async getSwapTrades(tokenX: string, tokenY: string, limit = 1): Promise<MidnightSwapTrade[] | null> {
+    const [tokenA, tokenB] = [tokenX.toLowerCase(), tokenY.toLowerCase()].sort();
+    const params = new URLSearchParams({ tokenA, tokenB, limit: String(limit) });
+    const { data, status } = await this.axiosInstance.get(`${nexusMidnightPathFor(this.network, 'swaps/trades')}?${params}`, {
+      timeout: 15_000, validateStatus: s => s === 200 || s === 404,
+    });
+    return status === 404 ? null : readSwapTrades(data);
+  }
+
+  /**
+   * List an offer with Gero (MIP-0006 publish). Throws a `MidnightSwapError`
+   * with Nexus's code (OFFER_*, SWAP_NOT_ENABLED), or `SWAP_UNAVAILABLE` for
+   * any other failure: the server's text is never shown.
+   */
+  async listSwapOffer(offer: string): Promise<MidnightListedOffer> {
+    let response: { data: unknown; status: number };
+    try {
+      response = await this.axiosInstance.post(nexusMidnightPathFor(this.network, 'swap-offers'), { offer }, {
+        timeout: 30_000, validateStatus: s => s === 200 || s === 201 || s === 400 || s === 404 || s === 409,
+      });
+    } catch {
+      throw new MidnightSwapError('SWAP_UNAVAILABLE');
+    }
+    if (response.status === 200 || response.status === 201) return readListedOffer(response.data);
+    const code = nexusErrorCode(response.data);
+    throw new MidnightSwapError(isMidnightSwapCode(code) ? code : 'SWAP_UNAVAILABLE');
+  }
+
+  /** Live open offers, filtered by what they give and want; `null` when swaps are not enabled here. */
+  async listOpenSwapOffers(query: { gives?: string; wants?: string; limit?: number } = {}): Promise<MidnightOpenOffer[] | null> {
+    const params = new URLSearchParams({ status: 'live', limit: String(query.limit ?? 50) });
+    if (query.gives) params.set('gives', query.gives);
+    if (query.wants) params.set('wants', query.wants);
+    const { data, status } = await this.axiosInstance.get(`${nexusMidnightPathFor(this.network, 'swap-offers')}?${params}`, {
+      timeout: 15_000, validateStatus: s => s === 200 || s === 404,
+    });
+    return status === 404 ? null : readOpenOffers(data);
+  }
+
+  /** One listed offer by id, with its `swapoffer1…` string; `null` when it is unknown or swaps are not enabled here. */
+  async getSwapOffer(offerId: string): Promise<MidnightOpenOffer | null> {
+    if (!/^[0-9a-f]{64}$/.test(offerId)) return null;
+    const { data, status } = await this.axiosInstance.get(nexusMidnightPathFor(this.network, `swap-offers/${offerId}`), {
+      timeout: 15_000, validateStatus: s => s === 200 || s === 404,
+    });
+    if (status === 404) return null;
+    const offer = readOpenOffer(data);
+    return offer && offer.offerId === offerId && offer.offerBech32 ? offer : null;
   }
 }
 

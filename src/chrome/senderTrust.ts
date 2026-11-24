@@ -79,6 +79,14 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'MIDNIGHT_STATION_STATUS',
   'MIDNIGHT_STATION_SEAL',
   'MIDNIGHT_STATION_REDEEM',
+  // Midnight P2P swap: seals offers and completes them with the wallet's key, spends its DUST,
+  // and reads or rewrites its offer records. A web page must not be able to do any of it.
+  'MIDNIGHT_SWAP_MAKE_OFFER',
+  'MIDNIGHT_SWAP_INSPECT_OFFER',
+  'MIDNIGHT_SWAP_TAKE_OFFER',
+  'MIDNIGHT_SWAP_WITHDRAW_OFFER',
+  'MIDNIGHT_SWAP_LIST_OFFERS',
+  'MIDNIGHT_SWAP_MARK_LISTED',
 ]);
 
 /**
