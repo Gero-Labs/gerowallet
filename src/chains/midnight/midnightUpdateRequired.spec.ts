@@ -40,7 +40,9 @@ describe('what turns "update required" on', () => {
     // This build follows each chain to ledger 9 on every network; only a newer one needs an update.
     await expect(read({ kind: 'open', ledger: 10 })).resolves.toBe('updateRequired');
     await expect(read({ kind: 'open', ledger: 9 })).resolves.toBeNull();
-    await expect(read({ kind: 'open', ledger: 9 }, 'Stagenet')).resolves.toBeNull();
+    // Preview is read-only in GeroWallet whatever the server says (midnightConfig.ts).
+    await expect(read({ kind: 'open', ledger: 9 }, 'Preview')).resolves.toBe('readOnly');
+    await expect(read({ kind: 'open', ledger: 10 }, 'Preview')).resolves.toBe('readOnly');
     await expect(read({ kind: 'open', ledger: 9 }, 'Preprod')).resolves.toBeNull();
     await expect(read({ kind: 'open', ledger: 8 }, 'Preprod')).resolves.toBeNull();
   });

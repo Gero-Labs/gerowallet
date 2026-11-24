@@ -36,7 +36,7 @@ async function settle() {
 describe('useProvenApprovalUtxos', () => {
   it('keeps the UTxO list when it says what the chain says', async () => {
     const claimed = ref<readonly Cardano.Utxo[]>([utxo(OWN, 1_000_000_000n)]);
-    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Stagenet'), () => history);
+    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Preview'), () => history);
     await settle();
     expect(misreported.value).toBe(false);
     expect(ownUtxos.value).toBe(claimed.value);
@@ -44,7 +44,7 @@ describe('useProvenApprovalUtxos', () => {
 
   it('replaces an understated input with its proven value and asks for an acknowledgement', async () => {
     const claimed = ref<readonly Cardano.Utxo[]>([utxo(OWN, 1_000_000n)]);
-    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Stagenet'), () => history);
+    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Preview'), () => history);
     await settle();
     expect(misreported.value).toBe(true);
     expect(ownUtxos.value[0][1].value.coins).toBe(1_000_000_000n);
@@ -53,7 +53,7 @@ describe('useProvenApprovalUtxos', () => {
   it('drops an input the list wrongly calls the wallet\'s', async () => {
     const otherIn = { txId: created.hash, index: 0 } as Cardano.HydratedTxIn;
     const claimed = ref<readonly Cardano.Utxo[]>([[otherIn, { address: OTHER as Cardano.PaymentAddress, value: { coins: 1_000_000_000n } }]]);
-    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Stagenet'), () => history);
+    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Preview'), () => history);
     await settle();
     expect(misreported.value).toBe(true);
     expect(ownUtxos.value).toEqual([]);
@@ -61,7 +61,7 @@ describe('useProvenApprovalUtxos', () => {
 
   it('never blocks when an input cannot be proven', async () => {
     const claimed = ref<readonly Cardano.Utxo[]>([utxo(OWN, 1_000_000n)]);
-    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Stagenet'), () => []);
+    const { ownUtxos, misreported } = useProvenApprovalUtxos(ref(spending), claimed, ref('Preview'), () => []);
     await settle();
     expect(misreported.value).toBe(false);
     expect(ownUtxos.value).toBe(claimed.value);

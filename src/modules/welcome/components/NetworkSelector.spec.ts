@@ -11,8 +11,8 @@ vi.mock('@/stores/featureFlagsStore', () => ({
   featureFlagsStore: { isBitcoinEnabled: () => false, isSolanaEnabled: () => flags.solana },
 }));
 
-const mountSelector = (devMode = false) => mount(NetworkSelector, {
-  props: { network: networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET), devMode },
+const mountSelector = (devMode = false, chain: string = Blockchain.CARDANO, network: string = Network.MAINNET) => mount(NetworkSelector, {
+  props: { network: networks.resolveNetwork(chain, network), devMode },
   global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } },
 });
 
@@ -44,5 +44,23 @@ describe('NetworkSelector', () => {
     flags.solana = true;
     expect(tileFor(mountSelector(), Blockchain.SOLANA)?.attributes('disabled')).toBeDefined();
     expect(tileFor(mountSelector(true), Blockchain.SOLANA)?.attributes('disabled')).toBeUndefined();
+  });
+
+  it('labels Midnight Preview read-only in GeroWallet for now, and no other network', () => {
+    const preview = mountSelector(true, Blockchain.MIDNIGHT, Network.PREVIEW);
+    expect(preview.get('[data-test="network-read-only"]').text()).toBe('midnight.readOnly.label');
+    const pills = preview.findAll('button.net-pill');
+    const previewPill = pills.find((pill) => pill.text().includes('Preview'))!;
+    expect(previewPill.attributes('title')).toBe('midnight.readOnly.label');
+    expect(previewPill.attributes('aria-describedby')).toBe('network-read-only-note');
+    expect(previewPill.find('.net-pill__read-only').exists()).toBe(true);
+    for (const pill of pills.filter((p) => p !== previewPill)) {
+      expect(pill.attributes('title')).toBeUndefined();
+      expect(pill.find('.net-pill__read-only').exists()).toBe(false);
+    }
+
+    for (const [chain, network] of [[Blockchain.MIDNIGHT, Network.PREPROD], [Blockchain.MIDNIGHT, Network.MAINNET], [Blockchain.CARDANO, Network.PREVIEW]]) {
+      expect(mountSelector(true, chain, network).find('[data-test="network-read-only"]').exists()).toBe(false);
+    }
   });
 });

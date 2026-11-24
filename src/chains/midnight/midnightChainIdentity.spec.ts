@@ -6,8 +6,8 @@ import { getMidnightEndpoints } from './midnightConfig';
 vi.mock('@/services/nexusDevice.service', () => ({
   getNexusAccessToken: async () => 'test-token', reauthenticateNexus: async () => 'new-test-token',
 }));
-const endpoints = getMidnightEndpoints('Stagenet')!;
-const identity = { network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'12'.repeat(32)}` };
+const endpoints = getMidnightEndpoints('Preview')!;
+const identity = { network: 'midnight-preview', chain_generation: 1, genesis_hash: `0x${'12'.repeat(32)}` };
 const request = vi.fn();
 function json(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 beforeEach(() => { request.mockReset(); vi.stubGlobal('fetch', request); });

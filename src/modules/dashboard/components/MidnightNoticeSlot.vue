@@ -23,10 +23,10 @@ import { computed, onBeforeUnmount, watch, type Component } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { useMidnightNetworkUpgrading, useMidnightUpdateRequired } from '@/chains/midnight/midnightWriteGate';
 import { MAX_NOTICES, MIDNIGHT_NOTICE_ORDER, visibleMidnightNotices, type MidnightNoticeId } from './midnightNotices';
-import { isMidnightStagenetWallet } from './midnightStagenet';
+import { showsPreviewMoveNotice } from './midnightPreviewMoveNotice';
 import MidnightNetworkUpgradeBanner from './MidnightNetworkUpgradeBanner.vue';
 import MidnightUpdateRequiredBanner from './MidnightUpdateRequiredBanner.vue';
-import MidnightStagenetNotice from './MidnightStagenetNotice.vue';
+import MidnightPreviewMoveNotice from './MidnightPreviewMoveNotice.vue';
 import MidnightRefreshingNotice from './MidnightRefreshingNotice.vue';
 import MidnightNotIncludedCard from './MidnightNotIncludedCard.vue';
 import { useNotIncludedSends } from '@/shared/composables/useMidnightPendingActions';
@@ -45,14 +45,14 @@ const NOTICE_COMPONENTS: Record<MidnightNoticeId, Component> = {
   upgrade: MidnightNetworkUpgradeBanner,
   refreshing: MidnightRefreshingNotice,
   notIncluded: MidnightNotIncludedCard,
-  stagenet: MidnightStagenetNotice,
+  previewMove: MidnightPreviewMoveNotice,
 };
 
 const network = computed(() => walletStore.loggedWallet?.network ?? '');
 // One gate entry per network: update required and the upgrade never both hold.
 const updateRequired = useMidnightUpdateRequired(() => network.value);
 const upgrading = useMidnightNetworkUpgrading(() => network.value);
-const stagenet = computed(() => isMidnightStagenetWallet(walletStore.loggedWallet));
+const previewMove = computed(() => showsPreviewMoveNotice(walletStore.loggedWallet, walletStore.config));
 const { refreshing } = useMidnightRefresh();
 // Sends that didn't go through: only once the rebuild has ended and the lookup didn't find them.
 const { sentence: notIncludedSentence } = useNotIncludedSends();
@@ -98,7 +98,7 @@ const shown = computed(() => visibleMidnightNotices({
   upgrade: upgrading.value,
   refreshing: refreshing.value,
   notIncluded: notIncluded.value,
-  stagenet: stagenet.value,
+  previewMove: previewMove.value,
 }, MAX_NOTICES));
 
 function noticeProps(id: MidnightNoticeId): Record<string, unknown> {

@@ -30,7 +30,7 @@ function dustWallet(coins: number, makerCoins = 0) {
   const makerKey = ledger.DustSecretKey.fromSeed(new Uint8Array(32).fill(92));
   const makerNightKey = ledger.signatureVerifyingKey(ledger.sampleSigningKey());
   let time = new Date((Math.floor(Date.now() / 1000) - 3600) * 1000);
-  let chain = ledger.LedgerState.blank('stagenet');
+  let chain = ledger.LedgerState.blank('preview');
   chain.parameters = ledger.LedgerParameters.deserialize(Buffer.from(preview.ledgerParameters.replace(/^0x/, ''), 'hex'));
   let local = new ledger.DustLocalState(chain.parameters.dust);
   let makerLocal = new ledger.DustLocalState(chain.parameters.dust);
@@ -55,11 +55,11 @@ function dustWallet(coins: number, makerCoins = 0) {
     const registration = ledger.Intent.new(new Date(time.getTime() + 300000));
     registration.dustActions = new ledger.DustActions('signature', 'pre-proof', time, [],
       [new ledger.DustRegistration('signature', night, dust.publicKey, 0n)]);
-    apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, registration));
+    apply(ledger.Transaction.fromParts('preview', undefined, undefined, registration));
     for (let index = 0; index < count; index++) {
       const amount = 1_000_000_000_000_000n;
       chain = chain.testingDistributeNight(ledger.addressFromKey(night), amount, time);
-      apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
+      apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'preview', amount,
         night, (dust === key ? index : 0x80 + index).toString(16).padStart(2, '0').repeat(32), new ledger.SignatureErased())));
     }
   }
@@ -116,9 +116,9 @@ function expectSignedByTaker(tx: ledger.Transaction<ledger.SignatureEnabled, led
 
 /** The maker's offer of {@link makerOffer} with a DUST spend of `vFee` from the maker's key inside its own intent. */
 async function makerOfferPaying(w: ReturnType<typeof dustWallet>, ttl: Date, vFee: (largest: bigint) => bigint): Promise<SealedTransaction9> {
-  const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'stagenet');
+  const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'preview');
   const keysCapability = Keys.makeDefaultKeysCapability();
-  const wallet = CoreWallet.init(w.makerLocal, w.makerKey, 'stagenet');
+  const wallet = CoreWallet.init(w.makerLocal, w.makerKey, 'preview');
   const [coin] = CoinsAndBalances.makeDefaultCoinsAndBalancesCapability({}, () => ({ keysCapability }))
     .getAvailableCoinsWithGeneratedDust(wallet, w.now).toSorted((a, b) => (a.value > b.value ? -1 : 1));
   const [spends] = CoreWallet.spendCoins(wallet, w.makerKey, [{ token: coin.token, value: vFee(coin.value) }], w.now);
@@ -127,23 +127,23 @@ async function makerOfferPaying(w: ReturnType<typeof dustWallet>, ttl: Date, vFe
     [{ value: 18n, owner: keystore.getPublicKey(), type: NIGHT, intentHash: '33'.repeat(32), outputNo: 0 }],
     [{ value: 8n, owner: keystore.getAddress(), type: NIGHT }, { value: 5_000n, owner: keystore.getAddress(), type: TOKEN }], []);
   intent.dustActions = new ledger.DustActions('signature', 'pre-proof', w.now, [...spends], []);
-  const proven = await proveWithMockProofs(signLedger9Intents(ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 7 }, intent), keystore));
+  const proven = await proveWithMockProofs(signLedger9Intents(ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 7 }, intent), keystore));
   return ledger.Transaction.deserialize('signature', 'proof', 'binding', proven.bind().serialize());
 }
 
 /** Another party's sealed swap offer: `inputs` NIGHT coins in, 10 NIGHT left over, 5,000 TOKEN asked for. */
 async function makerOffer(ttl: Date, inputs: number): Promise<SealedTransaction9> {
-  const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'stagenet');
+  const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'preview');
   const intent = ledger.Intent.new(ttl);
   intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new(
     Array.from({ length: inputs }, (_, index) => ({ value: 18n, owner: keystore.getPublicKey(), type: NIGHT, intentHash: '33'.repeat(32), outputNo: index })),
     [{ value: 18n * BigInt(inputs) - 10n, owner: keystore.getAddress(), type: NIGHT }, { value: 5_000n, owner: keystore.getAddress(), type: TOKEN }], []);
-  const proven = await ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 7 }, intent)
+  const proven = await ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 7 }, intent)
     .prove(noProver, ledger.CostModel.initialCostModel());
   return ledger.Transaction.deserialize('signature', 'proof', 'binding', signLedger9Intents(proven, keystore).bind().serialize());
 }
 
-const takerKeystore = () => ledger9Keystore(new Uint8Array(32).fill(1), 'stagenet');
+const takerKeystore = () => ledger9Keystore(new Uint8Array(32).fill(1), 'preview');
 
 /**
  * The wallet's own balancing part: its TOKEN coin in, the change and the 10
@@ -156,7 +156,7 @@ function takerCarrier(ttl: Date): ledger.UnprovenTransaction {
   intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new(
     [{ value: 10_000n, owner: keystore.getPublicKey(), type: TOKEN, intentHash: '11'.repeat(32), outputNo: 0 }],
     [{ value: 5_000n, owner: keystore.getAddress(), type: TOKEN }, { value: 10n, owner: keystore.getAddress(), type: NIGHT }], []);
-  return ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 1 }, intent);
+  return ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 1 }, intent);
 }
 const sign = <T extends Ledger9SignableTransaction>(tx: T): T => signLedger9Intents(tx, takerKeystore());
 
@@ -171,7 +171,7 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
     try {
       const ttl = new Date(w.now.getTime() + 300_000);
       const maker = await makerOffer(ttl, 1);
-      const fee = spreadLightDust9(w.local, w.key, 'stagenet', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
+      const fee = spreadLightDust9(w.local, w.key, 'preview', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
       expect(spendsOf(fee)).toHaveLength(1);
       // Still one intent, now with the wallet's input signed.
       expect([...fee.intents!.keys()]).toEqual([1]);
@@ -199,7 +199,7 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
     try {
       const ttl = new Date(w.now.getTime() + 300_000);
       const maker = await makerOffer(ttl, 2);
-      const fee = spreadLightDust9(w.local, w.key, 'stagenet', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
+      const fee = spreadLightDust9(w.local, w.key, 'preview', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
       const spends = spendsOf(fee);
       expect(spends).toHaveLength(4);
       expect(new Set(spends.map(spend => spend.oldNullifier)).size).toBe(4);
@@ -210,14 +210,14 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
       // Capped below what fits, or held in too few coins: refused, with the
       // code the UI translates. (Refused, not rethrown: the ledger's real
       // over-the-limit error is the one the spread recognises.)
-      expect(() => spreadLightDust9(w.local, w.key, 'stagenet', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { maximumSpends: 3, sign }))
+      expect(() => spreadLightDust9(w.local, w.key, 'preview', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { maximumSpends: 3, sign }))
         .toThrow(DustSpreadError);
     } finally { w.clear(); }
     const few = dustWallet(2);
     try {
       const ttl = new Date(few.now.getTime() + 300_000);
       let thrown: unknown;
-      try { spreadLightDust9(few.local, few.key, 'stagenet', [await makerOffer(ttl, 2)], takerCarrier(ttl), ttl, few.now, few.parameters, { sign }); } catch (error) { thrown = error; }
+      try { spreadLightDust9(few.local, few.key, 'preview', [await makerOffer(ttl, 2)], takerCarrier(ttl), ttl, few.now, few.parameters, { sign }); } catch (error) { thrown = error; }
       expect(thrown).toBeInstanceOf(DustSpreadError);
       expect((thrown as DustSpreadError).message).toBe(MIDNIGHT_DUST_COINS_SHORT);
       expect((thrown as DustSpreadError).coinsWithDust).toBe(2);
@@ -229,11 +229,11 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
     try {
       const ttl = new Date(w.now.getTime() + 300_000);
       const bare = await makerOffer(ttl, 1);
-      const alone = spreadLightDust9(w.local, w.key, 'stagenet', [bare], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
+      const alone = spreadLightDust9(w.local, w.key, 'preview', [bare], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
       // The offer's own fee (with the DUST spend it is about to carry), paid by the maker as makeIntent with payFees does.
       const ownFee = (await makerOfferPaying(w, ttl, () => 1n)).feesWithMargin(params(w), 1);
       const paying = await makerOfferPaying(w, ttl, () => ownFee);
-      const fee = spreadLightDust9(w.local, w.key, 'stagenet', [paying], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
+      const fee = spreadLightDust9(w.local, w.key, 'preview', [paying], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
       expect(spendsOf(fee).length).toBeGreaterThanOrEqual(1);
       // Clearly less: about the offer's own fee less.
       expect(paidBy(fee)).toBeLessThan(paidBy(alone) - ownFee / 2n);
@@ -248,13 +248,13 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
       const ttl = new Date(w.now.getTime() + 300_000);
       // The offer pays far more than the whole swap's fee.
       const paying = await makerOfferPaying(w, ttl, largest => largest);
-      const fee = spreadLightDust9(w.local, w.key, 'stagenet', [paying], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
+      const fee = spreadLightDust9(w.local, w.key, 'preview', [paying], takerCarrier(ttl), ttl, w.now, w.parameters, { sign });
       expect(spendsOf(fee)).toHaveLength(0);
       expect(fee.intents!.get(1)!.dustActions).toBeUndefined();
       expectSignedByTaker(fee);
       expectWellFormed(w, [paying, fee]);
 
-      const none = spreadLightDust9(w.local, w.key, 'stagenet', [paying], undefined, ttl, w.now, w.parameters, { sign });
+      const none = spreadLightDust9(w.local, w.key, 'preview', [paying], undefined, ttl, w.now, w.parameters, { sign });
       expect(none.intents?.size ?? 0).toBe(0);
       // Proven, bound and merged as the pipeline does: the offer comes out unchanged.
       const proven = await none.prove(noProver, ledger.CostModel.initialCostModel());
@@ -269,10 +269,10 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
       const ttl = new Date(w.now.getTime() + 300_000);
       const maker = await makerOffer(ttl, 1);
       vi.spyOn(ledger.Transaction.prototype, 'cost').mockImplementation(() => { throw new Error('cost model unavailable'); });
-      expect(() => spreadLightDust9(w.local, w.key, 'stagenet', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign }))
+      expect(() => spreadLightDust9(w.local, w.key, 'preview', [maker], takerCarrier(ttl), ttl, w.now, w.parameters, { sign }))
         .toThrow('cost model unavailable');
       vi.restoreAllMocks();
-      expect(() => spreadLightDust9(w.local, w.key, 'stagenet', [maker], takerCarrier(ttl), ttl, w.now, w.parameters,
+      expect(() => spreadLightDust9(w.local, w.key, 'preview', [maker], takerCarrier(ttl), ttl, w.now, w.parameters,
         { sign: () => { throw new Error('signing failed'); } })).toThrow('signing failed');
     } finally { w.clear(); }
   });
@@ -282,15 +282,15 @@ describe('a swap fee paid with the fewest DUST spends that fit the validation-ti
     try {
       const ttl = new Date(w.now.getTime() + 300_000);
       // A balanced part of one's own (nothing for the wallet to add) still needs its fee.
-      const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'stagenet');
+      const keystore = ledger9Keystore(new Uint8Array(32).fill(7), 'preview');
       const intent = ledger.Intent.new(ttl);
       intent.guaranteedUnshieldedOffer = ledger.UnshieldedOffer.new(
         [{ value: 18n, owner: keystore.getPublicKey(), type: NIGHT, intentHash: '33'.repeat(32), outputNo: 0 }],
         [{ value: 18n, owner: keystore.getAddress(), type: NIGHT }], []);
-      const proven = await ledger.Transaction.fromParts('stagenet').addIntent({ tag: 'specific', value: 1 }, intent)
+      const proven = await ledger.Transaction.fromParts('preview').addIntent({ tag: 'specific', value: 1 }, intent)
         .prove(noProver, ledger.CostModel.initialCostModel());
       const balanced: SealedTransaction9 = ledger.Transaction.deserialize('signature', 'proof', 'binding', signLedger9Intents(proven, keystore).bind().serialize());
-      const fee = spreadLightDust9(w.local, w.key, 'stagenet', [balanced], undefined, ttl, w.now, w.parameters);
+      const fee = spreadLightDust9(w.local, w.key, 'preview', [balanced], undefined, ttl, w.now, w.parameters);
       expect([...fee.intents!.keys()]).toEqual([2]);
       expect(spendsOf(fee).length).toBeGreaterThanOrEqual(1);
     } finally { w.clear(); }

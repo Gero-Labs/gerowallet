@@ -44,7 +44,7 @@ describe('write gate rules', () => {
     expect(record['mainnet']).toEqual({ source: 'status', at: NOW });
     record = nextGateRecord(record, 'Preprod', { paused: true, source: 'response', at: NOW });
     expect(nextGateRecord(record, 'Mainnet', { paused: false })).toEqual({ preprod: { source: 'response', at: NOW } });
-    const unchanged = nextGateRecord(record, 'Stagenet', { paused: false });
+    const unchanged = nextGateRecord(record, 'Preview', { paused: false });
     expect(unchanged).toBe(record);
   });
 

@@ -27,7 +27,7 @@ describe('getExplorerUrl: Cardano default (no saved choice)', () => {
   it('treats an unknown or missing network as mainnet, as before', () => {
     expect(getExplorerUrl(Blockchain.CARDANO, TX, 'tx')).toBe(`https://cexplorer.io/tx/${TX}`);
     expect(cardano('tx', TX, undefined, Network.TESTNET)).toBe(`https://cexplorer.io/tx/${TX}`);
-    expect(cardano('tx', TX, undefined, Network.STAGENET)).toBe(`https://cexplorer.io/tx/${TX}`);
+    expect(cardano('tx', TX, undefined, 'Stagenet')).toBe(`https://cexplorer.io/tx/${TX}`);
   });
 
   it('returns nothing for an empty id', () => {

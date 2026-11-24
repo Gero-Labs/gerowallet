@@ -157,7 +157,8 @@ export async function proveUnshieldedTransfer(
 
   // Cross-device payloads are already authenticated envelopes and carry their
   // network in the ledger serialization. Do not infer Midnight from the paired
-  // Cardano wallet's network (which has no Stagenet counterpart).
+  // Cardano wallet's network. 'stagenet' stays a candidate for a paired phone
+  // that may still build Stagenet transactions; this wallet no longer does.
   // Cross-device payloads name neither: the bytes carry both the ledger (the
   // envelope's version tag) and the network (checked by merging).
   let network = args.sdkNetworkId;

@@ -83,6 +83,8 @@ import { GROUP_SECRET_FIELDS, resolveAccountIndex, secretsWallet, secretsWalletI
 // namespace const regresses behind its first reader.
 import midnightSyncService from '@/services/midnight-sync.service';
 import { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession, clearMidnightPrivateSession } from '@/chains/midnight/midnightPrivateSyncSession';
+// Static for the same reason: the background is one iife (scripts/check-bundle-tdz.mjs).
+import { applyPendingPreviewMove } from '@/chains/midnight/midnightPreviewMoveCleanup';
 
 /**
  * Record fields whose only source is the stored wallet record, with its secrets
@@ -235,6 +237,7 @@ export class WalletManager {
         }
 
         await this.recheckBackup(wallet.id);
+        await this.completePreviewMove(wallet.id);
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
         // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
@@ -300,6 +303,24 @@ export class WalletManager {
       }
     } catch (error) {
       debugLog('WalletManager: backup recheck deferred:', error);
+    }
+  }
+
+  /**
+   * A Midnight wallet the GeroWalletDatabase v18 upgrade moved from Stagenet to
+   * Preview drops the old chain's local state before it starts, so it syncs
+   * Preview from empty (midnightPreviewMoveCleanup.ts). Awaited before the
+   * wallet initializes, like the backup recheck. Never throws: a failure keeps
+   * the stamp for the next login.
+   */
+  private async completePreviewMove(walletId: number): Promise<void> {
+    try {
+      const { getDb } = await import('@/db/gero-db');
+      if (await applyPendingPreviewMove(await getDb(), walletId)) {
+        debugLog('WalletManager: Midnight wallet moved from Stagenet to Preview');
+      }
+    } catch (error) {
+      debugLog('WalletManager: Stagenet to Preview cleanup deferred:', error);
     }
   }
 
@@ -414,6 +435,7 @@ export class WalletManager {
         }
 
         await this.recheckBackup(wallet.id);
+        await this.completePreviewMove(wallet.id);
         LoadingState.setText('Initializing wallet...');
 
         // Check if this is a first-time restore (no cached data).

@@ -67,7 +67,7 @@ describe('ExplorerLink', () => {
   });
 
   it('renders nothing on a chain without explorer pages for the id', async () => {
-    walletStore.loggedWallet = { ...walletStore.loggedWallet, chain: 'Midnight', network: 'Stagenet' } as typeof walletStore.loggedWallet;
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, chain: 'Midnight', network: 'Preview' } as typeof walletStore.loggedWallet;
     expect(mountLink({ type: 'tx', id: TX }).find('a').exists()).toBe(false);
   });
 });

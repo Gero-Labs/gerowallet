@@ -27,7 +27,7 @@ describe('connectorConfiguration', () => {
   it.each([
     [Network.MAINNET, 'mainnet'],
     [Network.PREPROD, 'preprod'],
-    [Network.STAGENET, 'stagenet'],
+    [Network.PREVIEW, 'preview'],
   ])('advertises no indexer or node on %s (issue 1320)', (network, sdkNetworkId) => {
     for (const mode of ['remote', 'local', 'zkpaas'] as const) {
       const config = connectorConfiguration(endpointsFor(network), preference(mode), sdkNetworkId);
@@ -44,16 +44,16 @@ describe('connectorConfiguration', () => {
     expect(connectorConfiguration(endpoints, preference('remote'), 'preprod').proverServerUri).toBe(endpoints.defaultProofServerUrl);
   });
 
-  it('reports the ledger-9 proof server on stagenet', () => {
-    const endpoints = endpointsFor(Network.STAGENET);
-    expect(connectorConfiguration(endpoints, preference('local'), 'stagenet').proverServerUri).toBe('http://localhost:6398');
-    expect(connectorConfiguration(endpoints, preference('remote'), 'stagenet').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
-    expect(connectorConfiguration(endpoints, preference('zkpaas'), 'stagenet').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
+  it('reports the ledger-9 proof server on preview', () => {
+    const endpoints = endpointsFor(Network.PREVIEW);
+    expect(connectorConfiguration(endpoints, preference('local'), 'preview').proverServerUri).toBe('http://localhost:6398');
+    expect(connectorConfiguration(endpoints, preference('remote'), 'preview').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
+    expect(connectorConfiguration(endpoints, preference('zkpaas'), 'preview').proverServerUri).toBe(DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9);
   });
 
   it('omits proverServerUri in local mode when the network has no local server set', () => {
     const { localUrlLedger9: _unset, ...withoutLedger9 } = preference('local');
-    expect(connectorConfiguration(endpointsFor(Network.STAGENET), withoutLedger9, 'stagenet').proverServerUri).toBeUndefined();
+    expect(connectorConfiguration(endpointsFor(Network.PREVIEW), withoutLedger9, 'preview').proverServerUri).toBeUndefined();
   });
 
   it('never advertises the zkPaaS endpoint or its credentials', () => {

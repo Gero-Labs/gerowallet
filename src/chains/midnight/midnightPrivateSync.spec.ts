@@ -8,9 +8,9 @@ import type { MidnightPrivateSyncArgs } from './midnightPrivateSync';
 
 const h = vi.hoisted(() => ({
   factory: vi.fn(), forking: vi.fn(), identity: vi.fn(), save: vi.fn(), history: vi.fn(), publish: vi.fn(), status: vi.fn(),
-  store: { activeWalletKey: 'mn_addr_stagenet1owner', privateSyncStatus: 'idle', addresses: { shielded: '' },
-    chainIdentity: { network: 'midnight-stagenet', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
-  wallet: { loggedWallet: { id: 7, network: 'Stagenet', chain: 'Midnight' }, isLocked: false },
+  store: { activeWalletKey: 'mn_addr_preview1owner', privateSyncStatus: 'idle', addresses: { shielded: '' },
+    chainIdentity: { network: 'midnight-preview', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
+  wallet: { loggedWallet: { id: 7, network: 'Preview', chain: 'Midnight' }, isLocked: false },
 }));
 vi.mock('midnight-v9-shielded', () => ({ CustomShieldedWallet: h.factory, ShieldedWallet: h.forking }));
 vi.mock('midnight-v9-abstractions', () => ({
@@ -27,13 +27,13 @@ import { startMidnightPrivateSync, stopMidnightPrivateSync, privateHistoryRows }
 
 const seed = new Uint8Array(32).fill(3);
 const token = 'aa'.repeat(32);
-const identity = { network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'ab'.repeat(32)}` };
+const identity = { network: 'midnight-preview', chain_generation: 1, genesis_hash: `0x${'ab'.repeat(32)}` };
 let publicKey: string; let encryptionKey: string;
 let events: Subject<ShieldedWalletState>;
 let wallet: { state: Subject<ShieldedWalletState>; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
 function args(): MidnightPrivateSyncArgs {
-  return { walletId: '7', network: 'Stagenet', seed: seed.slice(), endpoints: {
-    sdkNetworkId: 'stagenet', publicIndexerUrl: 'https://indexer.invalid', publicIndexerWsUrl: 'wss://indexer.invalid',
+  return { walletId: '7', network: 'Preview', seed: seed.slice(), endpoints: {
+    sdkNetworkId: 'preview', publicIndexerUrl: 'https://indexer.invalid', publicIndexerWsUrl: 'wss://indexer.invalid',
   } as MidnightPrivateSyncArgs['endpoints'] };
 }
 function state(): ShieldedWalletState {
@@ -48,11 +48,11 @@ describe('private sync ownership and generation', () => {
     vi.resetAllMocks(); vi.useFakeTimers();
     const keys = ledger.ZswapSecretKeys.fromSeed(seed);
     publicKey = keys.coinPublicKey; encryptionKey = keys.encryptionPublicKey;
-    h.store.addresses.shielded = ShieldedAddress.codec.encode('stagenet', new ShieldedAddress(
+    h.store.addresses.shielded = ShieldedAddress.codec.encode('preview', new ShieldedAddress(
       ShieldedCoinPublicKey.fromHexString(publicKey), ShieldedEncryptionPublicKey.fromHexString(encryptionKey))).toString();
     keys.clear();
     h.wallet.isLocked = false; h.wallet.loggedWallet.id = 7;
-    h.store.activeWalletKey = 'mn_addr_stagenet1owner';
+    h.store.activeWalletKey = 'mn_addr_preview1owner';
     h.store.chainIdentity = { network: identity.network, generation: 1, genesisHash: identity.genesis_hash };
     h.store.privateSyncStatus = 'idle';
     events = new Subject();
@@ -233,7 +233,7 @@ describe('private sync on a chain that crossed the upgrade', () => {
   });
   afterEach(async () => {
     await stopMidnightPrivateSync(); vi.useRealTimers();
-    h.wallet.loggedWallet.network = 'Stagenet';
+    h.wallet.loggedWallet.network = 'Preview';
   });
 
   it('starts wallet SDK 2\'s fork-aware wallet with both ledgers\' keys, as methods', async () => {

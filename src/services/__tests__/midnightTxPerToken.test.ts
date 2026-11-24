@@ -60,10 +60,10 @@ interface CapturedHandlers {
  * would do.
  */
 async function sync(payload: WsSyncMessage): Promise<void> {
-  midnightSyncService.start(Network.STAGENET, ADDRESSES);
+  midnightSyncService.start(Network.PREVIEW, ADDRESSES);
   const lastCall = h.connect.mock.calls[h.connect.mock.calls.length - 1];
   const handlers = lastCall[4] as CapturedHandlers;
-  await handlers.onSync?.({ ...payload, midnight_network: 'midnight-stagenet',
+  await handlers.onSync?.({ ...payload, midnight_network: 'midnight-preview',
     midnight_chain_generation: 1, midnight_genesis_hash: '0x' + 'ab'.repeat(32) });
 }
 

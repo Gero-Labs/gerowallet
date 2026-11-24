@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MidnightGenerationQueue, parseMidnightSyncIdentity, clearMidnightNetworkCheckpoints } from './midnightSyncGeneration';
 import { midnightWalletStatesForTest, resetMidnightWalletStateDbForTest } from './midnightWalletStatePersistence';
 
-const network = 'midnight-stagenet';
+const network = 'midnight-preview';
 const stamp = (generation = 1) => ({ midnight_network: network, midnight_chain_generation: generation,
   midnight_genesis_hash: `0x${(generation === 1 ? 'ab' : 'cd').repeat(32)}` });
 
@@ -54,8 +54,8 @@ describe('Midnight generation replay', () => {
     const table = midnightWalletStatesForTest();
     await table.clear();
     await table.bulkPut([
-      row('midnight_wallet_state_stagenet_dust_x'),
-      row('midnight_wallet_state_midnight-stagenet-ledger9-rc3_old'),
+      row('midnight_wallet_state_preview_dust_x'),
+      row('midnight_wallet_state_midnight-preview-ledger9-rc3_old'),
       row('midnight_wallet_state_preprod_dust_x'),
       row('midnight_wallet_state_mainnet_shielded_y'),
     ]);

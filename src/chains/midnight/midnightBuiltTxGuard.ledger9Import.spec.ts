@@ -17,7 +17,7 @@ describe('when the ledger 9 decoder cannot be loaded', () => {
   });
 
   it('the ledger 9 network refuses as UNREADABLE', async () => {
-    await expect(decodeUnprovenMidnightTransaction('stagenet', 'deadbeef'))
+    await expect(decodeUnprovenMidnightTransaction('preview', 'deadbeef'))
       .rejects.toMatchObject({ name: 'MidnightBuiltTxUnreadableError', message: MIDNIGHT_BUILT_TX_UNREADABLE });
   });
 });

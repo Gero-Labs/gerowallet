@@ -40,6 +40,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
 import { extractNexusErrorMessage, isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import { isMidnightReadOnlyNetwork } from '@/chains/midnight/midnightConfig';
 import { CNIGHT_ASSETS } from '@/shared/utils/cnightAssets';
 import { DUST_MAPPING_VALIDATOR } from '@/shared/utils/dustMappingValidator';
 import { inputRefOf } from '@/shared/utils/txIntentGuard';
@@ -82,13 +85,12 @@ export function mapDustBuildError(raw: string): string {
  * Official portal URLs — fallback CTA when the wallet can't sign locally
  * (hardware wallets). Keyed by the logged wallet's network. No preprod
  * instance exists (probed 2026-07-14: midnight-dust-preprod.nethermind.io
- * unreachable), and no stagenet instance exists either (probed 2026-09-07:
- * dust.stagenet.shielded.tools does not resolve) — on both, this wallet flow
- * is the only UI, so the portal CTA is hidden there.
+ * unreachable), so there this wallet flow is the only UI and the portal CTA is
+ * hidden.
  *
- * The preview portal stays listed: it is network-wired to Midnight preview,
- * which upstream still runs, and this key is now only reachable from a
- * CARDANO preview wallet (Midnight preview is no longer an offered network).
+ * The preview portal is network-wired to Midnight Preview (answering on
+ * 2026-11-24, after Preview's relaunch), and is reached from a Midnight Preview
+ * wallet and from a Cardano preview wallet alike.
  */
 export const DUST_PORTAL_URLS: Record<string, string> = {
   [Network.MAINNET]: 'https://midnight-dust-mainnet.nethermind.io/',
@@ -224,6 +226,16 @@ export function useCnightDustRegistration() {
     if (loggedWallet.value?.chain !== Blockchain.CARDANO) return false;
     return !!CNIGHT_ASSETS[network.value];
   });
+
+  /**
+   * The registration is built and submitted through the Midnight network's Nexus
+   * routes, so a network read-only in GeroWallet (midnightConfig.ts) holds it:
+   * every action below answers with this sentence before asking for anything.
+   */
+  const writesHeld = computed(() => isMidnightReadOnlyNetwork(network.value));
+  const writesHeldText = computed(() => (writesHeld.value
+    ? String(i18n.t('midnight.readOnly.registrationHeld', { network: midnightNetworkDisplayName(network.value) }))
+    : ''));
 
   /** Hardware wallets hold no mnemonic — they register via the official portal instead. */
   const canSignLocally = computed(() => {
@@ -482,6 +494,7 @@ export function useCnightDustRegistration() {
    * from the just-decrypted mnemonic (no second WebAuthn ceremony).
    */
   async function register(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {
+    if (writesHeld.value) return { status: 'error', message: writesHeldText.value };
     const wallet = loggedWallet.value;
     if (!wallet?.baseAddress || !wallet?.stakeAddress) {
       return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
@@ -693,6 +706,7 @@ export function useCnightDustRegistration() {
    * password path (SIGN_TX decrypts the stored key itself).
    */
   async function deregister(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {
+    if (writesHeld.value) return { status: 'error', message: writesHeldText.value };
     const wallet = loggedWallet.value;
     if (!wallet?.baseAddress || !wallet?.stakeAddress) {
       return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
@@ -753,6 +767,7 @@ export function useCnightDustRegistration() {
     txHash: string,
     outputIndex: number,
   ): Promise<CnightRegistrationResult> {
+    if (writesHeld.value) return { status: 'error', message: writesHeldText.value };
     const wallet = loggedWallet.value;
     if (!wallet?.baseAddress || !wallet?.stakeAddress) {
       return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
@@ -803,6 +818,7 @@ export function useCnightDustRegistration() {
    * with the replacement datum.
    */
   async function migrateDustAddressToOwn(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {
+    if (writesHeld.value) return { status: 'error', message: writesHeldText.value };
     const wallet = loggedWallet.value;
     if (!wallet?.baseAddress || !wallet?.stakeAddress) {
       return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
@@ -855,6 +871,8 @@ export function useCnightDustRegistration() {
 
   return {
     isSupported,
+    writesHeld,
+    writesHeldText,
     canSignLocally,
     cnightUnit,
     cnightBalance,

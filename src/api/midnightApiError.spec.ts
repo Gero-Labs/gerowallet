@@ -167,7 +167,7 @@ describe('Midnight API error helpers', () => {
   it('names the network the way the network list does', () => {
     expect(midnightNetworkDisplayName('Preprod')).toBe('Midnight Preprod');
     expect(midnightNetworkDisplayName('mainnet')).toBe('Midnight Mainnet');
-    expect(midnightNetworkDisplayName('Midnight Stagenet')).toBe('Midnight Stagenet');
+    expect(midnightNetworkDisplayName('Midnight Preview')).toBe('Midnight Preview');
     expect(midnightNetworkDisplayName(undefined)).toBe('Midnight');
   });
 

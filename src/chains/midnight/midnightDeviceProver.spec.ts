@@ -163,12 +163,12 @@ describe('midnightDeviceProver', () => {
 
 describe('walletProverFor', () => {
   // The device keys are ledger 9's (generation 10 DUST); the chain decides, not the name.
-  beforeEach(() => useMidnightChains({ preprod: [L9, L8], mainnet: [L9, L8], stagenet: [L9, L9] }));
+  beforeEach(() => useMidnightChains({ preprod: [L9, L8], mainnet: [L9, L8], preview: [L9, L9] }));
 
   it('proves public sends on this device in Gero Cloud mode on ledger 9 chains', () => {
     expect(walletProverFor('Preprod', { mode: 'remote' }, 'unshielded')).toBe('device');
     expect(walletProverFor('Mainnet', { mode: 'remote' }, 'unshielded')).toBe('device');
-    expect(walletProverFor('Stagenet', { mode: 'remote' }, 'unshielded')).toBe('device');
+    expect(walletProverFor('Preview', { mode: 'remote' }, 'unshielded')).toBe('device');
   });
 
   it('keeps private sends on Gero Cloud unless the shielded flag is on', () => {

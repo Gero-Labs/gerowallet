@@ -55,8 +55,8 @@ import TransactionAuthSection from '@/shared/components/TransactionAuthSection.v
 
 const { t } = useTranslation();
 const wallet = computed(() => walletStore.loggedWallet);
-// Private balances sync on every Midnight network now (ledger 9 on Stagenet,
-// ledger 8 elsewhere — see midnightPrivateSyncSession.ts).
+// Private balances sync on every Midnight network (see
+// midnightPrivateSyncSession.ts).
 const isMidnight = computed(() => wallet.value?.chain === Blockchain.MIDNIGHT);
 const isPrf = computed(() => wallet.value?.encryptionMethod === 'prf');
 const syncing = computed(() => midnightStore.privateSyncStatus === 'syncing');

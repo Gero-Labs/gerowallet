@@ -48,6 +48,9 @@ import {
 } from '@/shared/composables/useCardanoStakeEnumeration';
 import { secretsWalletId } from '@/shared/utils/walletAccount';
 import { debugLog } from '@/utils/debug';
+import i18n from '@/plugins/i18n';
+import { midnightNetworkDisplayName } from '@/api/midnightApiError';
+import { isMidnightReadOnlyNetwork } from '@/chains/midnight/midnightConfig';
 
 export interface DustSource extends CardanoStakeIdentity {
   /** Raw cNIGHT base units; null while loading / on query failure. */
@@ -607,11 +610,24 @@ export function useDustSources() {
     return mergeWitnessSets(witnessHex, witness);
   }
 
+  /**
+   * On a network read-only in GeroWallet (midnightConfig.ts) a source can be
+   * neither registered nor redirected: its Nexus routes take no writes. The
+   * sentence, or '' when writes are open.
+   */
+  function readOnlyMessage(): string {
+    return isMidnightReadOnlyNetwork(network.value)
+      ? String(i18n.t('midnight.readOnly.registrationHeld', { network: midnightNetworkDisplayName(network.value) }))
+      : '';
+  }
+
   /** Register `source`'s NIGHT to generate DUST at THIS Midnight wallet's address. */
   async function registerSource(
     source: DustSource, credentials: SourceCredentials,
     onStage?: (stage: DustSourceStage) => void,
   ): Promise<DustSourceActionResult> {
+    const held = readOnlyMessage();
+    if (held) return { status: 'error', message: held };
     if (!ownDustAddress.value) {
       return { status: 'error', message: 'This wallet has no DUST address yet' };
     }
@@ -670,6 +686,8 @@ export function useDustSources() {
     source: DustSource, credentials: SourceCredentials,
     onStage?: (stage: DustSourceStage) => void,
   ): Promise<DustSourceActionResult> {
+    const held = readOnlyMessage();
+    if (held) return { status: 'error', message: held };
     // Prefer the CONFIRMED Cardano registration UTxO over the indexer's copy:
     // during the ~2.5h relay `dust/status` carries no outpoint at all, and
     // that's exactly when a user wants to re-point a registration they can

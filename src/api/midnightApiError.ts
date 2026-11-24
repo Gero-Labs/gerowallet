@@ -29,6 +29,8 @@ export const CLIENT_UPDATE_REQUIRED = 'CLIENT_UPDATE_REQUIRED';
  * - `networkUpgrading`: writes on this network are paused for a network upgrade.
  * - `updateRequired`: writes on this network are closed to this build (a 501
  *   MIDNIGHT_NETWORK_UPGRADING with reason CLIENT_UPDATE_REQUIRED); a newer build may send.
+ * - `readOnly`: the network is read-only in GeroWallet (`writesSupported: false`
+ *   in midnightConfig.ts); nothing was sent.
  * - `ledgerMismatch`: the network's ledger changed under the transaction; a fresh build may work.
  * - `proverBusy`: the server's prover is at capacity (`retryAfter` says when to try again).
  * - `resetPending`: the server's view of the chain is being rebuilt.
@@ -38,6 +40,7 @@ export const CLIENT_UPDATE_REQUIRED = 'CLIENT_UPDATE_REQUIRED';
 export type MidnightApiErrorKind =
   | 'networkUpgrading'
   | 'updateRequired'
+  | 'readOnly'
   | 'ledgerMismatch'
   | 'proverBusy'
   | 'resetPending'
@@ -138,13 +141,15 @@ export function isMidnightSubmitRefusal(error: unknown): boolean {
  *   CLIENT_UPDATE_REQUIRED), or the pre-sign guard read the built transaction as
  *   a newer ledger than this build signs for (MidnightBuiltTxRefusedError, code
  *   MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED).
+ * - `readOnly`: the network is read-only in GeroWallet (midnightConfig.ts).
  */
-export type MidnightSendBlock = 'networkUpgrading' | 'updateRequired';
+export type MidnightSendBlock = 'networkUpgrading' | 'updateRequired' | 'readOnly';
 
 export function midnightSendBlockOf(error: unknown): MidnightSendBlock | null {
   const kind = midnightApiErrorKind(error);
   if (kind === 'networkUpgrading') return 'networkUpgrading';
   if (kind === 'updateRequired') return 'updateRequired';
+  if (kind === 'readOnly') return 'readOnly';
   if (error instanceof Error && error.name === 'MidnightBuiltTxRefusedError'
     && (error as { code?: unknown }).code === 'MIDNIGHT_BUILT_TX_LEDGER_UNSUPPORTED') return 'updateRequired';
   return null;
@@ -252,6 +257,8 @@ export function readableMidnightError(
       return String(i18n.t('midnight.errors.networkUpgrading', { network: midnightNetworkDisplayName(network) }));
     case 'updateRequired':
       return String(i18n.t('midnight.errors.updateRequired'));
+    case 'readOnly':
+      return String(i18n.t('midnight.readOnly.sendHeld', { network: midnightNetworkDisplayName(network) }));
     case 'ledgerMismatch':
       return String(i18n.t('midnight.errors.ledgerMismatch'));
     case 'noAnswer':

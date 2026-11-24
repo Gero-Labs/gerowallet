@@ -101,7 +101,7 @@ Three schemas, all declared in `src/db/schema.ts`:
 
 | DB | Opener | Versioning |
 |---|---|---|
-| `GeroWalletDatabase` (app-level: wallets, config, provider) | `getDb()` in `src/db/gero-db.ts` | Full version chain 10 -> 14 -> 15 -> 16, three with `.upgrade()` |
+| `GeroWalletDatabase` (app-level: wallets, config, provider) | `getDb()` in `src/db/gero-db.ts` | Full version chain 10 -> 14 -> 15 -> 16 -> 17 -> 18, five with `.upgrade()` |
 | `wallet-{id}` (per wallet) | `getDb(id)` in `src/db/wallet-db.ts` | **One** version, the complete current schema, no upgrade hooks |
 | `{chain}_{network}` (blockchain cache) | `src/db/index.ts` | Own version + Map cache |
 

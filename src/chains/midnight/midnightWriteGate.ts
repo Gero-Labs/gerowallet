@@ -35,6 +35,7 @@
 import { computed, reactive, type ComputedRef } from 'vue';
 import { Network } from '@/models/types';
 import { extensionVersion, isVersionBelow } from './midnightClientVersion';
+import { isMidnightReadOnlyNetwork } from './midnightConfig';
 
 export const MIDNIGHT_WRITE_GATE_KEY = 'midnightWriteGate';
 /** How long a 501 alone keeps a network paused before the next attempt asks the server again. */
@@ -48,8 +49,12 @@ export const STATUS_GATE_TTL_MS = 15 * 60_000;
 
 export type MidnightWriteGateSource = 'status' | 'response';
 
-/** Why writes are held: the network is upgrading, or this build must update. */
-export type MidnightWriteBlock = 'networkUpgrading' | 'updateRequired';
+/**
+ * Why writes are held: the network is read-only in GeroWallet (a fixed
+ * capability, `writesSupported` in midnightConfig.ts, which outranks the rest),
+ * the network is upgrading, or this build must update.
+ */
+export type MidnightWriteBlock = 'readOnly' | 'networkUpgrading' | 'updateRequired';
 
 export interface MidnightWriteGateEntry {
   source: MidnightWriteGateSource;
@@ -81,6 +86,7 @@ export function writeBlockIn(
   version: string = extensionVersion(),
 ): MidnightWriteBlock | null {
   if (!network) return null;
+  if (isMidnightReadOnlyNetwork(network)) return 'readOnly';
   const entry = record?.[midnightGateKey(network)];
   if (!entry || !isLive(entry, now)) return null;
   if (entry.block !== 'updateRequired') return 'networkUpgrading';

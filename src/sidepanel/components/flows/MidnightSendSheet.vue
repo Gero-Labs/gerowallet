@@ -931,8 +931,8 @@ async function acceptConsent() {
 }
 /**
  * Who proves this public send (midnight-tx.service's rule): in Gero Cloud
- * mode its DUST fee is proven on this device, so only zkPaaS (and Stagenet,
- * which this device cannot prove) still needs a consent notice.
+ * mode its DUST fee is proven on this device, so only zkPaaS still needs a
+ * consent notice.
  */
 function sendProver() {
   return walletProverFor(loggedWallet.value?.network ?? '', midnightStore.proofServer, 'unshielded', localProvingOffersHere());

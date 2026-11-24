@@ -241,13 +241,18 @@
             block
             size="large"
             class="geroButton"
-            :disabled="!hasNight"
+            :disabled="!hasNight || writesHeld"
+            :aria-describedby="writesHeld ? 'cnight-register-read-only' : undefined"
             @click="startRegistration"
           >
             <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
-          <div v-if="!hasNight" class="no-night-hint">
+          <!-- A network read-only in GeroWallet (midnightConfig.ts): its servers take no registration. -->
+          <GNote v-if="writesHeld" id="cnight-register-read-only" icon="mdi-eye-outline" role="status" class="mt-2" data-test="cnight-register-read-only">
+            {{ writesHeldText }}
+          </GNote>
+          <div v-else-if="!hasNight" class="no-night-hint">
             {{ t('midnight.cnightNoNight') }}
           </div>
         </template>
@@ -353,7 +358,7 @@
           <v-icon v-if="registrationStatus === 'Pending'" start>mdi-clock-outline</v-icon>
           {{ registrationStatus === 'Pending' ? t('common.close') : t('common.done') }}
         </v-btn>
-        <div v-if="registrationStatus === 'Registered' && canSignLocally" class="manage-actions">
+        <div v-if="registrationStatus === 'Registered' && canSignLocally && !writesHeld" class="manage-actions">
           <v-btn size="small" variant="text" color="var(--g-text-2)" :disabled="registering" @click="enterManage('migrate')">
             <v-icon size="small" start>mdi-swap-horizontal</v-icon>
             {{ t('midnight.cnightMigrateCta') }}
@@ -379,6 +384,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { useFetchedMidnightTip, useMidnightDataFreshness } from '@/shared/composables/useMidnightDataFreshness';
 import snackbar from '@/plugins/snackbar';
+import GNote from '@/shared/components/GNote.vue';
 
 const props = defineProps<{ isOpen: boolean }>();
 defineEmits<{ (e: 'close'): void }>();
@@ -386,6 +392,8 @@ defineEmits<{ (e: 'close'): void }>();
 const { t } = useTranslation();
 
 const {
+  writesHeld,
+  writesHeldText,
   canSignLocally,
   cnightBalance,
   cnightDecimals,
@@ -699,7 +707,7 @@ async function confirmManage() {
 }
 
 function startRegistration() {
-  if (!hasNight.value) return;
+  if (!hasNight.value || writesHeld.value) return;
   inSigningPhase.value = true;
   if (isPrfWallet.value) {
     confirmRegistration();

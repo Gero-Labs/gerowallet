@@ -39,7 +39,7 @@ import { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged
 import { DUST_SYNC_INACTIVITY_MS, dustSyncReporting, watchDustSync } from './midnightDustSyncWatch';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
-  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;

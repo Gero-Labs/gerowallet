@@ -137,10 +137,10 @@ async function stakeIdentityFromRecord(
  * address.
  *
  * Callers pass the LOGGED wallet's network, which on a Midnight wallet is a
- * Midnight network. Those names used to double as Cardano ones; stagenet does
- * not, so the pairing goes through `cardanoTwinNetwork` (stagenet's cNIGHT
- * lives on Cardano preprod). It is the identity function for every Cardano
- * network, so a Cardano-network argument still behaves as before.
+ * Midnight network. The pairing goes through `cardanoTwinNetwork` (each
+ * Midnight network's cNIGHT lives on the Cardano network of the same name).
+ * It is the identity function for every Cardano network, so a Cardano-network
+ * argument behaves the same.
  */
 export async function enumerateCardanoStakeIdentities(
   network: string,

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getDustAccountState: mocks.get }) }));
 vi.mock('@/utils/debug', () => ({ debugLog: mocks.log }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Stagenet' } }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Preview' } }) }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: reactive({
   addresses: { unshielded: 'wallet-a' }, dustState: null, balances: {},
 }) }));

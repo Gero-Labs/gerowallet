@@ -48,7 +48,7 @@ describe('validateConnectorBalanceRequest', () => {
     expect(validateConnectorBalanceRequest({ tx: 'abcd', options: { payFees: false } }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/payFees:false/) });
     // Both ledgers balance now; the chain's ledger picks the path (midnightDappBalancer9.spec.ts).
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Stagenet')).toMatchObject({ ok: true });
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: true });
     expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod'))
       .toMatchObject({ ok: false, reason: expect.stringMatching(/hex/) });
     expect(validateConnectorBalanceRequest({ tx: 'ab'.repeat(2 * 1024 * 1024 + 1) }, 'Preprod'))
@@ -56,13 +56,13 @@ describe('validateConnectorBalanceRequest', () => {
     expect(validateConnectorBalanceRequest({ tx: '' }, 'Preprod')).toMatchObject({ ok: false });
     expect(validateConnectorBalanceRequest(null, 'Preprod')).toMatchObject({ ok: false });
     // A chain whose ledger hasn't been read is refused, naming it.
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, reason: expect.stringMatching(/Could not read which ledger Midnight Preview runs/) });
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Undeployed')).toMatchObject({ ok: false, reason: expect.stringMatching(/Could not read which ledger Midnight Undeployed runs/) });
   });
 
   it('marks only the unread ledger as the wallet\'s failure, never a malformed request', () => {
-    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Preview')).toMatchObject({ ok: false, internal: true });
+    expect(validateConnectorBalanceRequest({ tx: 'abcd' }, 'Undeployed')).toMatchObject({ ok: false, internal: true });
     expect(validateConnectorBalanceRequest({ tx: 'xyz' }, 'Preprod')).not.toHaveProperty('internal');
-    expect(validateConnectorBalanceRequest(null, 'Preview')).not.toHaveProperty('internal');
+    expect(validateConnectorBalanceRequest(null, 'Undeployed')).not.toHaveProperty('internal');
   });
 });
 

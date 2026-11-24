@@ -46,7 +46,7 @@ export function validateMidnightConnectorTransfer(data: unknown, network: string
     }
   }
   const sdkNetwork = network.toLowerCase();
-  if (!['mainnet', 'preprod', 'stagenet', 'testnet'].includes(sdkNetwork)) {
+  if (!['mainnet', 'preprod', 'preview', 'testnet'].includes(sdkNetwork)) {
     return { ok: false, reason: 'Unsupported Midnight network' };
   }
   const prefix = unshieldedAddressPrefix(sdkNetwork);

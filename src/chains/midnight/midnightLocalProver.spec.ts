@@ -19,15 +19,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('native proof HTTP adapter', () => {
-  it.each(['stagenet', 'preprod'])('uses the selected %s codec and forwards only native binary payloads', async network => {
+  it.each(['preview', 'preprod'])('uses the selected %s codec and forwards only native binary payloads', async network => {
     const fetch = vi.fn().mockImplementation(async () => new Response(new Uint8Array([4, 5])));
     vi.stubGlobal('fetch', fetch);
     const provider = makeLocalProvingProvider('https://prover.example/native', { sdkNetworkId: network, headers: { 'x-api-key': 'synthetic-key' } });
     const preimage = new Uint8Array([7]);
     await provider.prove(preimage, 'builtin', 5n);
-    expect(network === 'stagenet' ? codecs.prove9 : codecs.prove8).toHaveBeenCalledWith(preimage, 5n);
+    expect(network === 'preview' ? codecs.prove9 : codecs.prove8).toHaveBeenCalledWith(preimage, 5n);
     const checked = await provider.check(preimage, 'builtin');
-    expect(checked).toEqual([network === 'stagenet' ? 9n : 8n]);
+    expect(checked).toEqual([network === 'preview' ? 9n : 8n]);
     expect(fetch.mock.calls[0][0].toString()).toBe('https://prover.example/native/prove');
     expect(new Uint8Array(fetch.mock.calls[0][1].body)).toEqual(new Uint8Array([1, 2, 3]));
     expect(fetch.mock.calls[0][1].headers).toEqual({ 'x-api-key': 'synthetic-key', 'Content-Type': 'application/octet-stream' });
@@ -37,7 +37,7 @@ describe('native proof HTTP adapter', () => {
   it('never includes an upstream response body or credential-bearing URL in the error', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response('secret-witness echoed by upstream', { status: 400 }));
     vi.stubGlobal('fetch', fetch);
-    const provider = makeLocalProvingProvider('https://prover.example/secret-api-key', { sdkNetworkId: 'stagenet' });
+    const provider = makeLocalProvingProvider('https://prover.example/secret-api-key', { sdkNetworkId: 'preview' });
     await expect(provider.prove(new Uint8Array(), 'builtin')).rejects.toThrow('proof server /prove: HTTP 400');
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -48,7 +48,7 @@ describe('native proof HTTP adapter', () => {
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Expected TCP server');
-      const provider = makeLocalProvingProvider(`http://127.0.0.1:${address.port}`, { sdkNetworkId: 'stagenet', timeoutMs: 100 });
+      const provider = makeLocalProvingProvider(`http://127.0.0.1:${address.port}`, { sdkNetworkId: 'preview', timeoutMs: 100 });
       const started = Date.now();
       await expect(provider.prove(new Uint8Array(), 'builtin')).rejects.toThrow();
       expect(Date.now() - started).toBeLessThan(2000);

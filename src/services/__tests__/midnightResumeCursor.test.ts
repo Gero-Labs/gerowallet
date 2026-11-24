@@ -118,9 +118,9 @@ describe('Midnight resume cursor on SUBSCRIBE', () => {
 
   it('forwards a blockless Midnight acknowledgment for generation validation', async () => {
     const onSync = vi.fn().mockResolvedValue(undefined);
-    ws.connect('MIDNIGHT', 'midnight-stagenet', 'mn_addr_stagenet1test', 0, { onSync });
+    ws.connect('MIDNIGHT', 'midnight-preview', 'mn_addr_preview1test', 0, { onSync });
     await flush();
-    const frame = { type: 'SYNC_CHECK_OK', midnight_network: 'midnight-stagenet',
+    const frame = { type: 'SYNC_CHECK_OK', midnight_network: 'midnight-preview',
       midnight_chain_generation: 1, midnight_genesis_hash: '0x' + 'ab'.repeat(32) };
     lastSocket.onmessage?.({ data: JSON.stringify(frame) });
     await flush();

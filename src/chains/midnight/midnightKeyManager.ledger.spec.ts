@@ -21,7 +21,7 @@ vi.mock('@/chrome/serialization', () => ({
 
 // Public BIP39 test vector; never fund these wallets.
 const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const networks = ['Mainnet', 'Preprod', 'Stagenet'] as const;
+const networks = ['Mainnet', 'Preprod', 'Preview'] as const;
 const keys = new Map<string, MidnightDerivedKeys>();
 
 describe('Midnight full HD derivation across ledger versions', () => {
@@ -70,7 +70,7 @@ describe('Midnight full HD derivation across ledger versions', () => {
   it.each(networks)('%s addresses and viewing key decode with the matching ledger', (network) => {
     const derived = keys.get(network)!;
     const sdkNetwork = network.toLowerCase();
-    const ledger = network === 'Stagenet' ? ledger9 : ledger8;
+    const ledger = network === 'Preview' ? ledger9 : ledger8;
     const suffix = network === 'Mainnet' ? '' : `_${sdkNetwork}`;
     const entries = [
       [derived.addresses.unshielded, `mn_addr${suffix}`],
@@ -81,7 +81,7 @@ describe('Midnight full HD derivation across ledger versions', () => {
     for (const [encoded, prefix] of entries) {
       expect(bech32m.decode(encoded!, 1024).prefix).toBe(prefix);
     }
-    const unshielded = network === 'Stagenet'
+    const unshielded = network === 'Preview'
       ? format9.UnshieldedAddress.codec.decode(sdkNetwork, format9.MidnightBech32m.parse(derived.addresses.unshielded))
       : format8.UnshieldedAddress.codec.decode(sdkNetwork, format8.MidnightBech32m.parse(derived.addresses.unshielded));
     expect(unshielded.hexString).toBe(derived.addressHex);
@@ -89,16 +89,16 @@ describe('Midnight full HD derivation across ledger versions', () => {
     const dust = ledger.DustSecretKey.fromSeed(derived.dustSecretKey);
     const zswap = ledger.ZswapSecretKeys.fromSeed(derived.zswapSecretKey);
     try {
-      const decodedDust = network === 'Stagenet'
+      const decodedDust = network === 'Preview'
         ? format9.DustAddress.codec.decode(sdkNetwork, format9.MidnightBech32m.parse(derived.addresses.dust!))
         : format8.DustAddress.codec.decode(sdkNetwork, format8.MidnightBech32m.parse(derived.addresses.dust!));
       expect(decodedDust.data).toBe(dust.publicKey);
-      const shielded = network === 'Stagenet'
+      const shielded = network === 'Preview'
         ? decodeShieldedAddress9(sdkNetwork, derived.addresses.shielded!)
         : format8.ShieldedAddress.codec.decode(sdkNetwork, format8.MidnightBech32m.parse(derived.addresses.shielded!));
       expect(shielded.coinPublicKeyString()).toBe(zswap.coinPublicKey);
       expect(shielded.encryptionPublicKeyString()).toBe(zswap.encryptionPublicKey);
-      const decodeViewing = (target: string) => network === 'Stagenet'
+      const decodeViewing = (target: string) => network === 'Preview'
         ? format9.ShieldedEncryptionSecretKey.codec.decode(target, format9.MidnightBech32m.parse(derived.zswapViewingKey))
         : format8.ShieldedEncryptionSecretKey.codec.decode(target, format8.MidnightBech32m.parse(derived.zswapViewingKey));
       const viewing = decodeViewing(sdkNetwork);

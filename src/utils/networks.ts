@@ -491,21 +491,22 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
-    // Midnight Stagenet (testnet — replaced preview, retired by Nexus 2026-09-06)
+    // Midnight Preview (testnet, relaunched as a new ledger 9 chain on
+    // 2026-11-06). It replaced Stagenet, whose wallets moved here (gero-db v18).
     {
       icon: midnightLogo,
       iconColor: 'grey',
-      title: 'Midnight Stagenet',
+      title: 'Midnight Preview',
       blockchain: Blockchain.MIDNIGHT,
-      network: Network.STAGENET,
+      network: Network.PREVIEW,
       // No hardware wallet support: Midnight ZK proof generation requires the
       // secret key in cleartext, which Ledger/Trezor cannot expose.
       supportedHardware: false,
       networkId: 0,
       currencySymbol: 'tNIGHT',
       currencyTicker: 'tNIGHT',
-      currencyName: 'Midnight Stagenet',
-      currencyDescription: 'Midnight Stagenet Network Token',
+      currencyName: 'Midnight Preview',
+      currencyDescription: 'Midnight Preview Network Token',
       currencyImage: midnightLogo,
       // Midnight uses Substrate fee model (DUST), not Cardano protocol params.
       // These fields stay zeroed; Midnight-specific parameters live elsewhere.

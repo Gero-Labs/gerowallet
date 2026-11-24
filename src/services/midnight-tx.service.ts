@@ -424,9 +424,7 @@ export async function sendUnshieldedNight(
  *   - Gero Cloud mode: the DUST fee is proven on this device.
  *   - local / zkPaaS: proven on that server.
  * The dapp gets a sealed tx and its `submitTransaction` goes to
- * `/tx/submit-proven`; no proving data reaches Gero. (On Stagenet, which this
- * device cannot prove, Gero Cloud mode still returns an unproven tx and the
- * approval UI requires the user's Gero Cloud consent first.)
+ * `/tx/submit-proven`; no proving data reaches Gero.
  * An unusable local/zkPaaS preference throws ProofServerUnreachableError
  * rather than silently falling back to Gero Cloud.
  */
@@ -707,7 +705,7 @@ export function walletProverForSend(network: string, kind: 'unshielded' | 'shiel
  * device, or a proof server's base URL (+ Arkhia auth headers for zkPaaS)
  * with the progress stage to surface and how strict the health preflight
  * is. `null` means "prove remotely via Gero Cloud": a private send without
- * the shielded flag, or Stagenet, which this device cannot prove.
+ * the shielded flag.
  *
  * zkPaaS health is lenient about 404 — the Arkhia gateway relays the
  * native `/prove`/`/check` endpoints but `/health` isn't a documented part

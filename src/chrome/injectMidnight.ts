@@ -71,7 +71,7 @@ function buildConnectedAPI(): ConnectedAPI {
       return bridge.midnightGetProvingProvider(keyMaterialProvider);
     },
     // Phase 3 — fund + fee-pay a dapp's proven, unbound tx (ledger-8
-    // networks; the background rejects Stagenet and payFees:false with
+    // networks; the background rejects payFees:false with
     // InvalidRequest before any prompt). Returns the sealed tx.
     balanceUnsealedTransaction: (tx, options) => {
       if (typeof tx !== 'string' || tx.length === 0) {
@@ -81,7 +81,7 @@ function buildConnectedAPI(): ConnectedAPI {
     },
     // Swap intents: public (unshielded) legs on ledger-8 networks. Returns a
     // sealed, purposefully imbalanced tx; the background rejects shielded
-    // legs, Stagenet and give-only intents with InvalidRequest before any
+    // legs and give-only intents with InvalidRequest before any
     // prompt, and a give the wallet cannot cover with InsufficientFunds.
     makeIntent: (desiredInputs, desiredOutputs, options) => {
       if (!Array.isArray(desiredInputs) || !Array.isArray(desiredOutputs)) {

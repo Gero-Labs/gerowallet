@@ -259,7 +259,7 @@ describe('wiring', () => {
     const slot = read('modules/dashboard/components/MidnightNoticeSlot.vue');
     expect(slot).toContain('notIncluded: MidnightNotIncludedCard,');
     expect(slot).toContain("const notIncluded = computed(() => !refreshing.value && notIncludedSentence.value !== '');");
-    expect(read('modules/dashboard/components/midnightNotices.ts')).toContain("['update', 'upgrade', 'refreshing', 'notIncluded', 'stagenet']");
+    expect(read('modules/dashboard/components/midnightNotices.ts')).toContain("['update', 'upgrade', 'refreshing', 'notIncluded', 'previewMove']");
     expect(read('modules/portfolio/PortfolioPage.vue')).toContain('<MidnightNoticeSlot class="portfolio-upgrade-banner" @send-again="openDialog(\'SEND\')" />');
     expect(read('sidepanel/pages/HomePage.vue')).toContain('@send-again="showMidnightSend = true"');
     expect(read('modules/dashboard/dialogs/MidnightSendDialog.vue')).toContain("watch(() => props.isOpen, (open) => { if (open) applySendAgain(); }, { immediate: true });");

@@ -52,14 +52,14 @@ export interface BuildAndSignShieldedTransferOutput {
 }
 
 export interface BuildAndSignShieldedTransferArgs {
-  /** Required on Stagenet: the private-token transfer must also pay its DUST fee. */
+  /** Required on ledger 9: the private-token transfer must also pay its DUST fee. */
   readonly dustSecretSeed?: Uint8Array;
   readonly ttl?: Date;
   readonly dustRegisteredAt?: Date;
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
   /** Called once, just before the wallet-side proof starts (only with {@link proving}). */
   readonly onProving?: () => void;
-  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;
@@ -286,7 +286,7 @@ export type ShieldedWalletInstance = {
 };
 
 export interface StartAndSyncShieldedWalletArgs {
-  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;

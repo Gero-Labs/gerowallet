@@ -4,7 +4,7 @@ Gero is multi-chain by a runtime data table plus explicit per-chain branches, **
 
 ## The table
 
-`src/utils/networks.ts` (there is no `src/config/networks*`) holds 8 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Bitcoin Mainnet/Testnet4, Midnight Stagenet/Preprod/Mainnet. Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through 28 `resolve*(chain, network)` helpers, 17 of them boolean capability gates (`resolveStakingSupport`, `resolveSwapSupport`, ...).
+`src/utils/networks.ts` (there is no `src/config/networks*`) holds 8 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Bitcoin Mainnet/Testnet4, Midnight Preview/Preprod/Mainnet (Stagenet retired in 2.8.0: gero-db v18 moves its wallets to Preview). Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through 28 `resolve*(chain, network)` helpers, 17 of them boolean capability gates (`resolveStakingSupport`, `resolveSwapSupport`, ...).
 
 `resolveNetwork(chain, network)` returns `undefined` for an unknown pair, and every caller must handle that.
 

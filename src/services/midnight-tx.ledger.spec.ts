@@ -23,6 +23,14 @@ vi.mock('@/stores/midnightStore', () => ({
 }));
 vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health, checkProofServerVersion: mocks.version }));
 vi.mock('@/plugins/i18n', () => ({ default: { t: (key: string) => key } }));
+// Preview stands in for a chain born on ledger 9 whose writes are open, as it
+// will be once Nexus opens them (`writesSupported`, midnightConfig.ts). The
+// read-only case at the end turns the real capability back on.
+const caps = vi.hoisted(() => ({ previewWritable: true }));
+vi.mock('@/chains/midnight/midnightConfig', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/chains/midnight/midnightConfig')>();
+  return { ...actual, isMidnightReadOnlyNetwork: (network: string) => !caps.previewWritable && actual.isMidnightReadOnlyNetwork(network) };
+});
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
   buildZkpaasHeaders: () => ({}),
@@ -44,13 +52,14 @@ function deferred<T>() {
 describe('Midnight ledger-specific orchestration', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    caps.previewWritable = true;
     mocks.consented = true;
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
     mocks.version.mockResolvedValue({ status: 'unknown' });
-    // Preprod and Stagenet on ledger 9 (device-provable); Mainnet stands in for a chain still on ledger 8.
-    useMidnightChains({ preprod: [L9, L8], stagenet: [L9, L9], mainnet: [L8, L8] });
+    // Preprod and Preview on ledger 9 (device-provable); Mainnet stands in for a chain still on ledger 8.
+    useMidnightChains({ preprod: [L9, L8], preview: [L9, L9], mainnet: [L8, L8] });
   });
 
   it.each(['send', 'connector'])('stops %s before building or signing when authorization becomes stale', async operation => {
@@ -161,9 +170,9 @@ describe('Midnight ledger-specific orchestration', () => {
   it.each(['remote', 'local', 'zkpaas'])('refuses native NIGHT privacy conversion before authorization or HTTP (%s)', async mode => {
     mocks.proofServer.mode = mode;
     for (const forceRemote of [false, true]) {
-      await expect(sendShieldedNight('Stagenet', [{ receiverAddress: 'unused', amount: 1n, tokenType: 'native' }], {}, 'InBlock', undefined, forceRemote))
+      await expect(sendShieldedNight('Preview', [{ receiverAddress: 'unused', amount: 1n, tokenType: 'native' }], {}, 'InBlock', undefined, forceRemote))
         .rejects.toThrow('unshielded token');
-      await expect(shieldNight('Stagenet', 1n, {}, 'InBlock', undefined, forceRemote))
+      await expect(shieldNight('Preview', 1n, {}, 'InBlock', undefined, forceRemote))
         .rejects.toThrow('NIGHT is a public token');
     }
     expect(mocks.send).not.toHaveBeenCalled();
@@ -173,13 +182,13 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it.each(['local', 'zkpaas'])('checks the configured wallet-side prover for both ledger stacks (%s)', async mode => {
     mocks.proofServer.mode = mode;
-    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
+    expect(await checkWalletProvingPreflight('Preview', 'unshielded')).toBe(true);
     expect(await checkWalletProvingPreflight('Preprod', 'unshielded')).toBe(true);
     expect(mocks.health).toHaveBeenCalledTimes(2);
   });
 
   it('retains remote unshielded availability without calling a local prover', async () => {
-    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(true);
+    expect(await checkWalletProvingPreflight('Preview', 'unshielded')).toBe(true);
     expect(mocks.health).not.toHaveBeenCalled();
   });
 
@@ -191,7 +200,7 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.send.mockResolvedValue({ data: { success: true, signedTxHex: 'aabb', proven: mode !== 'remote' } });
     const sponsor = { walletId: 2, password: 'synthetic-test-password' };
     const stages: string[] = [];
-    await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s), false, sponsor);
+    await sendShieldedNight('Preview', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {}, 'InBlock', (s) => stages.push(s), false, sponsor);
     // Gero Cloud proves inside the submit request: the timeline names it (X-09).
     expect(stages).toContain(mode === 'remote' ? 'provingCloud' : 'submitting');
     expect(stages).not.toContain(mode === 'remote' ? 'submitting' : 'provingCloud');
@@ -209,8 +218,8 @@ describe('Midnight ledger-specific orchestration', () => {
       submitProvenMidnightTx: submitProven, submitMidnightTx: cloud });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: true } });
-    await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
-    // Stagenet is ledger 9, so local mode reaches the ledger-9 server — not the ledger-8 one at :6300.
+    await sendUnshieldedNight('Preview', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    // Preview is ledger 9, so local mode reaches the ledger-9 server — not the ledger-8 one at :6300.
     expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6301' : 'https://prover.example');
     expect(submitProven).toHaveBeenCalledOnce();
     expect(cloud).not.toHaveBeenCalled();
@@ -328,7 +337,7 @@ describe('Midnight ledger-specific orchestration', () => {
   it('fails before authorization when the preferred prover is unreachable, without implicit cloud fallback', async () => {
     mocks.proofServer.mode = 'local';
     mocks.health.mockResolvedValue(false);
-    await expect(sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+    await expect(sendUnshieldedNight('Preview', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
       .rejects.toThrow('Proof server not reachable');
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.api).not.toHaveBeenCalled();
@@ -362,12 +371,12 @@ describe('Midnight ledger-specific orchestration', () => {
 
   it('reports why an unusable local preference cannot prove', async () => {
     mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
-    expect(await walletProvingPreflight('Stagenet', 'unshielded')).toEqual({ ok: false, reason: 'local-url-missing' });
+    expect(await walletProvingPreflight('Preview', 'unshielded')).toEqual({ ok: false, reason: 'local-url-missing' });
   });
 
-  it('fails before authorization when no ledger-9 URL is set for Stagenet, without touching the ledger-8 server', async () => {
+  it('fails before authorization when no ledger-9 URL is set for Preview, without touching the ledger-8 server', async () => {
     mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
-    expect(await checkWalletProvingPreflight('Stagenet', 'unshielded')).toBe(false);
+    expect(await checkWalletProvingPreflight('Preview', 'unshielded')).toBe(false);
     expect(mocks.health).not.toHaveBeenCalled();
   });
 
@@ -378,7 +387,7 @@ describe('Midnight ledger-specific orchestration', () => {
     });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } })
       .mockResolvedValueOnce({ data: { success: true, signatures: [{ index: 1, signatureHex: 'ff' }] } });
-    const result = await registerNightForDust('Stagenet', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
+    const result = await registerNightForDust('Preview', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
     expect(result).toEqual({ status: 'submitted', txHash: '0xfeed', submitStatus: 'Submitted' });
   });
 
@@ -390,7 +399,7 @@ describe('Midnight ledger-specific orchestration', () => {
     });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: 'dd', addressHex: 'ee' } })
       .mockResolvedValueOnce({ data: { success: false, error: 'Signing payload mismatch' } });
-    const result = await registerNightForDust('Stagenet', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
+    const result = await registerNightForDust('Preview', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {});
     expect(mocks.send).toHaveBeenLastCalledWith({
       method: MessageTypes.SIGN_MIDNIGHT_SEGMENTS,
       data: {
@@ -614,7 +623,7 @@ describe('Midnight ledger-specific orchestration', () => {
       submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: true, ledgerTxHash: 'ledger-from-bg' } });
-    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    const result = await sendUnshieldedNight('Preview', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(result.ledgerTxHash).toBe('ledger-from-bg');
     expect(result.txHash).toBe('0xextrinsic');
   });
@@ -623,7 +632,7 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.proofServer.mode = 'local';
     mocks.api.mockReturnValue({ submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
     mocks.send.mockResolvedValue({ data: { success: true, signedTxHex: 'aabb', proven: true, ledgerTxHash: 'ledger-from-bg' } });
-    const result = await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {});
+    const result = await sendShieldedNight('Preview', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {});
     expect(result.ledgerTxHash).toBe('ledger-from-bg');
   });
 
@@ -635,5 +644,37 @@ describe('Midnight ledger-specific orchestration', () => {
     const result = await sendUnshieldedNight('Mainnet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
     expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock' });
     expect('ledgerTxHash' in result).toBe(false);
+  });
+});
+
+describe('a network read-only in GeroWallet (Midnight Preview while Nexus takes none of its writes)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    caps.previewWritable = false;
+    resetMidnightWriteGateForTests();
+    resetMidnightWriteStatusForTests();
+    useMidnightChains({ preprod: [L9, L8], preview: [L9, L9], mainnet: [L8, L8] });
+  });
+  afterEach(() => { caps.previewWritable = true; });
+
+  it('refuses every send and the DUST registration before keys, a build or a prover are asked', async () => {
+    const api = { buildUnshieldedTx: vi.fn(), buildNightDustRegistrationTx: vi.fn(), submitMidnightTx: vi.fn(), submitProvenMidnightTx: vi.fn() };
+    mocks.api.mockReturnValue(api);
+    const readOnly = expect.objectContaining({ name: 'MidnightApiError', kind: 'readOnly', network: 'Preview' });
+    await expect(sendUnshieldedNight('Preview', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {})).rejects.toEqual(readOnly);
+    await expect(sendShieldedNight('Preview', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {})).rejects.toEqual(readOnly);
+    await expect(registerNightForDust('Preview', { fromAddress: 'unused', dustReceiverAddressBech32: 'unused' }, {}))
+      .resolves.toMatchObject({ status: 'failed', errorKind: 'readOnly' });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.health).not.toHaveBeenCalled();
+    for (const route of Object.values(api)) expect(route).not.toHaveBeenCalled();
+  });
+
+  it('holds a dapp transfer the wallet would build too', async () => {
+    mocks.api.mockReturnValue({ buildUnshieldedTx: vi.fn() });
+    const readOnly = expect.objectContaining({ kind: 'readOnly' });
+    await expect(buildAndSignUnshieldedTransfer('Preview', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+      .rejects.toEqual(readOnly);
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 });

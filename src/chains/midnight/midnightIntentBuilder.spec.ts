@@ -183,9 +183,9 @@ describe('buildConnectorIntent', () => {
     expect(wallet.stop).toHaveBeenCalled();
   });
 
-  it('refuses Stagenet before starting the wallet', async () => {
+  it('refuses Preview before starting the wallet', async () => {
     const { deps } = fakeDeps(async () => swapTx(HONEST_OUTPUTS));
-    await expect(buildConnectorIntent({ ...base, sdkNetworkId: 'stagenet', request: REQUEST }, deps)).rejects.toThrow('Stagenet');
+    await expect(buildConnectorIntent({ ...base, sdkNetworkId: 'preview', request: REQUEST }, deps)).rejects.toThrow('Preview');
     expect(deps.startUnshieldedWallet).not.toHaveBeenCalled();
   });
 });

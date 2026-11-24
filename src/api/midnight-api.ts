@@ -758,7 +758,7 @@ export class MidnightApi {
     }
   }
 
-  /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-stagenet` etc.). */
+  /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-preview` etc.). */
   private get nexusNetworkSlug(): string {
     return getMidnightEndpoints(this.network)!.sdkNetworkId === 'mainnet'
       ? 'midnight-mainnet'
@@ -769,10 +769,10 @@ export class MidnightApi {
    * The Nexus `?network=` slug for the CARDANO side of this Midnight network —
    * where cNIGHT lives and where DUST registration transactions are submitted.
    *
-   * Not derivable from `sdkNetworkId`: there is no `cardano-stagenet`. The
-   * pairing goes through `cardanoTwinNetwork` (stagenet → Cardano preprod),
-   * whose result is always a real Cardano network name, and Nexus's Cardano
-   * slugs are just that name lowercased.
+   * Not derived from `sdkNetworkId`: the pairing goes through
+   * `cardanoTwinNetwork` (Preview → Cardano preview, and so on), whose result
+   * is a Cardano network name, and Nexus's Cardano slugs are just that name
+   * lowercased.
    */
   private get cardanoNetworkSlug(): string {
     return `cardano-${cardanoTwinNetwork(this.network).toLowerCase()}`;

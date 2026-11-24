@@ -17,10 +17,10 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
 import { REFRESH_QUIET_MS, REFRESH_STALL_MS, REFRESH_TARGET_WAIT_MS } from '@/chains/midnight/midnightRefresh';
 
-const ME = 'mn_addr_stagenet1test';
+const ME = 'mn_addr_preview1test';
 const GENESIS = `0x${'cd'.repeat(32)}`;
 const identity = (generation: number, genesis = GENESIS) => ({
-  midnight_network: 'midnight-stagenet', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
+  midnight_network: 'midnight-preview', midnight_chain_generation: generation, midnight_genesis_hash: genesis,
 });
 const receive = (hash: string, value: string, index: number, at: number) => ({
   tx_hash: hash, tx_timestamp: at,
@@ -40,11 +40,11 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T00:00:00Z'));
   service.stop();
-  midnightActions.resetChainState({ network: 'midnight-stagenet', generation: 1, genesisHash: GENESIS });
+  midnightActions.resetChainState({ network: 'midnight-preview', generation: 1, genesisHash: GENESIS });
   midnightActions.endRefresh();
   midnightStore.chainIdentity = null;
   h.connect.mockClear();
-  service.start(Network.STAGENET, { unshielded: ME, shielded: '', dust: '' });
+  service.start(Network.PREVIEW, { unshielded: ME, shielded: '', dust: '' });
   await flush();
   // Generation 1: a funded wallet with history.
   await sync({ ...identity(1), transactions: [receive(OLD, '5000000', 0, 1_700_000_000_000)] });

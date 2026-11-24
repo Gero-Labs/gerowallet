@@ -45,10 +45,11 @@ describe('useExplorer', () => {
     expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://cexplorer.io/tx/${TX}`);
   });
 
-  it('lets a flow override the network too (a Midnight Stagenet wallet registers DUST on Preprod)', () => {
-    logIn(Blockchain.MIDNIGHT, Network.STAGENET);
+  it('lets a flow override the network too (a Midnight Preview wallet registers DUST on Cardano preview)', () => {
+    logIn(Blockchain.MIDNIGHT, Network.PREVIEW);
     const { explorerUrl } = useExplorer();
-    expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://cexplorer.io/tx/${TX}`);
+    // Preview names a Cardano network too, so the chain alone lands on its twin.
+    expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://preview.cexplorer.io/tx/${TX}`);
     expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO, network: Network.PREPROD }))
       .toBe(`https://preprod.cexplorer.io/tx/${TX}`);
   });

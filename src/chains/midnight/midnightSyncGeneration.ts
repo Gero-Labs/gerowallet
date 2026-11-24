@@ -7,7 +7,7 @@ export interface MidnightSyncIdentity {
 }
 
 export function parseMidnightSyncIdentity(data: Record<string, unknown>, network: string): MidnightSyncIdentity | null {
-  if (!/^midnight-(mainnet|preprod|stagenet)$/.test(network)
+  if (!/^midnight-(mainnet|preprod|preview)$/.test(network)
     || data['midnight_network'] !== network
     || !Number.isSafeInteger(data['midnight_chain_generation'])
     || (data['midnight_chain_generation'] as number) < 1
@@ -47,9 +47,13 @@ export class MidnightGenerationQueue {
   }
 }
 
-/** Clear only this Midnight network's SDK caches, including historical SDK namespaces. */
+/**
+ * Clear only this Midnight network's SDK caches, including historical SDK namespaces.
+ * `midnight-stagenet` is accepted only so the move of Stagenet wallets to Preview
+ * can drop what the retired network left behind (midnightPreviewMoveCleanup.ts).
+ */
 export async function clearMidnightNetworkCheckpoints(network: string): Promise<void> {
-  if (!/^midnight-(mainnet|preprod|stagenet)$/.test(network)) throw new Error('Invalid Midnight reset network');
+  if (!/^midnight-(mainnet|preprod|preview|stagenet)$/.test(network)) throw new Error('Invalid Midnight reset network');
   const sdkNetwork = network.slice('midnight-'.length);
   const prefixes = [`midnight_wallet_state_${sdkNetwork}_`, `midnight_wallet_state_${sdkNetwork}-ledger9-`,
     `midnight_wallet_state_${network}-ledger9-`];

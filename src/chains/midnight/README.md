@@ -8,7 +8,7 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 
 | File | Role |
 |---|---|
-| `midnightConfig.ts` | Per-network endpoints (Nexus REST base, gero-sync WS, public indexer/RPC) + Nexus path composition. Networks: stagenet / preprod / mainnet. |
+| `midnightConfig.ts` | Per-network endpoints (Nexus REST base, gero-sync WS, public indexer/RPC) + Nexus path composition. Networks: preview / preprod / mainnet (Stagenet retired; its wallets move to Preview, `midnightPreviewMove.ts`). `writesSupported: false` makes a network read-only in GeroWallet (Preview, until Nexus opens its writes): the write gate holds every send, DUST registration and dApp transaction request. |
 | `midnightTypes.ts` | Types + decimals (NIGHT=6, DUST=15), addresses, UTxOs, dust state, tx model. |
 | `midnightKeyManager.ts` | HD derivation from BIP39 mnemonic: `m/44'/2400'/account'/role/index`. Roles (wallet-sdk-hd 3.x): NightExternal=0, Dust=2, Zswap=3, Metadata=4. Also derives the Cardano CIP-1852 material (same mnemonic) for DUST registration, and the indexer viewing key (`mn_shield-esk_…` — the encryption SECRET key). |
 | `midnightLedger.ts` / `midnightChainLedger.ts` | Which ledger a chain runs, from the protocol version its indexer reports (`>= 2000000` is ledger 9), never from the network's name. Fails closed (`MIDNIGHT_LEDGER_UNKNOWN`) until read. |
@@ -55,7 +55,8 @@ Keep these boundaries when changing transaction code.
   intents itself and uses the synchronous `signData`.
 - `fixtures/nexus-ledger-signing.json` is the contract with Nexus's builder:
   ledger 9 transfers and DUST registrations for mainnet, preprod, Preview and
-  Stagenet, plus the earlier ledger 8 transfers for a chain below the fork.
+  the retired Stagenet (kept as Nexus generated them; the wallet reads none of
+  its builds), plus the earlier ledger 8 transfers for a chain below the fork.
 - The dust fee tx returned by `dust.balanceTransactions` MUST be `.merge()`d into
   the transfer or the ledger rejects with "Invalid signature value".
 - DUST preparation uses compact projections with a two-minute request deadline.
@@ -139,7 +140,7 @@ them: ledger 8 (`@midnightntwrk/ledger-v8`, pinned) below protocol version
 2000000, ledger 9 from it, handing over at the crossing. The private sync and
 the private send use it on a chain that crossed (`forkingShieldedWallet`,
 started with both ledgers' keys from one seed), and the ledger 9 variant alone
-on a chain born on ledger 9 (Stagenet, the relaunched Preview). A send refuses
+on a chain born on ledger 9 (the relaunched Preview). A send refuses
 while the fork-aware wallet is still on the ledger 8 side (its transaction
 handle carries the version that built it). `privateSyncStatus` stays the gate
 for what the views trust.
@@ -235,8 +236,8 @@ proves a transaction can therefore spend what it reveals.
   (`defaultLocalProofServerUrl`). Cross-device proving serves the ledger 9
   server and advertises `9.0.0`.
 - A proven transaction goes to `/tx/submit-proven`, which carries no witness.
-  `/tx/submit` (Gero Cloud proves) is left for the one-off fallback on Stagenet
-  and for an unsealed transaction a dapp submits itself.
+  `/tx/submit` (Gero Cloud proves) is left for an unsealed transaction a dapp
+  submits itself.
 - Submits wait 110 s; a lost reply is settled by looking the transaction up by
   its ledger identifiers (`midnightSubmitRecovery.ts`). Identifiers are fixed at
   build time and survive proving and binding.

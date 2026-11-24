@@ -9,55 +9,55 @@ import { noteMidnightProtocolVersion } from './midnightLedger';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('real ledger-specific proving envelope', () => {
-  it.each(['mainnet', 'preprod', 'stagenet'])('uses real prove/bind and preserves the %s empty envelope', async network => {
-    const runtime = network === 'stagenet' ? ledger9 : ledger8;
+  it.each(['mainnet', 'preprod', 'preview'])('uses real prove/bind and preserves the %s empty envelope', async network => {
+    const runtime = network === 'preview' ? ledger9 : ledger8;
     const tx = runtime.Transaction.fromParts(network);
     const signedTxHex = Buffer.from(tx.serialize()).toString('hex');
     // Empty envelopes need no circuit HTTP call. This verifies SDK markers,
     // network selection and binding, not the correctness of a funded proof.
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     const { provenTxHex } = await proveUnshieldedTransfer({ sdkNetworkId: network, signedTxHex, proving: { url: 'http://localhost:6300' } });
-    const decoded = network === 'stagenet'
+    const decoded = network === 'preview'
       ? ledger9.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'))
       : ledger8.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'));
     expect(Buffer.from(decoded.eraseProofs().serialize()).toString('hex')).toBe(Buffer.from(tx.eraseProofs().serialize()).toString('hex'));
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each(['mainnet', 'preprod', 'stagenet'])('reports the ledger hash of the exact %s bytes it hands back', async network => {
+  it.each(['mainnet', 'preprod', 'preview'])('reports the ledger hash of the exact %s bytes it hands back', async network => {
     // The hash the pending history row is keyed on must be the one the
     // indexer will compute from the submitted bytes: transactionHash() of the
     // deserialized finalized tx, bare and lowercase (the indexer's spelling).
-    const runtime = network === 'stagenet' ? ledger9 : ledger8;
+    const runtime = network === 'preview' ? ledger9 : ledger8;
     const signedTxHex = Buffer.from(runtime.Transaction.fromParts(network).serialize()).toString('hex');
     vi.stubGlobal('fetch', vi.fn());
     const { provenTxHex, ledgerTxHash } = await proveUnshieldedTransfer({ sdkNetworkId: network, signedTxHex, proving: { url: 'http://localhost:6300' } });
-    const decoded = network === 'stagenet'
+    const decoded = network === 'preview'
       ? ledger9.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'))
       : ledger8.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'));
     expect(ledgerTxHash).toMatch(/^[0-9a-f]{64}$/);
     expect(ledgerTxHash).toBe(decoded.transactionHash().toLowerCase().replace(/^0x/, ''));
   });
 
-  it('rejects a valid legacy envelope supplied as Stagenet before contacting the prover', async () => {
+  it('rejects a valid legacy envelope supplied as Preview before contacting the prover', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     const signedTxHex = Buffer.from(ledger8.Transaction.fromParts('preprod').serialize()).toString('hex');
-    await expect(proveUnshieldedTransfer({ sdkNetworkId: 'stagenet', signedTxHex, proving: { url: 'http://localhost:6300' } })).rejects.toThrow();
+    await expect(proveUnshieldedTransfer({ sdkNetworkId: 'preview', signedTxHex, proving: { url: 'http://localhost:6300' } })).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it('infers the embedded network for cross-device payloads independently of the paired Cardano wallet', async () => {
-    const signedTxHex = Buffer.from(ledger9.Transaction.fromParts('stagenet').serialize()).toString('hex');
+    const signedTxHex = Buffer.from(ledger9.Transaction.fromParts('preview').serialize()).toString('hex');
     const result = await proveUnshieldedTransfer({ signedTxHex, proving: { url: 'http://localhost:6300' } });
     expect(() => ledger9.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(result.provenTxHex, 'hex'))).not.toThrow();
   });
 
   it('shows the matching circuit server and binds its port to loopback', () => {
-    expect(midnightProofServerCommand('Stagenet')).toContain('proof-server:9.0.0 ');
+    expect(midnightProofServerCommand('Preview')).toContain('proof-server:9.0.0 ');
     expect(midnightProofServerCommand('Preprod')).toContain('proof-server:8.1.0');
     // One host port per ledger (#1114) so both servers can run at once; each
     // binds to loopback only. The container side is always 6300.
-    expect(midnightProofServerCommand('Stagenet')).toContain('127.0.0.1:6301:6300');
+    expect(midnightProofServerCommand('Preview')).toContain('127.0.0.1:6301:6300');
     expect(midnightProofServerCommand('Preprod')).toContain('127.0.0.1:6300:6300');
     // The chain decides: preprod on ledger 9 gets the ledger 9 server.
     noteMidnightProtocolVersion('Preprod', 2_001_100);

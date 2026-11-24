@@ -21,7 +21,7 @@ function fundedFixture({ chains = 1 }: { chains?: 1 | 2 } = {}) {
   const key = ledger.DustSecretKey.fromSeed(new Uint8Array(32).fill(73));
   const nightKey = ledger.signatureVerifyingKey(ledger.sampleSigningKey());
   let time = new Date((Math.floor(Date.now() / 1000) - 120) * 1000);
-  let chain = ledger.LedgerState.blank('stagenet');
+  let chain = ledger.LedgerState.blank('preview');
   let local = new ledger.DustLocalState(chain.parameters.dust);
   let height = 0;
   const transactions: DustSpendTransaction[] = [];
@@ -57,15 +57,15 @@ function fundedFixture({ chains = 1 }: { chains?: 1 | 2 } = {}) {
   const registration = ledger.Intent.new(new Date(time.getTime() + 300000));
   registration.dustActions = new ledger.DustActions('signature', 'pre-proof', time, [],
     [new ledger.DustRegistration('signature', nightKey, key.publicKey, 0n)]);
-  apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, registration));
+  apply(ledger.Transaction.fromParts('preview', undefined, undefined, registration));
   const amount = 1_000_000_000_000_000n;
   chain = chain.testingDistributeNight(ledger.addressFromKey(nightKey), amount, time);
-  apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
+  apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'preview', amount,
     nightKey, 'ab'.repeat(32), new ledger.SignatureErased())));
   const spentBacking = local.utxos[0].backingNight;
   if (chains === 2) {
     chain = chain.testingDistributeNight(ledger.addressFromKey(nightKey), amount, time);
-    apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'stagenet', amount,
+    apply(ledger.Transaction.fromRewards(new ledger.ClaimRewardsTransaction('signature-erased', 'preview', amount,
       nightKey, 'cd'.repeat(32), new ledger.SignatureErased())));
   }
   const spends = 3;
@@ -73,12 +73,12 @@ function fundedFixture({ chains = 1 }: { chains?: 1 | 2 } = {}) {
     const [, spend] = local.spend(key, local.utxos.find(coin => coin.backingNight === spentBacking)!, 1n, time);
     const intent = ledger.Intent.new(new Date(time.getTime() + 300000));
     intent.dustActions = new ledger.DustActions('signature', 'pre-proof', time, [spend], []);
-    apply(ledger.Transaction.fromParts('stagenet', undefined, undefined, intent));
+    apply(ledger.Transaction.fromParts('preview', undefined, undefined, intent));
   }
   const update = (from: number, to: number): CollapsedDustTree => ({ startIndex: from, endIndex: to,
     protocolVersion: 2_001_100, update: hex(ledger.DustStateMerkleTreeCollapsedUpdate.newFromCommitmentTree(
       chain.dust.utxo, BigInt(from), BigInt(to)).serialize()) });
-  const snapshot: DustSnapshot = { version: 1, network: 'midnight-stagenet', block: {
+  const snapshot: DustSnapshot = { version: 1, network: 'midnight-preview', block: {
     hash: 'cd'.repeat(32), height, timestamp: time.getTime(), protocolVersion: 2_001_100,
     ledgerParameters: hex(chain.parameters.serialize()), dustGenerationEndIndex: initial.length,
     dustCommitmentEndIndex: initial.length + spends,
@@ -115,7 +115,7 @@ describe('funded ledger-9 DUST projection', () => {
   it('reconstructs spent descendants and produces spendable witnesses matching full replay', async () => {
     const f = fundedFixture();
     try {
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport);
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport);
       expect(state.utxos).toEqual(f.local.utxos);
       expect(state.utxos).toHaveLength(1);
       expect(state.utxos[0].seq).toBe(3);
@@ -130,8 +130,8 @@ describe('funded ledger-9 DUST projection', () => {
   it('balances a transaction with the canonical ledger-9 SDK from reconstructed state', async () => {
     const f = fundedFixture();
     try {
-      const { state, block } = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport);
-      const fee = balanceLightDust9(state, f.key, 'stagenet', [ledger.Transaction.fromParts('stagenet')],
+      const { state, block } = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport);
+      const fee = balanceLightDust9(state, f.key, 'preview', [ledger.Transaction.fromParts('preview')],
         new Date(Date.now() + 300000), new Date(block.timestamp), block.ledgerParameters);
       const spends = [...fee.intents!.values()].flatMap(intent => intent.dustActions?.spends ?? []);
       expect(spends.length).toBeGreaterThan(0);
@@ -192,7 +192,7 @@ describe('funded ledger-9 DUST projection', () => {
       const malformed = page.transactions.map(tx => ({ ...tx, protocolVersion: undefined as unknown as number }));
       const bad: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
         transactions: malformed.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', bad)).rejects.toThrow('Invalid DUST spend protocol version');
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', bad)).rejects.toThrow('Invalid DUST spend protocol version');
     } finally { f.key.clear(); }
   });
 
@@ -204,11 +204,11 @@ describe('funded ledger-9 DUST projection', () => {
       const withLegacy = page.transactions.map(tx => ({ ...tx, dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 1_000_000 }, ...tx.dustLedgerEvents] }));
       const ok: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
         transactions: withLegacy.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', ok)).resolves.toBeTruthy();
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', ok)).resolves.toBeTruthy();
       const broken = page.transactions.map(tx => ({ ...tx, dustLedgerEvents: [{ raw: 'deadbeef', protocolVersion: 2_001_100 }] }));
       const bad: DustLightTransport = { ...f.transport, spends: vi.fn(async (_b, prefixes) => ({ nextBlock: null,
         transactions: broken.filter(tx => tx.matchedNullifiers.some(n => prefixes.some(p => n.startsWith(p)))) })) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', bad)).rejects.toThrow('Cannot decode an owned DUST spend');
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', bad)).rejects.toThrow('Cannot decode an owned DUST spend');
     } finally { f.key.clear(); }
   });
 
@@ -253,7 +253,7 @@ describe('DUST spend checkpoint', () => {
     try {
       const { transport, ranges } = ranged(f);
       // The fixture's spends are at heights 3, 4 and 5 (the snapshot block).
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpointMarginBlocks: 1 });
       expect(state.utxos).toEqual(f.local.utxos);
       // Never the successor's own creation block: that would name the wallet's spend to the server.
@@ -267,9 +267,9 @@ describe('DUST spend checkpoint', () => {
   it('a warm build scans only after the checkpoint and reaches the same state', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
       const { transport, ranges } = ranged(f);
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: JSON.parse(JSON.stringify(cold.checkpoint)), checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
@@ -282,12 +282,12 @@ describe('DUST spend checkpoint', () => {
   it('a checkpoint with every spend applied needs no rescan of older blocks', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
       expect(Object.values(cold.checkpoint!.heads).map(head => head.seq)).toEqual([3]);
       // The chain moved on one block: the checkpoint is now behind the snapshot.
       const later = { ...f.snapshot, block: { ...f.snapshot.block, height: f.snapshot.block.height + 1 } };
       const { transport, ranges } = ranged(f);
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', { ...transport, snapshot: vi.fn(async () => later) },
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', { ...transport, snapshot: vi.fn(async () => later) },
         undefined, { checkpoint: cold.checkpoint, checkpointMarginBlocks: 0, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(ranges).toEqual([[later.block.height, later.block.height]]);
@@ -302,11 +302,11 @@ describe('DUST spend checkpoint', () => {
   ])('ignores %s and scans that chain from the first block', async (_name, corrupt) => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
       const heads = Object.fromEntries(Object.entries(cold.checkpoint!.heads)
         .map(([chain, head]) => [chain, corrupt(head as unknown as Record<string, unknown>)]));
       const { transport, ranges } = ranged(f);
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: { checkedThrough: cold.checkpoint!.checkedThrough, heads } as never, checkpointMarginBlocks: 1 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(ranges.every(([from]) => from === 0)).toBe(true);
@@ -319,7 +319,7 @@ describe('DUST spend checkpoint', () => {
       const { transport, ranges } = ranged(f);
       const created = Math.min(...f.snapshot.generations.map(g => (g as { ctime: number }).ctime)) * 1000;
       // The fixture's spends are at heights 3, 4 and 5; its coin was created before them.
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { ledgerFirstBlock: { height: 3, timestamp: created } });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(ranges.length).toBeGreaterThan(1);
@@ -331,7 +331,7 @@ describe('DUST spend checkpoint', () => {
     const f = fundedFixture();
     try {
       const { transport, ranges } = ranged(f);
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { ledgerFirstBlock: { height: 3, timestamp: Date.now() + 60_000 } });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(ranges.every(([from]) => from === 0)).toBe(true);
@@ -341,9 +341,9 @@ describe('DUST spend checkpoint', () => {
   it('ignores a checkpoint at or past the snapshot (a lagging server)', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined, { checkpointMarginBlocks: 0 });
       const { transport, ranges } = ranged(f);
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: { ...cold.checkpoint!, checkedThrough: f.snapshot.block.height }, checkpointMarginBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(ranges.every(([from]) => from === 0)).toBe(true);
@@ -369,14 +369,14 @@ describe('DUST checkpoint review fixes', () => {
   it('a warm build with alignment scans from the boundary and reaches the same state', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const ranges: number[] = [];
       const transport: DustLightTransport = { ...f.transport, spends: vi.fn(async (block, prefixes, fromBlock, toBlock) => {
         ranges.push(fromBlock);
         const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
         return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
       }) };
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: cold.checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 2 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
@@ -388,7 +388,7 @@ describe('DUST checkpoint review fixes', () => {
     const f = fundedFixture({ chains: 2 });
     try {
       expect(f.snapshot.generations).toHaveLength(2);
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       expect(cold.state.utxos).toEqual(f.local.utxos);
       const heads = cold.checkpoint!.heads;
       const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
@@ -401,7 +401,7 @@ describe('DUST checkpoint review fixes', () => {
         const page = await f.transport.spends(block, prefixes, fromBlock, toBlock);
         return { ...page, transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
       } };
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: partial, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
@@ -413,7 +413,7 @@ describe('DUST checkpoint review fixes', () => {
   it('falls back to a cold scan when a well-formed head is not on the chain, and replaces it', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const [[chain, head]] = Object.entries(cold.checkpoint!.heads);
       expect(head.seq).toBeGreaterThan(0);
       // Passes every shape check, but no such coin was ever created: the commitment root cannot match.
@@ -426,7 +426,7 @@ describe('DUST checkpoint review fixes', () => {
           if (starts.at(-1) === -1) starts[starts.length - 1] = fromBlock;
           return f.transport.spends(block, prefixes, fromBlock, toBlock);
         } };
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: wrong, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(checkpoint).toEqual(cold.checkpoint);
@@ -480,7 +480,7 @@ describe('sliced DUST spend scans', () => {
             nextBlock: toBlock < height ? toBlock + 1 : null };
         }),
       };
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined, { checkpointMarginBlocks: 1 });
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined, { checkpointMarginBlocks: 1 });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       // Every round asks for the whole range, slice by slice, and never more at once than the limit.
@@ -510,7 +510,7 @@ describe('sliced DUST spend scans', () => {
             .map(tx => ({ ...tx, block: { ...tx.block, height: moved.get(tx.block.height) ?? tx.block.height } }))
             .filter(tx => tx.block.height >= fromBlock && tx.block.height <= end) };
         }) };
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined, { checkpointMarginBlocks: 1 });
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined, { checkpointMarginBlocks: 1 });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       expect(cut).toBeGreaterThan(0);
@@ -526,7 +526,7 @@ describe('sliced DUST spend scans', () => {
       const snapshot = { ...f.snapshot, block: { ...f.snapshot.block, height } };
       const transport: DustLightTransport = { ...f.transport, snapshot: vi.fn(async () => snapshot),
         spends: vi.fn(async () => ({ transactions: [], nextBlock: null })) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', transport)).rejects.toThrow('Invalid DUST spend page cursor');
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', transport)).rejects.toThrow('Invalid DUST spend page cursor');
     } finally { f.key.clear(); }
   });
 });
@@ -556,7 +556,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
       // The fixture's chain is spent at heights 3, 4 and 5 (the snapshot block): four passes, and after each of the
       // first three the scan is settled only below a spend. A checkpoint there would have the next attempt start
       // from that spend's day, so none is reported.
-      const { checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined,
+      const { checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined,
         { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) });
       expect(reported.map(partial => partial.checkedThrough)).toEqual([4]);
       expect(reported[0]).toEqual(wire(checkpoint!));
@@ -577,7 +577,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
         if (reported.length >= settledStages) throw new Error(unavailable);
         return spends(block, prefixes, fromBlock, toBlock);
       });
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing.transport, undefined,
         { checkpointMarginBlocks: 1, scanAlignBlocks: 0, scanStageBlocks: 2, onCheckpoint: partial => reported.push(wire(partial)) }))
         .rejects.toThrow('temporarily unavailable');
       expect(reported.map(partial => partial.checkedThrough)).toEqual(ends.slice(0, settledStages));
@@ -585,7 +585,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
       expect(Object.values(left.heads).map(head => head.seq)).toEqual([0, 0]);
 
       const { transport, starts } = ranged(f);
-      const next = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const next = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: left, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(next.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(next.state)).toEqual(dustLedger9.roots(f.local));
@@ -600,13 +600,13 @@ describe('DUST synchronization that survives a failed attempt', () => {
     try {
       const reported: DustSpendCheckpoint[] = [];
       const failing: DustLightTransport = { ...ranged(f).transport, commitments: vi.fn(async () => { throw new Error(unavailable); }) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing, undefined,
         { checkpointMarginBlocks: 1, onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('temporarily unavailable');
       const left = reported[reported.length - 1];
       expect(left.checkedThrough).toBe(f.snapshot.block.height - 1);
 
       const { transport, starts } = ranged(f);
-      const next = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const next = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpoint: left, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(next.state.utxos).toEqual(f.local.utxos);
       expect(starts.every(from => from === f.snapshot.block.height)).toBe(true);
@@ -616,9 +616,9 @@ describe('DUST synchronization that survives a failed attempt', () => {
   it('a resumed attempt reports nothing until it is further along than its checkpoint', async () => {
     const f = fundedFixture();
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined, { checkpointMarginBlocks: 1 });
       const onCheckpoint = vi.fn();
-      await reconstructDustState(dustLedger9, f.key, 'stagenet', ranged(f).transport, undefined,
+      await reconstructDustState(dustLedger9, f.key, 'preview', ranged(f).transport, undefined,
         { checkpoint: wire(cold.checkpoint!), checkpointMarginBlocks: 1, scanAlignBlocks: 0, onCheckpoint });
       expect(onCheckpoint).not.toHaveBeenCalled();
     } finally { f.key.clear(); }
@@ -627,7 +627,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
   it('a callback that throws does not fail the synchronization', async () => {
     const f = fundedFixture();
     try {
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined,
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined,
         { checkpointMarginBlocks: 1, onCheckpoint: () => { throw new Error('store is gone'); } });
       expect(state.utxos).toEqual(f.local.utxos);
     } finally { f.key.clear(); }
@@ -644,7 +644,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
         await new Promise(resolve => setTimeout(resolve, 5));
         try { return await f.transport.commitments(block, ranges); } finally { inFlight--; }
       });
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', { ...f.transport, commitments });
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', { ...f.transport, commitments });
       expect(state.utxos).toEqual(f.local.utxos);
       // Two owned coins that are not neighbours: more than one stretch of other people's leaves.
       expect(commitments.mock.calls.length).toBeGreaterThan(1);
@@ -658,7 +658,7 @@ describe('DUST synchronization that survives a failed attempt', () => {
     try {
       const doubled: DustLightTransport = { ...f.transport,
         commitments: vi.fn(async (block, ranges) => { const [update] = await f.transport.commitments(block, ranges); return [update, update]; }) };
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', doubled)).rejects.toThrow('Incomplete DUST commitment snapshot');
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', doubled)).rejects.toThrow('Incomplete DUST commitment snapshot');
     } finally { f.key.clear(); }
   });
 });
@@ -736,7 +736,7 @@ describe('long DUST spend scans are settled in stages', () => {
       // would have nothing to show for it: no pass over the whole range ever finishes.
       const failing = tall(f, height, moved, ends[2]);
       const reported: DustSpendCheckpoint[] = [];
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing.transport, undefined,
         { onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('timed out');
       // Stage 1; inside stage 2 the week below the second spend (nothing for the first: no whole week is settled
       // under it); then stages 2 and 3.
@@ -753,7 +753,7 @@ describe('long DUST spend scans are settled in stages', () => {
       expect(left.behind).toBeUndefined();
 
       const next = tall(f, height, moved);
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined, { checkpoint: left });
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined, { checkpoint: left });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       // Nothing below the day boundary before the checkpoint is asked for again.
@@ -777,10 +777,10 @@ describe('long DUST spend scans are settled in stages', () => {
       // The first attempt stops in its third stage; the second resumes and finishes, on a later, taller chain.
       const failing = tall(f, height, moved, dustScanStages(0, height)[1]);
       const reported: DustSpendCheckpoint[] = [];
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing.transport, undefined,
         { onCheckpoint: partial => reported.push(wire(partial)) })).rejects.toThrow('timed out');
       const next = tall(f, height + 123_457, moved);
-      const { state } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+      const { state } = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined,
         { checkpoint: reported[reported.length - 1], onCheckpoint: partial => reported.push(wire(partial)) });
       expect(state.utxos).toEqual(f.local.utxos);
       // Whatever either attempt stored, and every block a stage of either attempt ended on below its tip,
@@ -817,7 +817,7 @@ describe('long DUST spend scans are settled in stages', () => {
         inFlight--;
         return spends(block, prefixes, fromBlock, toBlock);
       });
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, percent => steps.push(percent),
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, percent => steps.push(percent),
         { onCheckpoint: partial => reported.push(partial.checkedThrough) });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
@@ -849,7 +849,7 @@ describe('long DUST spend scans are settled in stages', () => {
           transactions: page.transactions.filter(tx => tx.block.height >= fromBlock && tx.block.height <= toBlock) };
       }) };
       const reported: number[] = [];
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', transport, undefined,
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', transport, undefined,
         { checkpointMarginBlocks: 0, scanAlignBlocks: 0, scanStageBlocks: 2, onCheckpoint: partial => reported.push(partial.checkedThrough) });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
@@ -865,7 +865,7 @@ describe('long DUST spend scans are settled in stages', () => {
   it('a generation found after the checkpoint keeps its own progress while it catches up', async () => {
     const f = fundedFixture({ chains: 2 });
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const heads = cold.checkpoint!.heads;
       const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
       const added = Object.keys(heads).find(chain => chain !== spent)!;
@@ -880,7 +880,7 @@ describe('long DUST spend scans are settled in stages', () => {
       // The first attempt settles two stages of the new generation, both below the checkpoint, and fails in the third.
       const failing = tall(f, height, new Map(), ends[1]);
       const reported: DustSpendCheckpoint[] = [];
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing.transport, undefined,
         { ...options, checkpoint: partial, onCheckpoint: stored => reported.push(wire(stored)) })).rejects.toThrow('timed out');
       // The checkpoint stays where the resumed chain is, with the new generation's own progress beside it.
       expect(reported.map(stored => stored.checkedThrough)).toEqual([partial.checkedThrough, partial.checkedThrough]);
@@ -893,7 +893,7 @@ describe('long DUST spend scans are settled in stages', () => {
       // The second attempt takes the new generation up from there, not from the first block.
       const next = tall(f, height, new Map());
       const again: DustSpendCheckpoint[] = [];
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined,
         { ...options, checkpoint: reported[1], onCheckpoint: stored => again.push(wire(stored)) });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(warm.state)).toEqual(dustLedger9.roots(f.local));
@@ -912,7 +912,7 @@ describe('long DUST spend scans are settled in stages', () => {
       const ends = dustScanStages(0, height);
       const [first, second, third] = await spendHeights(f);
       const moved = new Map([[first, 10], [second, 20], [third, 30]]);
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', tall(f, height, moved).transport);
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', tall(f, height, moved).transport);
       const heads = cold.checkpoint!.heads;
       const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
       const added = Object.keys(heads).find(chain => chain !== spent)!;
@@ -921,14 +921,14 @@ describe('long DUST spend scans are settled in stages', () => {
 
       const failing = tall(f, height, moved, ends[3]);
       const reported: DustSpendCheckpoint[] = [];
-      await expect(reconstructDustState(dustLedger9, f.key, 'stagenet', failing.transport, undefined,
+      await expect(reconstructDustState(dustLedger9, f.key, 'preview', failing.transport, undefined,
         { checkpoint: partial, onCheckpoint: stored => reported.push(wire(stored)) })).rejects.toThrow('timed out');
       expect(failing.ranges.some(([from]) => from === 0)).toBe(true);
       expect(reported.map(stored => stored.behind?.[added]?.checkedThrough)).toEqual(ends.slice(0, 4));
       expect(reported.every(stored => stored.checkedThrough === partial.checkedThrough && Object.keys(stored.heads).join() === spent)).toBe(true);
 
       const next = tall(f, height, moved);
-      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined, { checkpoint: reported.at(-1) });
+      const { state, checkpoint } = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined, { checkpoint: reported.at(-1) });
       expect(state.utxos).toEqual(f.local.utxos);
       expect(dustLedger9.roots(state)).toEqual(dustLedger9.roots(f.local));
       expect(checkpoint).toEqual(cold.checkpoint);
@@ -947,7 +947,7 @@ describe('long DUST spend scans are settled in stages', () => {
   ])('ignores a generation said to be behind %s and scans it from the first block', async (_name, corrupt) => {
     const f = fundedFixture({ chains: 2 });
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const heads = cold.checkpoint!.heads;
       const spent = Object.keys(heads).find(chain => heads[chain].backingNight === f.spentBacking)!;
       const added = Object.keys(heads).find(chain => chain !== spent)!;
@@ -955,7 +955,7 @@ describe('long DUST spend scans are settled in stages', () => {
       const checkpoint = { checkedThrough, heads: { [spent]: heads[spent] },
         behind: { [added]: corrupt({ checkedThrough: 3, head: heads[added] }, checkedThrough) } } as never;
       const next = tall(f, f.snapshot.block.height, new Map());
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined,
         { checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(warm.checkpoint).toEqual(cold.checkpoint);
@@ -966,11 +966,11 @@ describe('long DUST spend scans are settled in stages', () => {
   it('a generation in the checkpoint\'s heads is taken from there, whatever is said of it being behind', async () => {
     const f = fundedFixture({ chains: 2 });
     try {
-      const cold = await reconstructDustState(dustLedger9, f.key, 'stagenet', f.transport, undefined, { checkpointMarginBlocks: 1 });
+      const cold = await reconstructDustState(dustLedger9, f.key, 'preview', f.transport, undefined, { checkpointMarginBlocks: 1 });
       const [chain] = Object.keys(cold.checkpoint!.heads);
       const checkpoint: DustSpendCheckpoint = { ...cold.checkpoint!, behind: { [chain]: { checkedThrough: 0, head: cold.checkpoint!.heads[chain] } } };
       const next = tall(f, f.snapshot.block.height, new Map());
-      const warm = await reconstructDustState(dustLedger9, f.key, 'stagenet', next.transport, undefined,
+      const warm = await reconstructDustState(dustLedger9, f.key, 'preview', next.transport, undefined,
         { checkpoint, checkpointMarginBlocks: 1, scanAlignBlocks: 0 });
       expect(warm.state.utxos).toEqual(f.local.utxos);
       expect(next.ranges.every(([from]) => from === cold.checkpoint!.checkedThrough + 1)).toBe(true);
