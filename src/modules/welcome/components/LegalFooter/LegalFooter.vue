@@ -46,14 +46,9 @@ const version = ref<string>(APP_VERSION);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* The footer sits on the chain's background image, whose bright areas (Cardano's teal
-     at the bottom right) left the links at under 2:1. A light canvas scrim, fading out
-     by the top of the footer, keeps them readable without dimming the image. */
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--g-canvas) 55%, transparent),
-    color-mix(in srgb, var(--g-canvas) 25%, transparent)
-  );
+  /* No scrim: the footer sits on the chain's background image as it is. The links stay
+     readable through their own tone and edge below. */
+  background: transparent;
   padding: 0 var(--g-s-5);
 }
 
@@ -64,5 +59,8 @@ const version = ref<string>(APP_VERSION);
   --g-btn-fg: var(--g-text-1);
   font-size: 12px;
   font-weight: 400;
+  /* A soft dark edge on the letters only (no band across the image) keeps them readable
+     where they cross the background's brightest highlights. */
+  text-shadow: 0 0 4px color-mix(in srgb, var(--g-canvas) 80%, transparent);
 }
 </style>
