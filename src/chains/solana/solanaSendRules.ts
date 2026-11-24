@@ -98,6 +98,16 @@ export function solanaSendErrorKey(code: string | undefined): string {
     case 'SEND_EXPIRED': return 'solana.hardware.sendExpired';
     case 'BAD_SIGNATURE': return 'solana.hardware.badSignature';
     case 'DEVICE_FAILED': return 'solana.hardware.signFailed';
+    case 'TOKEN_UNKNOWN': return 'solana.token.unknown';
+    case 'TOKEN_BALANCE': return 'send.insufficientBalance';
+    case 'TOKEN_FROZEN': return 'solana.token.frozen';
+    case 'TOKEN_NOT_TRANSFERABLE': return 'solana.token.notTransferable';
+    case 'RECIPIENT_NOT_WALLET': return 'solana.token.recipientNotWallet';
+    case 'RECIPIENT_WRONG_TOKEN': return 'solana.token.recipientWrongToken';
+    case 'INSUFFICIENT_SOL': return 'solana.token.insufficientSol';
+    case 'SIMULATION_FAILED': return 'solana.token.simulationFailed';
+    case 'LOOKUP_FAILED': return 'solana.token.lookupFailed';
+    case 'COST_CHANGED': return 'solana.token.costChanged';
     default: return 'solana.sendFailed';
   }
 }

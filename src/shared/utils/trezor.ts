@@ -540,12 +540,22 @@ export default {
   },
 
   /** The ed25519 signature (64 bytes) of a Solana transaction message by the account at `accountIndex`. */
-  async signSolanaTransaction(accountIndex: number, message: Uint8Array, isDevnet: boolean): Promise<Uint8Array> {
+  async signSolanaTransaction(
+    accountIndex: number,
+    message: Uint8Array,
+    isDevnet: boolean,
+    /** Token accounts the transfer names, so the device shows their owner's wallet (display only). */
+    tokenAccountsInfos?: Array<{ baseAddress: string; tokenProgram: string; tokenMint: string; tokenAccount: string }>,
+  ): Promise<Uint8Array> {
     await this.init();
+    const additionalInfo = {
+      ...(isDevnet ? { isDevnet: true } : {}),
+      ...(tokenAccountsInfos?.length ? { tokenAccountsInfos } : {}),
+    };
     const res = await TrezorConnect.solanaSignTransaction({
       path: solanaAccountPath(accountIndex),
       serializedTx: Buffer.from(message).toString('hex'),
-      additionalInfo: isDevnet ? { isDevnet: true } : undefined,
+      additionalInfo: Object.keys(additionalInfo).length ? additionalInfo : undefined,
     });
     if (!res.success) {
       throw new Error(connectError(res).message || 'Trezor did not sign the Solana transaction');
