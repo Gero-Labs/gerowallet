@@ -8,6 +8,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, associatedTokenAddress, singleSignerTransaction,
 } from '@/chains/solana/solanaTokenTransfer';
 import { SYSTEM_PROGRAM_ID } from '@/chains/solana/solanaTransaction';
+import { TOKEN_METADATA_PROGRAM_ID, tokenRecordAddress } from '@/chains/solana/solanaPnftTransfer';
 import { planSolanaTokenSend, solanaTokenAccountInfos, solanaTokenQuote, type SolanaHolding } from './solanaTokenSend';
 
 // Fixed test vectors — never used to hold funds.
@@ -78,7 +79,8 @@ describe('planning a token send', () => {
     expect(p.feeLamports).toBe(5000n + 2000n); // 20000 µL/CU on 100k CU
     const programs = decodeSolanaTransaction(singleSignerTransaction(p.message)).message;
     expect(programs.staticKeys).toContain(ASSOCIATED_TOKEN_PROGRAM_ID);
-    expect(solanaTokenQuote(p)).toEqual({ mint: MINT, decimals: 6, amount: '1250000', received: '1250000', createsAccount: true, rentLamports: '2039280', feeLamports: '7000' });
+    expect(solanaTokenQuote(p)).toEqual({ mint: MINT, decimals: 6, amount: '1250000', received: '1250000', createsAccount: true, rentLamports: '2039280', feeLamports: '7000',
+      programmable: false, refundLamports: '0' });
     expect(solanaTokenAccountInfos(p)).toEqual([{ baseAddress: TO, tokenProgram: TOKEN_PROGRAM_ID, tokenMint: MINT, tokenAccount: DEST }]);
   });
 
@@ -182,5 +184,102 @@ describe('planning a token send', () => {
     const a = api(chain());
     a.getAccounts.mockRejectedValueOnce(new Error('down'));
     await expect(planSolanaTokenSend({ publicKey: FROM }, request, holdings, a)).rejects.toMatchObject({ code: 'LOOKUP_FAILED' });
+  });
+});
+
+describe('planning a programmable NFT send', () => {
+  const NFT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+  const RULE_SET = 'eBJLFYPxJmMGKuFwpDWkzxZeUrad92kZRC5BJLpzyT9';
+  const SRC = associatedTokenAddress(FROM, NFT, TOKEN_PROGRAM_ID);
+  const DST = associatedTokenAddress(TO, NFT, TOKEN_PROGRAM_ID);
+  const OWNER_RECORD = tokenRecordAddress(NFT, SRC);
+  const DEST_RECORD = tokenRecordAddress(NFT, DST);
+  const nftMint: SolanaRemoteAccount = {
+    address: NFT, exists: true, lamports: 1_461_600n, owner: TOKEN_PROGRAM_ID, program: 'spl-token',
+    parsed: { type: 'mint', info: { decimals: 0, supply: '1' } },
+  };
+  const nftAccount = (address: string, owner: string, amount: bigint, state = 'frozen'): SolanaRemoteAccount => ({
+    ...tokenAccount(address, owner, amount, { mint: NFT, state }),
+  });
+  const record = (address: string, lamports = 1_447_680n): SolanaRemoteAccount =>
+    ({ address, exists: true, lamports, owner: TOKEN_METADATA_PROGRAM_ID, program: null, parsed: null });
+  const nftHoldings: SolanaHolding[] = [{ mint: NFT, amount: '1', decimals: 0, tokenAccount: SRC, programId: TOKEN_PROGRAM_ID }];
+  const pnftRequest = { mint: NFT, recipientAddress: TO, amount: '1', feeLevel: 'standard' };
+
+  function pnftApi(chain: Record<string, SolanaRemoteAccount>, opts: { standard?: string; ruleSet?: string | null; success?: boolean; delivered?: bigint } = {}) {
+    const read = (a: string) => chain[a] ?? missing(a);
+    return {
+      getFees: vi.fn(async () => ({ baseFeeLamportsPerSignature: 5000, slotsSampled: 1, prioritizationFeeMicroLamports: { min: 0, median: 0, p75: 0, p90: 0, max: 0 } })),
+      getChainTip: vi.fn(async () => ({ slot: 1, blockHeight: 1, blockhash: BLOCKHASH })),
+      getAccounts: vi.fn(async (addresses: string[]) => addresses.map(read)),
+      getNftMetadata: vi.fn(async (mints: string[]) => mints.map((mint) => ({
+        mint, standard: opts.standard ?? 'programmableNonFungible', ruleSet: opts.ruleSet === undefined ? RULE_SET : opts.ruleSet,
+        name: null, symbol: null, image: null, animationUrl: null, description: null, externalUrl: null, collection: null,
+        attributes: [], sellerFeeBasisPoints: null, offChain: true, fetchedAt: 0,
+      }) as never)),
+      simulate: vi.fn(async (_tx: string, accounts: string[]): Promise<SolanaRemoteSimulation> => {
+        if (opts.success === false) return { success: false, err: 'custom', logs: [], unitsConsumed: 1, before: [], after: null };
+        const before = (read(accounts[2]).parsed?.info as { tokenAmount?: { amount: string } } | undefined)?.tokenAmount?.amount;
+        return {
+          success: true, err: null, logs: [], unitsConsumed: 180_000, before: [],
+          after: [
+            read(FROM),
+            nftAccount(accounts[1], FROM, 0n),
+            { ...nftAccount(accounts[2], TO, BigInt(before ?? '0') + (opts.delivered ?? 1n)), lamports: 2_039_280n },
+            missing(accounts[3]), // the sender's token record is closed
+            record(accounts[4]),
+          ],
+        };
+      }),
+    };
+  }
+
+  const pnftChain = (extra: Record<string, SolanaRemoteAccount> = {}) => ({
+    [NFT]: nftMint, [SRC]: nftAccount(SRC, FROM, 1n), [OWNER_RECORD]: record(OWNER_RECORD), [FROM]: system(FROM), [TO]: system(TO), ...extra,
+  });
+
+  const planPnft = (c: Record<string, SolanaRemoteAccount>, opts: Parameters<typeof pnftApi>[1] = {}, r: Record<string, unknown> = pnftRequest) =>
+    planSolanaTokenSend({ publicKey: FROM }, r, nftHoldings, pnftApi(c, opts));
+
+  it('moves it through Token Metadata with its rule set, opening the recipient account and record', async () => {
+    const p = await planPnft(pnftChain());
+    expect(p).toMatchObject({
+      programmable: true, destination: DST, recipient: TO, createsAccount: true, amount: 1n, received: 1n,
+      rentLamports: 2_039_280n + 1_447_680n, refundLamports: 1_447_680n, feeLamports: 5000n,
+    });
+    const keys = decodeSolanaTransaction(singleSignerTransaction(p.message)).message.staticKeys;
+    expect(keys).toEqual(expect.arrayContaining([TOKEN_METADATA_PROGRAM_ID, RULE_SET, OWNER_RECORD, DEST_RECORD]));
+  });
+
+  it('sends a frozen account only because it is a programmable NFT', async () => {
+    // The same frozen account under a classic NFT is refused by the plain transfer.
+    await expect(planPnft(pnftChain(), { standard: 'nonFungible' })).rejects.toMatchObject({ code: 'TOKEN_FROZEN' });
+  });
+
+  it('works without a rule set, and to a recipient that already holds the record and account', async () => {
+    const p = await planPnft(pnftChain({ [DST]: nftAccount(DST, TO, 0n), [DEST_RECORD]: record(DEST_RECORD) }), { ruleSet: null });
+    expect(p).toMatchObject({ createsAccount: false, rentLamports: 0n });
+    expect(decodeSolanaTransaction(singleSignerTransaction(p.message)).message.staticKeys).not.toContain(RULE_SET);
+  });
+
+  it('refuses what Token Metadata would refuse or nobody meant', async () => {
+    await expect(planPnft(pnftChain(), {}, { ...pnftRequest, amount: '2' })).rejects.toMatchObject({ code: 'INVALID_AMOUNT' });
+    await expect(planPnft(pnftChain({ [OWNER_RECORD]: missing(OWNER_RECORD) }))).rejects.toMatchObject({ code: 'TOKEN_UNKNOWN' });
+    await expect(planPnft(pnftChain({ [DST]: nftAccount(DST, TO, 0n) }), {}, { ...pnftRequest, recipientAddress: DST }))
+      .rejects.toMatchObject({ code: 'RECIPIENT_NOT_WALLET' });
+    await expect(planPnft(pnftChain(), { success: false })).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
+    await expect(planPnft(pnftChain({ [FROM]: system(FROM, 1000n) }), { success: false })).rejects.toMatchObject({ code: 'INSUFFICIENT_SOL' });
+    await expect(planPnft(pnftChain(), { delivered: 2n })).rejects.toMatchObject({ code: 'SIMULATION_FAILED' });
+  });
+
+  it('holds the send to the reviewed cost', async () => {
+    await expect(planPnft(pnftChain(), {}, { ...pnftRequest, maxSolCost: String(5000n + 2_039_280n + 1_447_680n) })).resolves.toBeTruthy();
+    await expect(planPnft(pnftChain(), {}, { ...pnftRequest, maxSolCost: '5000' })).rejects.toMatchObject({ code: 'COST_CHANGED' });
+  });
+
+  it('falls back to the plain path when Nexus cannot say', async () => {
+    const a = pnftApi(pnftChain());
+    a.getNftMetadata.mockRejectedValueOnce(new Error('down'));
+    await expect(planSolanaTokenSend({ publicKey: FROM }, pnftRequest, nftHoldings, a)).rejects.toMatchObject({ code: 'TOKEN_FROZEN' });
   });
 });

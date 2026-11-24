@@ -73,7 +73,7 @@ describe('SolanaCollectibles', () => {
     expect(send.props('nftMint')).toBe(B);
   });
 
-  it('shows third-party text as text, warns on an unverified NFT and offers no Send for a programmable one', async () => {
+  it('shows third-party text as text, warns on an unverified NFT and notes a programmable one’s rules', async () => {
     const w = render();
     await w.find(`[data-test="sol-collection-${C}"]`).trigger('click');
     const detail = w.find('[data-test="sol-nft-detail"]');
@@ -81,8 +81,8 @@ describe('SolanaCollectibles', () => {
     expect(w.find('.dialog b').exists()).toBe(false);
     expect(detail.text()).toContain('solana.nft.unverifiedHint');
     expect(detail.text()).toContain('Legendary');
-    expect(w.find('[data-test="sol-nft-send"]').exists()).toBe(false);
-    expect(w.find('[data-test="sol-nft-programmable"]').exists()).toBe(true);
+    expect(w.find('[data-test="sol-nft-send"]').exists()).toBe(true);
+    expect(w.find('[data-test="sol-nft-programmable"]').text()).toBe('solana.nft.programmableRules');
   });
 
   it('lists only NFTs still held', () => {

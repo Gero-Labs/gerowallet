@@ -145,6 +145,10 @@
               <dt>{{ $t('solana.token.newAccount') }}</dt>
               <dd class="g-num">{{ formatSol(tokenQuote.rentLamports) }} {{ ticker }}</dd>
             </div>
+            <div v-if="tokenQuote.refundLamports && tokenQuote.refundLamports !== '0'" class="sol-summary__row" data-test="sol-refund">
+              <dt>{{ $t('solana.token.refund') }}</dt>
+              <dd class="g-num">{{ formatSol(tokenQuote.refundLamports) }} {{ ticker }}</dd>
+            </div>
             <div class="sol-summary__row sol-summary__row--total">
               <dt>{{ $t('solana.token.solCost') }}</dt>
               <dd class="g-num">{{ formatSol(BigInt(tokenQuote.feeLamports) + BigInt(tokenQuote.rentLamports)) }} {{ ticker }}</dd>

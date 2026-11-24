@@ -1,7 +1,7 @@
 <template>
   <!-- A Solana collection's NFTs, then one NFT: its image, name, mint, collection, attributes and
-       description, all the NFT's own metadata shown as text. Send for an NFT Gero can move; a
-       programmable NFT says why it cannot be sent from Gero yet. -->
+       description, all the NFT's own metadata shown as text, and Send (a programmable NFT notes
+       that its creator's transfer rules apply). -->
   <BaseDialog
     size="md"
     :isOpen="modelValue && !!collection"
@@ -66,8 +66,8 @@
           <v-icon size="x-small">mdi-open-in-new</v-icon>
         </a>
 
-        <p v-if="!sendable" class="t-caption" data-test="sol-nft-programmable">{{ $t('solana.nft.programmable') }}</p>
-        <GButton v-else tier="primary" block data-test="sol-nft-send" @click="emit('send', nft.mint)">
+        <p v-if="programmable" class="t-caption" data-test="sol-nft-programmable">{{ $t('solana.nft.programmableRules') }}</p>
+        <GButton tier="primary" block data-test="sol-nft-send" @click="emit('send', nft.mint)">
           <v-icon size="small" start>mdi-arrow-top-right</v-icon>
           {{ $t('send.send') }}
         </GButton>
@@ -109,7 +109,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
-import { isSendableSolanaNft, solanaNftName, type SolanaNftCollection } from '@/chains/solana/solanaNfts';
+import { isProgrammableSolanaNft, solanaNftName, type SolanaNftCollection } from '@/chains/solana/solanaNfts';
 
 const props = defineProps<{ modelValue: boolean; collection: SolanaNftCollection | null }>();
 const emit = defineEmits<{
@@ -125,7 +125,7 @@ const nft = computed(() => {
   return items.find((item) => item.mint === selectedMint.value) ?? null;
 });
 const nftTitle = computed(() => (nft.value ? solanaNftName(nft.value) : ''));
-const sendable = computed(() => !!nft.value && isSendableSolanaNft(nft.value));
+const programmable = computed(() => !!nft.value && isProgrammableSolanaNft(nft.value));
 const explorerUrl = computed(() => (nft.value ? solscanUrl('account', nft.value.mint, walletStore.loggedWallet?.network ?? '') : ''));
 
 watch(() => [props.modelValue, props.collection?.id], () => { selectedMint.value = null; });

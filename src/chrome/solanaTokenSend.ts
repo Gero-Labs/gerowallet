@@ -22,6 +22,7 @@ import { parseRawAmount } from '@/chains/solana/solanaAmount';
 import { SYSTEM_PROGRAM_ID } from '@/chains/solana/solanaTransaction';
 import {
   TOKEN_PROGRAMS,
+  TOKEN_PROGRAM_ID,
   associatedTokenAddress,
   buildTokenTransferMessage,
   estimateTokenTransferFee,
@@ -29,6 +30,13 @@ import {
 } from '@/chains/solana/solanaTokenTransfer';
 import { priorityPriceFor } from '@/chains/solana/solanaSendRules';
 import { bytesToBase64 } from '@/chrome/solanaDappTx';
+import type { SolanaNft } from '@/chains/solana/solanaNfts';
+import {
+  TOKEN_METADATA_PROGRAM_ID,
+  buildPnftTransferMessage,
+  estimatePnftTransferFee,
+  tokenRecordAddress,
+} from '@/chains/solana/solanaPnftTransfer';
 
 export type SolanaTokenSendRefusal =
   | 'INVALID_REQUEST'
@@ -88,9 +96,13 @@ export interface SolanaTokenPlan {
   recipient: string;
   destination: string;
   createsAccount: boolean;
-  /** Lamports the new token account holds (rent), paid by the sender; 0 without one. */
+  /** Lamports the new accounts hold (rent), paid by the sender; 0 without one. */
   rentLamports: bigint;
   feeLamports: bigint;
+  /** A programmable NFT, moved by Token Metadata (solanaPnftTransfer.ts). */
+  programmable: boolean;
+  /** Rent returned to the sender (a programmable NFT's closed token record); 0 otherwise. */
+  refundLamports: bigint;
 }
 
 /** What the page shows for a plan (decimal strings; never the message itself). */
@@ -102,6 +114,8 @@ export interface SolanaTokenQuote {
   createsAccount: boolean;
   rentLamports: string;
   feeLamports: string;
+  programmable: boolean;
+  refundLamports: string;
 }
 
 /** Trezor shows the recipient's wallet for a token account it names (display only). */
@@ -112,7 +126,8 @@ export interface SolanaTokenAccountInfo {
   tokenAccount: string;
 }
 
-export type SolanaTokenSendApi = Pick<SolanaApi, 'getFees' | 'getChainTip' | 'getAccounts' | 'simulate'>;
+export type SolanaTokenSendApi = Pick<SolanaApi, 'getFees' | 'getChainTip' | 'getAccounts' | 'simulate'>
+  & Partial<Pick<SolanaApi, 'getNftMetadata'>>;
 
 /**
  * Rent of a plain token account (165 bytes): used only to tell "not enough SOL" from other
@@ -212,6 +227,15 @@ export async function planSolanaTokenSend(
   const tokenProgram = mintAccount.owner as string;
   if (blockingExtension(mintAccount)) throw new SolanaTokenSendError('TOKEN_NOT_TRANSFERABLE');
 
+  // A programmable NFT moves through Token Metadata, never a plain transfer (its account is frozen).
+  const nft = decimals === 0 ? await readNft(api, mint) : null;
+  if (nft && nft.standard && PROGRAMMABLE.includes(nft.standard)) {
+    return planPnftSend({
+      from, mint, amount, source, mintAccount, sourceAccount, recipientInput, recipientAccount, senderAccount,
+      ruleSet: nft.ruleSet, feeLevel, request, api,
+    });
+  }
+
   const src = tokenAccount(sourceAccount, tokenProgram);
   if (!src || src.mint !== mint || src.owner !== from) throw new SolanaTokenSendError('TOKEN_UNKNOWN');
   if (isFrozen(sourceAccount)) throw new SolanaTokenSendError('TOKEN_FROZEN');
@@ -288,17 +312,148 @@ export async function planSolanaTokenSend(
     throw new SolanaTokenSendError('SIMULATION_FAILED');
   }
 
+  holdToReview(request, feeLamports + rentLamports, received);
+
+  return {
+    message, mint, tokenProgram, decimals, amount, received, recipient, destination, createsAccount, rentLamports, feeLamports,
+    programmable: false, refundLamports: 0n,
+  };
+}
+
+/** The limits from the review the user approved: never more SOL, never less received. */
+function holdToReview(request: SolanaTokenSendRequest, solCost: bigint, received: bigint): void {
   const { maxSolCost, minReceived } = request;
   if (maxSolCost !== undefined) {
     if (typeof maxSolCost !== 'string' || !/^\d+$/.test(maxSolCost)) throw new SolanaTokenSendError('INVALID_REQUEST');
-    if (feeLamports + rentLamports > BigInt(maxSolCost)) throw new SolanaTokenSendError('COST_CHANGED');
+    if (solCost > BigInt(maxSolCost)) throw new SolanaTokenSendError('COST_CHANGED');
   }
   if (minReceived !== undefined) {
     if (typeof minReceived !== 'string' || !/^\d+$/.test(minReceived)) throw new SolanaTokenSendError('INVALID_REQUEST');
     if (received < BigInt(minReceived)) throw new SolanaTokenSendError('COST_CHANGED');
   }
+}
 
-  return { message, mint, tokenProgram, decimals, amount, received, recipient, destination, createsAccount, rentLamports, feeLamports };
+const PROGRAMMABLE: readonly string[] = ['programmableNonFungible', 'programmableNonFungibleEdition'];
+
+/**
+ * The NFT's standard and rule set per Nexus. Unreadable reads as "not programmable": the plain
+ * transfer then refuses a programmable NFT's frozen account itself, so nothing is lost.
+ */
+async function readNft(api: SolanaTokenSendApi, mint: string): Promise<SolanaNft | null> {
+  if (!api.getNftMetadata) return null;
+  try {
+    const [row] = await api.getNftMetadata([mint]);
+    return row || null;
+  } catch {
+    return null;
+  }
+}
+
+/** A created account's rent as simulated: within what such an account can cost, or not believed. */
+function createdRent(after: SolanaRemoteAccount | null | undefined): bigint {
+  const lamports = after?.lamports ?? 0n;
+  if (lamports < CREATED_ACCOUNT_RENT_MIN || lamports > TOKEN_ACCOUNT_RENT_MAX) throw new SolanaTokenSendError('SIMULATION_FAILED');
+  return lamports;
+}
+
+/** The rent of the smallest account the runtime accepts (0 data bytes). */
+const CREATED_ACCOUNT_RENT_MIN = 890_880n;
+/** A token record's rent (80 bytes), only to tell "not enough SOL" from other failures. */
+const TOKEN_RECORD_RENT_ESTIMATE = 1_447_680n;
+
+interface PnftContext {
+  from: string;
+  mint: string;
+  amount: bigint;
+  source: string;
+  mintAccount: SolanaRemoteAccount;
+  sourceAccount: SolanaRemoteAccount;
+  recipientInput: string;
+  recipientAccount: SolanaRemoteAccount;
+  senderAccount: SolanaRemoteAccount;
+  ruleSet: string | null;
+  feeLevel: 'standard' | 'fast';
+  request: SolanaTokenSendRequest;
+  api: SolanaTokenSendApi;
+}
+
+/**
+ * A programmable NFT: Token Metadata TransferV1 from the sender's associated account to the
+ * recipient's (opened by the program when missing), with both token records and the rule set.
+ * Only to a wallet; the simulation must show exactly the one NFT moving.
+ */
+async function planPnftSend(ctx: PnftContext): Promise<SolanaTokenPlan> {
+  const { from, mint, source, api } = ctx;
+  if (ctx.amount !== 1n) throw new SolanaTokenSendError('INVALID_AMOUNT');
+  // Programmable NFTs are SPL Token mints held in the owner's associated account.
+  if (ctx.mintAccount.owner !== TOKEN_PROGRAM_ID) throw new SolanaTokenSendError('TOKEN_NOT_TRANSFERABLE');
+  if (source !== associatedTokenAddress(from, mint, TOKEN_PROGRAM_ID)) throw new SolanaTokenSendError('TOKEN_UNKNOWN');
+  const src = tokenAccount(ctx.sourceAccount, TOKEN_PROGRAM_ID);
+  if (!src || src.mint !== mint || src.owner !== from) throw new SolanaTokenSendError('TOKEN_UNKNOWN');
+  if (src.amount < 1n) throw new SolanaTokenSendError('TOKEN_BALANCE');
+  if (ctx.ruleSet !== null && !isValidSolanaAddress(ctx.ruleSet)) throw new SolanaTokenSendError('LOOKUP_FAILED');
+
+  const plainWallet = !ctx.recipientAccount.exists || ctx.recipientAccount.owner === SYSTEM_PROGRAM_ID;
+  if (!plainWallet || !isOnCurveSolanaAddress(ctx.recipientInput)) throw new SolanaTokenSendError('RECIPIENT_NOT_WALLET');
+  const recipient = ctx.recipientInput;
+  const destination = associatedTokenAddress(recipient, mint, TOKEN_PROGRAM_ID);
+  const ownerRecord = tokenRecordAddress(mint, source);
+  const destinationRecord = tokenRecordAddress(mint, destination);
+  const [destinationAccount, ownerRecordAccount, destinationRecordAccount] = await readAccounts(api, [destination, ownerRecord, destinationRecord]);
+  let destinationBefore = 0n;
+  if (destinationAccount.exists) {
+    const dst = tokenAccount(destinationAccount, TOKEN_PROGRAM_ID);
+    if (!dst || dst.mint !== mint || dst.owner !== recipient) throw new SolanaTokenSendError('RECIPIENT_WRONG_TOKEN');
+    destinationBefore = dst.amount;
+  }
+  if (!ownerRecordAccount.exists || ownerRecordAccount.owner !== TOKEN_METADATA_PROGRAM_ID) throw new SolanaTokenSendError('TOKEN_UNKNOWN');
+
+  const fees = await api.getFees().catch(() => undefined);
+  const priority = priorityPriceFor(ctx.feeLevel, fees?.prioritizationFeeMicroLamports);
+  let message: Uint8Array;
+  try {
+    const tip = await api.getChainTip();
+    message = buildPnftTransferMessage({
+      from, source, destination, recipient, mint, ruleSet: ctx.ruleSet, recentBlockhash: tip.blockhash,
+      computeUnitPriceMicroLamports: priority,
+    });
+  } catch {
+    throw new SolanaTokenSendError('LOOKUP_FAILED');
+  }
+  const feeLamports = estimatePnftTransferFee(priority);
+
+  let simulation;
+  try {
+    simulation = await api.simulate(bytesToBase64(singleSignerTransaction(message)), [from, source, destination, ownerRecord, destinationRecord]);
+  } catch {
+    throw new SolanaTokenSendError('LOOKUP_FAILED');
+  }
+  if (!simulation.success || !simulation.after || simulation.after.length < 5) {
+    const needed = feeLamports
+      + (destinationAccount.exists ? 0n : TOKEN_ACCOUNT_RENT_ESTIMATE)
+      + (destinationRecordAccount.exists ? 0n : TOKEN_RECORD_RENT_ESTIMATE);
+    if (ctx.senderAccount.lamports === null || ctx.senderAccount.lamports < needed) throw new SolanaTokenSendError('INSUFFICIENT_SOL');
+    throw new SolanaTokenSendError('SIMULATION_FAILED');
+  }
+  // Exactly the one NFT leaves the sender's account and arrives in the recipient's.
+  const srcAfter = tokenAccount(simulation.after[1], TOKEN_PROGRAM_ID);
+  const dstAfter = tokenAccount(simulation.after[2], TOKEN_PROGRAM_ID);
+  if (!srcAfter || srcAfter.amount !== src.amount - 1n || !dstAfter || dstAfter.mint !== mint || dstAfter.owner !== recipient
+    || dstAfter.amount !== destinationBefore + 1n) {
+    throw new SolanaTokenSendError('SIMULATION_FAILED');
+  }
+  const createsAccount = !destinationAccount.exists;
+  const rentLamports = (createsAccount ? createdRent(simulation.after[2]) : 0n)
+    + (destinationRecordAccount.exists ? 0n : createdRent(simulation.after[4]));
+  // The sender's token record is closed; its rent returns to the payer (the sender).
+  const ownerRecordAfter = simulation.after[3];
+  const refundLamports = !ownerRecordAfter.exists || (ownerRecordAfter.lamports ?? 0n) === 0n ? ownerRecordAccount.lamports ?? 0n : 0n;
+
+  holdToReview(ctx.request, feeLamports + rentLamports, 1n);
+  return {
+    message, mint, tokenProgram: TOKEN_PROGRAM_ID, decimals: 0, amount: 1n, received: 1n, recipient, destination, createsAccount,
+    rentLamports, feeLamports, programmable: true, refundLamports,
+  };
 }
 
 export function solanaTokenQuote(plan: SolanaTokenPlan): SolanaTokenQuote {
@@ -310,6 +465,8 @@ export function solanaTokenQuote(plan: SolanaTokenPlan): SolanaTokenQuote {
     createsAccount: plan.createsAccount,
     rentLamports: plan.rentLamports.toString(),
     feeLamports: plan.feeLamports.toString(),
+    programmable: plan.programmable,
+    refundLamports: plan.refundLamports.toString(),
   };
 }
 

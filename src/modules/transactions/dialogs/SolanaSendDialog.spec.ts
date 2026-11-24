@@ -191,7 +191,10 @@ describe('SolanaSendDialog: a token', () => {
 describe('SolanaSendDialog: an NFT', () => {
   const NFT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
   const TOKEN = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-  const NFT_QUOTE = { mint: NFT, decimals: 0, amount: '1', received: '1', createsAccount: false, rentLamports: '0', feeLamports: '5000' };
+  const NFT_QUOTE = {
+    mint: NFT, decimals: 0, amount: '1', received: '1', createsAccount: false, rentLamports: '0', feeLamports: '5000',
+    programmable: true, refundLamports: '1447680',
+  };
 
   beforeEach(() => {
     walletStore.loggedWallet = { id: 1, chain: Blockchain.SOLANA, network: Network.DEVNET, publicKey: FROM, encryptionMethod: 'password' } as never;
@@ -224,6 +227,8 @@ describe('SolanaSendDialog: an NFT', () => {
     await flushPromises();
     const request = { mint: NFT, recipientAddress: TO, amount: '1', feeLevel: 'standard' };
     expect(send).toHaveBeenCalledWith({ method: MessageTypes.SOLANA_TOKEN_SEND_QUOTE, data: request });
+    // A programmable NFT's closed token record returns its rent.
+    expect(wrapper.find('[data-test="sol-refund"]').text()).toContain('0.00144768');
     await wrapper.find('[data-test="sol-password"]').setValue('pw');
     await wrapper.find('[data-test="sol-send"]').trigger('click');
     await flushPromises();
