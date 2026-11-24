@@ -309,6 +309,19 @@
       ],
       "manual": "Midnight wallet: switch between the local and remote prover and prove one shielded send."
     },
+    "options:/midnight-swap": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/midnight/swap/MidnightSwapDeskPage.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/midnightSwapHandlers.spec.ts"
+        }
+      ],
+      "manual": "Midnight preprod wallet: make an offer on one account, take it on another, check both balances moved and the maker's offer reads Taken; withdraw an open offer."
+    },
     "options:/media-player": {
       "checks": [
         {
@@ -762,6 +775,19 @@
         }
       ],
       "manual": "With isCopilotEnabled on, open the side-panel feed and confirm cards render."
+    },
+    "sidepanel:/midnight-swap": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/sidepanel/pages/MidnightSwapPage.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/chrome/midnightSwapHandlers.spec.ts"
+        }
+      ],
+      "manual": "Midnight preprod wallet: make an offer on one account, take it on another, check both balances moved and the maker's offer reads Taken; withdraw an open offer."
     },
     "sidepanel:/:pathMatch(.*)*": {
       "checks": [],
