@@ -403,6 +403,7 @@ const currentStep = ref<number>(1);
 const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
+let maxRevision = 0;
 /** A build is scheduled or in flight: the summary shows a shimmer instead of stale or missing figures. */
 const isBuilding = ref<boolean>(false);
 const feePending = computed(() => isBuilding.value || isCalculatingMax.value);
@@ -1165,6 +1166,7 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const sendTokensCopy = JSON.parse(JSON.stringify(recipient.selectedTokens));
   const selectedToken = sendTokensCopy[tokenIndex];
   if (!selectedToken) { isCalculatingMax.value = false; return; }
+  maxRevision++;
 
   // For non-ADA tokens: set to the LIVE available balance (total minus what
   // other recipients committed — the same figure the card displays), not the
@@ -1533,8 +1535,11 @@ watch(() => props.isOpen, (val) => {
 // Debounced build — avoids firing on every keystroke (e.g. typing "10" = "1" then "10").
 // `isBuilding` is raised by the recipients watcher when it schedules this and dropped when
 // the run ends, whichever way, so the summary's shimmer covers the debounce and the call.
-const debouncedBuild = debounce(async () => {
+const debouncedBuild = debounce(async (recipientEditRevision?: number) => {
   try {
+    // Max builds the payment itself. An older recipient edit must not replace
+    // that payment during review. A fallback requested by Max still runs.
+    if (recipientEditRevision !== undefined && recipientEditRevision !== maxRevision) return;
     await runBuild();
   } finally {
     isBuilding.value = false;
@@ -1802,7 +1807,7 @@ watch(
     // Async: debounced network call to build tx. The shimmer starts now, not when the
     // debounce fires, so the summary never flashes stale figures in between.
     isBuilding.value = hasAnyAmount();
-    debouncedBuild();
+    debouncedBuild(maxRevision);
   },
   { deep: true }
 );
