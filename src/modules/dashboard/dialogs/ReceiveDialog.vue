@@ -8,7 +8,7 @@
     :min-height="0"
     :persistent="false"
     :img="assets.qrCodeSvg"
-    img-color="var(--g-accent)"
+    img-color="var(--g-text-1)"
   >
     <v-card-text class="receive-body pa-0 pt-2">
       <!-- Which address: Cardano payment/stake/DRep, or Midnight public/private/DUST.

@@ -5,7 +5,7 @@
     :title="t('send.sendBitcoin')"
     :subtitle="t('bitcoin.sendSubtitle', { currency: ticker })"
     :img="assts.sendSvg"
-    img-color="var(--g-accent)"
+    img-color="var(--g-text-1)"
     :min-height="0"
     :scrollable="true"
     :loading="loading"

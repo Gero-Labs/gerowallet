@@ -17,7 +17,7 @@
     :persistent="false"
     :img="assets.sendSvg"
     :width="428"
-    img-color="var(--g-accent)"
+    img-color="var(--g-text-1)"
   >
     <!-- A sweep's payment is out: what went where, instead of closing like a single send.
          Before the empty-wallet state, since a Max may well have emptied the wallet. -->
