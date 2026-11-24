@@ -112,7 +112,20 @@
           </dl>
         </div>
 
-        <template v-if="isPrfWallet">
+        <template v-if="isHardware">
+          <div class="sol-auth" data-test="sol-hardware">
+            <span class="t-caption">{{ $t('solana.hardware.signOnDevice', { device: loggedWallet?.type }) }}</span>
+            <ToggleSwitch
+              v-if="showBluetoothToggle"
+              :text-left="$t('dashboard.usb')"
+              icon-left="mdi-usb"
+              :text-right="$t('dashboard.bluetooth')"
+              icon-right="mdi-bluetooth"
+              v-model="isBluetooth"
+            />
+          </div>
+        </template>
+        <template v-else-if="isPrfWallet">
           <div v-if="!prfBytes" class="sol-auth">
             <span class="t-caption">{{ $t('security.passKeyAuthRequired') }}</span>
             <GButton tier="secondary" block @click="authenticateWithPassKey()">
@@ -170,6 +183,30 @@
         </GButton>
       </div>
     </template>
+
+    <!-- Keystone: the sign request as a QR, then the device's answer scanned back -->
+    <template v-if="isHardware">
+      <KeystoneSignSheet
+        v-if="inPanel"
+        :isOpen="keystone.keystoneShow.value"
+        :keystoneType="keystone.keystoneType.value"
+        :keystoneCbor="keystone.keystoneCbor.value"
+        :urTypes="['sol-signature']"
+        @scan="keystone.onKeystoneScan"
+        @error="keystone.failKeystone"
+        @close="keystone.cancelKeystone()"
+      />
+      <KeystoneSignDialog
+        v-else
+        :isOpen="keystone.keystoneShow.value"
+        :keystoneType="keystone.keystoneType.value"
+        :keystoneCbor="keystone.keystoneCbor.value"
+        :urTypes="['sol-signature']"
+        @scan="keystone.onKeystoneScan"
+        @error="keystone.failKeystone"
+        @close="keystone.cancelKeystone()"
+      />
+    </template>
   </div>
 </template>
 
@@ -196,9 +233,19 @@ import {
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import type { SolanaSendQuote } from '@/chrome/solanaSend';
 import { debugLog } from '@/utils/debug';
+import { WalletType } from '@/models/types';
+import { isSolanaHardware } from '@/chains/solana/solanaHardwarePolicy';
+import { useSolanaHardwareSigner, SolanaHardwareSignError } from '@/shared/composables/useSolanaHardwareSigner';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import KeystoneSignSheet from '@/sidepanel/components/KeystoneSignSheet.vue';
 
-/** `open` loads a fee quote; closing it clears everything typed, the PassKey answer included. */
-const props = defineProps<{ open: boolean }>();
+/**
+ * `open` loads a fee quote; closing it clears everything typed, the PassKey answer included.
+ * `inPanel`: hosted by the side panel (its Keystone sheet; Ledger over USB only, as Bluetooth
+ * pairing needs a window of its own there).
+ */
+const props = defineProps<{ open: boolean; inPanel?: boolean }>();
 const emit = defineEmits<{
   (e: 'close'): void;
   /** While a PassKey ceremony or the send itself is in flight: the host holds its close. */
@@ -275,7 +322,15 @@ const amountError = computed(() => {
 const canContinue = computed(() =>
   !!recipient.value && !addressError.value && lamports.value > 0n && !amountError.value && !!quote.value,
 );
-const canSign = computed(() => !loading.value && (isPrfWallet.value ? !!prfBytes.value : !!password.value));
+// Ledger, Trezor and Keystone sign in this page; the worker builds the message and checks
+// the signature (PREPARE_SOLANA_SEND / SUBMIT_SOLANA_SEND).
+const isHardware = computed(() => isSolanaHardware(loggedWallet.value?.type));
+const isBluetooth = ref(false);
+const showBluetoothToggle = computed(() => !props.inPanel && loggedWallet.value?.type === WalletType.Ledger && !!loggedWallet.value?.btSupported);
+const { sign: signOnDevice, keystone } = useSolanaHardwareSigner({ getIsBT: () => showBluetoothToggle.value && isBluetooth.value });
+
+const canSign = computed(() => !loading.value
+  && (isHardware.value || (isPrfWallet.value ? !!prfBytes.value : !!password.value)));
 
 const isPrfWallet = computed(() =>
   loggedWallet.value?.encryptionMethod === 'prf'
@@ -324,11 +379,38 @@ async function authenticateWithPassKey(): Promise<void> {
   }
 }
 
+type SendResponse = { data?: { success?: boolean; error?: string; result?: { signature: string } } };
+
+/** The device signs the message the worker built; the worker checks it and submits. */
+async function sendFromDevice(data: Record<string, unknown>): Promise<SendResponse> {
+  const prepared = await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.PREPARE_SOLANA_SEND, data }) as
+    { data?: { success?: boolean; error?: string; result?: { message: number[] } } };
+  if (!prepared.data?.success || !prepared.data.result) return { data: { success: false, error: prepared.data?.error } };
+  let signature: Uint8Array;
+  try {
+    signature = await signOnDevice(Uint8Array.from(prepared.data.result.message), 'transaction');
+  } catch (error) {
+    debugLog('Solana send: device did not sign', error);
+    // Cancelled on purpose: no error to show.
+    return { data: { success: false, error: error instanceof SolanaHardwareSignError && error.cancelled ? 'CANCELLED' : 'DEVICE_FAILED' } };
+  }
+  return await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_SOLANA_SEND,
+    data: { signature: Array.from(signature) },
+  }) as SendResponse;
+}
+
 async function confirmSend(): Promise<void> {
   if (!canSign.value) return;
   loading.value = true;
   sendError.value = '';
   try {
+    if (isHardware.value) {
+      const response = await sendFromDevice({ recipientAddress: recipient.value, lamports: lamports.value.toString(), feeLevel: feeLevel.value });
+      if (response.data?.success && response.data.result) sentSignature.value = response.data.result.signature;
+      else if (response.data?.error !== 'CANCELLED') sendError.value = errorText(response.data?.error ?? '');
+      return;
+    }
     const data: Record<string, unknown> = {
       recipientAddress: recipient.value,
       lamports: lamports.value.toString(),
@@ -355,6 +437,9 @@ async function confirmSend(): Promise<void> {
 }
 
 function reset(): void {
+  // A Keystone request still showing is abandoned with the form.
+  if (keystone.keystoneShow.value) keystone.cancelKeystone();
+  isBluetooth.value = false;
   step.value = 1;
   recipient.value = '';
   amountText.value = '';

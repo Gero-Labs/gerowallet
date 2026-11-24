@@ -65,6 +65,17 @@ describe('SolanaSignControls', () => {
     expect(w.emitted('sign-prf')).toHaveLength(1);
   });
 
+  it('a hardware wallet that signs this request signs on the device', async () => {
+    const w = mountControls({ walletType: WalletType.Keystone, hardware: true, signError: 'Device said no' });
+    expect(w.find('input.password').exists()).toBe(false);
+    expect(w.text()).toContain('solana.hardware.signOnDevice');
+    expect(w.text()).toContain('Device said no');
+    await buttons(w)[1].trigger('click');
+    expect(w.emitted('sign-hardware')).toHaveLength(1);
+    await w.setProps({ canSign: false } as never);
+    expect(buttons(w)[1].attributes('disabled')).toBeDefined();
+  });
+
   it('any other wallet can only reject', async () => {
     const w = mountControls({ walletType: WalletType.Ledger });
     expect(buttons(w)).toHaveLength(1);

@@ -12,6 +12,10 @@ export enum MessageTypes {
   SOLANA_SEND_QUOTE = 'SOLANA_SEND_QUOTE',
   /** Gero's own SOL send: the worker checks, signs and submits (chrome/solanaSend.ts). */
   SEND_SOLANA = 'SEND_SOLANA',
+  /** Hardware Solana send, step 1: the worker checks and builds the transfer message for the device. */
+  PREPARE_SOLANA_SEND = 'PREPARE_SOLANA_SEND',
+  /** Hardware Solana send, step 2: the device's signature over that message; the worker submits. */
+  SUBMIT_SOLANA_SEND = 'SUBMIT_SOLANA_SEND',
   /** Side panel only: sign a dApp's approved `solana:signMessage` bytes with the logged Solana account. */
   SIGN_SOLANA_MESSAGE = 'SIGN_SOLANA_MESSAGE',
   /** Side panel only: sign a dApp transaction the worker previewed (consumes its allowance). */

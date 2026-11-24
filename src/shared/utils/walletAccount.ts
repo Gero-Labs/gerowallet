@@ -50,6 +50,8 @@ type AccountRecord = Pick<Wallet, 'accountIndex' | 'chain' | 'type' | 'encryptio
 /** Watch wallets have no keys, and a legacy Google wallet's address comes from a contract. */
 function canHoldOtherAccounts(wallet: AccountRecord): boolean {
   if (!MULTI_ACCOUNT_CHAINS.has(wallet.chain)) return false;
+  // A Solana device signs at any account path, as Cardano hardware does.
+  if (wallet.chain === Blockchain.SOLANA && isHardwareWallet(wallet)) return true;
   if (PHRASE_ACCOUNT_CHAINS.has(wallet.chain)) return wallet.type === WalletType.Normal;
   if (wallet.type === WalletType.Watch) return false;
   return !(wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc');
@@ -170,6 +172,7 @@ export function childAccounts<T extends GroupRecord>(parent: T, wallets: WalletL
  * (password or PassKey) and Google wallets; on Bitcoin and Midnight seeds only.
  */
 export function canAddAccounts(wallet: Pick<Wallet, 'chain' | 'type' | 'encryptionMethod'>): boolean {
+  if (wallet.chain === Blockchain.SOLANA && isHardwareWallet(wallet)) return true;
   if (PHRASE_ACCOUNT_CHAINS.has(wallet.chain)) return wallet.type === WalletType.Normal;
   if (wallet.chain !== Blockchain.CARDANO) return false;
   if (isHardwareWallet(wallet)) return true;

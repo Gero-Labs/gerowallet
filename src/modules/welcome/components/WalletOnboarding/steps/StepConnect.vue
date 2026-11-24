@@ -19,14 +19,17 @@
       style="width: 230px; height: 126px; align-self: center;"
       :alt="t('wallet.connectKeystone')"
     />
+    <div :class="{ 'keystone-pair-row': walletType === WalletType.Keystone && !keystoneScan }">
     <v-alert color="primary" density="compact" variant="outlined" type="info" border="start" class="connect-info text-left">
       <div v-if="walletType === WalletType.Ledger">
         <ul class="connect-steps t-body">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
           <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
+          <li v-else-if="isSolana">{{ $t('welcome.installSolanaApp', { walletType }) }}</li>
           <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
           <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
           <li v-if="isBitcoin">{{ $t('welcome.openBitcoinApp') }}</li>
+          <li v-else-if="isSolana">{{ $t('welcome.openSolanaApp') }}</li>
           <li v-else>{{ $t('welcome.openCardanoApp') }}</li>
         </ul>
       </div>
@@ -74,6 +77,7 @@
       />
     </div>
     </div>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="text-align: initial;">
@@ -97,6 +101,7 @@ import {
   getKeystoneAccountsUR, getKeystonePublicKeyUR, generateBitcoinSyncQR, parseBitcoinAccount, parseKeystoneAccounts,
 } from '@/shared/utils/keystone';
 import type { AccountXpub } from '@/shared/utils/walletAccount';
+import { getKeystoneSolanaAccountsUR, parseKeystoneSolanaAccounts } from '@/shared/utils/solanaKeystone';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -127,11 +132,27 @@ const { t } = useTranslation();
 const props = defineProps<{
   network: NetworkInfo;
   walletType: string | undefined;
-  /** Accounts to ask the device for. Set only for multi-account pairing (Cardano). */
+  /** Accounts to ask the device for. Set only for multi-account pairing (Cardano and Solana). */
   accountIndices?: number[];
 }>();
 
 const multiAccount = computed(() => props.network?.blockchain === Blockchain.CARDANO && !!props.accountIndices?.length);
+
+// Solana (Ledger, Trezor, Keystone): the device exports addresses at m/44'/501'/n'/0'. Without
+// the multi-account step only account #0 is asked for, and the payload is single-account.
+const isSolana = computed(() => props.network?.blockchain === Blockchain.SOLANA);
+const solanaMultiAccount = computed(() => isSolana.value && !!props.accountIndices?.length);
+const solanaIndices = (): number[] => (solanaMultiAccount.value ? props.accountIndices! : [0]);
+const solanaPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string, firmwareVersion?: string): ConnectionPayload =>
+  solanaMultiAccount.value
+    ? accountsPayload(accounts, btSupported, xfp, firmwareVersion)
+    : {
+      publicKey: accounts[0].publicKey,
+      keys: accounts[0].keys,
+      btSupported,
+      ...(xfp ? { xfp } : {}),
+      ...(firmwareVersion ? { firmwareVersion } : {}),
+    };
 
 /** The payload for a multi-account export; the record fields come from each account. */
 const accountsPayload = (accounts: AccountXpub[], btSupported: boolean, xfp?: string, firmwareVersion?: string): ConnectionPayload => ({
@@ -162,7 +183,9 @@ const initKeystoneQR = (): void => {
     if (qrCodeRef.value) qrCodeRef.value.innerHTML = '';
   }
   let qrOptions;
-  if (multiAccount.value) {
+  if (isSolana.value) {
+    qrOptions = getKeystoneSolanaAccountsUR(solanaIndices());
+  } else if (multiAccount.value) {
     qrOptions = getKeystoneAccountsUR(props.accountIndices!);
   } else if (props.network?.blockchain === Blockchain.CARDANO) {
     qrOptions = getKeystonePublicKeyUR(purpose.hdwallet, 0);
@@ -184,6 +207,14 @@ onMounted(() => {
 const onKeystoneScan = async (ur: { type: string; cbor: string }): Promise<void> => {
   try {
     debugLog('[Keystone] QR code scanned', ur.type);
+
+    if (isSolana.value) {
+      const { xfp, accounts, firmwareVersion } = parseKeystoneSolanaAccounts(Buffer.from(ur.cbor, 'hex'), solanaIndices());
+      snackbar.fireSuccess(t('wallet.keystoneQRScannedSuccess') as string);
+      keystoneScan.value = false;
+      emit('connected', solanaPayload(accounts, false, xfp, firmwareVersion));
+      return;
+    }
 
     if (props.network?.blockchain === Blockchain.BITCOIN) {
       // Keep the scanned type: UR.from() would label it 'bytes' and parseBitcoinAccount rejects that.
@@ -254,7 +285,12 @@ const walletCreationStep2 = async (): Promise<void> => {
       let coldWalletProps;
       const index = 0;
 
-      if (multiAccount.value) {
+      if (isSolana.value) {
+        const { getLedgerSolanaAccounts } = await import('@/shared/utils/solanaLedger');
+        const { btSupported, accounts } = await getLedgerSolanaAccounts(isBluetooth.value, solanaIndices());
+        emit('connected', solanaPayload(accounts, btSupported));
+        return;
+      } else if (multiAccount.value) {
         const { btSupported, accounts } = await ledger.initLedgerAccounts(isBluetooth.value, props.accountIndices!);
         emit('connected', accountsPayload(accounts, btSupported));
         return;
@@ -293,6 +329,13 @@ const walletCreationStep2 = async (): Promise<void> => {
     hardwareLoading.begin('Trezor', t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
     try {
       hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
+      if (isSolana.value) {
+        // Trezor Connect runs through Trezor Suite from the page as well as from the worker.
+        const trezor = (await import('@/shared/utils/trezor')).default;
+        const { btSupported, accounts } = await trezor.getSolanaAccounts(solanaIndices());
+        emit('connected', solanaPayload(accounts, btSupported));
+        return;
+      }
       const data = {
         method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network,
         ...(multiAccount.value ? { accountIndices: props.accountIndices } : {}),
@@ -339,6 +382,28 @@ const walletCreationStep2 = async (): Promise<void> => {
 .connect-steps {
   text-align: left;
   line-height: 1.5;
+}
+
+// Keystone pairing: the steps beside the QR, so the illustration, the steps and
+// the QR fit the card without scrolling (issue 1656). Stacked again on a phone.
+.keystone-pair-row {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-4);
+
+  .connect-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+
+  #qr-code {
+    flex: none;
+  }
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+  }
 }
 
 .qr-scanner {

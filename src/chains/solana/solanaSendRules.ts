@@ -95,6 +95,9 @@ export function solanaSendErrorKey(code: string | undefined): string {
     case 'RECIPIENT_UNVERIFIED': return 'solana.recipientUnverified';
     case 'BUILD_FAILED': return 'solana.signFailed';
     case 'SUBMIT_FAILED': return 'solana.submitFailed';
+    case 'SEND_EXPIRED': return 'solana.hardware.sendExpired';
+    case 'BAD_SIGNATURE': return 'solana.hardware.badSignature';
+    case 'DEVICE_FAILED': return 'solana.hardware.signFailed';
     default: return 'solana.sendFailed';
   }
 }

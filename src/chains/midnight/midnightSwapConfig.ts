@@ -2,7 +2,7 @@
 // (makeIntent with payFees false), shares it as a MIP-0005 `swapoffer1…`
 // string, and a taker completes it (balanceSealedTransaction) and pays the
 // DUST fee. Public (unshielded) legs; private legs come from
-// midnightPrivateSwap9.ts once it is supported.
+// midnightPrivateSwap9.ts once the swap handlers call it (MIDNIGHT_SWAP_PRIVATE_LEGS).
 //
 // Pure: the build-time network gate, the offer lifetimes and the code → copy
 // table. Used by the worker and the pages.
@@ -19,6 +19,14 @@ export const MIDNIGHT_SWAP_NETWORKS: readonly string[] = [Network.PREPROD];
 export function isMidnightSwapNetwork(network: string | null | undefined): boolean {
   return typeof network === 'string' && MIDNIGHT_SWAP_NETWORKS.includes(network);
 }
+
+/**
+ * Whether the swap screens offer the Public/Private choice. The builders for
+ * private legs exist (midnightPrivateSwap9.ts, PRIVATE_SWAP_SUPPORTED); the
+ * MIDNIGHT_SWAP_* handlers do not call them yet, so the choice stays hidden
+ * until they do, and an offer with a private leg is refused as unsupported.
+ */
+export const MIDNIGHT_SWAP_PRIVATE_LEGS = false;
 
 /**
  * How long an offer can be taken, in minutes. 55 is the ceiling: the ledger

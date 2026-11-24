@@ -8,7 +8,7 @@
     @update:model-value="onUpdate"
   >
     <div class="solana-send-sheet">
-      <SolanaSendForm :open="modelValue" @close="onUpdate(false)" @busy="busy = $event" />
+      <SolanaSendForm :open="modelValue" in-panel @close="onUpdate(false)" @busy="busy = $event" />
     </div>
   </BottomSheet>
 </template>

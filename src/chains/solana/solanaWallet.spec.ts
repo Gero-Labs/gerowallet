@@ -47,14 +47,14 @@ describe('wallet identity', () => {
 });
 
 describe('Solana networks', () => {
-  it('has Mainnet (not yet selectable) and Devnet, with every feature off', () => {
+  it('has Mainnet (not yet selectable) and Devnet: hardware pairing on, the other features off', () => {
     const mainnet = networks.resolveNetwork(Blockchain.SOLANA, Network.MAINNET);
     const devnet = networks.resolveNetwork(Blockchain.SOLANA, Network.DEVNET);
     expect(mainnet?.comingSoon).toBe(true);
     expect(devnet?.comingSoon).toBeFalsy();
     for (const net of [mainnet, devnet]) {
       expect(net?.currencyTicker).toBe('SOL');
-      expect(net?.supportedHardware).toBe(false);
+      expect(net?.supportedHardware).toBe(true);
       expect(net?.transactionSupport).toBe(false);
       expect(net?.stakingSupport).toBe(false);
       expect(net?.buySupport).toBe(false);

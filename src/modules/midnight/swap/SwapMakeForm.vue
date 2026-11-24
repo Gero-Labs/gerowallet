@@ -41,7 +41,7 @@
       <span class="g-mono swap-make__type">{{ groupedTokenType(wantType) }}</span>
     </SwapBanner>
 
-    <div v-if="PRIVATE_SWAP_SUPPORTED" class="swap-make__field">
+    <div v-if="MIDNIGHT_SWAP_PRIVATE_LEGS" class="swap-make__field">
       <span :id="privacyLabelId" class="t-caption">{{ t('midnight.swap.offerType') }}</span>
       <SwapSegmented v-model="privacy" :options="privacyOptions" :labelledby="privacyLabelId" />
       <span class="t-caption">{{ privacyNote }}</span>
@@ -73,8 +73,9 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
 import { midnightCatalogTokens } from '@/chains/midnight/midnightTokenCatalog';
-import { MIDNIGHT_SWAP_DEFAULT_TTL, MIDNIGHT_SWAP_TTL_MINUTES, type MidnightSwapTtlMinutes } from '@/chains/midnight/midnightSwapConfig';
-import { PRIVATE_SWAP_SUPPORTED } from '@/chains/midnight/midnightPrivateSwap9';
+import {
+  MIDNIGHT_SWAP_DEFAULT_TTL, MIDNIGHT_SWAP_PRIVATE_LEGS, MIDNIGHT_SWAP_TTL_MINUTES, type MidnightSwapTtlMinutes,
+} from '@/chains/midnight/midnightSwapConfig';
 import type { MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
 import { injectMidnightSwap } from './swapContext';
 import { useSwapBalances } from './useSwapBalances';

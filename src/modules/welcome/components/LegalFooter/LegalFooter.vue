@@ -46,14 +46,21 @@ const version = ref<string>(APP_VERSION);
   display: flex;
   align-items: center;
   justify-content: center;
+  /* No scrim: the footer sits on the chain's background image as it is. The links stay
+     readable through their own tone and edge below. */
   background: transparent;
   padding: 0 var(--g-s-5);
 }
 
-/* Legal links are quiet chrome, not accents: compact tertiary GButtons in the
-   tertiary text tone, through GButton's --g-btn-fg seam. Their size is the
-   button tier's own. */
-.footer-legal :deep(.footer-btn) {
-  --g-btn-fg: var(--g-text-3);
+/* Legal links are quiet chrome, not accents: compact tertiary GButtons at caption
+   size and weight, in the primary text tone so they stay readable on the image,
+   through GButton's --g-btn-fg seam. */
+.footer-legal :deep(.v-btn.g-btn.footer-btn) {
+  --g-btn-fg: var(--g-text-1);
+  font-size: 12px;
+  font-weight: 400;
+  /* A soft dark edge on the letters only (no band across the image) keeps them readable
+     where they cross the background's brightest highlights. */
+  text-shadow: 0 0 4px color-mix(in srgb, var(--g-canvas) 80%, transparent);
 }
 </style>

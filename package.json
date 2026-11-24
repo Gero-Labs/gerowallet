@@ -60,6 +60,7 @@
     "@keystonehq/keystone-sdk": "^0.13.0",
     "@ledgerhq/devices": "^8.19.0",
     "@ledgerhq/hw-app-btc": "^10.22.1",
+    "@ledgerhq/hw-app-solana": "7.5.0",
     "@ledgerhq/hw-transport-web-ble": "^6.35.0",
     "@ledgerhq/hw-transport-webusb": "^6.35.0",
     "@mdi/font": "^7.4.47",
