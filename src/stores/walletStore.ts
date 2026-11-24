@@ -13,6 +13,7 @@ import { Contact, Keys } from '@/models/types';
 import { EXPLORER_CONFIG_KEY } from '@/shared/utils/explorer';
 import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
 import type { SolanaTransaction } from '@/chains/solana/solanaWireSync';
+import type { SolanaNft } from '@/chains/solana/solanaNfts';
 import { listedLovelace, reviveOwnListings, type OwnListing } from '@/chrome/nftMarket/ownListings';
 
 interface WhitelistedEntry {
@@ -154,6 +155,11 @@ export interface WalletStore {
   // Cardano-shaped `transactions` / `account` so no Cardano consumer ever reads it.
   solana?: SolanaWalletState;
   solanaTransactions?: SolanaTransaction[];
+  /**
+   * Metadata of the Solana NFTs the account holds, by mint (`false`: a held mint that is not an
+   * NFT). Kept by sync.service from Nexus; third-party text, shown only as text (solanaNfts.ts).
+   */
+  solanaNfts?: Record<string, SolanaNft | false>;
 }
 
 /**
@@ -300,6 +306,7 @@ export const walletStore = reactive<WalletStore>({
   // Solana state
   solana: emptySolanaState(),
   solanaTransactions: [],
+  solanaNfts: {},
 });
 
 const STORE_NAME = 'walletStore';
@@ -312,7 +319,7 @@ const context = getContextType();
  */
 const BULK_FIELDS: (keyof WalletStore)[] = [
   'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'listedListings', 'rewards', 'keys',
-  'solanaTransactions',
+  'solanaTransactions', 'solanaNfts',
 ];
 
 /**
@@ -548,6 +555,12 @@ export default {
   setSolanaTransactions(solanaTransactions: SolanaTransaction[]) {
     walletStore.solanaTransactions = solanaTransactions;
     broadcastFromBackground({ solanaTransactions });
+  },
+
+  /** The held Solana NFTs' metadata (sync.service `syncSolanaNfts`). */
+  setSolanaNfts(solanaNfts: Record<string, SolanaNft | false>) {
+    walletStore.solanaNfts = solanaNfts;
+    broadcastFromBackground({ solanaNfts });
   },
 
   /** Merges what Gero Sync reported into the Solana snapshot; fields not given keep their value. */
@@ -800,6 +813,7 @@ export default {
       bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) },
       solana: emptySolanaState(),
       solanaTransactions: [],
+      solanaNfts: {},
     };
 
     // Apply to local state
@@ -839,6 +853,7 @@ export default {
       bitcoinBalance: { available: BigInt(0), total: BigInt(0), locked: BigInt(0) },
       solana: emptySolanaState(),
       solanaTransactions: [],
+      solanaNfts: {},
     };
 
     // Apply to a local state

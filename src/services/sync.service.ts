@@ -21,6 +21,8 @@ import WalletStore, {
   type SolanaWalletState,
 } from '@/stores/walletStore';
 import { mergeSolanaTransactions, parseSolanaSyncMessage, type SolanaWireMessage } from '@/chains/solana/solanaWireSync';
+import { SOLANA_NFT_BATCH, solanaNftCandidates, solanaNftMintsToRead, type SolanaNft } from '@/chains/solana/solanaNfts';
+import { SolanaApi } from '@/api/solana-api';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
   convertBtcUtxos,
@@ -618,6 +620,8 @@ export class SyncService {
       }
     }
 
+    if (snapshot.tokens) void this.syncSolanaNfts(snapshot.tokens);
+
     debugLog('◎ [SOL gero-sync] applied', {
       txs: update.transactions.length,
       lamports: update.lamports?.toString(),
@@ -625,6 +629,55 @@ export class SyncService {
       cursor: update.cursorSlot,
       tip: update.tipSlot,
     });
+  }
+
+  private solanaNftsInFlight = false;
+  /** The newest token snapshot that arrived while a read was running: read once that one ends. */
+  private solanaNftsPending: { walletId: number; tokens: ReadonlyArray<{ mint: string; amount: string; decimals: number }> } | null = null;
+
+  /**
+   * Keeps `walletStore.solanaNfts` to the account's held NFTs (as syncAssets does for Cardano):
+   * entries for mints no longer held are dropped, and Nexus is asked only about mints Gero does
+   * not know yet (or whose JSON could not be read an hour ago). Never blocks the sync: a failed
+   * read keeps what is known and is tried again with the next token update.
+   */
+  async syncSolanaNfts(tokens: ReadonlyArray<{ mint: string; amount: string; decimals: number }>, api?: Pick<SolanaApi, 'getNftMetadata'>): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.SOLANA) return;
+    if (this.solanaNftsInFlight) {
+      this.solanaNftsPending = { walletId: this.walletBg.id, tokens };
+      return;
+    }
+    this.solanaNftsInFlight = true;
+    const walletId = this.walletBg.id;
+    try {
+      const candidates = solanaNftCandidates(tokens);
+      const known = walletStore.solanaNfts ?? {};
+      const kept: Record<string, SolanaNft | false> = {};
+      for (const mint of candidates) if (known[mint] !== undefined) kept[mint] = known[mint];
+      const toRead = solanaNftMintsToRead(candidates, kept, Date.now());
+      const client = toRead.length ? api ?? new SolanaApi(this.walletBg.network) : null;
+      for (let i = 0; client && i < toRead.length; i += SOLANA_NFT_BATCH) {
+        const batch = toRead.slice(i, i + SOLANA_NFT_BATCH);
+        try {
+          const rows = await client.getNftMetadata(batch);
+          batch.forEach((mint, j) => { if (rows[j] !== undefined) kept[mint] = rows[j] as SolanaNft | false; });
+        } catch (error) {
+          debugLog('◎ [SOL NFTs] metadata read failed', error instanceof Error ? error.message : String(error));
+          break;
+        }
+      }
+      // The wallet may have changed while Nexus answered.
+      if (this.walletBg?.id !== walletId) return;
+      const changed = Object.keys(kept).length !== Object.keys(known).length
+        || Object.entries(kept).some(([mint, entry]) => known[mint] !== entry);
+      if (changed) WalletStore.setSolanaNfts(kept);
+    } finally {
+      this.solanaNftsInFlight = false;
+    }
+    const pending = this.solanaNftsPending;
+    this.solanaNftsPending = null;
+    // Another wallet's tokens are never read into this one's NFTs.
+    if (pending && pending.walletId === this.walletBg?.id) await this.syncSolanaNfts(pending.tokens, api);
   }
 
   /**

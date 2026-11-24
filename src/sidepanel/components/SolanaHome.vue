@@ -42,6 +42,14 @@
       </li>
     </ul>
     <p v-if="tokens.length === 0" class="t-caption sol-home__empty">{{ $t('solana.noTokens') }}</p>
+
+    <!-- NFTs open on the dashboard, as Cardano's do -->
+    <button v-if="nftCount" type="button" class="sol-home__nfts" data-test="sol-home-nfts" @click="openCollectibles()">
+      <v-icon size="18">mdi-image-multiple-outline</v-icon>
+      <span class="sol-home__name">{{ $t('assets.collectibles') }}</span>
+      <span class="sol-home__value g-num">{{ nftCount }}</span>
+      <v-icon size="16">mdi-open-in-new</v-icon>
+    </button>
   </div>
 </template>
 
@@ -53,6 +61,8 @@ import networks from '@/utils/networks';
 import QuickActions from './QuickActions.vue';
 import { formatSol, formatUnits, parseRawAmount } from '@/chains/solana/solanaAmount';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
+import { solanaNftCandidates } from '@/chains/solana/solanaNfts';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 import solanaLogo from '@/assets/svg/solana.svg';
 
 const emit = defineEmits<{ (e: 'action', id: string): void }>();
@@ -67,7 +77,14 @@ const lamports = computed<bigint | null>(() => {
   return raw == null ? null : parseRawAmount(raw);
 });
 
-const tokens = computed(() => (walletStore.solana?.tokens ?? []).filter((token) => token.amount !== '0'));
+// NFTs are counted apart and shown on the dashboard.
+const tokens = computed(() => (walletStore.solana?.tokens ?? [])
+  .filter((token) => token.amount !== '0' && !walletStore.solanaNfts?.[token.mint]));
+const nftCount = computed(() => solanaNftCandidates(walletStore.solana?.tokens).filter((mint) => !!walletStore.solanaNfts?.[mint]).length);
+
+function openCollectibles(): void {
+  void openFullDashboard('#/?view=collectibles', true);
+}
 
 function shortId(id: string): string {
   return id.length > 20 ? `${id.slice(0, 6)}…${id.slice(-6)}` : id;
@@ -75,6 +92,21 @@ function shortId(id: string): string {
 </script>
 
 <style scoped>
+.sol-home__nfts {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  width: 100%;
+  padding: var(--g-s-2) var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: none;
+  color: var(--g-text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .sol-home {
   display: flex;
   flex-direction: column;

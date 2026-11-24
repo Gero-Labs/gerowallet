@@ -11,6 +11,7 @@ import { geroClientHeaders } from '@/chains/midnight/midnightClientVersion';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
+import { SOLANA_NFT_BATCH, parseSolanaNftRows, type SolanaNft } from '@/chains/solana/solanaNfts';
 import {
   parseSolanaAccounts,
   parseSolanaSimulation,
@@ -163,6 +164,17 @@ export class SolanaApi {
       { params: this.params(), transformResponse: (raw) => raw },
     );
     return parseSolanaAccounts(typeof data === 'string' ? data : JSON.stringify(data), addresses);
+  }
+
+  /**
+   * `POST /api/sol/nfts/metadata`: one entry per mint, in order (solanaNfts.ts reads it strictly).
+   * At most SOLANA_NFT_BATCH mints per call.
+   */
+  async getNftMetadata(mints: string[], now = Date.now()): Promise<Array<SolanaNft | false | undefined>> {
+    if (mints.length > SOLANA_NFT_BATCH) throw new Error(`At most ${SOLANA_NFT_BATCH} mints per call`);
+    mints.forEach((m) => this.address(m));
+    const { data } = await this.http.post<unknown>('/api/sol/nfts/metadata', { mints }, { params: this.params() });
+    return parseSolanaNftRows(data, mints, now);
   }
 
   /**
