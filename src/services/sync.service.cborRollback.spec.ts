@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WalletBg } from '@/chrome/walletBg';
 import { Blockchain } from '@/models/types';
 import { SyncService } from './sync.service';
+import musashi from './__tests__/fixtures/musashi-144033.json';
 
 vi.mock('@/chrome/storeMessagingBg', () => ({ default: { broadcastUpdate: vi.fn() } }));
 vi.mock('@/services/storeMessaging.service', () => ({ default: { subscribe: vi.fn() } }));
@@ -108,5 +109,37 @@ describe('CBOR responses arriving after chain changes', () => {
     await second;
     expect(await db.table('transactions').get(hash)).toMatchObject({ ...adopted, cbor, body: { fee: 0n } });
     expect(await db.table('transactions').count()).toBe(1);
+  });
+
+  it('recovers the certified Musashi transaction on replay of the same block', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const txs = db.table('transactions');
+    const thin = {
+      id: musashi.transactionHash, tx_hash: musashi.transactionHash, pending: false,
+      block_hash: musashi.blockHash, block_height: musashi.block, absolute_slot: musashi.slot,
+    };
+    const response = [{ tx_hash: thin.tx_hash, cbor: musashi.cbor, block_hash: thin.block_hash }];
+    await txs.delete(hash);
+    await txs.put(thin);
+    const first = service.healMissingTxCbor();
+    await vi.waitFor(() => expect(getTransactionsCbor).toHaveBeenCalledWith([thin.tx_hash]));
+    await service.handleRollback(musashi.parentSlot);
+    answer(response);
+    await first;
+    expect(await txs.get(thin.id)).toBeUndefined();
+
+    await txs.put(thin);
+    clock.mockReturnValue(now + 121_000);
+    const replay = service.healMissingTxCbor();
+    await vi.waitFor(() => expect(getTransactionsCbor).toHaveBeenCalledTimes(2));
+    answer(response);
+    await replay;
+    expect(await txs.count()).toBe(1);
+    expect(await txs.get(thin.id)).toMatchObject({
+      ...thin,
+      cbor: musashi.cbor,
+      body: { fee: 1_000_000n, outputs: [{ value: { coins: 406_418_000_000n } }] },
+    });
   });
 });

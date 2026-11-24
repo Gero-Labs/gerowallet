@@ -47,7 +47,7 @@ export class SyncService {
   // (the SW dying and restarting naturally allows an occasional retry), plus
   // a timestamp throttle so the heal pass doesn't scan the tx table on every
   // ~20s tip push.
-  private cborHealAttempted = new Set<string>();
+  private cborHealAttempted = new Map<string, string>();
   private lastCborHealAt = 0;
   private rewardsRefreshInFlight: Promise<void> | null = null;
   private lastRewardsAttemptAt: number | null = null;
@@ -289,13 +289,13 @@ export class SyncService {
     // Delete transactions that are above the rollback point
     const txTable = db.table('transactions');
     const allTxs = await txTable.toArray();
-    const invalidTxIds = allTxs
-      .filter((tx: { absolute_slot?: number }) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot)
-      .map((tx: { id: IndexableType }) => tx.id);
+    const invalidTxs = allTxs.filter((tx: { absolute_slot?: number }) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot);
 
-    if (invalidTxIds.length > 0) {
-      await txTable.bulkDelete(invalidTxIds);
-      debugLog(`Deleted ${invalidTxIds.length} invalidated transactions`);
+    if (invalidTxs.length > 0) {
+      await txTable.bulkDelete(invalidTxs.map(tx => tx.id));
+      // A reconnect can replay the same block after the wallet rolled it back.
+      for (const tx of invalidTxs) this.cborHealAttempted.delete(tx.tx_hash || tx.id);
+      debugLog(`Deleted ${invalidTxs.length} invalidated transactions`);
     }
 
     // Reset sync checkpoint to before the rollback point
@@ -901,16 +901,16 @@ export class SyncService {
       const thin = await txsTable
         .filter((tx) => !tx.cbor && !tx.pending && !!(tx.tx_hash || tx.id))
         .toArray();
-      const attemptKey = (tx: { tx_hash?: string; id?: string; block_hash?: string; absolute_slot?: number }) =>
-        [tx.tx_hash || tx.id, tx.block_hash ?? tx.absolute_slot ?? ''].join(':');
+      const inclusion = (tx: { block_hash?: string; absolute_slot?: number }) =>
+        String(tx.block_hash ?? tx.absolute_slot ?? '');
       const candidates = thin
-        .filter((tx) => !this.cborHealAttempted.has(attemptKey(tx)))
+        .filter((tx) => this.cborHealAttempted.get(tx.tx_hash || tx.id) !== inclusion(tx))
         .sort((a, b) => (b.block_height || 0) - (a.block_height || 0))
         .slice(0, 40);
       if (candidates.length === 0) return;
-      const requested = new Map<string, string>(candidates.map(tx => [tx.tx_hash || tx.id, attemptKey(tx)]));
+      const requested = new Map<string, string>(candidates.map(tx => [tx.tx_hash || tx.id, inclusion(tx)]));
       const hashes = [...requested.keys()];
-      requested.forEach(key => this.cborHealAttempted.add(key));
+      requested.forEach((block, hash) => this.cborHealAttempted.set(hash, block));
       const res = await this.api.getTransactionsCbor(hashes);
       if (res.status !== 200 || !Array.isArray(res.data)) return;
       const healed = res.data
@@ -936,12 +936,12 @@ export class SyncService {
         const updates = healed.flatMap(({ row, decoded }, index) => {
           const stored = current[index];
           if (!stored || stored.pending || stored.cbor) return [];
-          if (attemptKey(stored) !== requested.get(row.tx_hash)) return [];
+          if (inclusion(stored) !== requested.get(row.tx_hash)) return [];
           const blockChanged = stored.block_hash && row.block_hash && stored.block_hash !== row.block_hash;
           const slotChanged = stored.absolute_slot != null && row.absolute_slot != null
             && String(stored.absolute_slot) !== String(row.absolute_slot);
           if (blockChanged || slotChanged) {
-            this.cborHealAttempted.delete(attemptKey(stored));
+            this.cborHealAttempted.delete(row.tx_hash);
             return [];
           }
           return [{
