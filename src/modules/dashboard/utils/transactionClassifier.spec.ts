@@ -79,6 +79,44 @@ describe('transaction titles and types', () => {
     expect(buildTxTags(item, ctx, t, kind).map((tag) => tag.key)).not.toContain('internal');
   });
 
+  describe('a reward withdrawal paid back to the wallet (QA, issue 1518)', () => {
+    // 7.09 ADA of rewards, less a 0.18 fee: the wallet gains 6.91, all of it at its own addresses.
+    const utxo = { inputs: [io(OWN_PAYMENT)], outputs: [io(OWN_PAYMENT)] };
+    const gain = { ada: 6_910_000, receivedAmount: 6_910_000, sentAmount: 0 };
+
+    it('is a withdrawal, not a self transfer, while the record is still thin (no CBOR yet)', () => {
+      const item = tx({ ...gain, utxo });
+      expect(classifyTxKind(item, ctx)).toBe('withdrawal');
+      expect(buildTxTitle(item, ctx, t)).toBe('transactions.withdrawal');
+      // The title says it; neither a Withdrawal nor an Internal tag repeats it.
+      expect(buildTxTags(item, ctx, t, 'withdrawal').map((tag) => tag.key)).toEqual([]);
+    });
+
+    it('is titled a withdrawal once the CBOR has filled in the body', () => {
+      const item = tx({
+        ...gain, utxo,
+        body: { withdrawals: [{ stakeAddress: 'stake_test1me', quantity: 7_090_000n }], outputs: [{ address: OWN_PAYMENT }] },
+      });
+      expect(classifyTxKind(item, ctx)).toBe('withdrawal');
+      expect(buildTxTitle(item, ctx, t)).toBe('transactions.withdrawal');
+    });
+
+    it('keeps an all-own transaction that only cost the fee a self transfer', () => {
+      const item = tx({ ada: -180_000, sentAmount: 180_000, utxo });
+      expect(classifyTxKind(item, ctx)).toBe('self');
+      expect(buildTxTitle(item, ctx, t)).toBe('transactions.selfTransfer');
+    });
+
+    it('names both a withdrawal and the funds it sent elsewhere', () => {
+      const item = tx({
+        ada: -3_000_000, sentAmount: 3_000_000,
+        utxo: { inputs: [io(OWN_PAYMENT)], outputs: [io(OTHER), io(OWN_PAYMENT)] },
+        body: { withdrawals: [{ stakeAddress: 'stake_test1me', quantity: 7_090_000n }], outputs: [{ address: OTHER }, { address: OWN_PAYMENT }] },
+      });
+      expect(buildTxTitle(item, ctx, t)).toBe('transactions.withdrawal, transactions.sentFunds');
+    });
+  });
+
   it('never calls a transaction internal without a verifiable output list', () => {
     const item = tx({ utxo: { inputs: [io(OWN_PAYMENT)], outputs: [] } });
     expect(isInternalTransfer(item, ctx)).toBe(false);

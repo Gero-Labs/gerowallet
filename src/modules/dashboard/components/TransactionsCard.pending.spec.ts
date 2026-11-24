@@ -1,4 +1,6 @@
 import { mockGlobalProperties } from '@test/helpers/globalProperties';
+// No market logos here: these tests are about rows, not images (the logo lookup imports market data).
+vi.mock('@/modules/market/composables/useMarketData', () => ({ getTokenByUnit: () => undefined }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ path: '/transactions', query: {} }), useRouter: () => ({ push: vi.fn() }) }));
 import * as Vue from 'vue';
 import { nextTick } from 'vue';

@@ -354,6 +354,7 @@ import debounce from 'lodash/debounce';
 import { isCardanoTx, StoredTransaction, TxAsset } from '@/models/transaction.types';
 import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 import { resolveAsset } from '@/shared/utils/resolver';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
 import { getCertificateBaseStatus } from '@/modules/dashboard/utils/transactionStatus';
 import {
   addFundTransferStatus,
@@ -760,7 +761,10 @@ const rowToken = (asset: TxAsset): RowToken => {
   // A malformed unit must not take the whole list down
   try {
     const resolved = resolveAsset(asset);
-    return { key: asset.unit, img: resolved?.img || assts.questionMarkDark, name: resolved?.name || '' };
+    // Gero's market logo first, as the holdings list shows it: a token's own metadata can
+    // carry an old image (GERO's did). Then that image, then the placeholder.
+    const img = getTokenByUnit(asset.unit)?.img || resolved?.img || assts.questionMarkDark;
+    return { key: asset.unit, img, name: resolved?.name || '' };
   } catch {
     return { key: asset.unit, img: assts.questionMarkDark, name: '' };
   }
