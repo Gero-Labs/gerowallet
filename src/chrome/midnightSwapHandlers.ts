@@ -193,6 +193,9 @@ const INPUTS_GONE = /(?:already spent|double.?spend|input.*not.*(?:found|in.*utx
 /** One maker at a time: a second offer must not select the coins the first is still being built from. */
 let makeQueue: Promise<unknown> = Promise.resolve();
 
+/** Offers with a withdrawal being built or submitted: a second one (a double click) is refused at once. */
+const withdrawing = new Set<string>();
+
 function reply(request: Request, sendResponse: (response?: unknown) => void, data: Record<string, unknown>): void {
   sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
 }
@@ -324,6 +327,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
 
   app.addToOptions(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, async (request, sendResponse) => {
     let prfBytes: Uint8Array | undefined;
+    let held = '';
     try {
       const { wallet, sdkNetworkId } = await swapWallet();
       const data = (request.data ?? {}) as RequestData;
@@ -331,6 +335,10 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       if (!HEX64.test(offerId)) throw new MidnightSwapError('SWAP_OFFER_UNKNOWN');
       const credential = readCredential(data);
       prfBytes = credential.prfBytes;
+      const key = `${wallet.id}:${offerId}`;
+      if (withdrawing.has(key)) throw new MidnightSwapError('SWAP_OFFER_NOT_OPEN');
+      withdrawing.add(key);
+      held = key;
       if (await midnightWriteBlock(wallet.network)) throw new MidnightSwapError('SWAP_UNAVAILABLE');
       const own = syncedOwnAddress();
       const records = await loadSwapOffers(wallet.network, wallet.id, midnightStore);
@@ -352,12 +360,16 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       const { ok: _ok, ...intentRequest } = validation;
       const built = await wallet.buildMidnightConnectorIntent(intentRequest, credential.password, prfBytes, { onlyCoins: wanted });
       const txHash = await submitSealed(wallet.network, sdkNetworkId, built.tx);
+      // Noted after the submit. Should this write fail, the record stays open without the hash:
+      // the next read finds the offered coins spent and shows it cancelled (midnightSwapRecords.ts),
+      // and a second Withdraw is refused because those coins are gone.
       const updated = await updateSwapOffer(wallet.network, wallet.id, offerId, { withdrawTxHash: txHash });
       reply(request, sendResponse, { success: true, txHash, record: updated });
     } catch (error) {
       replyError(request, sendResponse, error);
     } finally {
       prfBytes?.fill(0);
+      if (held) withdrawing.delete(held);
     }
   });
 

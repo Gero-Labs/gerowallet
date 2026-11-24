@@ -250,6 +250,17 @@ describe('withdraw', () => {
     expect(list.records?.[0].status).toBe('cancelled');
   });
 
+  it('a second withdrawal of the same offer while the first is running is refused at once', async () => {
+    const record = (await call(MessageTypes.MIDNIGHT_SWAP_MAKE_OFFER, { give: GIVE, want: WANT, ttlMinutes: 30, password: 'pw' })).record!;
+    const [first, second] = await Promise.all([
+      call(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, { offerId: record.offerId, password: 'pw' }),
+      call(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, { offerId: record.offerId, password: 'pw' }),
+    ]);
+    expect(first.success).toBe(true);
+    expect(second).toMatchObject({ success: false, error: 'SWAP_OFFER_NOT_OPEN' });
+    expect(state.submit as ReturnType<typeof vi.fn>).toHaveBeenCalledOnce();
+  });
+
   it('an unknown offer is SWAP_OFFER_UNKNOWN', async () => {
     expect(await call(MessageTypes.MIDNIGHT_SWAP_WITHDRAW_OFFER, { offerId: 'cd'.repeat(32), password: 'pw' })).toMatchObject({ error: 'SWAP_OFFER_UNKNOWN' });
   });
