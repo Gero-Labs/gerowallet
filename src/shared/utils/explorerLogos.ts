@@ -3,6 +3,7 @@ import cexplorer from '@/assets/explorers/cexplorer.png';
 import cardanoscan from '@/assets/explorers/cardanoscan.png';
 import adastat from '@/assets/explorers/adastat.png';
 import poolpm from '@/assets/explorers/poolpm.png';
+import supercardano from '@/assets/explorers/supercardano.png';
 
 /**
  * Each explorer's own 180px touch icon, bundled so the settings list makes no
@@ -14,4 +15,5 @@ export const EXPLORER_LOGOS: Record<CardanoExplorerId, string> = {
   cardanoscan,
   adastat,
   poolpm,
+  supercardano,
 };

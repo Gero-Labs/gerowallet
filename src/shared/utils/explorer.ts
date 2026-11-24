@@ -11,8 +11,9 @@ import { parseDRepId, toCip129 } from '@/shared/utils/drepId';
  * explorer, so the choice only exists for Cardano.
  *
  * URL templates were checked against the live sites on 2026-10-09 with real
- * mainnet and testnet ids. When the chosen explorer has no page for an entity
- * (pool.pm has no transactions, AdaStat 404s on CIP-129 governance ids, ...)
+ * mainnet and testnet ids (Super Cardano, mainnet only, on 2026-11-05). When
+ * the chosen explorer has no page for an entity (pool.pm has no transactions,
+ * AdaStat 404s on CIP-129 governance ids, ...) or does not cover the network,
  * the link falls back to DEFAULT_CARDANO_EXPLORER rather than disappearing.
  */
 
@@ -32,7 +33,7 @@ export type ExplorerEntity =
   | 'drep'
   | 'govAction';
 
-export type CardanoExplorerId = 'cexplorer' | 'cardanoscan' | 'adastat' | 'poolpm';
+export type CardanoExplorerId = 'cexplorer' | 'cardanoscan' | 'adastat' | 'poolpm' | 'supercardano';
 
 /** Per-wallet config row (wallet DB `config` table) holding the chosen explorer id. */
 export const EXPLORER_CONFIG_KEY = 'explorer';
@@ -65,7 +66,7 @@ function toPoolBech32(id: string): string | null {
   return bech32.encode('pool', bech32.toWords(bytes));
 }
 
-/** `{txHash}{index as one hex byte}`: the 66-hex form AdaStat and Cardanoscan accept. */
+/** `{txHash}{index as one hex byte}`: the 66-hex form AdaStat, Cardanoscan and Super Cardano accept. */
 function govActionHex(id: string): string | null {
   const parsed = parseGovActionId(id);
   if (!parsed || parsed.index > 0xff) return null;
@@ -169,6 +170,29 @@ const CARDANO_EXPLORERS: Record<CardanoExplorerId, ExplorerDef> = {
       },
       asset: id => (id.startsWith('asset1') ? `/${seg(id)}` : null),
       policy: id => `/policy/${seg(id)}`,
+    },
+  },
+  supercardano: {
+    name: 'Super Cardano',
+    // Mainnet only, so Preprod and Preview wallets are not offered it.
+    hosts: { [Network.MAINNET]: 'https://supercardano.com' },
+    paths: {
+      tx: id => `/tx/${seg(id)}`,
+      block: id => `/block/${seg(id)}`,
+      epoch: id => `/epoch/${seg(id)}`,
+      address: id => `/address/${seg(id)}`,
+      stake: id => `/stake/${seg(id)}`,
+      // pool1… or the 56-hex key hash (redirects to pool1…).
+      pool: id => `/pool/${seg(id)}`,
+      // asset1… fingerprint or the policy+name unit.
+      asset: id => `/token/${seg(id)}`,
+      policy: id => `/policy/${seg(id)}`,
+      drep: drepPath('/drep/'),
+      // The 66-hex form redirects to the CIP-129 gov_action1… page.
+      govAction: (id) => {
+        const hex = govActionHex(id);
+        return hex ? `/governance-action/${hex}` : null;
+      },
     },
   },
 };
