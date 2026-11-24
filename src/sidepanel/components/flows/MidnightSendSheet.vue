@@ -412,6 +412,7 @@
               <p v-if="passwordError" role="alert" class="t-caption mt-2 mb-0 text-center" style="color: var(--g-error)">
                 {{ passwordError }}
               </p>
+              <MidnightDustFeeRecovery v-if="passwordError && recoverDustFee && !submitting" side-panel />
 
               <div class="step-actions-row mt-3">
                 <v-btn variant="text" size="small" color="var(--g-text-3)" block :disabled="sendDispatched" @click="editStep(3)">
@@ -440,6 +441,7 @@ import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTim
 import { provingDetail } from '@/shared/composables/useProvingElapsed';
 import { usePoliteAnnouncer } from '@/shared/composables/usePoliteAnnouncer';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import MidnightDustFeeRecovery from '@/shared/components/MidnightDustFeeRecovery.vue';
 import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import MidnightStationFeeNote from '@/shared/components/MidnightStationFeeNote.vue';
 import { useMidnightStationFee } from '@/shared/composables/useMidnightStationFee';
@@ -462,7 +464,7 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive, midnightFeeCapacityLive, MidnightDustFeeShortfall } from '@/chains/midnight/midnightFeeCapacity';
 import { dustBatteryPercent } from '@/chains/midnight/midnightDustBalance';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
@@ -477,7 +479,8 @@ import { useChainContext } from '../../composables/useChainContext';
 import snackbar from '@/plugins/snackbar';
 import { takeMidnightSendPrefill } from '@/chains/midnight/midnightSendPrefill';
 import { debugLog } from '@/utils/debug';
-import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
+import { useRawPrfPopup } from '@/shared/composables/useRawPrfPopup';
+import { useApprovalFreshness, awaitFreshApproval } from '@/shared/composables/useApprovalFreshness';
 import { midnightApiErrorKind, midnightSendBlockOf, type MidnightSendBlock } from '@/api/midnightApiError';
 import { isMidnightBusyCancelled, type MidnightBusyHandlers } from '@/services/midnightBusyRetry';
 import { useMidnightSendHold } from '@/shared/composables/useMidnightSendHold';
@@ -517,6 +520,7 @@ const ledgerMismatch = ref(false);
 const sendCtaText = computed(() => (ledgerMismatch.value ? t('common.tryAgain') : t('miniGero.confirmSend')));
 /** Refused for a state the user can't fix here (midnightApiError.ts): a note, and the CTA is disabled. */
 const sendBlock = ref<MidnightSendBlock | null>(null);
+const recoverDustFee = ref(false);
 const sendBlockText = ref('');
 
 /** Seconds until the automatic resubmit while Gero Cloud is busy (midnightBusyRetry.ts). */
@@ -556,6 +560,7 @@ watch(busyPrompt, (prompt) => {
 
 /** Show a failed send: a note for a state the user can't fix here, else the error's readable message. */
 function showSendError(e: unknown) {
+  recoverDustFee.value = e instanceof MidnightDustFeeShortfall && sponsorWalletId.value == null && feeSource.value !== 'station';
   // Cancel while Gero Cloud was busy: nothing was sent and nothing went wrong.
   if (isMidnightBusyCancelled(e)) {
     busyCancelled.value = true;
@@ -891,7 +896,7 @@ const consentOpen = ref(false);
 const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
 let pendingAuthorization: (() => boolean) | null = null;
-const pendingPopups = new Set<() => void>();
+const { requestRawPrf, cancelPopups } = useRawPrfPopup();
 const approval = useApprovalFreshness(() => [
   loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
   loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked,
@@ -899,8 +904,8 @@ const approval = useApprovalFreshness(() => [
   sponsorWallet.value?.webAuthnCredentialId, sponsorPassword.value, step.value,
   midnightStore.proofServer,
 ], () => props.modelValue, () => {
-  pendingPopups.forEach(cancel => cancel());
-  pendingPopups.clear();
+  cancelPopups();
+  recoverDustFee.value = false;
   pendingCredentials.value?.prfSecret?.fill(0);
   pendingCredentials.value = null;
   pendingAuthorization = null;
@@ -1074,50 +1079,6 @@ async function signAndSubmit() {
   const current = approval.capture();
   const password = spendingPassword.value;
   await approval.run(() => routeSend({ password }, current));
-}
-
-// PRF (PassKey) — side panels cannot host WebAuthn directly, so this reuses
-// the exact cross-window popup workaround DAppOverlay.vue's
-// signMidnightTransferPrf() implements (mode=rawPrf), since Midnight decrypts
-// its mnemonic from the raw PRF output rather than a Cardano private key.
-function requestRawPrf(current: () => boolean, walletId?: number): Promise<Uint8Array> {
-  if (!current()) return Promise.reject(new StaleApprovalError());
-  // `walletId` unlocks a wallet OTHER than the logged-in one — a DUST sponsor.
-  // Omitted, the popup evaluates the active wallet exactly as before.
-  const target = walletId == null ? '' : `&walletId=${encodeURIComponent(String(walletId))}`;
-  const popupUrl = chrome.runtime.getURL(`index.html?mode=rawPrf${target}#/passkey-auth`);
-  const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
-  if (!popup) return Promise.reject(new Error(t('errors.popupBlocked')));
-
-  return new Promise((resolve, reject) => {
-    const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
-    const cleanup = () => {
-      window.removeEventListener('message', handler);
-      clearTimeout(timeout);
-      pendingPopups.delete(cancel);
-      popup.close();
-    };
-    const cancel = () => { cleanup(); reject(new StaleApprovalError()); };
-    const handler = (event: MessageEvent) => {
-      if (event.origin !== extensionOrigin || event.source !== popup) return;
-      if (event.data?.type === 'PASSKEY_AUTH_RESULT') {
-        cleanup();
-        const { success, prfOutput, error } = event.data.payload;
-        if (success && prfOutput) {
-          const bytes = new Uint8Array(prfOutput);
-          if (!current()) { bytes.fill(0); reject(new StaleApprovalError()); }
-          else resolve(bytes);
-        }
-        else reject(new Error(error || t('security.passKeyAuthFailed')));
-      }
-    };
-    window.addEventListener('message', handler);
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(t('errors.authenticationTimeout')));
-    }, 60000);
-    pendingPopups.add(cancel);
-  });
 }
 
 /**
