@@ -2,8 +2,8 @@
   <BaseDialog
     size="sm"
     :isOpen="props.modelValue"
-    :title="t('solana.sendTitle')"
-    :subtitle="t('solana.sendSubtitle', { currency: ticker })"
+    :title="props.nftMint ? t('solana.nft.sendTitle') : t('solana.sendTitle')"
+    :subtitle="props.nftMint ? t('solana.nft.sendSubtitle') : t('solana.sendSubtitle', { currency: ticker })"
     :img="assts.sendSvg"
     img-color="var(--g-accent)"
     :min-height="0"
@@ -13,7 +13,7 @@
     @close="closeDialog"
   >
     <v-card-text class="px-5 pt-1 pb-5">
-      <SolanaSendForm :open="props.modelValue" @close="closeDialog()" @busy="busy = $event" />
+      <SolanaSendForm :open="props.modelValue" :nft-mint="props.nftMint" @close="closeDialog()" @busy="busy = $event" />
     </v-card-text>
   </BaseDialog>
 </template>
@@ -29,7 +29,8 @@ import SolanaSendForm from '@/modules/transactions/components/SolanaSendForm.vue
 import assts from '@/utils/assets';
 import networks from '@/utils/networks';
 
-const props = defineProps<{ modelValue: boolean }>();
+/** `nftMint`: send that NFT (from its detail), with the asset and amount fixed. */
+const props = defineProps<{ modelValue: boolean; nftMint?: string }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const { t } = useTranslation();

@@ -68,6 +68,12 @@
     </v-row>
 
     <v-row no-gutters>
+      <v-col ref="collectiblesCol" cols="12" class="pa-2">
+        <SolanaCollectibles />
+      </v-col>
+    </v-row>
+
+    <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <section class="glass-panel sol-card" data-test="sol-activity">
           <div class="sol-card__header">
@@ -104,7 +110,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
+import SolanaCollectibles from './SolanaCollectibles.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import networks from '@/utils/networks';
@@ -133,7 +141,16 @@ const lamports = computed<bigint | null>(() => {
   return raw == null ? null : parseRawAmount(raw);
 });
 
-const tokens = computed(() => (walletStore.solana?.tokens ?? []).filter((token) => token.amount !== '0'));
+// NFTs are listed under Collectibles, not as tokens.
+const tokens = computed(() => (walletStore.solana?.tokens ?? [])
+  .filter((token) => token.amount !== '0' && !walletStore.solanaNfts?.[token.mint]));
+
+// `?view=collectibles` (the side panel's Collectibles row) scrolls to them.
+const route = useRoute();
+const collectiblesCol = ref<{ $el?: HTMLElement } | null>(null);
+onMounted(() => {
+  if (route?.query?.['view'] === 'collectibles') void nextTick(() => collectiblesCol.value?.$el?.scrollIntoView({ block: 'start' }));
+});
 const transactions = computed(() => (walletStore.solanaTransactions ?? []).slice(0, ACTIVITY_LIMIT));
 const historyTruncated = computed(() =>
   !!walletStore.solana?.historyTruncated || (walletStore.solanaTransactions?.length ?? 0) > ACTIVITY_LIMIT,
