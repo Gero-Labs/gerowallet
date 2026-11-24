@@ -206,7 +206,7 @@ const tokenRows = computed<MidnightHoldingRow[]>(() =>
         avgCost: '—',
         pnl: '—',
         icon: 'mdi-help-circle-outline',
-        iconBg: 'grey darken-4',
+        iconBg: 'grey-darken-4',
         iconColor: 'grey',
       };
     }
@@ -235,7 +235,7 @@ const tokenRows = computed<MidnightHoldingRow[]>(() =>
       avgCost: '—',
       pnl: '—',
       icon: 'mdi-circle-multiple-outline',
-      iconBg: 'grey darken-4',
+      iconBg: 'grey-darken-4',
       iconColor: 'grey',
       image: market?.img || undefined,
     };
@@ -262,8 +262,10 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     icon: 'mdi-shield-outline',
     // Neutral near-black disc (was 'blue darken-4') so the white Midnight mark
     // reads as black-and-white, matching the chain's monochrome identity.
-    iconBg: 'grey darken-4',
-    iconColor: 'grey lighten-2',
+    // Vuetify 3+ names: 'grey darken-4' became class `bg-grey` (mid grey) and
+    // washed the mark out.
+    iconBg: 'grey-darken-4',
+    iconColor: 'grey-lighten-2',
     image: midnightLogo,
   },
   ...tokenRows.value,

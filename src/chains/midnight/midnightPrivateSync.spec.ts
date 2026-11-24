@@ -8,7 +8,9 @@ import type { MidnightPrivateSyncArgs } from './midnightPrivateSync';
 
 const h = vi.hoisted(() => ({
   factory: vi.fn(), forking: vi.fn(), identity: vi.fn(), save: vi.fn(), history: vi.fn(), publish: vi.fn(), status: vi.fn(),
+  progress: vi.fn(),
   store: { activeWalletKey: 'mn_addr_preview1owner', privateSyncStatus: 'idle', addresses: { shielded: '' },
+    privateSyncProgress: null as { applied: number; highest: number; connected: boolean } | null,
     chainIdentity: { network: 'midnight-preview', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
   wallet: { loggedWallet: { id: 7, network: 'Preview', chain: 'Midnight' }, isLocked: false },
 }));
@@ -17,7 +19,7 @@ vi.mock('midnight-v9-abstractions', () => ({
   InMemoryTransactionHistoryStorage: class { getAll() { return h.history(); } },
 }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: h.store,
-  midnightActions: { applyPrivateSnapshot: h.publish, setPrivateSyncStatus: h.status } }));
+  midnightActions: { applyPrivateSnapshot: h.publish, setPrivateSyncStatus: h.status, setPrivateSyncProgress: h.progress } }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: h.wallet }));
 vi.mock('./midnightChainIdentity', () => ({ readVerifiedMidnightChainIdentity: h.identity,
   midnightCheckpointNamespace: (identity: { chain_generation: number }) => `verified-${identity.chain_generation}` }));
@@ -61,8 +63,26 @@ describe('private sync ownership and generation', () => {
     h.identity.mockResolvedValue(identity); h.history.mockResolvedValue([]); h.save.mockResolvedValue(undefined);
     h.status.mockImplementation(status => { h.store.privateSyncStatus = status; });
     h.publish.mockImplementation(() => { h.store.privateSyncStatus = 'synced'; });
+    h.store.privateSyncProgress = null;
+    h.progress.mockImplementation(progress => { h.store.privateSyncProgress = progress; });
   });
   afterEach(async () => { await stopMidnightPrivateSync(); vi.useRealTimers(); });
+
+  it('reports scan progress while syncing, only when the counters move', async () => {
+    const scanning = (applied: bigint, highest: bigint) => ({ ...state(), progress: {
+      isStrictlyComplete: () => false, appliedIndex: applied, highestRelevantWalletIndex: highest, isConnected: true,
+    } }) as unknown as ShieldedWalletState;
+    await startMidnightPrivateSync(args());
+    events.next(scanning(120n, 480n)); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.progress).toHaveBeenLastCalledWith({ applied: 120, highest: 480, connected: true });
+    events.next(scanning(120n, 480n)); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.progress).toHaveBeenCalledOnce();
+    events.next(scanning(360n, 480n)); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.progress).toHaveBeenLastCalledWith({ applied: 360, highest: 480, connected: true });
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.progress).toHaveBeenCalledTimes(2);
+    expect(h.store.privateSyncStatus).toBe('synced');
+  });
 
   it('copies caller-owned seed and publishes real custom balances only after full sync', async () => {
     const input = args(); const starting = startMidnightPrivateSync(input); input.seed.fill(0);
