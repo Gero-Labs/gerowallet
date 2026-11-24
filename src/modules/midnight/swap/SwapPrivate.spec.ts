@@ -140,18 +140,16 @@ describe('making a private offer', () => {
   });
 });
 
-describe('a prover that cannot prove private legs', () => {
-  it('says so before the password and keeps the offer from being made', async () => {
+describe('proving on preprod', () => {
+  it('uses the Local proof server whatever the stored choice: no warning, the offer can be made', async () => {
     const store = midnightStore as unknown as { proofServer: { mode: string } };
     store.proofServer.mode = 'remote';
     try {
       const wrapper = mountWithSwap(SwapMakeForm);
       await flushPromises();
-      expect(wrapper.find('[data-test="swap-private-prover"]').exists()).toBe(false);
       await wrapper.findAll('[role="radio"]').find(option => option.text().includes('midnight.swap.kind.private'))!.trigger('click');
       await flushPromises();
-      expect(wrapper.find('[data-test="swap-private-prover"]').text()).toBe('midnight.swap.error.privateProver');
-      expect(wrapper.find('[data-test="swap-create"]').attributes('disabled')).toBeDefined();
+      expect(wrapper.find('[data-test="swap-private-prover"]').exists()).toBe(false);
     } finally {
       store.proofServer.mode = 'local';
     }

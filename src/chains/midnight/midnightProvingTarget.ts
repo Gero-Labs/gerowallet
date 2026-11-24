@@ -10,8 +10,8 @@
  * statically.
  */
 
-import { getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
-import { midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
+import { DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9, getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
+import { midnightLedgerKey, midnightLedgerOrNewest, midnightNetworkName } from '@/chains/midnight/midnightLedger';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import type { ZkpaasSettings } from '@/chains/midnight/midnightZkpaas';
 import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
@@ -56,6 +56,33 @@ export interface ProofServerPreference extends ZkpaasSettings {
 }
 
 export type LocalProvingEngine = 'docker' | 'helper' | 'browser';
+
+/**
+ * Networks where the wallet's own SENDS and SWAPS prove with the Local
+ * (Docker) proof server only, whatever the stored choice says: Gero Cloud,
+ * Arkhia, Gero Prover and the browser prover are not offered for them there.
+ * Ledger keys (`midnightLedgerKey`). The Proof Server settings, connected
+ * sites' proofs and every other network keep the stored choice.
+ */
+export const MIDNIGHT_LOCAL_PROVING_ONLY_NETWORKS: readonly string[] = ['preprod'];
+
+export function isLocalProvingOnlyNetwork(network: string | null | undefined): boolean {
+  return typeof network === 'string' && MIDNIGHT_LOCAL_PROVING_ONLY_NETWORKS.includes(midnightLedgerKey(network));
+}
+
+/**
+ * The preference a send or a swap on `network` proves with: the stored one,
+ * or on a local-only network (MIDNIGHT_LOCAL_PROVING_ONLY_NETWORKS) the Local
+ * Docker proof server, at the stored ledger 9 URL or its default. Passed to
+ * walletProverFor / resolveProvingTarget by the send and swap paths only.
+ */
+export function sendProofServerPreference<T extends { mode: string; localEngine?: LocalProvingEngine; localUrlLedger9?: string }>(
+  network: string | null | undefined,
+  ps: T,
+): T {
+  if (!isLocalProvingOnlyNetwork(network)) return ps;
+  return { ...ps, mode: 'local', localEngine: 'docker', localUrlLedger9: ps.localUrlLedger9 || DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 };
+}
 
 /**
  * The local proof-server URL for the circuit family of `network`'s chain

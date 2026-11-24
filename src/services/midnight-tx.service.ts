@@ -33,7 +33,9 @@ import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
 import {
+  isLocalProvingOnlyNetwork,
   resolveProvingTarget,
+  sendProofServerPreference,
   walletProverFor,
   type ProvingUnconfiguredTarget,
   type WalletProver,
@@ -448,7 +450,8 @@ export async function buildAndSignUnshieldedTransfer(
     assertCurrentApproval(current);
     await timer.time('writeGate', () => assertMidnightWritesOpen(network));
     assertCurrentApproval(current);
-    const target = resolveWalletProvingTarget(network, 'unshielded');
+    // A connected site's transfer: the stored choice, never the send-only preprod rule.
+    const target = resolveWalletProvingTarget(network, 'unshielded', false, 'dapp');
     assertWalletProving(target, expectedProver);
     if (target && target.prover !== 'device') await timer.time('proverPreflight', () => assertProverReachable(target, current));
     assertCurrentApproval(current);
@@ -697,10 +700,21 @@ export function shieldedOnDevice(): boolean {
  * never disagree. `forceRemote` is the one-off fallback from a local or zkPaaS
  * server that did not answer: the send proves as in Gero Cloud mode, which for
  * a public send still means this device.
+ *
+ * `scope` `send` (the wallet's own sends): on a local-only network
+ * (MIDNIGHT_LOCAL_PROVING_ONLY_NETWORKS, preprod) the Local Docker proof
+ * server, whatever the stored choice, and no one-off fallback. `dapp` (a
+ * connected site's transfer) always follows the stored choice.
  */
-export function walletProverForSend(network: string, kind: 'unshielded' | 'shielded', forceRemote = false): WalletProver {
-  const mode = forceRemote ? 'remote' : midnightStore.proofServer.mode;
-  return walletProverFor(network, { mode, localEngine: midnightStore.proofServer.localEngine }, kind, {
+export function walletProverForSend(
+  network: string,
+  kind: 'unshielded' | 'shielded',
+  forceRemote = false,
+  scope: 'send' | 'dapp' = 'send',
+): WalletProver {
+  const ps = scope === 'send' ? sendProofServerPreference(network, midnightStore.proofServer) : midnightStore.proofServer;
+  const mode = forceRemote && !(scope === 'send' && isLocalProvingOnlyNetwork(network)) ? 'remote' : ps.mode;
+  return walletProverFor(network, { mode, localEngine: ps.localEngine }, kind, {
     shieldedOnDevice: shieldedOnDevice(),
     ...localProvingOffersHere(),
   });
@@ -724,14 +738,15 @@ function resolveWalletProvingTarget(
   network: string,
   kind: 'unshielded' | 'shielded',
   forceRemote = false,
+  scope: 'send' | 'dapp' = 'send',
 ): WalletProvingTarget | null {
-  const prover = walletProverForSend(network, kind, forceRemote);
+  const prover = walletProverForSend(network, kind, forceRemote, scope);
   if (prover === 'device') return { prover, request: { device: true }, stage: 'provingDevice' };
   if (prover === 'helper') return { prover, request: { helper: true }, stage: 'provingHelper' };
   if (prover === 'cloud') return null;
   // `unconfigured` covers both zkPaaS-without-a-key and a local server whose
   // circuit family doesn't match the network (see resolveProvingTarget).
-  const target = resolveProvingTarget(network, midnightStore.proofServer);
+  const target = resolveProvingTarget(network, scope === 'send' ? sendProofServerPreference(network, midnightStore.proofServer) : midnightStore.proofServer);
   if (target.kind === 'unconfigured') {
     throw new ProofServerUnreachableError(target.url, target.reason);
   }

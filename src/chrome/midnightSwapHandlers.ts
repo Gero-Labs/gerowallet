@@ -433,6 +433,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
         const createdAt = Date.now();
         const built = await wallet.buildMidnightConnectorIntent(intentRequest, credential.password, prfBytes, {
           ttl: new Date(createdAt + ttlMinutes * 60_000),
+          forSwap: true,
         });
         // Every figure of the record is read back from the sealed bytes.
         const bytes = Uint8Array.from(Buffer.from(built.tx, 'hex'));
@@ -496,6 +497,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       const progress = {
         onDustSyncProgress: (percent: number, detail: string) => midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail }),
         onProving: () => midnightActions.setSendProgress({ phase: 'proving', percent: -1 }),
+        forSwap: true,
       };
       let sealed: string;
       try {
@@ -564,7 +566,7 @@ export function registerMidnightSwapHandlers(app: Controller): void {
       }, wallet.network);
       if (validation.ok === false) throw new Error(validation.reason);
       const { ok: _ok, ...intentRequest } = validation;
-      const built = await wallet.buildMidnightConnectorIntent(intentRequest, credential.password, prfBytes, { onlyCoins: wanted });
+      const built = await wallet.buildMidnightConnectorIntent(intentRequest, credential.password, prfBytes, { onlyCoins: wanted, forSwap: true });
       const txHash = await submitSealed(wallet.network, sdkNetworkId, built.tx);
       // Noted after the submit. Should this write fail, the record stays open without the hash:
       // the next read finds the offered coins spent and shows it cancelled (midnightSwapRecords.ts),

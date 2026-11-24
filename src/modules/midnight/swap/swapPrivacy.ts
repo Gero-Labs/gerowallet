@@ -6,7 +6,7 @@ import { computed, type Ref } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { canProvePrivateSwap } from '@/chains/midnight/midnightSwapConfig';
-import { walletProverFor } from '@/chains/midnight/midnightProvingTarget';
+import { sendProofServerPreference, walletProverFor } from '@/chains/midnight/midnightProvingTarget';
 import { localProvingOffersHere } from '@/chains/midnight/geroProverFlag';
 import { midnightShieldedKeysHosted } from '@/chains/midnight/midnightZkKeys';
 import type { MidnightSwapLeg, MidnightSwapOfferRecord } from '@/chains/midnight/midnightSwapRecords';
@@ -45,7 +45,10 @@ export const privateSwapProverReady = computed(() => {
   const network = walletStore.loggedWallet?.network;
   if (!network) return false;
   const hosted = midnightShieldedKeysHosted();
-  const prover = walletProverFor(network, midnightStore.proofServer, 'shielded', { shieldedOnDevice: hosted, ...localProvingOffersHere() });
+  // On preprod a swap proves with the Local proof server only, whatever the stored choice.
+  const prover = walletProverFor(network, sendProofServerPreference(network, midnightStore.proofServer), 'shielded', {
+    shieldedOnDevice: hosted, ...localProvingOffersHere(),
+  });
   return canProvePrivateSwap(prover, hosted);
 });
 

@@ -118,7 +118,9 @@ import {
   midnightPrivateSessionEpoch,
   prepareMidnightPrivateSession,
 } from '@/chains/midnight/midnightPrivateSyncSession';
-import { resolveDappProvingTarget, walletProverFor, type WalletProvingRequest } from '@/chains/midnight/midnightProvingTarget';
+import {
+  resolveDappProvingTarget, sendProofServerPreference, walletProverFor, type WalletProvingRequest,
+} from '@/chains/midnight/midnightProvingTarget';
 import { localProvingOffersFor } from '@/chains/midnight/midnightProvingFlags';
 import { helperProofProcessor } from '@/chains/midnight/midnightHelperProver';
 // Static, not `await import()`: see scripts/check-bundle-tdz.mjs (the background is one iife).
@@ -2880,8 +2882,12 @@ export class WalletBg {
     prfSecret?: Uint8Array,
     /** `balanceSealedTransaction`: the tx is another party's sealed part (ledger 9 only). */
     sealed = false,
-    /** Progress of a sealed balance, for the swap screens: the DUST fee sync, then proving. */
-    progress?: { onDustSyncProgress?: (percent: number, detail: string) => void; onProving?: () => void },
+    /**
+     * Progress of a sealed balance, for the swap screens: the DUST fee sync, then proving.
+     * `forSwap`: the wallet's own swap, which on preprod proves with the Local proof server
+     * only (sendProofServerPreference); a connected site's request keeps the stored choice.
+     */
+    progress?: { onDustSyncProgress?: (percent: number, detail: string) => void; onProving?: () => void; forSwap?: boolean },
   ): Promise<{ tx: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('balanceMidnightConnectorTransaction called on non-Midnight wallet');
@@ -2928,15 +2934,14 @@ export class WalletBg {
         // the DUST secret must not leave the wallet); otherwise on the proof
         // server the user chose.
         let proving: WalletProvingRequest;
-        const feeProver = walletProverFor(
-          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
-        );
+        const ps = progress?.forSwap ? sendProofServerPreference(network, midnightStore.proofServer) : midnightStore.proofServer;
+        const feeProver = walletProverFor(network, ps, 'unshielded', await localProvingOffersFor(ps));
         if (feeProver === 'device') {
           proving = { device: true };
         } else if (feeProver === 'helper') {
           proving = { helper: true };
         } else {
-          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          const target = resolveDappProvingTarget(network, ps, midnightStore.shieldedProvingConsent);
           proving = { url: target.url, headers: target.headers };
         }
         // Registration lower bound for the dust snapshot bootstrap (see
@@ -3019,7 +3024,12 @@ export class WalletBg {
      * in place of every synced coin not set aside for an open swap offer (a
      * withdrawal re-spends exactly the offered coins).
      */
-    opts: { ttl?: Date; onlyCoins?: ReadonlySet<string> } = {},
+    opts: {
+      ttl?: Date;
+      onlyCoins?: ReadonlySet<string>;
+      /** The wallet's own swap: on preprod the Local proof server only (sendProofServerPreference). */
+      forSwap?: boolean;
+    } = {},
   ): Promise<{ tx: string; segmentId: number }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildMidnightConnectorIntent called on non-Midnight wallet');
@@ -3064,15 +3074,14 @@ export class WalletBg {
         // Same prover choice as the connector balance: the fee is the wallet's
         // own DUST spend, proved on this device in Gero Cloud mode.
         let proving: WalletProvingRequest;
-        const feeProver = walletProverFor(
-          network, midnightStore.proofServer, 'unshielded', await localProvingOffersFor(midnightStore.proofServer),
-        );
+        const ps = opts.forSwap ? sendProofServerPreference(network, midnightStore.proofServer) : midnightStore.proofServer;
+        const feeProver = walletProverFor(network, ps, 'unshielded', await localProvingOffersFor(ps));
         if (feeProver === 'device') {
           proving = { device: true };
         } else if (feeProver === 'helper') {
           proving = { helper: true };
         } else {
-          const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+          const target = resolveDappProvingTarget(network, ps, midnightStore.shieldedProvingConsent);
           proving = { url: target.url, headers: target.headers };
         }
         // The chain's ledger decides the path, never the network's name.
@@ -3149,8 +3158,10 @@ export class WalletBg {
     if (await resolveMidnightLedger(network) !== 9) throw new Error('A private swap needs a ledger 9 network');
     if (!connectorIntentSyncReady(midnightStore)) throw new Error(MIDNIGHT_WALLET_NOT_SYNCED);
     const keysHosted = midnightShieldedKeysHosted();
-    const prover = walletProverFor(network, midnightStore.proofServer, 'shielded', {
-      shieldedOnDevice: keysHosted, ...await localProvingOffersFor(midnightStore.proofServer),
+    // On preprod a swap proves with the Local proof server only (sendProofServerPreference).
+    const ps = sendProofServerPreference(network, midnightStore.proofServer);
+    const prover = walletProverFor(network, ps, 'shielded', {
+      shieldedOnDevice: keysHosted, ...await localProvingOffersFor(ps),
     });
     if (!canProvePrivateSwap(prover, keysHosted)) throw new MidnightSwapError('SWAP_PRIVATE_PROVER');
     let proving: WalletProvingRequest;
@@ -3159,7 +3170,7 @@ export class WalletBg {
     } else if (prover === 'helper') {
       proving = { helper: true };
     } else {
-      const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
+      const target = resolveDappProvingTarget(network, ps, midnightStore.shieldedProvingConsent);
       proving = { url: target.url, headers: target.headers };
     }
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
