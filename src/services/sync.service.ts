@@ -633,7 +633,7 @@ export class SyncService {
 
   private solanaNftsInFlight = false;
   /** The newest token snapshot that arrived while a read was running: read once that one ends. */
-  private solanaNftsPending: ReadonlyArray<{ mint: string; amount: string; decimals: number }> | null = null;
+  private solanaNftsPending: { walletId: number; tokens: ReadonlyArray<{ mint: string; amount: string; decimals: number }> } | null = null;
 
   /**
    * Keeps `walletStore.solanaNfts` to the account's held NFTs (as syncAssets does for Cardano):
@@ -644,7 +644,7 @@ export class SyncService {
   async syncSolanaNfts(tokens: ReadonlyArray<{ mint: string; amount: string; decimals: number }>, api?: Pick<SolanaApi, 'getNftMetadata'>): Promise<void> {
     if (this.walletBg?.chain !== Blockchain.SOLANA) return;
     if (this.solanaNftsInFlight) {
-      this.solanaNftsPending = tokens;
+      this.solanaNftsPending = { walletId: this.walletBg.id, tokens };
       return;
     }
     this.solanaNftsInFlight = true;
@@ -676,7 +676,8 @@ export class SyncService {
     }
     const pending = this.solanaNftsPending;
     this.solanaNftsPending = null;
-    if (pending) await this.syncSolanaNfts(pending, api);
+    // Another wallet's tokens are never read into this one's NFTs.
+    if (pending && pending.walletId === this.walletBg?.id) await this.syncSolanaNfts(pending.tokens, api);
   }
 
   /**

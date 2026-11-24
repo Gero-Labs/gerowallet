@@ -226,6 +226,18 @@ describe('syncSolanaNfts', () => {
     expect(store.setSolanaNfts).toHaveBeenLastCalledWith({ [A]: row(A), [B]: row(B) });
   });
 
+  it('drops a pending update from a wallet that is no longer logged in', async () => {
+    const { service } = setup();
+    let finish: () => void = () => undefined;
+    const api = { getNftMetadata: vi.fn((mints: string[]) => new Promise((resolve) => { finish = () => resolve(mints.map((m) => row(m))); })) };
+    const first = service.syncSolanaNfts(held(A), api as never);
+    await service.syncSolanaNfts(held(A, B), api as never);
+    (service as unknown as { walletBg: { id: number } }).walletBg.id = 8; // switched mid-read
+    finish();
+    await first;
+    expect(api.getNftMetadata).toHaveBeenCalledTimes(1);
+  });
+
   it('does nothing for another chain', async () => {
     const { service } = setup(Blockchain.CARDANO);
     const api = { getNftMetadata: vi.fn() };
