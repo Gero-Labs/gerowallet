@@ -165,14 +165,16 @@ const canTake = computed(() => takeable.value && !busy.value && !dustShort.value
 const shortAddress = (address: string) => (address.length > 24 ? `${address.slice(0, 14)}…${address.slice(-4)}` : address);
 const detailRows = computed<SwapRow[]>(() => {
   const rows: SwapRow[] = [
-    { label: t('midnight.swap.networkFee'), value: feeText.value },
+    { label: t('midnight.swap.networkFee'), value: feeText.value, hint: t('midnight.swap.hint.takerFee') },
     {
       label: t('midnight.swap.review.yourDust'),
       value: `${formatTokenAmount(midnightStore.balances.dust, MIDNIGHT_DECIMALS.DUST)} DUST`,
       tone: dustShort.value ? 'warning' : undefined,
     },
   ];
-  if (inspection.value?.maker) rows.push({ label: t('midnight.swap.review.otherWallet'), value: shortAddress(inspection.value.maker), mono: true });
+  if (inspection.value?.maker) {
+    rows.push({ label: t('midnight.swap.review.otherWallet'), value: shortAddress(inspection.value.maker), mono: true, hint: t('midnight.swap.hint.otherWallet') });
+  }
   rows.push({ label: t('midnight.swap.offerType'), value: t('midnight.swap.kind.public') });
   rows.push({ label: t('midnight.swap.visible'), value: t('midnight.swap.visibleBoth'), tone: 'muted' });
   if (lastTrade.value) rows.push({ label: t('midnight.swap.review.lastTrade'), value: lastTrade.value, tone: 'muted' });

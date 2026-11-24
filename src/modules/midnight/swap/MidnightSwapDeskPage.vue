@@ -9,16 +9,25 @@
 
       <div class="dswap__grid">
         <section class="glass-panel dswap__card" :aria-labelledby="makeId">
-          <h2 :id="makeId" class="t-body-lg dswap__card-title">{{ t('midnight.swap.make.title') }}</h2>
+          <div class="dswap__card-head">
+            <h2 :id="makeId" class="t-body-lg dswap__card-title">{{ t('midnight.swap.make.title') }}</h2>
+            <SwapHint :text="t('midnight.swap.hint.make')" />
+          </div>
           <SwapMakeForm compact @created="record => (sharing = record.offerId)" />
         </section>
 
         <div class="dswap__side">
           <section class="glass-panel dswap__card" :aria-labelledby="takeId" @dragover.prevent @drop.prevent="onDrop">
-            <h2 :id="takeId" class="t-body-lg dswap__card-title">{{ t('midnight.swap.take.title') }}</h2>
+            <div class="dswap__card-head">
+              <h2 :id="takeId" class="t-body-lg dswap__card-title">{{ t('midnight.swap.take.title') }}</h2>
+              <SwapHint :text="t('midnight.swap.hint.take')" />
+            </div>
             <div class="dswap__drop">
               <span class="dswap__drop-icon" aria-hidden="true"><v-icon size="20">mdi-file-download-outline</v-icon></span>
-              <span class="t-body-sm dswap__drop-text">{{ t('midnight.swap.open.dropFile') }}</span>
+              <span class="t-body-sm dswap__drop-text">
+                {{ t('midnight.swap.open.dropFile') }}
+                <SwapHint :text="t('midnight.swap.hint.offerFile')" />
+              </span>
               <GButton compact data-test="swap-desk-paste" @click="openTake('paste')">{{ t('midnight.swap.open.pasteCode') }}</GButton>
               <GButton compact data-test="swap-desk-scan" @click="openTake('scan')">{{ t('midnight.swap.open.scanQr') }}</GButton>
             </div>
@@ -129,6 +138,7 @@ import SwapYourOffers from './SwapYourOffers.vue';
 import SwapOpenOffers from './SwapOpenOffers.vue';
 import SwapWithdrawDialog from './SwapWithdrawDialog.vue';
 import SwapBanner from './SwapBanner.vue';
+import SwapHint from './SwapHint.vue';
 
 const { t } = useTranslation();
 const router = useRouter();
@@ -256,6 +266,12 @@ async function onDrop(event: DragEvent) {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.dswap__card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
 .dswap__card-title {

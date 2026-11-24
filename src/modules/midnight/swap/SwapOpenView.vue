@@ -26,7 +26,10 @@
 
     <div v-else class="swap-open__paste">
       <div class="swap-open__field">
-        <label class="t-caption" :for="codeId">{{ t('midnight.swap.open.code') }}</label>
+        <span class="swap-open__label">
+          <label class="t-caption" :for="codeId">{{ t('midnight.swap.open.code') }}</label>
+          <SwapHint :text="t('midnight.swap.hint.offerFile')" />
+        </span>
         <textarea
           :id="codeId"
           v-model="code"
@@ -67,6 +70,7 @@ import {
 } from '@/chains/midnight/midnightSwapOffer';
 import SwapSegmented from './SwapSegmented.vue';
 import SwapBanner from './SwapBanner.vue';
+import SwapHint from './SwapHint.vue';
 
 const props = withDefaults(defineProps<{
   /** Open straight on one mode, without the switch (the dashboard's Paste code / Scan QR buttons). */
@@ -189,6 +193,12 @@ function onDrop(event: DragEvent) {
 .swap-open__code:focus-visible {
   outline: 2px solid var(--g-accent);
   outline-offset: 1px;
+}
+
+.swap-open__label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
 .swap-open__buttons {

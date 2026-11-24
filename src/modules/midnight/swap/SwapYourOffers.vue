@@ -1,7 +1,10 @@
 <template>
   <!-- Side panel: one row per offer, the open one with its time bar. -->
   <section v-if="!table" class="swap-yours" :aria-labelledby="headingId">
-    <div :id="headingId" class="t-label swap-yours__heading">{{ t('midnight.swap.yours') }}</div>
+    <div class="swap-yours__heading">
+      <span :id="headingId" class="t-label">{{ t('midnight.swap.yours') }}</span>
+      <SwapHint :text="t('midnight.swap.hint.yours')" />
+    </div>
     <p v-if="!rows.length" class="t-caption swap-yours__empty">{{ t('midnight.swap.yoursEmpty') }}</p>
     <button
       v-for="row in rows"
@@ -21,7 +24,10 @@
 
   <!-- Dashboard: a table, actions in the row. -->
   <section v-else class="swap-yours" :aria-labelledby="headingId">
-    <h2 :id="headingId" class="t-body-lg swap-yours__title">{{ t('midnight.swap.yours') }}</h2>
+    <div class="swap-yours__heading">
+      <h2 :id="headingId" class="t-body-lg swap-yours__title">{{ t('midnight.swap.yours') }}</h2>
+      <SwapHint :text="t('midnight.swap.hint.yours')" />
+    </div>
     <p v-if="!rows.length" class="t-caption swap-yours__empty">{{ t('midnight.swap.yoursEmpty') }}</p>
     <table v-else class="swap-table t-body-sm">
       <thead>
@@ -66,6 +72,7 @@ import { swapDisplayStatus } from './swapStatus';
 import { minutesLeft, swapLegText } from './swapTokens';
 import SwapStatusChip from './SwapStatusChip.vue';
 import SwapTimeBar from './SwapTimeBar.vue';
+import SwapHint from './SwapHint.vue';
 
 withDefaults(defineProps<{ table?: boolean }>(), { table: false });
 const emit = defineEmits<{
@@ -98,6 +105,9 @@ function settledText(record: MidnightSwapOfferRecord): string {
 }
 
 .swap-yours__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
   margin-top: var(--g-s-1);
 }
 

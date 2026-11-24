@@ -73,6 +73,8 @@ describe('dashboard swap page', () => {
     expect(wrapper.find('[data-test="swap-desk-scan"]').exists()).toBe(true);
     expect(wrapper.find(`[data-test="swap-offer-${record.offerId.slice(0, 8)}"]`).text()).toContain('1 tNIGHT');
     expect(wrapper.find('[data-test="swap-row-withdraw"]').exists()).toBe(true);
+    // The drop zone says what an offer file is and that nothing is uploaded.
+    expect(wrapper.get('.dswap__drop').find('[data-test="swap-hint"]').attributes('aria-label')).toBe('midnight.swap.hint.offerFile');
     // No open-offers list while Nexus does not serve one.
     expect(wrapper.text()).not.toContain('midnight.swap.open.title');
   });

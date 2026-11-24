@@ -13,8 +13,8 @@
           {{ t('midnight.swap.saveFile') }}
         </GButton>
       </div>
+      <div v-if="geroListAvailable && record.status === 'open'" class="swap-share__list">
       <GButton
-        v-if="geroListAvailable && record.status === 'open'"
         block
         :disabled="!!record.listed || listing"
         :loading="listing"
@@ -24,8 +24,10 @@
         <v-icon start size="16" aria-hidden="true">{{ record.listed ? 'mdi-check' : 'mdi-storefront-outline' }}</v-icon>
         {{ record.listed ? t('midnight.swap.listed') : t('midnight.swap.listWithGero') }}
       </GButton>
+      <SwapHint :text="t('midnight.swap.hint.listWithGero')" />
+      </div>
       <SwapBanner v-if="listError" tone="error">{{ listError }}</SwapBanner>
-      <p class="t-caption swap-share__note">{{ t('midnight.swap.anyone') }}</p>
+      <p class="t-caption swap-share__note">{{ t('midnight.swap.anyone') }} <SwapHint :text="t('midnight.swap.hint.share')" /></p>
     </div>
   </div>
 </template>
@@ -41,6 +43,7 @@ import { countdownText, swapLegText } from './swapTokens';
 import SwapOfferQr from './SwapOfferQr.vue';
 import SwapRows, { type SwapRow } from './SwapRows.vue';
 import SwapBanner from './SwapBanner.vue';
+import SwapHint from './SwapHint.vue';
 
 const props = withDefaults(defineProps<{ record: MidnightSwapOfferRecord; wide?: boolean }>(), { wide: false });
 const { t } = useTranslation();
@@ -119,5 +122,11 @@ async function list() {
 
 .swap-share__note {
   margin: 0;
+}
+
+.swap-share__list {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
 }
 </style>

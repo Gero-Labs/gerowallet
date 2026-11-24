@@ -4,7 +4,7 @@
     <template v-for="(row, index) in rows" :key="index">
       <hr v-if="row.rule" class="swap-rows__rule">
       <div v-else class="swap-rows__row t-body-sm">
-        <span class="swap-rows__label">{{ row.label }}</span>
+        <span class="swap-rows__label">{{ row.label }}<SwapHint v-if="row.hint" :text="row.hint" class="swap-rows__hint" /></span>
         <span
           class="swap-rows__value g-num"
           :class="[row.tone ? `swap-rows__value--${row.tone}` : '', { 'g-mono': row.mono }]"
@@ -16,6 +16,8 @@
 </template>
 
 <script setup lang="ts">
+import SwapHint from './SwapHint.vue';
+
 export interface SwapRow {
   label?: string;
   value?: string;
@@ -25,6 +27,8 @@ export interface SwapRow {
   /** A hairline between groups instead of a row. */
   rule?: boolean;
   test?: string;
+  /** A short explanation behind an info icon beside the label. */
+  hint?: string;
 }
 
 withDefaults(defineProps<{
@@ -54,6 +58,10 @@ withDefaults(defineProps<{
 
 .swap-rows__label {
   color: var(--g-text-3);
+}
+
+.swap-rows__hint {
+  margin-left: var(--g-s-1);
 }
 
 .swap-rows__value {

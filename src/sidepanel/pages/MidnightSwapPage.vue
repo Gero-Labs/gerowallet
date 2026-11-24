@@ -21,6 +21,7 @@
     <main class="mswap__body">
       <template v-if="view.name === 'home'">
         <div class="mswap__choices">
+          <p class="t-caption mswap__intro">{{ t('midnight.swap.hint.how') }}</p>
           <button type="button" class="glass-tier mswap__choice" data-test="swap-choice-make" @click="go({ name: 'make' })">
             <span class="mswap__choice-icon" aria-hidden="true"><v-icon size="20">mdi-plus</v-icon></span>
             <span class="mswap__choice-text">
@@ -211,6 +212,10 @@ function back() {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
+}
+
+.mswap__intro {
+  margin: 0;
 }
 
 .mswap__choice {

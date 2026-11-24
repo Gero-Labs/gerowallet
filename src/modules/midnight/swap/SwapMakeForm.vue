@@ -48,7 +48,7 @@
     </div>
 
     <div class="swap-make__field">
-      <span :id="ttlLabelId" class="t-caption">{{ t('midnight.swap.expiresIn') }}</span>
+      <span :id="ttlLabelId" class="t-caption">{{ t('midnight.swap.expiresIn') }} <SwapHint :text="t('midnight.swap.hint.expiry')" /></span>
       <SwapSegmented v-model="ttlMinutes" :options="ttlOptions" :labelledby="ttlLabelId" />
     </div>
 
@@ -87,6 +87,7 @@ import SwapSegmented from './SwapSegmented.vue';
 import SwapRows, { type SwapRow } from './SwapRows.vue';
 import SwapBanner from './SwapBanner.vue';
 import SwapPasswordField from './SwapPasswordField.vue';
+import SwapHint from './SwapHint.vue';
 
 withDefaults(defineProps<{
   /** The dashboard card: a shorter summary, nested in the card. */
@@ -148,8 +149,8 @@ const summaryRows = computed<SwapRow[]>(() => {
   const rows: SwapRow[] = [];
   if (giveAmount.value > 0n) rows.push({ label: t('midnight.swap.youGive'), value: swapLegText(giveLeg.value, network.value) });
   if (wantAmount.value > 0n) rows.push({ label: t('midnight.swap.youReceive'), value: swapLegText(wantLeg.value, network.value) });
-  rows.push({ label: t('midnight.swap.networkFee'), value: t('midnight.swap.paidByTaker'), tone: 'muted' });
-  rows.push({ label: t('midnight.swap.visible'), value: t('midnight.swap.visibleBoth'), tone: 'muted' });
+  rows.push({ label: t('midnight.swap.networkFee'), value: t('midnight.swap.paidByTaker'), tone: 'muted', hint: t('midnight.swap.hint.makerFee') });
+  rows.push({ label: t('midnight.swap.visible'), value: t('midnight.swap.visibleBoth'), tone: 'muted', hint: t('midnight.swap.hint.visible') });
   rows.push({ rule: true });
   rows.push({ label: t('midnight.swap.offerFee'), value: t('midnight.swap.none'), tone: 'success' });
   return rows;

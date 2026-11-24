@@ -5,6 +5,7 @@
       <component :is="table ? 'h2' : 'div'" :id="headingId" :class="table ? 't-body-lg swap-board__title' : 't-label'">
         {{ t('midnight.swap.open.title') }}
       </component>
+      <SwapHint :text="t('midnight.swap.hint.openOffers')" />
     </div>
     <SwapSegmented v-model="direction" :options="directionOptions" :aria-label="t('midnight.swap.open.direction')" />
     <ul v-if="rows.length" class="swap-board__list" :aria-label="t('midnight.swap.open.title')">
@@ -38,6 +39,7 @@ import { injectMidnightSwap } from './swapContext';
 import { minutesLeft, NIGHT_TOKEN_TYPE, nightTicker, swapLegText, swapRateText } from './swapTokens';
 import SwapSegmented from './SwapSegmented.vue';
 import SwapBanner from './SwapBanner.vue';
+import SwapHint from './SwapHint.vue';
 
 withDefaults(defineProps<{ table?: boolean }>(), { table: false });
 const emit = defineEmits<{ (e: 'take', offer: string): void; (e: 'make'): void }>();
@@ -87,6 +89,12 @@ async function open(offer: MidnightOpenOffer) {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
+}
+
+.swap-board__head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
 .swap-board__title {
