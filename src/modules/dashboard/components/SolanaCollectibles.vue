@@ -53,10 +53,14 @@ import { solanaNftCandidates, solanaNftCollections, type SolanaNft, type SolanaN
 import SolanaNftDialog from '@/modules/dashboard/dialogs/SolanaNftDialog.vue';
 import SolanaSendDialog from '@/modules/transactions/dialogs/SolanaSendDialog.vue';
 
-/** The NFTs still held (Gero Sync's tokens) whose metadata Nexus confirmed. */
+/**
+ * The NFTs still held: token NFTs (Gero Sync's tokens) whose metadata Nexus confirmed, and the
+ * compressed and Core NFTs Nexus's DAS index lists for the account.
+ */
 const nfts = computed<SolanaNft[]>(() => {
   const known = walletStore.solanaNfts ?? {};
-  return solanaNftCandidates(walletStore.solana?.tokens).flatMap((mint) => (known[mint] ? [known[mint] as SolanaNft] : []));
+  const tokenNfts = solanaNftCandidates(walletStore.solana?.tokens).flatMap((mint) => (known[mint] ? [known[mint] as SolanaNft] : []));
+  return [...tokenNfts, ...(walletStore.solanaAssets ?? [])];
 });
 const collections = computed(() => solanaNftCollections(nfts.value));
 const count = computed(() => nfts.value.length);

@@ -188,6 +188,46 @@ describe('SolanaSendDialog: a token', () => {
   });
 });
 
+describe('SolanaSendDialog: a compressed NFT', () => {
+  const ASSET = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
+  const QUOTE_ASSET = { mint: ASSET, decimals: 0, amount: '1', received: '1', createsAccount: false, rentLamports: '0', feeLamports: '5000', programmable: false, refundLamports: '0' };
+
+  beforeEach(() => {
+    walletStore.loggedWallet = { id: 1, chain: Blockchain.SOLANA, network: Network.DEVNET, publicKey: FROM, encryptionMethod: 'password' } as never;
+    const store = walletStore as unknown as { solana: unknown; solanaNfts: unknown; solanaAssets: unknown };
+    store.solana = { lamports: '2000000000', tokens: [] };
+    store.solanaNfts = {};
+    store.solanaAssets = [{ mint: ASSET, kind: 'compressed', name: 'Leaf #3', standard: null, attributes: [] }];
+    send.mockReset();
+    send.mockImplementation(async ({ method }: { method: string }) => {
+      if (method === MessageTypes.SOLANA_SEND_QUOTE) return { data: { success: true, result: QUOTE } };
+      if (method === MessageTypes.SOLANA_TOKEN_SEND_QUOTE) return { data: { success: true, result: QUOTE_ASSET } };
+      return { data: { success: true, result: { signature: SIGNATURE } } };
+    });
+  });
+
+  it('sends the asset, one unit, though it is no token account', async () => {
+    const wrapper = mount(SolanaSendDialog as unknown as Parameters<typeof mount>[0], {
+      props: { modelValue: true, nftMint: ASSET },
+      global: { plugins: [createTestVuetify()], mocks: { $t: (key: string) => key } },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-test="sol-nft"]').text()).toContain('Leaf #3');
+    await wrapper.find('[data-test="sol-recipient"]').setValue(TO);
+    await wrapper.find('[data-test="sol-continue"]').trigger('click');
+    await flushPromises();
+    const request = { mint: ASSET, recipientAddress: TO, amount: '1', feeLevel: 'standard' };
+    expect(send).toHaveBeenCalledWith({ method: MessageTypes.SOLANA_TOKEN_SEND_QUOTE, data: request });
+    await wrapper.find('[data-test="sol-password"]').setValue('pw');
+    await wrapper.find('[data-test="sol-send"]').trigger('click');
+    await flushPromises();
+    expect(send).toHaveBeenLastCalledWith({
+      method: MessageTypes.SEND_SOLANA_TOKEN,
+      data: { ...request, maxSolCost: '5000', minReceived: '1', password: 'pw' },
+    });
+  });
+});
+
 describe('SolanaSendDialog: an NFT', () => {
   const NFT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
   const TOKEN = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';

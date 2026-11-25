@@ -7,10 +7,11 @@ import { Blockchain } from '@/models/types';
 
 const store = vi.hoisted(() => {
   const empty = () => ({ lamports: null, tokens: null, tipSlot: null, historyTruncated: false });
-  const state: { solana: Record<string, unknown>; solanaTransactions: Array<Record<string, unknown>>; solanaNfts: Record<string, unknown> } = {
+  const state: { solana: Record<string, unknown>; solanaTransactions: Array<Record<string, unknown>>; solanaNfts: Record<string, unknown>; solanaAssets: unknown[] } = {
     solana: empty(),
     solanaTransactions: [],
     solanaNfts: {},
+    solanaAssets: [],
   };
   return {
     empty,
@@ -19,6 +20,7 @@ const store = vi.hoisted(() => {
     setSolanaState: vi.fn((update: Record<string, unknown>) => { state.solana = { ...state.solana, ...update }; }),
     flush: vi.fn(async () => undefined),
     setSolanaNfts: vi.fn((nfts: Record<string, unknown>) => { state.solanaNfts = nfts; }),
+    setSolanaAssets: vi.fn((assets: unknown[]) => { state.solanaAssets = assets; }),
   };
 });
 
@@ -29,14 +31,19 @@ vi.mock('@cardano-sdk/core', () => ({ Serialization: {} }));
 vi.mock('@/stores/loading', () => ({ default: {} }));
 vi.mock('@/stores/networkStore', () => ({ default: { setTip: vi.fn() } }));
 vi.mock('@/stores/walletStore', () => ({
-  default: { state: {}, setSolanaTransactions: store.setSolanaTransactions, setSolanaState: store.setSolanaState, setSolanaNfts: store.setSolanaNfts },
+  default: { state: {}, setSolanaTransactions: store.setSolanaTransactions, setSolanaState: store.setSolanaState, setSolanaNfts: store.setSolanaNfts, setSolanaAssets: store.setSolanaAssets },
   walletStore: store.state,
   emptySolanaState: store.empty,
   flushWalletStorePersistence: store.flush,
 }));
 vi.mock('@/services/websocket.service', () => ({ default: {} }));
 vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
-vi.mock('@/api/solana-api', () => ({ SolanaApi: class { getNftMetadata = vi.fn(async () => { throw new Error('no network in tests'); }); } }));
+vi.mock('@/api/solana-api', () => ({
+  SolanaApi: class {
+    getNftMetadata = vi.fn(async () => { throw new Error('no network in tests'); });
+    getAssets = vi.fn(async () => { throw new Error('no network in tests'); });
+  },
+}));
 
 function setup(chain = Blockchain.SOLANA, cursor = 0) {
   let syncRow: Record<string, unknown> | undefined = cursor ? { id: 1, height: cursor } : undefined;
@@ -45,6 +52,7 @@ function setup(chain = Blockchain.SOLANA, cursor = 0) {
     chain,
     id: 7,
     network: 'Devnet',
+    publicKey: 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk',
     getLastSyncInfo: vi.fn(async () => syncRow),
     getDb: vi.fn(async () => ({ table: () => ({ put }) })),
   };
@@ -63,6 +71,8 @@ beforeEach(() => {
   store.flush.mockClear();
   store.state.solanaNfts = {};
   store.setSolanaNfts.mockClear();
+  store.state.solanaAssets = [];
+  store.setSolanaAssets.mockClear();
 });
 
 describe('applySolanaSync', () => {
@@ -243,5 +253,35 @@ describe('syncSolanaNfts', () => {
     const api = { getNftMetadata: vi.fn() };
     await service.syncSolanaNfts(held(A), api as never);
     expect(api.getNftMetadata).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncSolanaAssets', () => {
+  const asset = (mint: string) => ({ mint, kind: 'compressed', name: mint.slice(0, 3), fetchedAt: 1 });
+
+  it('stores the compressed and Core NFTs Nexus lists, and only when they changed', async () => {
+    const { service } = setup();
+    const api = { getAssets: vi.fn(async () => [asset('A'), asset('B')]) };
+    await service.syncSolanaAssets(api as never);
+    expect(api.getAssets).toHaveBeenCalledWith('HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk');
+    expect(store.setSolanaAssets).toHaveBeenCalledWith([asset('A'), asset('B')]);
+    store.setSolanaAssets.mockClear();
+    const later = { getAssets: vi.fn(async () => [{ ...asset('A'), fetchedAt: 2 }, { ...asset('B'), fetchedAt: 2 }]) };
+    await service.syncSolanaAssets(later as never);
+    expect(store.setSolanaAssets).not.toHaveBeenCalled();
+  });
+
+  it('keeps what it knows when Nexus fails (no DAS configured answers 503)', async () => {
+    const { service } = setup();
+    store.state.solanaAssets = [asset('A')];
+    await service.syncSolanaAssets({ getAssets: vi.fn(async () => { throw new Error('503'); }) } as never);
+    expect(store.setSolanaAssets).not.toHaveBeenCalled();
+  });
+
+  it('drops an answer for a wallet that is no longer logged in', async () => {
+    const { service } = setup();
+    const api = { getAssets: vi.fn(async () => { (service as unknown as { walletBg: { id: number } }).walletBg.id = 8; return [asset('A')]; }) };
+    await service.syncSolanaAssets(api as never);
+    expect(store.setSolanaAssets).not.toHaveBeenCalled();
   });
 });

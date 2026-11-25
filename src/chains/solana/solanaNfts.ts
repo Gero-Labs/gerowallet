@@ -39,6 +39,11 @@ export interface SolanaNft {
   offChain: boolean;
   /** When Gero read this (epoch ms), to read an incomplete one again later. */
   fetchedAt: number;
+  /**
+   * Not a token account: a compressed NFT (a Bubblegum leaf) or a Metaplex Core asset, listed by
+   * the DAS index (solanaAssets.ts). `mint` is then the asset id. Absent for a token NFT.
+   */
+  kind?: 'compressed' | 'core';
 }
 
 export interface SolanaNftCollection {

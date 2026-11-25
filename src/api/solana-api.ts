@@ -12,6 +12,7 @@ import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice
 import { debugLog } from '@/utils/debug';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import { SOLANA_NFT_BATCH, parseSolanaNftRows, type SolanaNft } from '@/chains/solana/solanaNfts';
+import { parseSolanaAssetTransfer, parseSolanaAssets, type SolanaAssetTransferInputs } from '@/chains/solana/solanaAssets';
 import {
   parseSolanaAccounts,
   parseSolanaSimulation,
@@ -164,6 +165,18 @@ export class SolanaApi {
       { params: this.params(), transformResponse: (raw) => raw },
     );
     return parseSolanaAccounts(typeof data === 'string' ? data : JSON.stringify(data), addresses);
+  }
+
+  /** `GET /api/sol/addresses/{a}/assets`: the owner's compressed and Core NFTs (solanaAssets.ts reads it strictly). */
+  async getAssets(owner: string, now = Date.now()): Promise<SolanaNft[]> {
+    const { data } = await this.http.get<unknown>(`/api/sol/addresses/${this.address(owner)}/assets`, { params: this.params() });
+    return parseSolanaAssets(data, now);
+  }
+
+  /** `GET /api/sol/assets/{id}/transfer`: what a compressed or Core NFT's transfer needs, read fresh. */
+  async getAssetTransfer(id: string): Promise<SolanaAssetTransferInputs> {
+    const { data } = await this.http.get<unknown>(`/api/sol/assets/${this.address(id)}/transfer`, { params: this.params() });
+    return parseSolanaAssetTransfer(data, id);
   }
 
   /**

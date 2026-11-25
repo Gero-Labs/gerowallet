@@ -621,6 +621,11 @@ export class SyncService {
     }
 
     if (snapshot.tokens) void this.syncSolanaNfts(snapshot.tokens);
+    // Compressed and Core NFTs are not token accounts: read them again when anything moved, and
+    // once per wallet the first time it syncs.
+    if (update.transactions.length > 0 || snapshot.tokens || this.solanaAssetsLoadedFor !== this.walletBg.id) {
+      void this.syncSolanaAssets();
+    }
 
     debugLog('◎ [SOL gero-sync] applied', {
       txs: update.transactions.length,
@@ -629,6 +634,43 @@ export class SyncService {
       cursor: update.cursorSlot,
       tip: update.tipSlot,
     });
+  }
+
+  private solanaAssetsInFlight = false;
+  private solanaAssetsPending = false;
+  /** The wallet whose compressed and Core NFTs were last read. */
+  private solanaAssetsLoadedFor: number | null = null;
+
+  /**
+   * Keeps `walletStore.solanaAssets` to the account's compressed and Core NFTs, from Nexus's DAS
+   * index. Never blocks the sync: a failed read (Nexus without a DAS URL answers 503) keeps what
+   * is known. A request that arrives while one runs is read once that one ends.
+   */
+  async syncSolanaAssets(api?: Pick<SolanaApi, 'getAssets'>): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.SOLANA) return;
+    if (this.solanaAssetsInFlight) {
+      this.solanaAssetsPending = true;
+      return;
+    }
+    this.solanaAssetsInFlight = true;
+    const walletId = this.walletBg.id;
+    try {
+      const assets = await (api ?? new SolanaApi(this.walletBg.network)).getAssets(this.walletBg.publicKey);
+      if (this.walletBg?.id !== walletId) return;
+      this.solanaAssetsLoadedFor = walletId;
+      const known = walletStore.solanaAssets ?? [];
+      const same = known.length === assets.length
+        && assets.every((a, i) => JSON.stringify({ ...a, fetchedAt: 0 }) === JSON.stringify({ ...known[i], fetchedAt: 0 }));
+      if (!same) WalletStore.setSolanaAssets(assets);
+    } catch (error) {
+      debugLog('◎ [SOL assets] read failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      this.solanaAssetsInFlight = false;
+    }
+    if (this.solanaAssetsPending) {
+      this.solanaAssetsPending = false;
+      if (this.walletBg?.id === walletId) await this.syncSolanaAssets(api);
+    }
   }
 
   private solanaNftsInFlight = false;

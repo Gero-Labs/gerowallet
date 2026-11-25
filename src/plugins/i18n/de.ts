@@ -6727,6 +6727,8 @@ export default {
   'solana.nft.collection': 'Kollektion',
   'solana.nft.symbol': 'Symbol',
   'solana.nft.programmableRules': 'Programmierbares NFT: Es gelten die Übertragungsregeln seines Erstellers, und das Netzwerk prüft sie beim Senden.',
+  'solana.nft.compressed': 'Komprimiertes NFT: Es liegt in einem gemeinsamen On-Chain-Baum, nicht in einem Token-Konto.',
+  'solana.nft.core': 'Metaplex-Core-NFT.',
   'solana.nft.gone': 'Dieses NFT ist nicht mehr in dieser Wallet, daher gibt es nichts zu senden.',
   'solana.dapp.warn.assignsWallet': 'Übergibt die Kontrolle über Ihr Solana-Konto an ein anderes Programm.',
   'solana.dapp.warn.givesTokenAccount': 'Übergibt eines Ihrer Token-Konten an eine andere Adresse.',

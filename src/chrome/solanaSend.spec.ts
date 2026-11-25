@@ -2,7 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const store = vi.hoisted(() => ({
-  state: { solana: { lamports: '2000000000' as string | null, tokens: null as Array<Record<string, unknown>> | null } },
+  state: {
+    solana: { lamports: '2000000000' as string | null, tokens: null as Array<Record<string, unknown>> | null },
+    solanaAssets: [] as Array<Record<string, unknown>>,
+  },
 }));
 vi.mock('@/stores/walletStore', () => ({ default: store }));
 vi.mock('@/api/solana-api', () => ({ SolanaApi: class {} }));
@@ -11,6 +14,7 @@ import {
   clearSolanaHardwareSends,
   prepareSolanaHardwareSend,
   prepareSolanaHardwareTokenSend,
+  quoteSolanaTokenSend,
   sendSolanaToken,
   quoteSolanaSend,
   sendSolana,
@@ -252,5 +256,28 @@ describe('token send in the worker', () => {
     expect(tokenAccounts).toEqual([{ baseAddress: TO, tokenProgram: TOKEN_PROGRAM_ID, tokenMint: MINT, tokenAccount: DEST }]);
     const signature = Array.from(signSolanaBytes(Uint8Array.from(message), keypair().secretKey));
     await expect(submitSolanaHardwareSend(w, { signature }, api())).resolves.toEqual({ signature: 'sig-from-nexus' });
+  });
+});
+
+describe('compressed and Core NFTs in the worker send', () => {
+  const ASSET = 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN';
+  const BLOCK = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
+
+  it('routes an asset the worker lists to the asset planner, and asks Nexus for its transfer', async () => {
+    store.state.solana.tokens = [];
+    store.state.solanaAssets = [{ mint: ASSET, kind: 'core', standard: null, attributes: [] }];
+    const sender = { address: FROM, exists: true, lamports: 1_000_000_000n, owner: SYSTEM_PROGRAM_ID, program: 'system', parsed: null };
+    const a = {
+      ...api(),
+      getChainTip: vi.fn(async () => ({ slot: 1, blockHeight: 1, blockhash: BLOCK })),
+      getAccounts: vi.fn(async (addresses: string[]) => addresses.map((addr) => (addr === FROM ? sender
+        : { address: addr, exists: false, lamports: null, owner: null, program: null, parsed: null }))),
+      getAssetTransfer: vi.fn(async () => ({ kind: 'core' as const, id: ASSET, owner: FROM, frozen: false, collection: null })),
+      simulate: vi.fn(async () => ({ success: true, err: null, logs: [], unitsConsumed: 1, before: [sender], after: [sender] })),
+    };
+    const quote = await quoteSolanaTokenSend(wallet(), { mint: ASSET, recipientAddress: TO, amount: '1', feeLevel: 'standard' }, a);
+    expect(a.getAssetTransfer).toHaveBeenCalledWith(ASSET);
+    expect(quote).toMatchObject({ mint: ASSET, amount: '1', received: '1', rentLamports: '0', programmable: false });
+    store.state.solanaAssets = [];
   });
 });
