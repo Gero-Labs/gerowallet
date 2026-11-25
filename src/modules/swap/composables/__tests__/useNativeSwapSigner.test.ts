@@ -60,6 +60,8 @@ vi.mock('@/shared/utils/ledger', () => ({ default: { txToLedger: vi.fn().mockRes
 vi.mock('@/shared/utils/keystone', () => ({
   createKeystoneSignRequest: vi.fn(() => ({ ur: { type: 'ur-type', cbor: Buffer.from('aa', 'hex') } })),
   parseSignature: vi.fn(() => ({ witnessSet: 'KEYSTONE_WIT' })),
+  // The answer reader (request id or hash binding) is keystoneTxWitnessSet.spec.ts's subject.
+  keystoneTxWitnessSet: vi.fn(async () => 'KEYSTONE_WIT'),
 }));
 vi.mock('@/utils/networks', () => ({ default: { resolveNetwork: vi.fn(() => ({})) } }));
 vi.mock('@cardano-sdk/core', async () => {
