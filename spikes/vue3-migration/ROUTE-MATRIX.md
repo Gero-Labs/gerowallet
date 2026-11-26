@@ -19,9 +19,9 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 
 ## Summary
 
-- 56 routes: 47 options, 9 sidepanel.
-- By owner: V04 4, V08 10, V09 8, V10 5, V11 29.
-- 52 routes render a view; 4 are redirects or catch-alls, covered by the guard spec or a manual step.
+- 57 routes: 48 options, 9 sidepanel.
+- By owner: V04 5, V08 10, V09 8, V10 5, V11 29.
+- 52 routes render a view; 5 are redirects or catch-alls, covered by the guard spec or a manual step.
 - 38 of the 52 views have a check that renders them without a funded wallet (unit, Help browser or E2E).
 - 14 views rely on the manual step: `options:/nexus`, `options:/governance/dreps/:drepId`, `options:/copilot-feed`, `options:/dev-tools`, `options:/wc-session-proposal`, `options:/warning`, `options:/ledger-ble-sign`, `options:/ordinals`, `options:/mempool`, `options:/lightning`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/feed`.
 - Of those, 3 have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/feed`.
@@ -50,6 +50,7 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 | `/realfi` | `realfi` | V10 | auth, `isRealFiEnabled`, network | unit: `modules/realfi/RealFi.spec.ts`<br>unit: `modules/realfi/RealFi.staking.spec.ts`<br>e2e: `08-post-v27/feature-gates.spec.ts` | Mainnet only: stake and unstake once with the live widget. |
 | `/proof-server` | `proofServer` | V11 | auth, network | unit: `modules/midnight/ProofServerPage.consent.spec.ts`<br>unit: `modules/midnight/ProofServerRestartNotice.spec.ts` | Midnight wallet: switch between the local and remote prover and prove one shielded send. |
 | `/midnight-swap` | `midnightSwap` | V11 | auth, network | unit: `modules/midnight/swap/MidnightSwapDeskPage.spec.ts`<br>unit: `chrome/midnightSwapHandlers.spec.ts` | Midnight preprod wallet: make an offer on one account, take it on another, check both balances moved and the maker's offer reads Taken; withdraw an open offer. |
+| `/vaults` | - | V04 | auth | guards: `modules/navigation/router.guards.spec.ts`<br>unit: `modules/gerovault/views/gerovaultViews.spec.ts`<br>_GeroVault parent route with no view of its own, behind isVaultsEnabled (off) and Cardano wallets only. Its children (the overview, create, and :vaultId with the proposals, policy, history and settings tabs) are placeholders: the guard spec pushes every child path with the flag off and on, and gerovaultViews.spec.ts renders each placeholder._ | - |
 | `/media-player` | `mediaPlayer` | V11 | auth | e2e: `07-v270-features/navigation.spec.ts` | Play an audio and a video NFT from a wallet that holds them. |
 | `/help` | `help-0` | V11 | public | unit: `modules/help/helpHome.spec.ts`<br>unit: `modules/help/home/HelpHomeDashboard.spec.ts`<br>help-browser: `scripts/help-browser/foundation-smoke.cjs`<br>e2e: `08-post-v27/help-center.spec.ts` | - |
 | `/help/topics/:topic` | `help-1` | V11 | public | unit: `modules/help/helpNavigation.spec.ts`<br>unit: `modules/help/HelpLayout.spec.ts` | - |
