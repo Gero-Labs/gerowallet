@@ -156,7 +156,7 @@ jobs:
       # The release gate and the Chrome Web Store step run only when a release is
       # cut, so a regression in either would otherwise surface on release day.
       - name: Release artifact and Chrome Web Store logic
-        run: npx vitest run scripts/check-release-artifact.spec.mjs scripts/chrome-web-store.spec.mjs
+        run: npx vitest run scripts/check-release-artifact.spec.mjs scripts/chrome-web-store.spec.mjs scripts/check-gerovault-switch.spec.mjs
 
       # The background bundle is built here but never run, and unit tests use
       # Node's own `assert`, so a CommonJS interop mistake in the worker build
@@ -199,3 +199,8 @@ jobs:
           # The build plugin only sees Rollup output; this also covers the
           # vendored SDKs build:web copies into extension/.
           node scripts/remote-code-guard.mjs extension
+          # GeroVault's local test switch (VITE_GEROVAULT_FORCE_ON) is off in this
+          # bundle, and the check still finds it: a source change that turned it
+          # on by default, or that hid it from the release artifact check
+          # (check-release-artifact.mjs refuses it on), fails here first.
+          node scripts/check-gerovault-switch.mjs extension --require-off
