@@ -1,5 +1,5 @@
 <template>
-  <section :class="['tx-flow', { 'tx-flow--compact': compact }]" :aria-label="ariaLabel">
+  <section :class="['tx-flow', `tx-flow--${orientation}`, { 'tx-flow--compact': compact }]" :aria-label="ariaLabel">
     <div ref="canvas" class="tx-flow__canvas" :class="{ 'tx-flow__canvas--dim': highlighted.size > 0 }" :style="{ height: `${layout.height}px` }">
       <svg
         v-if="width > 0"
@@ -15,8 +15,8 @@
           :d="band.path"
           :class="['tx-flow__band', { 'tx-flow__band--hi': highlighted.has(band.key) }]"
           :style="{ fill: KIND_COLOR[band.kind] }"
-          @mouseenter="hoverNode(band.key)"
-          @mouseleave="clearHover"
+          @pointerenter="pointerHover($event, band.key)"
+          @pointerleave="pointerLeave"
         />
         <line
           v-for="divider in layout.dividers"
@@ -37,10 +37,7 @@
         />
         <rect
           class="tx-flow__bar-core"
-          :x="layout.bar.x + layout.bar.width / 2 - 1"
-          :y="layout.bar.y + 8"
-          width="2"
-          :height="Math.max(0, layout.bar.height - 16)"
+          v-bind="barCore"
           rx="1"
         />
       </svg>
@@ -55,7 +52,10 @@
           'tx-flow__box',
           'glass-tier',
           `tx-flow__box--${box.node.kind}`,
-          { 'tx-flow__box--hi': highlighted.has(box.node.key) },
+          {
+            'tx-flow__box--hi': highlighted.has(box.node.key),
+            'tx-flow__box--pinned': pinnedNode === box.node.key,
+          },
         ]"
         :style="{
           left: `${box.x}px`,
@@ -64,9 +64,9 @@
           height: `${box.height}px`,
           '--flow-c': KIND_COLOR[box.node.kind],
         }"
-        @mouseenter="hoverNode(box.node.key)"
-        @mouseleave="clearHover"
-        @click="box.node.kind === 'more' ? expand(box.side) : undefined"
+        @pointerenter="pointerHover($event, box.node.key)"
+        @pointerleave="pointerLeave"
+        @click="box.node.kind === 'more' ? expand(box.side) : pinNode(box.node.key)"
       >
         <div class="tx-flow__head">
           <span v-if="!compact" class="tx-flow__icon"><v-icon size="16">{{ KIND_ICON[box.node.kind] }}</v-icon></span>
@@ -88,9 +88,9 @@
             class="tx-flow__chip t-caption"
             data-chip
             :title="tokenTitle(token)"
-            @mouseenter.stop="traceToken(token.unit)"
-            @mouseleave.stop="clearHover"
-            @focus="traceToken(token.unit)"
+            @pointerenter.stop="pointerTrace($event, token.unit)"
+            @pointerleave.stop="pointerLeave"
+            @focus="focusTrace($event, token.unit)"
             @blur="clearHover"
             @click.stop="pinToken(token.unit)"
           >
@@ -143,6 +143,7 @@ import assts from '@/utils/assets';
 import {
   collapseFlowNodes,
   layoutTxFlow,
+  layoutTxFlowVertical,
   type FlowKind,
   type FlowNode,
   type FlowToken,
@@ -160,9 +161,11 @@ interface Props {
   /** Display name, image and decimals of a token unit */
   tokenInfo: (unit: string) => FlowTokenInfo;
   currencySymbol: string;
+  /** `vertical`: inputs above a horizontal bar, outputs below (narrow surfaces such as the side panel) */
+  orientation?: 'horizontal' | 'vertical';
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { orientation: 'horizontal' });
 const { t, tc } = useTranslation();
 
 const KIND_COLOR: Record<FlowKind, string> = {
@@ -197,6 +200,8 @@ const MORE_CHIP_WIDTH = 40;
 const COLUMN_LIMIT = 5;
 /** Below this canvas width boxes drop the icon and show the amount under the label. */
 const COMPACT_WIDTH = 520;
+/** Vertical boxes take the width right of the band gutter: compact only on very narrow canvases. */
+const COMPACT_WIDTH_VERTICAL = 280;
 
 // ---------------------------------------------------------------------------
 // Size: the diagram fills its container and re-lays out when it changes
@@ -219,7 +224,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
-const compact = computed(() => width.value > 0 && width.value < COMPACT_WIDTH);
+const compact = computed(() =>
+  width.value > 0 && width.value < (props.orientation === 'vertical' ? COMPACT_WIDTH_VERTICAL : COMPACT_WIDTH)
+);
 
 // ---------------------------------------------------------------------------
 // Layout
@@ -227,19 +234,37 @@ const compact = computed(() => width.value > 0 && width.value < COMPACT_WIDTH);
 const open = ref<{ in: boolean; out: boolean }>({ in: false, out: false });
 watch(() => props.model, () => {
   open.value = { in: false, out: false };
+  pinnedNode.value = null;
+  pinned.value = null;
 });
 
 const inputs = computed(() => collapseFlowNodes(props.model.inputs, COLUMN_LIMIT, open.value.in));
 const outputs = computed(() => collapseFlowNodes(props.model.outputs, COLUMN_LIMIT, open.value.out));
 
+const boxHeight = (node: FlowNode) => (node.tokens.length ? BOX_HEIGHT_TOKENS : BOX_HEIGHT);
+
 const layout = computed(() =>
-  layoutTxFlow(inputs.value, outputs.value, {
-    width: Math.max(width.value, 1),
-    boxHeight: (node) => (node.tokens.length ? BOX_HEIGHT_TOKENS : BOX_HEIGHT),
-    anchorY: BOX_HEIGHT / 2,
-    minGutter: compact.value ? 36 : 56,
-  })
+  props.orientation === 'vertical'
+    ? layoutTxFlowVertical(inputs.value, outputs.value, {
+      width: Math.max(width.value, 1),
+      boxHeight,
+      anchorY: BOX_HEIGHT / 2,
+    })
+    : layoutTxFlow(inputs.value, outputs.value, {
+      width: Math.max(width.value, 1),
+      boxHeight,
+      anchorY: BOX_HEIGHT / 2,
+      minGutter: compact.value ? 36 : 56,
+    })
 );
+
+/** The accent line along the bar's length, inset from its rounded ends. */
+const barCore = computed(() => {
+  const { x, y, width: barWidth, height } = layout.value.bar;
+  return props.orientation === 'vertical'
+    ? { x: x + 8, y: y + height / 2 - 1, width: Math.max(0, barWidth - 16), height: 2 }
+    : { x: x + barWidth / 2 - 1, y: y + 8, width: 2, height: Math.max(0, height - 16) };
+});
 
 function expand(side: 'in' | 'out') {
   open.value = { ...open.value, [side]: true };
@@ -341,11 +366,13 @@ async function fitChips() {
 watch([width, layout], () => void fitChips(), { flush: 'post' });
 
 // ---------------------------------------------------------------------------
-// Highlight: a hovered box with its band, or every box holding a traced token
+// Highlight: a hovered box with its band, or every box holding a traced token.
+// Touch has no hover: a tap pins a box (or a chip's token) until tapped again.
 // ---------------------------------------------------------------------------
 const hovered = ref<string | null>(null);
 const traced = ref<string | null>(null);
 const pinned = ref<string | null>(null);
+const pinnedNode = ref<string | null>(null);
 
 const allBoxes = computed(() => layout.value.boxes.map((box) => box.node));
 
@@ -354,8 +381,42 @@ const highlighted = computed<Set<string>>(() => {
   if (unit) {
     return new Set(allBoxes.value.filter((node) => node.tokens.some((token) => token.unit === unit)).map((node) => node.key));
   }
-  return hovered.value ? new Set([hovered.value]) : new Set();
+  const node = hovered.value ?? pinnedNode.value;
+  return node ? new Set([node]) : new Set();
 });
+
+// A tap also sends pointerenter, and no pointerleave until the next tap elsewhere:
+// hover follows the mouse only, so a second tap on a pinned box really clears it.
+const isMouse = (event: PointerEvent) => !event.pointerType || event.pointerType === 'mouse';
+
+function pointerHover(event: PointerEvent, key: string) {
+  if (isMouse(event)) hoverNode(key);
+}
+
+function pointerTrace(event: PointerEvent, unit: string) {
+  if (isMouse(event)) traceToken(unit);
+}
+
+function pointerLeave(event: PointerEvent) {
+  if (isMouse(event)) clearHover();
+}
+
+/** Keyboard focus traces a token; the focus a tap leaves behind does not (the tap pins it). */
+function focusTrace(event: FocusEvent, unit: string) {
+  const target = event.target as HTMLElement | null;
+  let visible = true;
+  try {
+    visible = !target || target.matches(':focus-visible');
+  } catch {
+    visible = true;
+  }
+  if (visible) traceToken(unit);
+}
+
+function pinNode(key: string) {
+  pinned.value = null;
+  pinnedNode.value = pinnedNode.value === key ? null : key;
+}
 
 function hoverNode(key: string) {
   hovered.value = key;
@@ -367,6 +428,7 @@ function traceToken(unit: string) {
 }
 
 function pinToken(unit: string) {
+  pinnedNode.value = null;
   pinned.value = pinned.value === unit ? null : unit;
 }
 
@@ -387,8 +449,10 @@ const info = computed(() => {
       to: names(outputs.value) || t('transactions.flow.burned'),
     });
   }
-  const node = hovered.value ? allBoxes.value.find((item) => item.key === hovered.value) : undefined;
-  return node ? nodeLine(node) : t('transactions.flow.hint');
+  const key = hovered.value ?? pinnedNode.value;
+  const node = key ? allBoxes.value.find((item) => item.key === key) : undefined;
+  if (node) return nodeLine(node);
+  return t(props.orientation === 'vertical' ? 'transactions.flow.hintTap' : 'transactions.flow.hint');
 });
 </script>
 
@@ -458,6 +522,10 @@ const info = computed(() => {
 .tx-flow__canvas--dim .tx-flow__box--hi {
   opacity: 1;
   border-color: var(--g-hairline-3);
+}
+
+.tx-flow__box--pinned {
+  border-color: var(--flow-c);
 }
 
 .tx-flow__box--fee,

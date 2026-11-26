@@ -3560,6 +3560,7 @@ export default {
   'transactions.flow.minted': 'Minted',
   'transactions.flow.burned': 'Burned',
   'transactions.flow.hint': 'Hover a box or a token to trace it',
+  'transactions.flow.hintTap': 'Tap or point at a box or a token to trace it',
   'transactions.flow.ariaLabel': 'How value moved in this transaction',
   'transactions.stakeCredential': 'Stake credential',
   'transactions.credentialType': 'Credential type',

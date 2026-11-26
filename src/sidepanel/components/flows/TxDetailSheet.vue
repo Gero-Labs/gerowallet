@@ -71,6 +71,16 @@
         </div>
       </div>
 
+      <!-- Flow: inputs above the transaction, outputs, fee and deposits below -->
+      <TxFlowDiagram
+        v-if="flowModel"
+        class="tx-flow-section"
+        orientation="vertical"
+        :model="flowModel"
+        :token-info="flowTokenInfo"
+        :currency-symbol="currencySymbol"
+      />
+
       <!-- Assets -->
       <div v-if="txAssets.length > 0" class="tx-assets-section">
         <div class="detail-label mb-2">{{ $t('miniGero.tokens') }}</div>
@@ -105,11 +115,18 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import type { SponsoredTx } from '@/chains/midnight/midnightSponsorLinks';
 import BottomSheet from '../BottomSheet.vue';
+import TxFlowDiagram, { type FlowTokenInfo } from '@/shared/components/TxFlowDiagram.vue';
+import { buildTxFlow, type FlowTxRecord } from '@/shared/utils/txFlow';
+import { buildClassifyContext } from '@/modules/dashboard/utils/transactionClassifier';
+import { resolveAsset } from '@/shared/utils/resolver';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
+import { walletStore } from '@/stores/walletStore';
+import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { useChainContext } from '../../composables/useChainContext';
 
-const { themeColors } = useChainContext();
+const { themeColors, isCardano } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 type TxAsset = {
@@ -131,6 +148,8 @@ type TxDetail = {
   // formatAda coerces through Number() either way.
   body?: { fee?: number | string | bigint; certificates?: unknown[] };
   assets?: TxAsset[];
+  isValid?: FlowTxRecord['isValid'];
+  utxo?: FlowTxRecord['utxo'];
 };
 
 // Vue 2.7 compiles type-only defineProps to `{ tx: { type: Object, required: true } }`,
@@ -225,6 +244,41 @@ function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
 }
 
+// ---------------------------------------------------------------------------
+// Flow diagram: Cardano records with both sides (none while pending, none for a
+// failed script transaction, where only the collateral moved)
+// ---------------------------------------------------------------------------
+const ownAddresses = computed(() =>
+  buildClassifyContext(walletStore.loggedWallet, walletStore.keys, walletStore.contacts).walletAddresses
+);
+
+const flowModel = computed(() =>
+  isCardano.value && props.tx && !props.tx.pending
+    ? buildTxFlow({ ...props.tx, body: props.tx.body as FlowTxRecord['body'] }, ownAddresses.value)
+    : null
+);
+
+const currencySymbol = computed(() =>
+  networks.resolveCurrencySymbol(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network)
+);
+
+/** The row's own resolved asset first, then the asset store, then the market's image. */
+const flowTokenInfo = (unit: string): FlowTokenInfo => {
+  const held = props.tx?.assets?.find((asset) => asset.unit === unit);
+  let resolved: { name?: string; img?: string; metadata?: { decimals?: number | string } } | null = null;
+  try {
+    resolved = resolveAsset({ unit, quantity: 0 });
+  } catch {
+    resolved = null;
+  }
+  const decimals = held?.decimals ?? Number(resolved?.metadata?.decimals ?? 0);
+  return {
+    name: held?.name || resolved?.name || filters.truncate(unit),
+    img: getTokenByUnit(unit)?.img || held?.img || resolved?.img,
+    decimals: Number.isFinite(decimals) ? decimals : 0,
+  };
+};
+
 // Chain, network and chosen explorer all come from the logged wallet.
 const { explorerUrl } = useExplorer();
 
@@ -302,6 +356,10 @@ function openExplorer() {
 
 .fee-text {
   color: var(--g-error);
+}
+
+.tx-flow-section {
+  margin-top: 16px;
 }
 
 .tx-assets-section {

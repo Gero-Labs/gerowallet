@@ -55,7 +55,7 @@ const model = (overrides: Partial<TxFlowModel> = {}): TxFlowModel => ({
   ...overrides,
 });
 
-const mountDiagram = async (props: Partial<{ model: TxFlowModel }> = {}) => {
+const mountDiagram = async (props: Partial<{ model: TxFlowModel; orientation: 'horizontal' | 'vertical' }> = {}) => {
   const wrapper = mount(TxFlowDiagram, {
     props: {
       model: model(),
@@ -97,7 +97,7 @@ describe('TxFlowDiagram', () => {
   it('traces a token to every box that holds it', async () => {
     const wrapper = await mountDiagram();
     try {
-      await wrapper.find('.tx-flow__chip[data-chip]').trigger('mouseenter');
+      await wrapper.find('.tx-flow__chip[data-chip]').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       const lit = wrapper.findAll('.tx-flow__box--hi');
       expect(lit).toHaveLength(2);
@@ -171,5 +171,64 @@ describe('TxFlowDiagram', () => {
       narrow.unmount();
       wide.unmount();
     }
+  });
+
+  it('pins a tapped box, which a second tap clears; a touch pointer does not hover', async () => {
+    const wrapper = await mountDiagram();
+    try {
+      const mine = () => wrapper.findAll('.tx-flow__box').find((box) => box.classes().includes('tx-flow__box--own'))!;
+      await mine().trigger('pointerenter', { pointerType: 'touch' });
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(0);
+
+      await mine().trigger('click');
+      expect(mine().classes()).toEqual(expect.arrayContaining(['tx-flow__box--hi', 'tx-flow__box--pinned']));
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(1);
+      expect(wrapper.find('.tx-flow__band--hi').exists()).toBe(true);
+      expect(wrapper.find('.tx-flow__info').text()).toContain('governance.you');
+
+      await mine().trigger('click');
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(0);
+      expect(wrapper.find('.tx-flow__info').text()).toBe('transactions.flow.hint');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('a tapped chip pins its token in place of a pinned box', async () => {
+    const wrapper = await mountDiagram();
+    try {
+      await wrapper.findAll('.tx-flow__box').find((box) => box.classes().includes('tx-flow__box--own'))!.trigger('click');
+      await wrapper.find('.tx-flow__chip[data-chip]').trigger('click');
+      expect(wrapper.findAll('.tx-flow__box--pinned')).toHaveLength(0);
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(2);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  describe('vertical', () => {
+    it('stacks every box right of the band gutter, with a horizontal bar', async () => {
+      canvasWidth = 340;
+      const wrapper = await mountDiagram({ orientation: 'vertical' });
+      canvasWidth = 600;
+      try {
+        expect(wrapper.find('.tx-flow').classes()).toEqual(expect.arrayContaining(['tx-flow--vertical']));
+        expect(wrapper.find('.tx-flow').classes()).not.toContain('tx-flow--compact');
+        const boxes = wrapper.findAll('.tx-flow__box');
+        const lefts = new Set(boxes.map((box) => /left: ([\d.]+)px/.exec(box.attributes('style') ?? '')?.[1]));
+        expect(lefts.size).toBe(1);
+        expect(wrapper.findAll('.tx-flow__band')).toHaveLength(boxes.length);
+        const bar = wrapper.find('.tx-flow__bar');
+        expect(Number(bar.attributes('width'))).toBe(340);
+        const core = wrapper.find('.tx-flow__bar-core');
+        expect(Number(core.attributes('width'))).toBeGreaterThan(Number(core.attributes('height')));
+        expect(wrapper.find('.tx-flow__info').text()).toBe('transactions.flow.hintTap');
+
+        await wrapper.find('button.tx-flow__box--more').trigger('click');
+        expect(wrapper.findAll('.tx-flow__box')).toHaveLength(model().inputs.length + model().outputs.length);
+      } finally {
+        wrapper.unmount();
+      }
+    });
   });
 });

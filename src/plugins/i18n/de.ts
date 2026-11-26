@@ -4079,6 +4079,7 @@ export default {
   'transactions.flow.minted': 'Geprägt',
   'transactions.flow.burned': 'Verbrannt',
   'transactions.flow.hint': 'Fahren Sie über ein Feld oder einen Token, um ihn zu verfolgen',
+  'transactions.flow.hintTap': 'Tippen oder zeigen Sie auf ein Feld oder einen Token, um ihn zu verfolgen',
   'transactions.flow.ariaLabel': 'Wie sich der Wert in dieser Transaktion bewegt hat',
   'transactions.stakeCredential': 'Stake-Credential',
   'transactions.credentialType': 'Credential-Typ',

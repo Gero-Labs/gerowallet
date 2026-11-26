@@ -3491,6 +3491,7 @@ export default {
   'transactions.flow.minted': 'Acuñado',
   'transactions.flow.burned': 'Quemado',
   'transactions.flow.hint': 'Pasa el cursor sobre un recuadro o un token para seguirlo',
+  'transactions.flow.hintTap': 'Toca o señala un recuadro o un token para seguirlo',
   'transactions.flow.ariaLabel': 'Cómo se movió el valor en esta transacción',
   'transactions.stakeCredential': 'Credencial de staking',
   'transactions.credentialType': 'Tipo de credencial',
