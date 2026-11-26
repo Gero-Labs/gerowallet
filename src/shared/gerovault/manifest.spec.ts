@@ -75,12 +75,12 @@ import {
  *   1795651260; the removal digest it signs.
  */
 const VECTORS = {
-  standard: { hash: '52a65677b6a1fb5d6c69b8b3e6fedc383bebf14e1d4f5b6f11e0865ac8696097', bytes: '2826' },
+  standard: { hash: 'ba3f7585873b7c8c315b16e54d336b945764c63e7530227d22e876421910ce66', bytes: '2828' },
   backup: { hash: 'd9ec7a10ca2e45b978582f9a051630b47aa7718ee437899edf13fa8249b91f7e' },
   external: { hash: '58e36cd2ca0a1df4e25375509441cbd4de23147857b95fb9c2b018f1b7bfcfbb', importDigest: 'e98294d111998ed9ce0bec88173c6d97a0a698d9cbff435fe9b59a3020a836d5' },
   bindingDigest: 'f09eae9d91d7b990115437ed3413ef2a6c1f65894236914ef71c4170917faef5',
   bindingDeviceDigest: '9ce4156618b7d473f1c2dd6465744d978e57e0a2e779a904d62bee031b66e750',
-  removal: { digest: '97c9561f63744a1f97afc5481f220dbfc0ee0da7df3ea02ca101ffc9a66ce7c6', hash: 'be5149fa70fa2d40506166ed914259e5b589c0dcaad38529c93f40337ffa2b17' },
+  removal: { digest: '97c9561f63744a1f97afc5481f220dbfc0ee0da7df3ea02ca101ffc9a66ce7c6', hash: 'b2e8ba2b4e5a5bbf7d4b680d7bc69525493e942833b47c43bfed5f208f3dc1c6' },
 };
 
 const REVISED_AT = VECTOR_REVISED_AT;
@@ -626,7 +626,7 @@ describe('revisions', () => {
     const next = (roles: Partial<VaultManifest['roles']>, from: VaultManifest = base) =>
       ({ ...from, version: from.version + 1, prevManifestHash: manifestHash(from), roles: { ...from.roles, ...roles } }) as VaultManifest;
     // Owner 1's binding attested again, by the other method: the same body, another authorisation.
-    const reattested = { ...laptop, attestation: attestationBy(people[0], { kind: 'binding', digest: bindingDigest(laptop) }, 'expiredTx') };
+    const reattested = { ...laptop, attestation: attestationBy(people[0], { kind: 'binding', network: 'preprod', digest: bindingDigest(laptop) }, 'expiredTx') };
     expect(checkManifestRevision(base, next({ owners: base.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, devices: [reattested] } : e)) })))
       .toEqual({ ok: false, code: 'AUTHORISATION_CHANGED' });
     // The viewer admitted again by owner 2's device while owner 1's device, its admitter, is still bound.

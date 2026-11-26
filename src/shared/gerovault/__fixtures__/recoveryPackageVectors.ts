@@ -104,14 +104,14 @@ export const ADDRESS_BOOK_ADDRESS = Cardano.EnterpriseAddress.fromCredentials(Ca
 export async function vectorEndorsement(): Promise<{ endorsement: ExternalEndorsement; externalAttestation: OwnerAttestation }> {
   const [endorser, external] = await testParticipants();
   const digest = '11'.repeat(32);
-  const externalAttestation = attestationBy(external, { kind: 'verification', digest }, 'expiredTx');
+  const externalAttestation = attestationBy(external, { kind: 'verification', digest, network: 'preprod' }, 'expiredTx');
   const body = {
     verificationDigest: digest,
     externalCredential: external.credential,
     externalAttestationHash: externalAttestationHash(externalAttestation.proof),
     endorserCredential: endorser.credential,
   };
-  const endorsement = { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body) }) };
+  const endorsement = { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body), network: 'preprod' }) };
   return { endorsement, externalAttestation };
 }
 

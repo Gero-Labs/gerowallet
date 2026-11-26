@@ -904,7 +904,7 @@ describe('export: endorsements', () => {
       external: [signedExternal({ vaultId: fx.id, participant: tp[2], importer: tp[0] })],
       revisedAt: VECTOR_REVISED_AT,
     });
-    proof = expiredTxAttestation(tp[2].signer, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest) }).proof;
+    proof = expiredTxAttestation(tp[2].signer, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest), network: latest.network }).proof;
     endorsement = signedEndorsement(latest, tp[1], tp[2].credential, proof);
     const base = await standardContents(people, 0);
     endorsed = {
@@ -926,13 +926,13 @@ describe('export: endorsements', () => {
   it('leaves out and counts an endorsement with an altered proof, and an endorsement of an altered external proof', async () => {
     const digest = externalEndorsementDigest(endorsement);
     const altered = await brokenButStored(endorsement.attestation, async x =>
-      (await verifyAttestation(x, endorsement.endorserCredential, { kind: 'endorsement', digest })).ok === true);
+      (await verifyAttestation(x, endorsement.endorserCredential, { kind: 'endorsement', digest, network: latest.network })).ok === true);
     const one = await exported({ ...endorsed, endorsements: [{ ...endorsement, attestation: altered }] });
     expect(one.skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
     expect(one.pkg).toMatchObject({ endorsements: [], externalAttestations: [] });
     // An altered external proof, endorsed as it is: the pair matches by hash, the proof does not verify.
     const badProof = (await brokenButStored(expired(proof), async x =>
-      (await verifyAttestation(x, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest) })).ok === true)).proof;
+      (await verifyAttestation(x, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest), network: latest.network })).ok === true)).proof;
     const two = await exported({
       ...endorsed,
       endorsements: [signedEndorsement(latest, tp[1], tp[2].credential, badProof), endorsement],
@@ -943,7 +943,7 @@ describe('export: endorsements', () => {
   });
 
   it('leaves out an endorsement attested by another key than its endorser\'s', async () => {
-    const otherKey = { ...endorsement, attestation: attestationBy(tp[3], { kind: 'endorsement', digest: externalEndorsementDigest(endorsement) }) };
+    const otherKey = { ...endorsement, attestation: attestationBy(tp[3], { kind: 'endorsement', digest: externalEndorsementDigest(endorsement), network: latest.network }) };
     const { skipped, pkg } = await exported({ ...endorsed, endorsements: [otherKey] });
     expect(skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
     expect(pkg).toMatchObject({ endorsements: [], externalAttestations: [] });
