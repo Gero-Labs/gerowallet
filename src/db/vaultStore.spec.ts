@@ -151,13 +151,18 @@ describe('vault store', () => {
   it('refuses a bad index, network, origin, label or wallet id', async () => {
     const wallet = walletId();
     for (const overrides of [
-      { ownIndex: -1 }, { ownIndex: 0 }, { ownIndex: 2 ** 31 }, { ownIndex: 1.5 },
+      { ownIndex: -1 }, { ownIndex: 2 ** 31 }, { ownIndex: 1.5 },
       { network: 'testnet' as never }, { origin: 'synced' as never }, { name: 'bad\u0000name' },
     ]) {
       expect(await refusal(vaultStore.addCandidate(wallet, candidate(overrides)))).toBe('INVALID_INPUT');
     }
     expect(await refusal(vaultStore.list(-1))).toBe('INVALID_INPUT');
     expect(await refusal(vaultStore.get(wallet, 'ABC'))).toBe('INVALID_INPUT');
+  });
+
+  it('takes this wallet at index 0, which the dApp signing guard then refuses as well', async () => {
+    const wallet = walletId();
+    expect((await vaultStore.addCandidate(wallet, candidate({ ownIndex: 0 }))).ownIndex).toBe(0);
   });
 
   it('refuses the same vault twice', async () => {
