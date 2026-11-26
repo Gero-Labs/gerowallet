@@ -23,9 +23,13 @@
  *     prevManifestHash  bytes 0 for version 1, else bytes 32: the hash of the previous revision
  *     revisedAt         uint, unix seconds, for display (version and prevManifestHash order revisions)
  *   }
- *   RoleEntry     { credential: bytes 28, vaultKeys: { payment: bytes 32, stake: bytes 32 }, devices: [OwnerDeviceBinding] }
- *                 (a viewer: credential bytes 0, vaultKeys {})
- *   ExternalEntry { credential, vaultKeys, label, role: "owner" | "backupHolder", importerDeviceId: bytes 16, importSig: bytes 64 }
+ *   RoleEntry {
+ *     credential        bytes 28; vaultKeys { payment: bytes 32, stake: bytes 32 }
+ *     devices           [OwnerDeviceBinding]
+ *     removedDevices    [DeviceTombstone], kept in every later revision
+ *   }                   (a viewer: credential bytes 0, vaultKeys {}, removedDevices [])
+ *   ExternalEntry   { credential, vaultKeys, label, role: "owner" | "backupHolder", importSig: attestation }
+ *   DeviceTombstone { deviceId: bytes 16, ed25519Pub: bytes 32, bindingVersion: uint, removal: attestation }
  *   OwnerDeviceBinding {
  *     vaultId, role, credential, vaultKeys   the participant's, as in their entry ({} and bytes 0 for a viewer)
  *     deviceId          bytes 16, sha256(ed25519Pub)[0:16]
@@ -46,13 +50,24 @@
  * - binding digest     "gero-vault/v1|binding|", the binding body: what the attestation signs
  * - device digest      "gero-vault/v1|binding-device|", the binding body: what `deviceSig` signs
  * - viewer admission   "gero-vault/v1|viewer-admission|", the binding digest's 32 bytes
+ * - device removal     "gero-vault/v1|device-removal|", `{ vaultId, deviceId, bindingVersion }`:
+ *                      what a tombstone's `removal` signs
  * - external import    "gero-vault/v1|external-import|", `{ vaultId, credential, vaultKeys, role,
- *                      label, importerDeviceId }`: what `importSig` signs
+ *                      label }`: what `importSig` signs
  *
- * Every field outside the verification set is signed by a bound device: an owner's binding by
- * the owner's vault key, a viewer's binding by an owner device (`admittedBy`), an external entry by
- * the importing owner's device (`importSig`). `importedBy` is not stored: it is the owner whose
- * device made `importSig`, so only an owner can import, and a relay cannot reassign the import.
+ * What the verification ceremony does not compare is covered by signatures of its own. A
+ * participant's binding carries that participant's attestation by their vault payment key; a
+ * viewer's binding carries the admission of an owner device; a removed device leaves a tombstone
+ * attested by its participant's payment key; and an external entry carries `importSig`, an
+ * attestation by the payment key of the owner who imported it. `importedBy` is not stored: it is
+ * the credential of the key that made `importSig`, which must be an owner's (only the owners slot
+ * imports), so a relay cannot reassign an import, and device changes never strand one.
+ *
+ * Removing a device (spec 5.3): its participant's revision drops the binding and adds a
+ * tombstone, which no later revision may drop. A binding of that device id must carry a
+ * `bindingVersion` above every tombstone of it, and needs a new attestation. A viewer admitted by
+ * a removed device keeps its binding, but its admission lapses: it has no standing
+ * (`deviceStanding`) until an owner device admits it again.
  *
  * Threshold, template and backup terms are read from the scripts (`parseVaultScript`) and never
  * stored twice. The participants are exactly the scripts' keys: each owner, backup holder and
@@ -80,6 +95,7 @@ import {
   MAX_ATTESTATION_BYTES,
   OwnerAttestation,
   atLeastP,
+  attestationSigner,
   isCanonicalAttestation,
   isUsableEd25519Key,
   verifyEd25519,
@@ -107,6 +123,7 @@ export const MANIFEST_HASH_TAG = 'gero-vault/v1|manifest|';
 export const BINDING_DIGEST_TAG = 'gero-vault/v1|binding|';
 export const BINDING_DEVICE_TAG = 'gero-vault/v1|binding-device|';
 export const VIEWER_ADMISSION_TAG = 'gero-vault/v1|viewer-admission|';
+export const DEVICE_REMOVAL_TAG = 'gero-vault/v1|device-removal|';
 export const EXTERNAL_IMPORT_TAG = 'gero-vault/v1|external-import|';
 
 /** Network ids as `gero-xdev/v1` writes them. */
@@ -121,6 +138,8 @@ export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_DEVICES_PER_ENTRY = 5;
 export const MAX_VIEWERS = 20;
 export const MAX_BINDINGS = 64;
+/** Tombstones in one manifest, all participants together. PROVISIONAL: the spec sets no bound. */
+export const MAX_REMOVED_DEVICES = 128;
 const MAX_SCRIPT_BYTES = 8192;
 /** Owners, backup holders and external cosigners together: every key of the two scripts. */
 const MAX_SCRIPT_PARTICIPANTS = MAX_OWNERS + MAX_BACKUP_KEYS;
@@ -166,11 +185,23 @@ export interface OwnerDeviceBinding extends DeviceBindingBody {
   readonly admittedBy?: ViewerAdmission;
 }
 
-/** An owner, backup holder, guardian or delegate with a Gero device. */
+/** What is kept of a removed device: enough to refuse it, and its participant's removal attestation. */
+export interface DeviceTombstone {
+  readonly deviceId: string;
+  readonly ed25519Pub: string;
+  /** The `bindingVersion` of the binding removed. */
+  readonly bindingVersion: number;
+  /** By the participant's vault payment key over `deviceRemovalDigest`. */
+  readonly removal: OwnerAttestation;
+}
+
+/** An owner, backup holder, guardian or delegate. */
 export interface ParticipantEntry {
   readonly credential: Ed25519KeyHashHex;
   readonly vaultKeys: VaultPublicKeys;
   readonly devices: readonly OwnerDeviceBinding[];
+  /** Tombstones of the participant's removed devices; empty when none was removed. */
+  readonly removedDevices: readonly DeviceTombstone[];
 }
 
 /** A viewer has no script key, only devices (at least one). */
@@ -184,8 +215,6 @@ export interface ExternalEntryBody {
   readonly vaultKeys: VaultPublicKeys;
   readonly label: string;
   readonly role: ExternalRole;
-  /** The importing owner's device. */
-  readonly importerDeviceId: string;
 }
 
 /**
@@ -194,9 +223,9 @@ export interface ExternalEntryBody {
  * the script branch the keys sit in.
  */
 export interface ExternalEntry extends ExternalEntryBody {
-  /** 64 bytes, lowercase hex: by the importer device's key over `externalImportDigest`. */
-  readonly importSig: string;
-  /** Derived, not stored: the owner whose device is `importerDeviceId`. */
+  /** By the importing owner's vault payment key over `externalImportDigest`. */
+  readonly importSig: OwnerAttestation;
+  /** Derived, not stored: the credential of the key that made `importSig`, an owner's. */
   readonly importedBy?: Ed25519KeyHashHex;
 }
 
@@ -255,6 +284,8 @@ export type ManifestRefusalCode =
   | 'BINDING_MISMATCH'
   | 'DEVICE_ID_MISMATCH'
   | 'ATTESTATION_INVALID'
+  | 'TOMBSTONE_INVALID'
+  | 'REMOVED_DEVICE_BOUND'
   | 'SCRIPT_INVALID'
   | 'VAULT_ID_MISMATCH'
   | 'UNKNOWN_TEMPLATE'
@@ -394,28 +425,33 @@ function checkBindingBody(b: DeviceBindingBody): DeviceBindingBody {
   });
 }
 
+/** An attestation in its stored form (`attestation.ts`), refused with `code`. */
+function checkProof(a: OwnerAttestation | undefined, code: ManifestRefusalCode, what: string): OwnerAttestation {
+  if (!a || (a.method !== ATTESTATION_METHOD.CIP8 && a.method !== ATTESTATION_METHOD.EXPIRED_TX)) {
+    return fault(code, `${what} method`);
+  }
+  if (typeof a.proof !== 'string' || !HEX_BYTES.test(a.proof) || a.proof.length > MAX_ATTESTATION_BYTES * 2) {
+    fault(code, `${what} proof`);
+  }
+  if (!isCanonicalAttestation(a)) fault(code, `${what} is not in the stored form`);
+  return Object.freeze({ method: a.method, proof: a.proof });
+}
+
 function checkAttestation(role: ManifestRole, a: OwnerAttestation | undefined): OwnerAttestation | undefined {
   if (role === 'viewer') {
     if (a !== undefined && a !== null) fault('ATTESTATION_INVALID', 'a viewer binding carries no attestation');
     return undefined;
   }
-  if (!a || (a.method !== ATTESTATION_METHOD.CIP8 && a.method !== ATTESTATION_METHOD.EXPIRED_TX)) {
-    return fault('ATTESTATION_INVALID', 'attestation method');
-  }
-  if (typeof a.proof !== 'string' || !HEX_BYTES.test(a.proof) || a.proof.length > MAX_ATTESTATION_BYTES * 2) {
-    fault('ATTESTATION_INVALID', 'attestation proof');
-  }
-  if (!isCanonicalAttestation(a)) fault('ATTESTATION_INVALID', 'not the canonical stored form');
-  return Object.freeze({ method: a.method, proof: a.proof });
+  return checkProof(a, 'ATTESTATION_INVALID', 'attestation');
 }
 
-function checkAdmission(role: ManifestRole, a: ViewerAdmission | undefined, ownerDevices: ReadonlySet<string>): ViewerAdmission | undefined {
+function checkAdmission(role: ManifestRole, a: ViewerAdmission | undefined, admitters: ReadonlySet<string>): ViewerAdmission | undefined {
   if (role !== 'viewer') {
     if (a !== undefined && a !== null) fault('ADMISSION_INVALID', 'only a viewer binding is admitted');
     return undefined;
   }
   if (!a || !isHex(a.deviceId, 16) || !isHex(a.signature, 64)) return fault('ADMISSION_INVALID', 'a viewer binding carries admittedBy');
-  if (!ownerDevices.has(a.deviceId)) fault('ADMISSION_INVALID', 'admittedBy names an owner device of the manifest');
+  if (!admitters.has(a.deviceId)) fault('ADMISSION_INVALID', 'admittedBy names an owner device of the manifest');
   return Object.freeze({ deviceId: a.deviceId, signature: a.signature });
 }
 
@@ -430,7 +466,7 @@ function checkDevices(
   list: readonly OwnerDeviceBinding[],
   ctx: BindingContext,
   min: number,
-  ownerDevices: ReadonlySet<string>,
+  admitters: ReadonlySet<string>,
 ): readonly OwnerDeviceBinding[] {
   if (!Array.isArray(list)) return fault('SCHEMA_INVALID', 'devices');
   if (list.length > MAX_DEVICES_PER_ENTRY) fault('TOO_MANY_ENTRIES', 'devices of one participant');
@@ -443,10 +479,27 @@ function checkDevices(
     }
     if (!isHex(b.deviceSig, 64)) fault('FIELD_INVALID', 'deviceSig');
     const attestation = checkAttestation(body.role, b.attestation);
-    const admittedBy = checkAdmission(body.role, b.admittedBy, ownerDevices);
+    const admittedBy = checkAdmission(body.role, b.admittedBy, admitters);
     return Object.freeze({ ...body, deviceSig: b.deviceSig, ...(attestation ? { attestation } : {}), ...(admittedBy ? { admittedBy } : {}) });
   });
   return Object.freeze(out.sort((a, b) => byText(a.deviceId, b.deviceId)));
+}
+
+const byDeviceThenVersion = (a: DeviceTombstone, b: DeviceTombstone) => byText(a.deviceId, b.deviceId) || a.bindingVersion - b.bindingVersion;
+
+function checkTombstones(list: readonly DeviceTombstone[] | undefined): readonly DeviceTombstone[] {
+  const items = list ?? [];
+  if (!Array.isArray(items)) return fault('SCHEMA_INVALID', 'removedDevices');
+  if (items.length > MAX_REMOVED_DEVICES) fault('TOO_MANY_ENTRIES', 'removed devices');
+  const out = items.map(t => {
+    if (!t || typeof t !== 'object') return fault('SCHEMA_INVALID', 'tombstone');
+    if (!isHex(t.ed25519Pub, 32) || !isUsableEd25519Key(t.ed25519Pub)) fault('DEVICE_KEY_INVALID', 'tombstone');
+    if (t.deviceId !== deviceIdHex(t.ed25519Pub)) fault('DEVICE_ID_MISMATCH', 'tombstone');
+    if (!isInt(t.bindingVersion, 1, MAX_VERSION)) fault('FIELD_INVALID', 'tombstone bindingVersion');
+    const removal = checkProof(t.removal, 'TOMBSTONE_INVALID', 'removal');
+    return Object.freeze({ deviceId: t.deviceId, ed25519Pub: t.ed25519Pub, bindingVersion: t.bindingVersion, removal });
+  });
+  return Object.freeze(out.sort(byDeviceThenVersion));
 }
 
 function checkParticipant(e: ParticipantEntry, role: ManifestRole, vaultId: string): ParticipantEntry {
@@ -454,14 +507,20 @@ function checkParticipant(e: ParticipantEntry, role: ManifestRole, vaultId: stri
   const vaultKeys = checkVaultKeys(e.vaultKeys, 'vaultKeys');
   const credential = keyHashOf(vaultKeys.payment);
   if (e.credential !== credential) fault('CREDENTIAL_MISMATCH');
-  return Object.freeze({ credential, vaultKeys, devices: checkDevices(e.devices, { vaultId, role, credential, vaultKeys }, 0, new Set()) });
+  return Object.freeze({
+    credential,
+    vaultKeys,
+    devices: checkDevices(e.devices, { vaultId, role, credential, vaultKeys }, 0, new Set()),
+    removedDevices: checkTombstones(e.removedDevices),
+  });
 }
 
-function checkViewer(e: ViewerEntry, vaultId: string, ownerDevices: ReadonlySet<string>): ViewerEntry {
+function checkViewer(e: ViewerEntry, vaultId: string, admitters: ReadonlySet<string>): ViewerEntry {
   if (!e || typeof e !== 'object') return fault('SCHEMA_INVALID', 'viewer');
-  const keyed = e as { credential?: unknown; vaultKeys?: unknown };
+  const keyed = e as { credential?: unknown; vaultKeys?: unknown; removedDevices?: readonly unknown[] };
   if (keyed.credential || keyed.vaultKeys) fault('FIELD_INVALID', 'a viewer has no script key');
-  return Object.freeze({ devices: checkDevices(e.devices, { vaultId, role: 'viewer' }, 1, ownerDevices) });
+  if (keyed.removedDevices?.length) fault('FIELD_INVALID', 'a viewer device is removed by the owners, with no tombstone');
+  return Object.freeze({ devices: checkDevices(e.devices, { vaultId, role: 'viewer' }, 1, admitters) });
 }
 
 function checkExternalBody(e: ExternalEntryBody): ExternalEntryBody {
@@ -470,16 +529,16 @@ function checkExternalBody(e: ExternalEntryBody): ExternalEntryBody {
   const credential = keyHashOf(vaultKeys.payment);
   if (e.credential !== credential) fault('CREDENTIAL_MISMATCH', 'external');
   if (e.role !== 'owner' && e.role !== 'backupHolder') fault('FIELD_INVALID', 'external role');
-  if (!isHex(e.importerDeviceId, 16)) fault('IMPORTER_INVALID', 'importerDeviceId');
-  return Object.freeze({ credential, vaultKeys, label: checkLabel(e.label, 'An external label'), role: e.role, importerDeviceId: e.importerDeviceId });
+  return Object.freeze({ credential, vaultKeys, label: checkLabel(e.label, 'An external label'), role: e.role });
 }
 
-function checkExternal(e: ExternalEntry, ownerOfDevice: ReadonlyMap<string, Ed25519KeyHashHex>): ExternalEntry {
+function checkExternal(e: ExternalEntry, owners: ReadonlySet<string>): ExternalEntry {
   const body = checkExternalBody(e);
-  // Only an owner imports: the signing device must be an owner's.
-  const importedBy = ownerOfDevice.get(body.importerDeviceId) ?? fault('IMPORTER_INVALID', 'importerDeviceId names an owner device of the manifest');
-  if (!isHex(e.importSig, 64)) fault('IMPORTER_INVALID', 'an external entry carries importSig');
-  return Object.freeze({ ...body, importSig: e.importSig, importedBy });
+  const importSig = checkProof(e.importSig, 'IMPORTER_INVALID', 'importSig');
+  // Only an owner imports: the key that made importSig must be an owner's.
+  const importedBy = attestationSigner(importSig);
+  if (!importedBy || !owners.has(importedBy)) fault('IMPORTER_INVALID', 'importSig is by an owner\'s vault payment key');
+  return Object.freeze({ ...body, importSig, importedBy: Ed25519KeyHashHex(importedBy) });
 }
 
 const SLOTS = ['owners', 'backupHolders', 'guardians', 'delegates', 'viewers', 'external'] as const;
@@ -583,11 +642,15 @@ function normalize(m: VaultManifest): VaultManifest {
   const byCredential = <T extends { credential: string }>(a: T, b: T) => byText(a.credential, b.credential);
   const owners = r.owners.map(e => checkParticipant(e, 'owner', m.vaultId)).sort(byCredential);
   const backupHolders = r.backupHolders.map(e => checkParticipant(e, 'backupHolder', m.vaultId)).sort(byCredential);
-  const ownerOfDevice = new Map<string, Ed25519KeyHashHex>(owners.flatMap(e => e.devices.map(d => [d.deviceId, e.credential] as const)));
-  const ownerDevices = new Set(ownerOfDevice.keys());
-  const viewers = r.viewers.map(e => checkViewer(e, m.vaultId, ownerDevices))
+  // A viewer is admitted by an owner device: one bound now, or one removed since (the admission lapsed).
+  const liveOwnerDevices = new Set(owners.flatMap(e => e.devices.map(d => d.deviceId)));
+  const admitters = new Set([...liveOwnerDevices, ...owners.flatMap(e => e.removedDevices.map(t => t.deviceId))]);
+  const viewers = r.viewers.map(e => checkViewer(e, m.vaultId, admitters))
     .sort((a, b) => byText(a.devices[0].deviceId, b.devices[0].deviceId));
-  const external = r.external.map(e => checkExternal(e, ownerOfDevice)).sort(byCredential);
+  if (m.version === 1 && viewers.some(v => v.devices.some(d => !liveOwnerDevices.has(d.admittedBy.deviceId)))) {
+    fault('ADMISSION_INVALID', 'a first manifest has no lapsed admission');
+  }
+  const external = r.external.map(e => checkExternal(e, new Set(owners.map(o => o.credential)))).sort(byCredential);
 
   if (!unique([...owners, ...backupHolders, ...external].map(e => e.credential))) fault('DUPLICATE_PARTICIPANT', 'credential');
   if (!unique([...owners, ...backupHolders, ...external].flatMap(e => [e.vaultKeys.payment, e.vaultKeys.stake]))) {
@@ -598,6 +661,13 @@ function normalize(m: VaultManifest): VaultManifest {
   if (!unique(bindings.map(b => b.deviceId)) || !unique(bindings.flatMap(b => [b.ed25519Pub, b.x25519Pub]))) {
     fault('DUPLICATE_DEVICE');
   }
+  const tombstones = [...owners, ...backupHolders].flatMap(e => e.removedDevices);
+  if (tombstones.length > MAX_REMOVED_DEVICES) fault('TOO_MANY_ENTRIES', 'removed devices');
+  if (!unique(tombstones.map(t => `${t.deviceId}:${t.bindingVersion}`))) fault('DUPLICATE_DEVICE', 'tombstone');
+  // A removed binding version never returns: a device bound again carries a higher one.
+  const removedUpTo = new Map<string, number>();
+  for (const t of tombstones) removedUpTo.set(t.deviceId, Math.max(removedUpTo.get(t.deviceId) ?? 0, t.bindingVersion));
+  if (bindings.some(b => (removedUpTo.get(b.deviceId) ?? 0) >= b.bindingVersion)) fault('REMOVED_DEVICE_BOUND');
 
   const placed: Placed[] = [
     ...owners.map(e => ({ role: 'owner' as const, payment: e.credential, stake: keyHashOf(e.vaultKeys.stake) })),
@@ -652,6 +722,8 @@ function keysWritable(k: VaultPublicKeys | undefined): CborWritableMap {
   return k ? { payment: bytes(k.payment), stake: bytes(k.stake) } : {};
 }
 
+const proofWritable = (a: OwnerAttestation | undefined): CborWritableMap => (a ? { method: a.method, proof: bytes(a.proof) } : {});
+
 function bindingBodyWritable(d: DeviceBindingBody): CborWritableMap {
   return {
     vaultId: bytes(d.vaultId),
@@ -670,19 +742,17 @@ function bindingWritable(d: OwnerDeviceBinding): CborWritableMap {
   return {
     ...bindingBodyWritable(d),
     deviceSig: bytes(d.deviceSig),
-    attestation: d.attestation ? { method: d.attestation.method, proof: bytes(d.attestation.proof) } : {},
+    attestation: proofWritable(d.attestation),
     admittedBy: d.admittedBy ? { deviceId: bytes(d.admittedBy.deviceId), signature: bytes(d.admittedBy.signature) } : {},
   };
 }
 
+function tombstoneWritable(t: DeviceTombstone): CborWritableMap {
+  return { deviceId: bytes(t.deviceId), ed25519Pub: bytes(t.ed25519Pub), bindingVersion: t.bindingVersion, removal: proofWritable(t.removal) };
+}
+
 function externalBodyWritable(e: ExternalEntryBody): CborWritableMap {
-  return {
-    credential: bytes(e.credential),
-    vaultKeys: keysWritable(e.vaultKeys),
-    label: e.label,
-    role: e.role,
-    importerDeviceId: bytes(e.importerDeviceId),
-  };
+  return { credential: bytes(e.credential), vaultKeys: keysWritable(e.vaultKeys), label: e.label, role: e.role };
 }
 
 function manifestWritable(m: VaultManifest): CborWritableMap {
@@ -690,6 +760,7 @@ function manifestWritable(m: VaultManifest): CborWritableMap {
     credential: bytes(e.credential),
     vaultKeys: keysWritable(e.vaultKeys),
     devices: e.devices.map(bindingWritable),
+    removedDevices: e.removedDevices.map(tombstoneWritable),
   });
   return {
     protocol: m.protocol,
@@ -703,8 +774,8 @@ function manifestWritable(m: VaultManifest): CborWritableMap {
       backupHolders: m.roles.backupHolders.map(participant),
       guardians: m.roles.guardians.map(participant),
       delegates: m.roles.delegates.map(participant),
-      viewers: m.roles.viewers.map(e => ({ credential: EMPTY, vaultKeys: {}, devices: e.devices.map(bindingWritable) })),
-      external: m.roles.external.map(e => ({ ...externalBodyWritable(e), importSig: bytes(e.importSig) })),
+      viewers: m.roles.viewers.map(e => ({ credential: EMPTY, vaultKeys: {}, devices: e.devices.map(bindingWritable), removedDevices: [] })),
+      external: m.roles.external.map(e => ({ ...externalBodyWritable(e), importSig: proofWritable(e.importSig) })),
     },
     viewersSeeProposalContents: m.viewersSeeProposalContents,
     policiesDisplay: {},
@@ -768,7 +839,7 @@ export function scriptsHaveCanonicalKeyOrder(scripts: Pick<VaultScripts, 'paymen
 }
 
 // ---------------------------------------------------------------------------------------------
-// Device bindings, viewer admission and external import
+// Device bindings, removals, viewer admission and external import
 
 export interface DeviceBindingInput {
   readonly vaultId: string;
@@ -845,13 +916,40 @@ export async function verifyDeviceSignature(binding: OwnerDeviceBinding): Promis
   }
 }
 
+/**
+ * What a participant's vault payment key signs to remove one of their devices (spec 5.3):
+ * `blake2b-256( "gero-vault/v1|device-removal|" || CBOR of { vaultId, deviceId, bindingVersion } )`,
+ * the binding version of the binding removed. No revision is named, so the removal stays valid
+ * when another revision is accepted first. Throws `GeroVaultError('INVALID_DEVICE_BINDING')`.
+ */
+export function deviceRemovalDigest(vaultId: string, removed: { readonly deviceId: string; readonly bindingVersion: number }): string {
+  if (!isHex(vaultId, 32) || !isHex(removed?.deviceId, 16) || !isInt(removed?.bindingVersion, 1, MAX_VERSION)) {
+    throw new GeroVaultError('INVALID_DEVICE_BINDING', 'A removal names a vault id, a device id and a binding version');
+  }
+  return taggedHash(DEVICE_REMOVAL_TAG, encodeCanonicalCbor({
+    vaultId: bytes(vaultId),
+    deviceId: bytes(removed.deviceId),
+    bindingVersion: removed.bindingVersion,
+  }));
+}
+
+/** The tombstone a removal leaves: the binding's device id, key and version, and the removal attestation. */
+export function deviceTombstone(binding: DeviceBindingBody, removal: OwnerAttestation): DeviceTombstone {
+  try {
+    const body = checkBindingBody(binding);
+    const [tombstone] = checkTombstones([{ deviceId: body.deviceId, ed25519Pub: body.ed25519Pub, bindingVersion: body.bindingVersion, removal }]);
+    return tombstone;
+  } catch (e) {
+    throw asGeroVaultError(e, 'INVALID_DEVICE_BINDING');
+  }
+}
+
 /** An external entry before its import signature; the credential is computed. */
 export interface ExternalEntryInput {
   readonly vaultKeys: VaultPublicKeys;
   /** Written with the write rule of `labels.ts`. */
   readonly label: string;
   readonly role: ExternalRole;
-  readonly importerDeviceId: string;
 }
 
 /** Builds an external entry body. Throws `GeroVaultError('INVALID_MANIFEST')`. */
@@ -863,7 +961,6 @@ export function externalEntry(input: ExternalEntryInput): ExternalEntryBody {
       vaultKeys: keys,
       label: writtenLabel(input?.label, 'An external label'),
       role: input?.role,
-      importerDeviceId: input?.importerDeviceId,
     });
   } catch (e) {
     throw asGeroVaultError(e, 'INVALID_MANIFEST');
@@ -871,8 +968,8 @@ export function externalEntry(input: ExternalEntryInput): ExternalEntryBody {
 }
 
 /**
- * What the importing owner's device signs (`importSig`):
- * `blake2b-256( "gero-vault/v1|external-import|" || CBOR of { vaultId, credential, vaultKeys, role, label, importerDeviceId } )`.
+ * What the importing owner's vault payment key attests (`importSig`):
+ * `blake2b-256( "gero-vault/v1|external-import|" || CBOR of { vaultId, credential, vaultKeys, role, label } )`.
  */
 export function externalImportDigest(vaultId: string, entry: ExternalEntryBody): string {
   let body: ExternalEntryBody;
@@ -883,6 +980,54 @@ export function externalImportDigest(vaultId: string, entry: ExternalEntryBody):
     throw asGeroVaultError(e, 'INVALID_MANIFEST');
   }
   return taggedHash(EXTERNAL_IMPORT_TAG, encodeCanonicalCbor({ vaultId: bytes(vaultId), ...externalBodyWritable(body) }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Standing of a device
+
+function allBindings(m: VaultManifest): OwnerDeviceBinding[] {
+  return [...m.roles.owners, ...m.roles.backupHolders, ...m.roles.viewers].flatMap(e => e.devices);
+}
+
+function lapsedIn(m: VaultManifest): Set<string> {
+  const live = new Set(m.roles.owners.flatMap(e => e.devices.map(d => d.deviceId)));
+  return new Set(m.roles.viewers.flatMap(v => v.devices).filter(d => !live.has(d.admittedBy.deviceId)).map(d => d.deviceId));
+}
+
+/** The viewer devices whose admission lapsed: the owner device that admitted them was removed. Throws for an invalid manifest. */
+export function lapsedAdmissions(manifest: VaultManifest): readonly string[] {
+  return Object.freeze([...lapsedIn(normalizeOrThrow(manifest))].sort());
+}
+
+export type DeviceStanding =
+  | { readonly status: 'bound'; readonly binding: OwnerDeviceBinding }
+  | { readonly status: 'lapsed'; readonly binding: OwnerDeviceBinding }
+  | { readonly status: 'removed' }
+  | { readonly status: 'unknown' };
+
+/**
+ * What a device key is to a manifest this device accepted (spec 5.3). A client takes frames only
+ * from a `bound` device. A `removed` device (a tombstone, not bound again), a viewer whose
+ * admission `lapsed` and an `unknown` key are refused. Throws for an invalid manifest.
+ */
+export function deviceStanding(manifest: VaultManifest, ed25519Pub: string): DeviceStanding {
+  const m = normalizeOrThrow(manifest);
+  if (!isHex(ed25519Pub, 32)) return Object.freeze({ status: 'unknown' });
+  const binding = allBindings(m).find(b => b.ed25519Pub === ed25519Pub);
+  if (binding) return Object.freeze({ status: lapsedIn(m).has(binding.deviceId) ? 'lapsed' : 'bound', binding });
+  const id = deviceIdHex(ed25519Pub);
+  const removed = [...m.roles.owners, ...m.roles.backupHolders].some(e => e.removedDevices.some(t => t.deviceId === id));
+  return Object.freeze({ status: removed ? 'removed' : 'unknown' });
+}
+
+/**
+ * The devices that receive content-key wraps: every bound device of an owner or a backup holder.
+ * A removed device is never among them; phase 1 viewers get chain data only and no content keys.
+ * Throws for an invalid manifest.
+ */
+export function keyWrapRecipients(manifest: VaultManifest): readonly OwnerDeviceBinding[] {
+  const m = normalizeOrThrow(manifest);
+  return Object.freeze([...m.roles.owners, ...m.roles.backupHolders].flatMap(e => e.devices));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -923,7 +1068,7 @@ export function newManifest(input: NewManifestInput): VaultManifest {
     throw new GeroVaultError('INVALID_MANIFEST', 'NON_CANONICAL_KEY_ORDER: the scripts list keys in another order than this wallet writes');
   }
   const credentialOf = (k: VaultPublicKeys) => (isHex(k?.payment, 32) ? keyHashOf(k.payment) : undefined);
-  const entry = (p: ManifestParticipantInput) => ({ credential: credentialOf(p?.vaultKeys), vaultKeys: p?.vaultKeys, devices: p?.devices ?? [] });
+  const entry = (p: ManifestParticipantInput) => ({ credential: credentialOf(p?.vaultKeys), vaultKeys: p?.vaultKeys, devices: p?.devices ?? [], removedDevices: [] });
   return normalizeOrThrow({
     protocol: MANIFEST_PROTOCOL,
     schema: MANIFEST_SCHEMA,
@@ -952,22 +1097,86 @@ export type ManifestRevisionRefusal =
   | 'VERSION_NOT_NEXT'
   | 'PREV_HASH_MISMATCH'
   | 'PARTICIPANTS_CHANGED'
-  | 'TIME_BACKWARDS';
+  | 'IMPORTER_CHANGED'
+  | 'TIME_BACKWARDS'
+  | 'TOMBSTONE_DROPPED'
+  | 'REMOVAL_UNATTESTED'
+  | 'TOMBSTONE_INVALID'
+  | 'ADMITTED_BY_REMOVED_DEVICE'
+  | 'AUTHORISATION_CHANGED';
 
 export type ManifestRevisionCheck = { readonly ok: true } | { readonly ok: false; readonly code: ManifestRevisionRefusal };
 
 function scriptParticipants(m: VaultManifest): string {
   const keys = (list: readonly ParticipantEntry[]) => list.map(e => `${e.credential}:${e.vaultKeys.payment}:${e.vaultKeys.stake}`);
-  const external = m.roles.external.map(e => `${e.credential}:${e.vaultKeys.payment}:${e.vaultKeys.stake}:${e.role}:${e.importedBy}`);
+  const external = m.roles.external.map(e => `${e.credential}:${e.vaultKeys.payment}:${e.vaultKeys.stake}:${e.role}`);
   return JSON.stringify([keys(m.roles.owners), keys(m.roles.backupHolders), external]);
 }
 
+const tombstoneKey = (t: DeviceTombstone) => JSON.stringify([t.deviceId, t.ed25519Pub, t.bindingVersion, t.removal.method, t.removal.proof]);
+const authorisationOf = (d: OwnerDeviceBinding) =>
+  JSON.stringify([d.deviceSig, d.attestation?.method, d.attestation?.proof, d.admittedBy?.deviceId, d.admittedBy?.signature]);
+const externalBodyKey = (e: ExternalEntryBody) => JSON.stringify([e.credential, e.vaultKeys.payment, e.vaultKeys.stake, e.role, e.label]);
+
+/** Removals and tombstones between two revisions with the same participants. */
+function removalRefusal(a: VaultManifest, b: VaultManifest): ManifestRevisionRefusal | undefined {
+  for (const slot of ['owners', 'backupHolders'] as const) {
+    for (const before of a.roles[slot]) {
+      const after = b.roles[slot].find(e => e.credential === before.credential);
+      const kept = new Set(after.removedDevices.map(tombstoneKey));
+      if (before.removedDevices.some(t => !kept.has(tombstoneKey(t)))) return 'TOMBSTONE_DROPPED';
+      const old = new Set(before.removedDevices.map(tombstoneKey));
+      const added = after.removedDevices.filter(t => !old.has(tombstoneKey(t)));
+      const removed = before.devices.filter(d => !after.devices.some(x => x.deviceId === d.deviceId));
+      if (removed.some(d => !added.some(t => t.deviceId === d.deviceId && t.bindingVersion === d.bindingVersion))) return 'REMOVAL_UNATTESTED';
+      if (added.some(t => !removed.some(d => d.deviceId === t.deviceId && d.bindingVersion === t.bindingVersion))) return 'TOMBSTONE_INVALID';
+    }
+  }
+  return undefined;
+}
+
+/** Authorisations of unchanged bodies, carried forward from `a` to `b`. */
+function authorisationRefusal(a: VaultManifest, b: VaultManifest): ManifestRevisionRefusal | undefined {
+  const live = new Set(b.roles.owners.flatMap(e => e.devices.map(d => d.deviceId)));
+  const before = new Map(allBindings(a).map(d => [d.deviceId, d]));
+  for (const d of allBindings(b)) {
+    const p = before.get(d.deviceId);
+    const unchangedBody = p !== undefined && bindingDigest(p) === bindingDigest(d);
+    // A removed device admits nothing new: a lapsed admission is only ever carried forward.
+    if (d.role === 'viewer' && !live.has(d.admittedBy.deviceId) && !(unchangedBody && authorisationOf(p) === authorisationOf(d))) {
+      return 'ADMITTED_BY_REMOVED_DEVICE';
+    }
+    if (!unchangedBody || authorisationOf(p) === authorisationOf(d)) continue;
+    // The one exception: a viewer whose admission lapsed, admitted again by a bound owner device.
+    const readmitted = d.role === 'viewer' && d.deviceSig === p.deviceSig && !live.has(p.admittedBy.deviceId);
+    if (!readmitted) return 'AUTHORISATION_CHANGED';
+  }
+  const owners = new Set<string>(b.roles.owners.map(e => e.credential));
+  for (const e of b.roles.external) {
+    const p = a.roles.external.find(x => x.credential === e.credential);
+    if (!p || externalBodyKey(p) !== externalBodyKey(e)) continue;
+    if (p.importSig.method === e.importSig.method && p.importSig.proof === e.importSig.proof) continue;
+    // A remaining owner imports again when the importer has left the owners slot.
+    if (!owners.has(p.importedBy)) continue;
+    return 'AUTHORISATION_CHANGED';
+  }
+  return undefined;
+}
+
 /**
- * Whether `next` is the next revision of `prev` (spec 5.3): the same vault and scripts, `version`
- * one higher, `prevManifestHash` the hash of `prev`, the same script participants with the same
- * vault keys and importers (a phase 1 vault's keys never change; new owners make a new vault), and
- * `revisedAt` not earlier. Devices, viewers and labels may change; which changes can be accepted
- * is `checkManifestBeforeAck`. Never throws.
+ * Whether `next` is the next revision of `prev` (spec 5.3). Never throws. It must have:
+ * - the same vault and scripts, `version` one higher, `prevManifestHash` the hash of `prev`, and
+ *   `revisedAt` not earlier;
+ * - the same script participants with the same vault keys (a phase 1 vault's keys never change;
+ *   new owners make a new vault), and the same importer for each external cosigner unless that
+ *   importer has left the owners slot;
+ * - every tombstone of `prev`, and for each binding it removes from a participant, a new tombstone
+ *   of that participant with the same device id and binding version (and no other new one);
+ * - every authorisation (`deviceSig`, attestation, `admittedBy`, `importSig`) of a body it does
+ *   not change carried forward byte for byte, so a relay holding two valid authorisations of one
+ *   body cannot choose between them. A viewer whose admission lapsed may be admitted again by a
+ *   bound owner device; a lapsed admission is otherwise only carried forward.
+ * Which of the changes are authorised is `checkManifestBeforeAck`.
  */
 export function checkManifestRevision(prev: VaultManifest, next: VaultManifest): ManifestRevisionCheck {
   let a: VaultManifest;
@@ -986,8 +1195,16 @@ export function checkManifestRevision(prev: VaultManifest, next: VaultManifest):
   if (b.version !== a.version + 1) return { ok: false, code: 'VERSION_NOT_NEXT' };
   if (b.prevManifestHash !== prevHash) return { ok: false, code: 'PREV_HASH_MISMATCH' };
   if (scriptParticipants(a) !== scriptParticipants(b)) return { ok: false, code: 'PARTICIPANTS_CHANGED' };
+  const owners = new Set<string>(b.roles.owners.map(e => e.credential));
+  if (b.roles.external.some(e => {
+    const importer = a.roles.external.find(x => x.credential === e.credential)?.importedBy;
+    return importer !== e.importedBy && owners.has(importer);
+  })) {
+    return { ok: false, code: 'IMPORTER_CHANGED' };
+  }
   if (b.revisedAt < a.revisedAt) return { ok: false, code: 'TIME_BACKWARDS' };
-  return { ok: true };
+  const refusal = removalRefusal(a, b) ?? authorisationRefusal(a, b);
+  return refusal ? { ok: false, code: refusal } : { ok: true };
 }
 
 /** The next revision of `prev`, with the role slots given replaced. Throws `GeroVaultError`. */
@@ -1006,6 +1223,28 @@ export function nextManifestRevision(
   const link = checkManifestRevision(base, next);
   if (link.ok === false) throw new GeroVaultError('INVALID_MANIFEST', link.code);
   return next;
+}
+
+/**
+ * The next revision of `prev` with one device removed by its own participant: the binding dropped
+ * and its tombstone kept, with `removal`, that participant's attestation over
+ * `deviceRemovalDigest`. Viewers it admitted keep their bindings, their admission lapsed. Throws
+ * `GeroVaultError`.
+ */
+export function nextRevisionRemovingDevice(
+  prev: VaultManifest,
+  change: { readonly deviceId: string; readonly removal: OwnerAttestation; /** Unix seconds. */ readonly revisedAt: number },
+): VaultManifest {
+  const base = normalizeOrThrow(prev);
+  const holds = (e: ParticipantEntry) => e.devices.some(d => d.deviceId === change?.deviceId);
+  const slot = (['owners', 'backupHolders'] as const).find(s => base.roles[s].some(holds));
+  if (!slot) throw new GeroVaultError('INVALID_DEVICE_BINDING', 'The device is not bound to an owner or a backup holder of the manifest');
+  const entries = base.roles[slot].map(e => {
+    const binding = e.devices.find(d => d.deviceId === change.deviceId);
+    if (!binding) return e;
+    return { ...e, devices: e.devices.filter(d => d !== binding), removedDevices: [...e.removedDevices, deviceTombstone(binding, change.removal)] };
+  });
+  return nextManifestRevision(base, { roles: { [slot]: entries }, revisedAt: change.revisedAt });
 }
 
 /**
@@ -1033,8 +1272,9 @@ const TOP_KEYS = [
   'protocol', 'schema', 'network', 'vaultId', 'paymentScript', 'stakeScript', 'roles',
   'viewersSeeProposalContents', 'policiesDisplay', 'version', 'prevManifestHash', 'revisedAt',
 ] as const;
-const ENTRY_KEYS = ['credential', 'vaultKeys', 'devices'] as const;
-const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'role', 'importerDeviceId', 'importSig'] as const;
+const ENTRY_KEYS = ['credential', 'vaultKeys', 'devices', 'removedDevices'] as const;
+const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'role', 'importSig'] as const;
+const TOMBSTONE_KEYS = ['deviceId', 'ed25519Pub', 'bindingVersion', 'removal'] as const;
 const BINDING_KEYS = [
   'vaultId', 'role', 'credential', 'vaultKeys', 'deviceId', 'ed25519Pub', 'x25519Pub', 'label', 'bindingVersion',
   'deviceSig', 'attestation', 'admittedBy',
@@ -1091,15 +1331,16 @@ function emptyMap(v: Value, what: string): boolean {
   return v.value.length === 0;
 }
 
+function attestationFrom(v: Value, what: string, code: ManifestRefusalCode): OwnerAttestation {
+  const a = fields(v, ['method', 'proof'], what);
+  const proof = a['proof'];
+  if (proof.type === 'bytes' && proof.value.length > MAX_ATTESTATION_BYTES) fault(code, `${what} proof too large`);
+  return { method: uint(a['method'], `${what} method`), proof: byteString(proof, undefined, `${what} proof`) };
+}
+
 function bindingFrom(v: Value): OwnerDeviceBinding {
   const f = fields(v, BINDING_KEYS, 'binding');
-  let attestation: OwnerAttestation | undefined;
-  if (!emptyMap(f['attestation'], 'attestation')) {
-    const a = fields(f['attestation'], ['method', 'proof'], 'attestation');
-    const proof = a['proof'];
-    if (proof.type === 'bytes' && proof.value.length > MAX_ATTESTATION_BYTES) fault('ATTESTATION_INVALID', 'attestation proof too large');
-    attestation = { method: uint(a['method'], 'attestation method'), proof: byteString(proof, undefined, 'attestation proof') };
-  }
+  const attestation = emptyMap(f['attestation'], 'attestation') ? undefined : attestationFrom(f['attestation'], 'attestation', 'ATTESTATION_INVALID');
   let admittedBy: ViewerAdmission | undefined;
   if (!emptyMap(f['admittedBy'], 'admittedBy')) {
     const a = fields(f['admittedBy'], ['deviceId', 'signature'], 'admittedBy');
@@ -1127,12 +1368,23 @@ function devicesFrom(v: Value): OwnerDeviceBinding[] {
   return list(v, MAX_DEVICES_PER_ENTRY, 'devices').map(i => bindingFrom(i.value));
 }
 
+function tombstoneFrom(v: Value): DeviceTombstone {
+  const f = fields(v, TOMBSTONE_KEYS, 'tombstone');
+  return {
+    deviceId: byteString(f['deviceId'], [16], 'tombstone deviceId'),
+    ed25519Pub: byteString(f['ed25519Pub'], [32], 'tombstone ed25519Pub'),
+    bindingVersion: uint(f['bindingVersion'], 'tombstone bindingVersion'),
+    removal: attestationFrom(f['removal'], 'removal', 'TOMBSTONE_INVALID'),
+  };
+}
+
 function participantFrom(v: Value): ParticipantEntry {
   const f = fields(v, ENTRY_KEYS, 'participant');
   return {
     credential: Ed25519KeyHashHex(byteString(f['credential'], [28], 'credential')),
     vaultKeys: keysFrom(f['vaultKeys'], 'vaultKeys'),
     devices: devicesFrom(f['devices']),
+    removedDevices: list(f['removedDevices'], MAX_REMOVED_DEVICES, 'removedDevices').map(i => tombstoneFrom(i.value)),
   };
 }
 
@@ -1140,6 +1392,7 @@ function viewerFrom(v: Value): ViewerEntry {
   const f = fields(v, ENTRY_KEYS, 'viewer');
   byteString(f['credential'], [0], 'a viewer credential');
   if (!emptyMap(f['vaultKeys'], 'viewer vaultKeys')) fault('FIELD_INVALID', 'a viewer has no vault keys');
+  if (list(f['removedDevices'], MAX_REMOVED_DEVICES, 'removedDevices').length > 0) fault('FIELD_INVALID', 'a viewer has no tombstones');
   return { devices: devicesFrom(f['devices']) };
 }
 
@@ -1150,8 +1403,7 @@ function externalFrom(v: Value): ExternalEntry {
     vaultKeys: keysFrom(f['vaultKeys'], 'external vaultKeys'),
     label: text(f['label'], 'external label'),
     role: text(f['role'], 'external role') as ExternalRole,
-    importerDeviceId: byteString(f['importerDeviceId'], [16], 'importerDeviceId'),
-    importSig: byteString(f['importSig'], [64], 'importSig'),
+    importSig: attestationFrom(f['importSig'], 'importSig', 'IMPORTER_INVALID'),
   };
 }
 

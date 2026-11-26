@@ -15,13 +15,16 @@
  * - The QR, scanned in person: `gero-vault/v1|VERIFY|<network>|<vaultId>|<verificationDigest>`,
  *   with the full 256-bit `blake2b-256( "gero-vault/v1|verification|" || canonical CBOR of the set )`.
  * - An external cosigner, who has no Gero device, signs the verification digest with their vault
- *   payment key in an expired transaction (`attestation.ts`, method 1). The file must reach an
- *   owner other than the one who imported their keys, by a route the importer does not control.
- *   That owner's device records it, and endorses it for the other devices: an endorsement is
- *   signed by the receiving device over the verification digest, the external's credential and the
- *   attestation's hash. It is stored per vault, not in the manifest. Software cannot prove where a
- *   file came from: an importer who substituted a key they hold can sign for it themselves, which is
- *   why the attestation must come from the external person directly.
+ *   payment key in an expired transaction (`attestation.ts`, method 1). It counts only when an
+ *   owner who did not import that cosigner's keys takes the file from the external person
+ *   themself; a copy handed on by the importer proves nothing, because an importer who put in a
+ *   key of their own can also sign for it. Software cannot tell where a file came from, so this
+ *   is a rule for people, and the screen states it. The receiving owner's device records the
+ *   receipt for itself, and the owner endorses it for everyone else: an endorsement is attested by
+ *   the receiving owner's vault payment key over the verification digest, the external's
+ *   credential, the attestation's hash and the endorser's credential. It is stored per vault, not
+ *   in the manifest, and it does not depend on any device, so removing the device that received
+ *   the file leaves it valid.
  *
  * Checks through a data provider (an ADA Handle, a known address, a shared vault) are recorded and
  * shown as resolved by a provider; they never verify anyone. There is no value threshold.
@@ -31,21 +34,11 @@
  */
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { blake2b } from '@noble/hashes/blake2.js';
-import { ATTESTATION_METHOD, AttestationRefusalCode, ingestAttestation, verifyAttestation, verifyEd25519 } from './attestation';
+import { ATTESTATION_METHOD, AttestationRefusalCode, OwnerAttestation, ingestAttestation, verifyAttestation } from './attestation';
 import { bytesToHex, hexToBytes } from './cbor';
 import { CborWritableMap, encodeCanonicalCbor } from './canonicalCbor';
 import { GeroVaultError } from './errors';
-import {
-  MANIFEST_PROTOCOL,
-  VaultManifest,
-  WIRE_NETWORK,
-  bindingDigest,
-  manifestHash,
-  manifestScripts,
-  normalizeManifest,
-  taggedHash,
-  verifyDeviceSignature,
-} from './manifest';
+import { MANIFEST_PROTOCOL, VaultManifest, WIRE_NETWORK, manifestHash, manifestScripts, normalizeManifest, taggedHash } from './manifest';
 import { isManifestAck } from './ackBrand';
 import type { ManifestAck } from './manifestCheck';
 import { parseVaultScript } from './scripts';
@@ -58,9 +51,7 @@ export const VERIFICATION_NUMBER_GROUPS = 8;
 const NUMBER_BYTES = 40;
 const GROUP_BYTES = 5;
 
-const HEX16 = /^[0-9a-f]{32}$/;
 const HEX32 = /^[0-9a-f]{64}$/;
-const HEX64 = /^[0-9a-f]{128}$/;
 const KEY_HASH = /^[0-9a-f]{56}$/;
 
 function verificationSetBytes(manifest: VaultManifest): Uint8Array {
@@ -170,18 +161,19 @@ export function compareVerificationQr(payload: unknown, manifest: VaultManifest)
 // ---------------------------------------------------------------------------------------------
 // External endorsements
 
-/** What an owner device signs when its owner received an external's attestation directly. */
+/** What an owner attests when they received an external's attestation directly. */
 export interface ExternalEndorsementBody {
   readonly verificationDigest: string;
   readonly externalCredential: Ed25519KeyHashHex;
-  /** `blake2b-256` of the external attestation's stored proof bytes. */
+  /** The untagged `blake2b-256` of the external attestation's stored proof bytes. */
   readonly externalAttestationHash: string;
-  readonly endorserDeviceId: string;
+  /** The endorsing owner's payment key hash. */
+  readonly endorserCredential: Ed25519KeyHashHex;
 }
 
 export interface ExternalEndorsement extends ExternalEndorsementBody {
-  /** 64 bytes, lowercase hex: by the endorsing device's key over `externalEndorsementDigest`. */
-  readonly signature: string;
+  /** By the endorsing owner's vault payment key over `externalEndorsementDigest`, in its stored form. */
+  readonly attestation: OwnerAttestation;
 }
 
 /** The hash an endorsement names: `blake2b-256` of the attestation's stored proof bytes, hex. */
@@ -193,32 +185,32 @@ export function externalAttestationHash(proof: string): string {
 
 function endorsementBodyOk(e: ExternalEndorsementBody): boolean {
   return Boolean(e) && typeof e === 'object' && HEX32.test(e.verificationDigest ?? '') && KEY_HASH.test(e.externalCredential ?? '')
-    && HEX32.test(e.externalAttestationHash ?? '') && HEX16.test(e.endorserDeviceId ?? '');
+    && HEX32.test(e.externalAttestationHash ?? '') && KEY_HASH.test(e.endorserCredential ?? '');
 }
 
 /**
- * What the endorsing device signs:
- * `blake2b-256( "gero-vault/v1|external-endorsement|" || CBOR of { verificationDigest, externalCredential, externalAttestationHash, endorserDeviceId } )`.
+ * What the endorsing owner's vault payment key attests:
+ * `blake2b-256( "gero-vault/v1|external-endorsement|" || CBOR of { verificationDigest, externalCredential, externalAttestationHash, endorserCredential } )`.
  */
 export function externalEndorsementDigest(body: ExternalEndorsementBody): string {
-  if (!endorsementBodyOk(body)) throw new GeroVaultError('INVALID_VERIFICATION', 'An endorsement names a digest, a credential, a hash and a device');
+  if (!endorsementBodyOk(body)) throw new GeroVaultError('INVALID_VERIFICATION', 'An endorsement names a digest, two credentials and a hash');
   return taggedHash(EXTERNAL_ENDORSEMENT_TAG, encodeCanonicalCbor({
     verificationDigest: hexToBytes(body.verificationDigest),
     externalCredential: hexToBytes(body.externalCredential),
     externalAttestationHash: hexToBytes(body.externalAttestationHash),
-    endorserDeviceId: hexToBytes(body.endorserDeviceId),
+    endorserCredential: hexToBytes(body.endorserCredential),
   }));
 }
 
-/** The body this device signs to endorse an external's attestation it received directly. */
+/** The body an owner attests to endorse an external's attestation they received directly. */
 export function externalEndorsementBody(
   manifest: VaultManifest,
   externalCredential: Ed25519KeyHashHex,
   proof: string,
-  endorserDeviceId: string,
+  endorserCredential: Ed25519KeyHashHex,
 ): ExternalEndorsementBody {
-  const body = { verificationDigest: verificationDigest(manifest), externalCredential, externalAttestationHash: externalAttestationHash(proof), endorserDeviceId };
-  if (!endorsementBodyOk(body)) throw new GeroVaultError('INVALID_VERIFICATION', 'An endorsement names a credential and a device');
+  const body = { verificationDigest: verificationDigest(manifest), externalCredential, externalAttestationHash: externalAttestationHash(proof), endorserCredential };
+  if (!endorsementBodyOk(body)) throw new GeroVaultError('INVALID_VERIFICATION', 'An endorsement names two credentials');
   return Object.freeze(body);
 }
 
@@ -226,42 +218,43 @@ export type EndorsementRefusalCode =
   | 'MALFORMED'
   | 'DIGEST_MISMATCH'
   | 'NOT_AN_EXTERNAL'
-  | 'UNBOUND_DEVICE'
+  | 'NOT_AN_OWNER'
   | 'ENDORSER_IS_IMPORTER'
   | 'ATTESTATION_HASH_MISMATCH'
-  | 'BAD_SIGNATURE'
+  | 'ENDORSEMENT_INVALID'
   | AttestationRefusalCode;
 
+export type EndorsementCheck =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly code: EndorsementRefusalCode;
+      /** For `ENDORSEMENT_INVALID`: why the endorser's own attestation was refused. */
+      readonly attestation?: AttestationRefusalCode;
+    };
+
 /**
- * An endorsement is valid when its digest is this manifest's verification digest, the endorsing
- * device's binding is an owner's in the manifest with a verified owner attestation, that owner is
- * not the external's importer, the attestation it names verifies against the external's key over
- * the same digest, and the endorsing device signed it. Never throws.
+ * An endorsement is valid when its digest is this manifest's verification digest, the endorser is
+ * in the owners slot and is not the external's importer (as this manifest names them, so a new
+ * importer needs an endorsement by someone else), the attestation it names verifies against the
+ * external's key over the same digest, and the endorser's payment key attested the endorsement.
+ * No device is involved. Never throws.
  */
-export async function verifyExternalEndorsement(
-  manifest: VaultManifest,
-  endorsement: ExternalEndorsement,
-  proof: string,
-): Promise<{ readonly ok: true } | { readonly ok: false; readonly code: EndorsementRefusalCode }> {
+export async function verifyExternalEndorsement(manifest: VaultManifest, endorsement: ExternalEndorsement, proof: string): Promise<EndorsementCheck> {
   try {
-    if (!endorsementBodyOk(endorsement) || !HEX64.test(endorsement.signature ?? '')) return { ok: false, code: 'MALFORMED' };
+    if (!endorsementBodyOk(endorsement) || !endorsement.attestation || typeof endorsement.attestation !== 'object') return { ok: false, code: 'MALFORMED' };
     const m = normalizeManifest(manifest);
     const digest = verificationDigest(m);
     if (endorsement.verificationDigest !== digest) return { ok: false, code: 'DIGEST_MISMATCH' };
     const external = m.roles.external.find(e => e.credential === endorsement.externalCredential);
     if (!external) return { ok: false, code: 'NOT_AN_EXTERNAL' };
-    const owner = m.roles.owners.find(e => e.devices.some(d => d.deviceId === endorsement.endorserDeviceId));
-    const device = owner?.devices.find(d => d.deviceId === endorsement.endorserDeviceId);
-    if (!device) return { ok: false, code: 'UNBOUND_DEVICE' };
-    const attested = await verifyDeviceSignature(device)
-      && (await verifyAttestation(device.attestation, owner.credential, { kind: 'binding', digest: bindingDigest(device) })).ok;
-    if (!attested) return { ok: false, code: 'UNBOUND_DEVICE' };
-    if (owner.credential === external.importedBy) return { ok: false, code: 'ENDORSER_IS_IMPORTER' };
+    if (!m.roles.owners.some(e => e.credential === endorsement.endorserCredential)) return { ok: false, code: 'NOT_AN_OWNER' };
+    if (endorsement.endorserCredential === external.importedBy) return { ok: false, code: 'ENDORSER_IS_IMPORTER' };
     if (externalAttestationHash(proof) !== endorsement.externalAttestationHash) return { ok: false, code: 'ATTESTATION_HASH_MISMATCH' };
     const check = await verifyAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof }, external.credential, { kind: 'verification', digest });
     if (check.ok === false) return check;
-    const signed = await verifyEd25519(hexToBytes(device.ed25519Pub), hexToBytes(endorsement.signature), hexToBytes(externalEndorsementDigest(endorsement)));
-    return signed ? { ok: true } : { ok: false, code: 'BAD_SIGNATURE' };
+    const signed = await verifyAttestation(endorsement.attestation, endorsement.endorserCredential, { kind: 'endorsement', digest: externalEndorsementDigest(endorsement) });
+    return signed.ok === true ? { ok: true } : { ok: false, code: 'ENDORSEMENT_INVALID', attestation: signed.code };
   } catch {
     return { ok: false, code: 'MALFORMED' };
   }
@@ -277,6 +270,11 @@ const PROVIDER_CHECKS: readonly ProviderCheck[] = ['adaHandle', 'knownAddress', 
 /**
  * How this device verified one cosigner, kept in its own vault record. Number, QR and external
  * records are bound to the verification digest they compared.
+ *
+ * Every record is local to the device that made it and is never synced, the `external` receipt
+ * most of all: it says that this device's owner took the file from the external person, which
+ * only this device can say. That fact reaches the other devices only as an endorsement (the
+ * `endorsed` record), which they verify themselves.
  */
 export type CosignerVerification =
   | {
@@ -296,7 +294,7 @@ export type CosignerVerification =
       readonly at: number;
     }
   | {
-      /** An external cosigner's attestation another owner received, with that owner device's endorsement. */
+      /** An external cosigner's attestation another owner received, with that owner's endorsement. */
       readonly method: 'endorsed';
       readonly credential: Ed25519KeyHashHex;
       readonly verificationDigest: string;
@@ -350,7 +348,7 @@ function ackMatches(m: VaultManifest, ack: ManifestAck): boolean {
   return isManifestAck(ack) && ack.vaultId === m.vaultId && ack.manifestHash === manifestHash(m);
 }
 
-/** The importer is the only Gero owner: then the attestation alone suffices. */
+/** The importer is the only Gero owner, counting the owners slot alone: then the attestation alone suffices. */
 function importerIsOnlyOwner(m: VaultManifest, importedBy: string): boolean {
   return m.roles.owners.every(e => e.credential === importedBy);
 }
@@ -358,8 +356,10 @@ function importerIsOnlyOwner(m: VaultManifest, importedBy: string): boolean {
 /**
  * The record for an external cosigner whose attestation (the expired transaction over this
  * vault's verification digest) this device's owner received directly from them. The proof is
- * taken as a wallet returned it and stored in its canonical form. Refused when this device's
- * owner imported the external's keys while another owner exists: that owner must receive it.
+ * taken as a wallet returned it and stored in its canonical form. Refused unless this device is
+ * an owner's, and when that owner imported the external's keys while another owner exists:
+ * another owner must receive it. The record stays on this device; the owner's endorsement
+ * (`externalEndorsementBody`) is what tells the other devices.
  */
 export async function externalVerification(
   manifest: VaultManifest,
@@ -382,13 +382,13 @@ export async function externalVerification(
   return { ok: true, record: Object.freeze({ method: 'external', credential, verificationDigest: digest, proof: ingested.attestation.proof, at }) };
 }
 
-/** The record for an external cosigner verified by another owner device's endorsement. */
+/** The record for an external cosigner verified by another owner's endorsement. */
 export async function endorsedVerification(
   manifest: VaultManifest,
   endorsement: ExternalEndorsement,
   proof: string,
   at: number,
-): Promise<{ readonly ok: true; readonly record: CosignerVerification } | { readonly ok: false; readonly code: EndorsementRefusalCode }> {
+): Promise<{ readonly ok: true; readonly record: CosignerVerification } | Extract<EndorsementCheck, { ok: false }>> {
   assertTime(at);
   const check = await verifyExternalEndorsement(manifest, endorsement, proof);
   if (check.ok === false) return check;
@@ -445,8 +445,9 @@ type AttestationRecord = Extract<CosignerVerification, { method: 'external' | 'e
 /**
  * How this device verified each cosigner. The cosigners are read from the scripts: every payment
  * key of both branches except this device's own (`ack.ownCredential`). `ack` must be the result
- * of `checkManifestBeforeAck` for this very manifest (the latest accepted revision). External
- * records are verified again here. Throws for an invalid manifest or an ack of another manifest.
+ * of `checkManifestBeforeAck` for this very manifest. External records are verified again here,
+ * against this manifest's importer: when an importer has changed, a receipt or an endorsement by
+ * the new importer no longer counts. Throws for an invalid manifest or an ack of another manifest.
  */
 export async function cosignerVerificationStatus(
   manifest: VaultManifest,
@@ -513,19 +514,21 @@ export async function cosignerVerificationStatus(
 
 /**
  * The ceremony step of the funding order (spec 6.1). True only when:
- * - `ack` is this device's check of this very manifest, the latest accepted revision (whether that
- *   revision's own changes were accepted is revision acceptance, not funding);
+ * - `ack` is this device's check of this very manifest and says it is the latest accepted
+ *   revision (`ack.latest`): a superseded revision, or one not accepted, never opens funding;
  * - every owner and backup holder, this device's own participant included, has a device binding
  *   whose owner attestation verified (`ack.unattested` is empty);
  * - every other Gero cosigner is verified by the number or the QR for this verification set;
  * - every external cosigner is verified by their own attestation: received directly by this
- *   device's owner when that owner did not import them, or endorsed by another owner's device, or
- *   alone when their importer is the only owner.
+ *   device's owner when that owner is not their importer, or endorsed by an owner other than
+ *   their importer, or alone when their importer is the only owner. When the importer changes
+ *   (they left the owners slot and another owner imported again), this is evaluated afresh, and
+ *   deposits stay closed until an owner other than the new importer endorses.
  * It takes no amount: there is no value below which the ceremony may be skipped. Never throws.
  */
 export async function fundingVerified(manifest: VaultManifest, ack: ManifestAck, records: readonly CosignerVerification[]): Promise<boolean> {
   try {
-    if (!isManifestAck(ack) || ack.unattested.length > 0) return false;
+    if (!isManifestAck(ack) || ack.latest !== true || ack.unattested.length > 0) return false;
     const status = await cosignerVerificationStatus(manifest, ack, records);
     return status.length > 0 && status.every(c => c.state === 'verified' && c.attested !== false);
   } catch {

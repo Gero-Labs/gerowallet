@@ -12,6 +12,7 @@ import { buildSignatureAndCoseKey } from '../../utils/converter';
 import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, canonicalAttestation, cip8Proof, expiredTxBodyHash } from '../attestation';
 import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes } from '../keys';
 import {
+  DeviceBindingBody,
   ExternalEntry,
   ExternalRole,
   ManifestRole,
@@ -21,11 +22,13 @@ import {
   bindingDigest,
   deviceBinding,
   deviceIdOf,
+  deviceRemovalDigest,
   externalEntry,
   externalImportDigest,
   newManifest,
   viewerAdmissionDigest,
 } from '../manifest';
+import { ExternalEndorsement, externalEndorsementBody, externalEndorsementDigest } from '../verificationNumber';
 import { buildVaultFromParticipants } from '../scripts';
 import { RoleKeys, VaultPublicKeys, VaultScripts } from '../types';
 import { vaultId } from '../vaultId';
@@ -104,6 +107,15 @@ export function expiredTxAttestation(signer: Ed25519PrivateKey, credential: stri
   return { method: ATTESTATION_METHOD.EXPIRED_TX, proof: assembleExpiredTx(credential, subject, signer.toPublic().hex(), signature) };
 }
 
+export type TestMethod = 'cip8' | 'expiredTx';
+
+/** An attestation of `subject` by the participant's vault payment key, in the stored form (CIP-8 by default). */
+export function attestationBy(participant: TestParticipant, subject: AttestedDigest, method: TestMethod = 'cip8'): OwnerAttestation {
+  return method === 'expiredTx'
+    ? expiredTxAttestation(participant.signer, participant.credential, subject)
+    : cip8Attestation(participant.signer, participant.credential, subject.digest);
+}
+
 /**
  * A bound device, signed by the device and attested by the participant. A viewer's binding is
  * admitted by the owner device `admitter` instead.
@@ -114,7 +126,7 @@ export async function signedBinding(input: {
   readonly participant?: TestParticipant;
   readonly device: number;
   readonly label?: string;
-  readonly method?: 'cip8' | 'expiredTx';
+  readonly method?: TestMethod;
   readonly admitter?: number;
   readonly bindingVersion?: number;
   readonly x25519Pub?: string;
@@ -135,30 +147,37 @@ export async function signedBinding(input: {
     const signature = admitter.key.sign(HexBlob(viewerAdmissionDigest(body))).hex();
     return { ...body, deviceSig, admittedBy: { deviceId: deviceIdOf(admitter.ed25519Pub), signature } };
   }
-  const { signer, credential } = input.participant;
-  const digest = bindingDigest(body);
-  const attestation = input.method === 'expiredTx'
-    ? expiredTxAttestation(signer, credential, { kind: 'binding', digest })
-    : cip8Attestation(signer, credential, digest);
-  return { ...body, deviceSig, attestation };
+  return { ...body, deviceSig, attestation: attestationBy(input.participant, { kind: 'binding', digest: bindingDigest(body) }, input.method) };
 }
 
-/** An external entry for `participant`'s keys, imported and signed by the owner device `importer`. */
-export async function signedExternal(input: {
+/** An external entry for `participant`'s keys, imported by the owner `importer`, whose payment key attests it. */
+export function signedExternal(input: {
   readonly vaultId: string;
   readonly participant: TestParticipant;
-  readonly importer: number;
+  readonly importer: TestParticipant;
   readonly role?: ExternalRole;
   readonly label?: string;
-}): Promise<ExternalEntry> {
-  const device = await testDevice(input.importer);
-  const body = externalEntry({
-    vaultKeys: input.participant.vaultKeys,
-    label: input.label ?? 'Other wallet',
-    role: input.role ?? 'owner',
-    importerDeviceId: deviceIdOf(device.ed25519Pub),
-  });
-  return { ...body, importSig: device.key.sign(HexBlob(externalImportDigest(input.vaultId, body))).hex() };
+  readonly method?: TestMethod;
+}): ExternalEntry {
+  const body = externalEntry({ vaultKeys: input.participant.vaultKeys, label: input.label ?? 'Other wallet', role: input.role ?? 'owner' });
+  return { ...body, importSig: attestationBy(input.importer, { kind: 'import', digest: externalImportDigest(input.vaultId, body) }, input.method) };
+}
+
+/** The participant's attestation removing `binding` (the binding's own participant, unless another is given). */
+export function removalBy(participant: TestParticipant, vaultId: string, binding: DeviceBindingBody, method?: TestMethod): OwnerAttestation {
+  return attestationBy(participant, { kind: 'removal', digest: deviceRemovalDigest(vaultId, binding) }, method);
+}
+
+/** `endorser`'s endorsement of the external attestation `proof`, attested by their payment key. */
+export function signedEndorsement(
+  manifest: VaultManifest,
+  endorser: TestParticipant,
+  externalCredential: Ed25519KeyHashHex,
+  proof: string,
+  method?: TestMethod,
+): ExternalEndorsement {
+  const body = externalEndorsementBody(manifest, externalCredential, proof, endorser.credential);
+  return { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body) }, method) };
 }
 
 export const VECTOR_REVISED_AT = 1795651200;

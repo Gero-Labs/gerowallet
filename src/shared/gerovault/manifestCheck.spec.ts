@@ -9,12 +9,14 @@ import {
   bindingDeviceDigest,
   bindingDigest,
   deviceBinding,
+  deviceTombstone,
   manifestHash,
   newManifest,
   nextManifestRevision,
+  nextRevisionRemovingDevice,
   normalizeManifest,
 } from './manifest';
-import { AcceptedManifest, ManifestAckInput, OwnParticipant, UnverifiedChange, checkManifestBeforeAck } from './manifestCheck';
+import { AcceptedVault, MAX_ACCEPTED_REVISIONS, ManifestAck, ManifestAckInput, OwnParticipant, acceptRevision, checkManifestBeforeAck } from './manifestCheck';
 import { decodeRegistration, dedupeRegistrations, encodeRegistration } from './registration';
 import { buildVaultFromParticipants, instantiateVaultScripts } from './scripts';
 import { VaultPublicKeys, VaultScripts } from './types';
@@ -24,6 +26,7 @@ import {
   TestParticipant,
   VECTOR_REVISED_AT,
   cip8Attestation,
+  removalBy,
   signedBinding,
   signedExternal,
   testDevice,
@@ -45,11 +48,19 @@ const owner = (i: number, index = 1, extra: Partial<Extract<OwnParticipant, { ki
 const ownersOf = (list: readonly (TestParticipant | VaultPublicKeys)[]) => list.map(p => ({ vaultKeys: 'vaultKeys' in p ? p.vaultKeys : p }));
 const mix = (a: VaultPublicKeys, s: VaultPublicKeys) =>
   parseVaultPublicKeys({ payment: encodeVaultPublicKeys(a).payment, stake: encodeVaultPublicKeys(s).stake });
-/** An accepted revision as a device stores it. */
-const acc = (manifest: VaultManifest, attestationsVerified = true, unverified: UnverifiedChange[] = []): AcceptedManifest => ({ manifest, attestationsVerified, unverified });
-
-/** The fixture's viewer, admitted by test device 2 (owner 2's) instead of device 1. */
-const readmitted = async () => [{ devices: [await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 2 })] }];
+/**
+ * The history index of `manifests`, each checked on `own`'s device (owner 2 by default) and
+ * accepted in turn, as a device builds it.
+ */
+async function historyOf(manifests: readonly VaultManifest[], own: OwnParticipant = owner(1)): Promise<AcceptedVault> {
+  let vault: AcceptedVault | undefined;
+  for (const m of manifests) {
+    const ack = await check(m, own, { accepted: vault ? [vault] : [] });
+    if (ack.ok !== true) throw new Error(`fixture: revision ${m.version} refused ${ack.code} ${ack.revision ?? ''}`);
+    vault = acceptRevision(vault, m, ack);
+  }
+  return vault;
+}
 
 function check(manifest: VaultManifest, own: OwnParticipant, rest: Partial<ManifestAckInput> = {}) {
   return checkManifestBeforeAck({ manifest, network: 'preprod', own, ...rest });
@@ -62,10 +73,6 @@ function withOwner(m: VaultManifest, n: number, change: (e: VaultManifest['roles
     roles: { ...m.roles, owners: m.roles.owners.map(e => (e.credential === people[n].credential ? { ...e, ...change(e) } : e)) },
   } as VaultManifest);
 }
-
-/** The owners list with participant `n`'s devices replaced, not yet checked. */
-const ownersWith = (m: VaultManifest, n: number, devices: readonly OwnerDeviceBinding[]) =>
-  m.roles.owners.map(e => (e.credential === people[n].credential ? { ...e, devices } : e));
 
 /** A binding of test device `n` for owner 0, signed and attested, with the X25519 key and version given. */
 async function rebound(n: number, x25519Pub: string, bindingVersion: number): Promise<OwnerDeviceBinding> {
@@ -102,10 +109,12 @@ describe('checks before acknowledging a manifest', () => {
         ownCredential: people[i].credential,
         redelivery: false,
         canonicalKeyOrder: true,
+        latest: true,
         attestationsVerified: true,
         unverified: [],
         unattested: [people[2].credential],
         externals: [],
+        lapsedViewers: [],
         bindingVersions: Object.fromEntries([...base.roles.owners, ...base.roles.viewers].flatMap(e => e.devices).map(d => [d.deviceId, 1])),
       });
       expect(isManifestAck(ack)).toBe(true);
@@ -207,22 +216,22 @@ describe('signatures', () => {
     expect(await check(ok, owner(0))).toMatchObject({ ok: true });
   });
 
-  it('refuse an external entry whose import signature does not verify', async () => {
+  it('refuse an external entry whose import attestation does not verify', async () => {
     const m = newManifest({
       vault,
       network: 'preprod',
       owners: [{ vaultKeys: people[0].vaultKeys, devices: [laptop] }, ...ownersOf(people.slice(1, 2))],
-      external: [await signedExternal({ vaultId: id, participant: people[2], importer: 1 })],
+      external: [signedExternal({ vaultId: id, participant: people[2], importer: people[0] })],
       revisedAt: T,
     });
     expect(await check(m, owner(1))).toMatchObject({ ok: true, externals: [people[2].credential], unattested: [people[1].credential] });
-    // The relay relabels the external entry: the importer's signature no longer covers it.
+    // The relay relabels the external entry: the importer's attestation no longer covers it.
     const relabelled = normalizeManifest({ ...m, roles: { ...m.roles, external: [{ ...m.roles.external[0], label: 'Mallory' }] } });
-    expect(await check(relabelled, owner(1))).toEqual({ ok: false, code: 'IMPORT_SIGNATURE_INVALID', credential: people[2].credential });
-    // Signed by another device than the one named.
-    const byOther = await signedExternal({ vaultId: id, participant: people[2], importer: 2 });
-    const misnamed = normalizeManifest({ ...m, roles: { ...m.roles, external: [{ ...byOther, importerDeviceId: laptop.deviceId }] } });
-    expect(await check(misnamed, owner(1))).toEqual({ ok: false, code: 'IMPORT_SIGNATURE_INVALID', credential: people[2].credential });
+    expect(await check(relabelled, owner(1))).toEqual({ ok: false, code: 'IMPORT_SIGNATURE_INVALID', credential: people[2].credential, attestation: 'WRONG_PAYLOAD' });
+    // An import attested for another vault.
+    const elsewhere = signedExternal({ vaultId: 'ab'.repeat(32), participant: people[2], importer: people[0] });
+    const moved = normalizeManifest({ ...m, roles: { ...m.roles, external: [{ ...m.roles.external[0], importSig: elsewhere.importSig }] } });
+    expect(await check(moved, owner(1))).toEqual({ ok: false, code: 'IMPORT_SIGNATURE_INVALID', credential: people[2].credential, attestation: 'WRONG_PAYLOAD' });
   });
 
   it('pin each owner\'s stake key to their binding: a crossed stake key fails the owner\'s attestation', async () => {
@@ -243,29 +252,48 @@ describe('signatures', () => {
   });
 });
 
-describe('the revision chain and the full history', () => {
-  it('accepts the same manifest again with the status stored for it', async () => {
-    expect(await check(base, owner(0), { accepted: [acc(base)] })).toMatchObject({ ok: true, redelivery: true, manifestHash: manifestHash(base), attestationsVerified: true });
+describe('the revision chain and the history index', () => {
+  it('accepts the same manifest again as a redelivery, and says whether it is the latest accepted revision', async () => {
+    const h1 = await historyOf([base]);
+    expect(await check(base, owner(0), { accepted: [h1] })).toMatchObject({ ok: true, redelivery: true, latest: true, attestationsVerified: true });
+    const v2 = nextManifestRevision(base, { roles: {}, revisedAt: T + 60 });
+    const h2 = await historyOf([base, v2]);
+    expect(h2.revisions.map(r => r.version)).toEqual([1, 2]);
+    expect(h2.latest).toEqual(v2);
+    // A superseded revision checked again is not the latest: the funding gate will not take it.
+    expect(await check(base, owner(0), { accepted: [h2] })).toMatchObject({ ok: true, redelivery: true, latest: false });
+    expect(await check(v2, owner(0), { accepted: [h2] })).toMatchObject({ ok: true, redelivery: true, latest: true });
+    expect(acceptRevision(h2, v2, await check(v2, owner(0), { accepted: [h2] }) as ManifestAck)).toBe(h2);
+  });
+
+  it('does not accept a revision whose changes still need threshold attestations', async () => {
+    const h1 = await historyOf([base]);
     const noViewer = nextManifestRevision(base, { roles: { viewers: [] }, revisedAt: T + 60 });
-    const first = await check(noViewer, owner(0), { accepted: [acc(base)] });
-    expect(first).toMatchObject({ ok: true, redelivery: false, attestationsVerified: false, unverified: ['VIEWER_REMOVED'] });
-    // Stored with its status, a redelivery inherits it.
-    const again = await check(noViewer, owner(0), { accepted: [acc(base), acc(noViewer, false, ['VIEWER_REMOVED'])] });
-    expect(again).toMatchObject({ ok: true, redelivery: true, attestationsVerified: false, unverified: ['VIEWER_REMOVED'] });
+    const ack = await check(noViewer, owner(0), { accepted: [h1] });
+    expect(ack).toMatchObject({ ok: true, redelivery: false, latest: false, attestationsVerified: false, unverified: ['VIEWER_REMOVED'] });
+    expect(() => acceptRevision(h1, noViewer, ack as ManifestAck)).toThrow(expect.objectContaining({ message: expect.stringContaining('NOT_ACCEPTED') }));
+    // An acknowledgement of another manifest, or a copy, is refused too.
+    const v2 = nextManifestRevision(base, { roles: {}, revisedAt: T + 60 });
+    const ackV2 = await check(v2, owner(0), { accepted: [h1] }) as ManifestAck;
+    expect(() => acceptRevision(h1, noViewer, ackV2)).toThrow(expect.objectContaining({ message: expect.stringContaining('INVALID_ACK') }));
+    expect(() => acceptRevision(h1, v2, { ...ackV2 })).toThrow(expect.objectContaining({ message: expect.stringContaining('INVALID_ACK') }));
+    expect(() => acceptRevision(undefined, v2, ackV2)).toThrow(expect.objectContaining({ message: expect.stringContaining('VERSION_NOT_NEXT') }));
   });
 
   it('raises the fork alert on a different manifest at any accepted version, version 1 included', async () => {
     const other = normalizeManifest({ ...base, roles: { ...base.roles, viewers: [] } });
-    expect(await check(other, owner(0), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
+    const h1 = await historyOf([base]);
+    expect(await check(other, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
     const v2a = nextManifestRevision(base, { roles: {}, revisedAt: T + 60 });
     const v2b = nextManifestRevision(base, { roles: {}, revisedAt: T + 61 });
+    const h2 = await historyOf([base, v2a]);
     // A late conflicting version 1, after later revisions were accepted.
-    expect(await check(other, owner(0), { accepted: [acc(base), acc(v2a)] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
-    // A sibling of an accepted version 2, whatever order the history comes in.
-    expect(await check(v2b, owner(0), { accepted: [acc(base), acc(v2a)] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
-    expect(await check(v2b, owner(0), { accepted: [acc(v2a), acc(base)] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
+    expect(await check(other, owner(0), { accepted: [h2] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
+    // A sibling of an accepted version 2.
+    expect(await check(v2b, owner(0), { accepted: [h2] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
     // A history that is itself forked.
-    expect(await check(base, owner(0), { accepted: [acc(v2a), acc(v2b)] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
+    const forked = { ...h2, revisions: [...h2.revisions, { version: 2, manifestHash: manifestHash(v2b) }] };
+    expect(await check(base, owner(0), { accepted: [forked] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
   });
 
   it('never makes a second vault from a duplicate registration of an accepted vault\'s scripts', async () => {
@@ -275,65 +303,64 @@ describe('the revision chain and the full history', () => {
     expect(dedupeRegistrations(regs)).toEqual([regs[0]]);
     const fromSecond = newManifest({ vault: { payment: regs[1].payment, stake: regs[1].stake }, network: 'preprod', owners: ownersOf(people.slice(0, 3)), revisedAt: T });
     expect(fromSecond.vaultId).toBe(id);
-    expect(await check(fromSecond, owner(1), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
+    expect(await check(fromSecond, owner(1), { accepted: [await historyOf([base])] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
   });
 
-  it('accepts the next revision, and says when a change it makes still needs threshold attestations', async () => {
+  it('accepts the next revision when each change is authorised now', async () => {
+    const h1 = await historyOf([base]);
     const ledger = await signedBinding({ vaultId: id, role: 'owner', participant: people[2], device: 3, label: 'Ledger', method: 'expiredTx' });
     const added = nextManifestRevision(base, { roles: { owners: withOwner(base, 2, () => ({ devices: [ledger] })).roles.owners }, revisedAt: T + 60 });
-    expect(await check(added, owner(2), { accepted: [acc(base)] })).toMatchObject({ ok: true, attestationsVerified: true, unverified: [], unattested: [] });
+    expect(await check(added, owner(2), { accepted: [h1] })).toMatchObject({ ok: true, attestationsVerified: true, latest: true, unverified: [], unattested: [] });
     // A viewer admitted by one owner device is authorised now.
     const viewer = await signedBinding({ vaultId: id, role: 'viewer', device: 8, admitter: 2 });
     const moreViewers = nextManifestRevision(base, { roles: { viewers: [...base.roles.viewers, { devices: [viewer] }] }, revisedAt: T + 60 });
-    expect(await check(moreViewers, owner(0), { accepted: [acc(base)] })).toMatchObject({ ok: true, attestationsVerified: true });
-    // Removing device 1, which admitted the viewer, needs the viewer admitted again by another owner device.
-    expect(() => nextManifestRevision(base, { roles: { owners: ownersWith(base, 0, []) }, revisedAt: T + 60 }))
-      .toThrow(expect.objectContaining({ message: expect.stringContaining('ADMISSION_INVALID') }));
-    const removed = nextManifestRevision(base, { roles: { owners: ownersWith(base, 0, []), viewers: await readmitted() }, revisedAt: T + 60 });
-    expect(await check(removed, owner(1), { accepted: [acc(base)] })).toMatchObject({ ok: true, attestationsVerified: false, unverified: ['DEVICE_REMOVED'] });
+    expect(await check(moreViewers, owner(0), { accepted: [h1] })).toMatchObject({ ok: true, attestationsVerified: true });
+    // An authorisation of an unchanged body swapped by the relay.
+    const reattested = { ...laptop, attestation: cip8Attestation(people[0].signer, people[0].credential, bindingDigest(laptop)) };
+    expect(reattested.attestation).toEqual(laptop.attestation);
+    const otherMethod = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop', method: 'expiredTx' });
+    const swapped = normalizeManifest({ ...base, version: 2, prevManifestHash: manifestHash(base), roles: { ...base.roles, owners: withOwner(base, 0, () => ({ devices: [otherMethod] })).roles.owners } });
+    expect(await check(swapped, owner(1), { accepted: [h1] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'AUTHORISATION_CHANGED' });
   });
 
   it('refuses gaps, stale revisions, broken links and revisions of unknown vaults', async () => {
     const a = nextManifestRevision(base, { roles: {}, revisedAt: T + 60 });
     const b = nextManifestRevision(base, { roles: {}, revisedAt: T + 61 });
     const c = nextManifestRevision(a, { roles: {}, revisedAt: T + 120 });
-    expect(await check(c, owner(0), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'REVISION_GAP' });
-    expect(await check(c, owner(0), { accepted: [acc(b)] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'PREV_HASH_MISMATCH', alert: true });
-    expect(await check(base, owner(0), { accepted: [acc(a)] })).toEqual({ ok: false, code: 'STALE_REVISION' });
+    const h1 = await historyOf([base]);
+    expect(await check(c, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'REVISION_GAP' });
+    const hb = await historyOf([base, b]);
+    expect(await check(c, owner(0), { accepted: [hb] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'PREV_HASH_MISMATCH', alert: true });
+    const ha = await historyOf([base, a]);
+    const v1Only = { ...ha, revisions: ha.revisions.filter(r => r.version === 2) };
+    expect(await check(base, owner(0), { accepted: [v1Only] })).toEqual({ ok: false, code: 'STALE_REVISION' });
     const backwards = normalizeManifest({ ...a, revisedAt: T - 1 });
-    expect(await check(backwards, owner(0), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'TIME_BACKWARDS' });
+    expect(await check(backwards, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'TIME_BACKWARDS' });
     const v7 = normalizeManifest({ ...base, version: 7, prevManifestHash: 'ab'.repeat(32) });
     expect(await check(v7, owner(0))).toEqual({ ok: false, code: 'UNKNOWN_VAULT' });
-    expect(await check(v7, owner(0), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'REVISION_GAP' });
+    expect(await check(v7, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'REVISION_GAP' });
   });
 
-  it('refuses a rolled-back key rotation and a removed device re-added with an old binding', async () => {
+  it('refuses a rolled-back key rotation, whether the history or only the high-water marks show it', async () => {
     const rotatedKey = (await testDevice(41)).x25519Pub;
     const b2 = await rebound(1, rotatedKey, 2);
     const v2 = nextManifestRevision(base, { roles: { owners: withOwner(base, 0, () => ({ devices: [b2] })).roles.owners }, revisedAt: T + 60 });
-    expect(await check(v2, owner(1), { accepted: [acc(base)] })).toMatchObject({ ok: true, attestationsVerified: true });
+    const h2 = await historyOf([base, v2]);
+    expect(h2.bindingVersions[laptop.deviceId]).toBe(2);
     // The old binding (old key agreement key, old signatures) put back.
     const v3 = nextManifestRevision(v2, { roles: { owners: withOwner(v2, 0, () => ({ devices: [laptop] })).roles.owners }, revisedAt: T + 120 });
-    expect(await check(v3, owner(1), { accepted: [acc(base), acc(v2)] })).toEqual({ ok: false, code: 'BINDING_REPLAY', credential: people[0].credential });
-    // Without the history, the stored high-water mark still catches it.
-    expect(await check(v3, owner(1), { accepted: [acc(v2)], bindingVersions: { [laptop.deviceId]: 2 } })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
+    expect(await check(v3, owner(1), { accepted: [h2] })).toEqual({ ok: false, code: 'BINDING_REPLAY', credential: people[0].credential });
     // A changed binding at the same version is a replay too.
     const sameVersion = await rebound(1, (await testDevice(42)).x25519Pub, 2);
     const v3b = nextManifestRevision(v2, { roles: { owners: withOwner(v2, 0, () => ({ devices: [sameVersion] })).roles.owners }, revisedAt: T + 120 });
-    expect(await check(v3b, owner(1), { accepted: [acc(base), acc(v2)] })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
-    // A higher version goes through, and the result carries the new mark.
+    expect(await check(v3b, owner(1), { accepted: [h2] })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
+    // A device bound at version 3 once, then rotated back to 2 in a later index: the marks still say 3.
+    const marked = { ...h2, bindingVersions: { ...h2.bindingVersions, [laptop.deviceId]: 3 } };
     const b3 = await rebound(1, (await testDevice(43)).x25519Pub, 3);
     const v3c = nextManifestRevision(v2, { roles: { owners: withOwner(v2, 0, () => ({ devices: [b3] })).roles.owners }, revisedAt: T + 120 });
-    expect(await check(v3c, owner(1), { accepted: [acc(base), acc(v2)] })).toMatchObject({ ok: true, bindingVersions: expect.objectContaining({ [laptop.deviceId]: 3 }) });
-
-    // A removed device re-added with its old binding.
-    const removed = nextManifestRevision(base, { roles: { owners: ownersWith(base, 0, []), viewers: await readmitted() }, revisedAt: T + 60 });
-    const readded = nextManifestRevision(removed, { roles: { owners: ownersWith(removed, 0, [laptop]) }, revisedAt: T + 120 });
-    expect(await check(readded, owner(1), { accepted: [acc(base), acc(removed, false, ['DEVICE_REMOVED'])] })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
-    expect(await check(readded, owner(1), { accepted: [acc(removed, false, ['DEVICE_REMOVED'])], bindingVersions: { [laptop.deviceId]: 1 } })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
-    const fresh = await rebound(1, laptop.x25519Pub, 2);
-    const readdedFresh = nextManifestRevision(removed, { roles: { owners: ownersWith(removed, 0, [fresh]) }, revisedAt: T + 120 });
-    expect(await check(readdedFresh, owner(1), { accepted: [acc(base), acc(removed, false, ['DEVICE_REMOVED'])] })).toMatchObject({ ok: true });
+    expect(await check(v3c, owner(1), { accepted: [marked] })).toMatchObject({ ok: false, code: 'BINDING_REPLAY' });
+    // A higher version goes through, and the result carries the new mark.
+    expect(await check(v3c, owner(1), { accepted: [h2] })).toMatchObject({ ok: true, bindingVersions: expect.objectContaining({ [laptop.deviceId]: 3 }) });
   });
 
   it('refuses a second vault id for a script of an accepted vault, and flags a non-canonical key order', async () => {
@@ -344,18 +371,134 @@ describe('the revision chain and the full history', () => {
     });
     const m = newManifest({ vault: permuted, network: 'preprod', owners: ownersOf(people.slice(0, 3)), revisedAt: T, allowNonCanonicalKeyOrder: true });
     expect(m.vaultId).not.toBe(id);
-    expect(await check(m, owner(0), { accepted: [acc(base)] })).toEqual({ ok: false, code: 'SCRIPT_OF_ANOTHER_VAULT' });
+    const h1 = await historyOf([base]);
+    expect(await check(m, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'SCRIPT_OF_ANOTHER_VAULT' });
     expect(await check(m, owner(0))).toMatchObject({ ok: true, canonicalKeyOrder: false });
     const preview = newManifest({ vault, network: 'preview', owners: ownersOf(people.slice(0, 3)), revisedAt: T });
-    expect(await checkManifestBeforeAck({ manifest: preview, network: 'preview', own: owner(0), accepted: [acc(base)] })).toMatchObject({ ok: true });
+    expect(await checkManifestBeforeAck({ manifest: preview, network: 'preview', own: owner(0), accepted: [h1] })).toMatchObject({ ok: true });
   });
 
-  it('never throws on bad input', async () => {
+  it('never throws on bad input, a damaged history index included', async () => {
     expect(await check({ ...base, schema: 0 } as unknown as VaultManifest, owner(0))).toEqual({ ok: false, code: 'INVALID_MANIFEST' });
     expect(await checkManifestBeforeAck(undefined)).toEqual({ ok: false, code: 'INVALID_MANIFEST' });
     expect(await check(base, owner(0), { network: 'preview' })).toEqual({ ok: false, code: 'NETWORK_MISMATCH' });
     expect(await check(base, undefined)).toEqual({ ok: false, code: 'INVALID_INPUT' });
     expect(await check(base, { kind: 'other' } as unknown as OwnParticipant)).toEqual({ ok: false, code: 'INVALID_INPUT' });
-    expect(await check(base, owner(0), { accepted: [acc({ ...base, schema: 0 } as unknown as VaultManifest)] })).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    const h1 = await historyOf([base]);
+    for (const damaged of [
+      { ...h1, latest: { ...base, schema: 0 } },
+      { ...h1, revisions: [] },
+      { ...h1, revisions: [{ version: 1, manifestHash: 'AB'.repeat(32) }] },
+      { ...h1, revisions: [{ version: 1, manifestHash: 'ab'.repeat(32) }] },
+      { ...h1, bindingVersions: { [laptop.deviceId]: 0 } },
+      { ...h1, network: 'sanchonet' },
+      { ...h1, paymentScript: 'zz' },
+      null,
+    ]) {
+      expect(await check(base, owner(0), { accepted: [damaged as unknown as AcceptedVault] })).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    }
+    expect(await check(base, owner(0), { accepted: [h1, h1] })).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    expect(await check(base, owner(0), { accepted: 'none' as unknown as AcceptedVault[] })).toEqual({ ok: false, code: 'INVALID_INPUT' });
+  });
+});
+
+describe('the history check costs the same whatever the history\'s length', () => {
+  it('checks the next revision against a full history of 16,384 revisions without normalising it', async () => {
+    const long = normalizeManifest({ ...base, version: MAX_ACCEPTED_REVISIONS, prevManifestHash: 'ab'.repeat(32) });
+    const revisions = Array.from({ length: MAX_ACCEPTED_REVISIONS }, (_, i) => ({
+      version: i + 1,
+      manifestHash: i + 1 === MAX_ACCEPTED_REVISIONS ? manifestHash(long) : sdkBlake2b.hash(HexBlob((i + 1).toString(16).padStart(8, '0')), 32),
+    }));
+    const index: AcceptedVault = { network: 'preprod', vaultId: id, paymentScript: base.paymentScript, stakeScript: base.stakeScript, revisions, bindingVersions: {}, latest: long };
+    const incoming = nextManifestRevision(long, { roles: {}, revisedAt: T + 60 });
+    const short = { ...index, revisions: revisions.slice(-1) };
+    const time = async (accepted: AcceptedVault) => {
+      const t0 = performance.now();
+      const r = await check(incoming, owner(1), { accepted: [accepted] });
+      return { r, ms: performance.now() - t0 };
+    };
+    await time(short);
+    const small = await time(short);
+    const large = await time(index);
+    expect(large.r).toMatchObject({ ok: true, latest: true });
+    expect(small.r).toMatchObject({ ok: true, latest: true });
+    // A Map of 16,384 hashes, not 16,384 normalisations (each takes milliseconds).
+    expect(large.ms).toBeLessThan(small.ms + 250);
+    // Accepting it keeps revision 1 and the latest revisions, within the bound.
+    const after = acceptRevision(index, incoming, large.r as ManifestAck);
+    expect(after.revisions).toHaveLength(MAX_ACCEPTED_REVISIONS);
+    expect(after.revisions[0].version).toBe(1);
+    expect(after.revisions[1].version).toBe(3);
+    expect(after.revisions[after.revisions.length - 1]).toEqual({ version: MAX_ACCEPTED_REVISIONS + 1, manifestHash: manifestHash(incoming) });
+  });
+});
+
+describe('device removal on the acknowledging device', () => {
+  let removed: VaultManifest;
+  beforeAll(() => {
+    removed = nextRevisionRemovingDevice(base, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, laptop), revisedAt: T + 60 });
+  });
+
+  it('accepts a removal attested by the device\'s own participant now, without threshold attestations', async () => {
+    const viewer = base.roles.viewers[0].devices[0];
+    const ack = await check(removed, owner(1), { accepted: [await historyOf([base])] });
+    expect(ack).toMatchObject({
+      ok: true, attestationsVerified: true, unverified: [], latest: true, lapsedViewers: [viewer.deviceId],
+      bindingVersions: expect.objectContaining({ [laptop.deviceId]: 1 }),
+    });
+    expect(ack.ok === true && ack.manifestHash).toBe(manifestHash(removed));
+    // The removed device's own owner still acknowledges, without a device.
+    expect(await check(removed, owner(0), { accepted: [await historyOf([base])] })).toMatchObject({ ok: true, ownRole: 'owner' });
+    // The viewer still checks its own binding, and learns its admission lapsed.
+    expect(await check(removed, { kind: 'viewer', device: await testDevice(9) }, { accepted: [await historyOf([base])] }))
+      .toMatchObject({ ok: true, ownRole: 'viewer', lapsedViewers: [viewer.deviceId] });
+  });
+
+  it('refuses a removal attested by anyone but the device\'s participant', async () => {
+    const byOther = deviceTombstone(laptop, removalBy(people[1], id, laptop));
+    const forged = normalizeManifest({
+      ...removed,
+      roles: { ...removed.roles, owners: removed.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, removedDevices: [byOther] } : e)) },
+    });
+    expect(await check(forged, owner(1), { accepted: [await historyOf([base])] }))
+      .toEqual({ ok: false, code: 'REMOVAL_INVALID', credential: people[0].credential, attestation: 'WRONG_KEY' });
+  });
+
+  it('refuses a replayed removal against a re-added binding', async () => {
+    const back = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop', bindingVersion: 2 });
+    const readded = nextManifestRevision(removed, { roles: { owners: withOwner(removed, 0, () => ({ devices: [back] })).roles.owners }, revisedAt: T + 120 });
+    const history = await historyOf([base, removed, readded]);
+    expect(history.bindingVersions[laptop.deviceId]).toBe(2);
+    const old = removed.roles.owners.find(e => e.credential === people[0].credential).removedDevices[0];
+    const dropBack = (removedDevices: readonly object[]) => normalizeManifest({
+      ...readded,
+      version: 4,
+      prevManifestHash: manifestHash(readded),
+      revisedAt: T + 180,
+      roles: { ...readded.roles, owners: withOwner(readded, 0, () => ({ devices: [], removedDevices })).roles.owners },
+    } as VaultManifest);
+    // The old removal (of binding version 1) put on a tombstone of version 2: its attestation does not cover it.
+    const replayed = dropBack([old, { ...old, bindingVersion: 2 }]);
+    expect(await check(replayed, owner(1), { accepted: [history] }))
+      .toEqual({ ok: false, code: 'REMOVAL_INVALID', credential: people[0].credential, attestation: 'WRONG_PAYLOAD' });
+    // The old tombstone alone removes nothing.
+    expect(await check(dropBack([old]), owner(1), { accepted: [history] })).toEqual({ ok: false, code: 'REVISION_INVALID', revision: 'REMOVAL_UNATTESTED' });
+    // A new removal of version 2 by the owner is accepted.
+    const again = nextRevisionRemovingDevice(readded, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, back, 'expiredTx'), revisedAt: T + 180 });
+    expect(await check(again, owner(1), { accepted: [history] })).toMatchObject({ ok: true, attestationsVerified: true });
+  });
+
+  it('keeps an import valid when every device of the importer is removed', async () => {
+    const m = newManifest({
+      vault,
+      network: 'preprod',
+      owners: [{ vaultKeys: people[0].vaultKeys, devices: [laptop] }, ...ownersOf(people.slice(1, 2))],
+      external: [signedExternal({ vaultId: id, participant: people[2], importer: people[0] })],
+      revisedAt: T,
+    });
+    const gone = nextRevisionRemovingDevice(m, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, laptop), revisedAt: T + 60 });
+    expect(gone.roles.owners.every(e => e.devices.length === 0)).toBe(true);
+    expect(gone.roles.external[0].importedBy).toBe(people[0].credential);
+    expect(await check(gone, owner(1), { accepted: [await historyOf([m])] })).toMatchObject({ ok: true, attestationsVerified: true, externals: [people[2].credential] });
   });
 });

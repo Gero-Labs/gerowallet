@@ -11,6 +11,8 @@ import { encodeVaultPublicKeys, parseVaultPublicKeys } from './keys';
 import {
   BINDING_DEVICE_TAG,
   BINDING_DIGEST_TAG,
+  DEVICE_REMOVAL_TAG,
+  DeviceTombstone,
   EXTERNAL_IMPORT_TAG,
   ExternalEntry,
   MANIFEST_HASH_TAG,
@@ -24,15 +26,22 @@ import {
   deviceBinding,
   deviceBindingCbor,
   deviceIdOf,
+  deviceRemovalDigest,
+  deviceStanding,
+  deviceTombstone,
   encodeManifest,
   externalEntry,
   externalImportDigest,
   isManifestFork,
   isUsableX25519Key,
+  keyWrapRecipients,
+  lapsedAdmissions,
   manifestHash,
   manifestTemplate,
   newManifest,
   nextManifestRevision,
+  nextRevisionRemovingDevice,
+  normalizeManifest,
   scriptsHaveCanonicalKeyOrder,
   verifyDeviceSignature,
   viewerAdmissionDigest,
@@ -43,6 +52,8 @@ import { vaultId } from './vaultId';
 import {
   TestParticipant,
   VECTOR_REVISED_AT,
+  attestationBy,
+  removalBy,
   signedBinding,
   signedExternal,
   testDevice,
@@ -57,15 +68,18 @@ import {
  *   backup holder the third, with test device 3 (CIP-8); backup threshold 1 after slot 200000000;
  *   preprod; no viewer.
  * - external: owners the first two, owner 1 with test device 1; the third as an external owner
- *   imported by test device 1, label "Other wallet".
+ *   imported by owner 1 (a CIP-8 attestation by their payment key), label "Other wallet".
  * - binding: owner 1's binding of test device 1, its body's two tagged digests.
+ * - removal: revision 2 of the standard vector, owner 1 removing test device 1 (CIP-8), revisedAt
+ *   1795651260; the removal digest it signs.
  */
 const VECTORS = {
-  standard: { hash: '435ccf55b1ac6836ae88c6e3c3f429709b52d7328299575d5915f14831824c7a', bytes: '2762' },
-  backup: { hash: 'f40c4032832b092d02ae424793300a30a347db8a2fe3c0654dd89e121174b69e' },
-  external: { hash: '122851390c033bc20fbc6f702fb13e3b20531a82d4819046da2a4fcf6f4a6c10', importDigest: '2c9639cf8502a42d17c7e6fd9d085a78e342be363f36e2315fdc27f2e8f13e98' },
+  standard: { hash: '52a65677b6a1fb5d6c69b8b3e6fedc383bebf14e1d4f5b6f11e0865ac8696097', bytes: '2826' },
+  backup: { hash: 'd9ec7a10ca2e45b978582f9a051630b47aa7718ee437899edf13fa8249b91f7e' },
+  external: { hash: '58e36cd2ca0a1df4e25375509441cbd4de23147857b95fb9c2b018f1b7bfcfbb', importDigest: 'e98294d111998ed9ce0bec88173c6d97a0a698d9cbff435fe9b59a3020a836d5' },
   bindingDigest: 'f09eae9d91d7b990115437ed3413ef2a6c1f65894236914ef71c4170917faef5',
   bindingDeviceDigest: '9ce4156618b7d473f1c2dd6465744d978e57e0a2e779a904d62bee031b66e750',
+  removal: { digest: '97c9561f63744a1f97afc5481f220dbfc0ee0da7df3ea02ca101ffc9a66ce7c6', hash: 'ec70929ce00408be48ef2377b523ee0957930541f90b9585115bbda89b11bade' },
 };
 
 const REVISED_AT = VECTOR_REVISED_AT;
@@ -83,7 +97,7 @@ let laptop: OwnerDeviceBinding;
 
 const ownersOf = (list: readonly TestParticipant[]) => list.map(p => ({ vaultKeys: p.vaultKeys }));
 
-/** Owners 1 and 2 (owner 1 with test device 1), and the third participant as an external cosigner. */
+/** Owners 1 and 2 (owner 1 with test device 1), and the third participant as an external cosigner imported by owner 1. */
 async function withExternal(input: { vault?: VaultScripts; role?: 'owner' | 'backupHolder'; importer?: number; label?: string } = {}): Promise<VaultManifest> {
   const v = input.vault ?? vault;
   const vid = vaultId(v, 'preprod');
@@ -94,7 +108,7 @@ async function withExternal(input: { vault?: VaultScripts; role?: 'owner' | 'bac
       { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[0], device: 1 })] },
       { vaultKeys: people[1].vaultKeys },
     ],
-    external: [await signedExternal({ vaultId: vid, participant: people[2], importer: input.importer ?? 1, role: input.role, label: input.label })],
+    external: [signedExternal({ vaultId: vid, participant: people[2], importer: people[input.importer ?? 0], role: input.role, label: input.label })],
     revisedAt: REVISED_AT,
   });
 }
@@ -134,12 +148,17 @@ function plainBinding(d: OwnerDeviceBinding): P {
   };
 }
 
+function plainTombstone(t: DeviceTombstone): P {
+  return { deviceId: b(t.deviceId), ed25519Pub: b(t.ed25519Pub), bindingVersion: t.bindingVersion, removal: { method: t.removal.method, proof: b(t.removal.proof) } };
+}
+
 function plainOf(m: VaultManifest): P {
   const byCredential = <T extends { credential: string }>(list: readonly T[]) => [...list].sort((x, y) => (x.credential < y.credential ? -1 : 1));
   const participant = (e: VaultManifest['roles']['owners'][number]) => ({
     credential: b(e.credential),
     vaultKeys: plainKeys(e.vaultKeys),
     devices: e.devices.map(plainBinding),
+    removedDevices: e.removedDevices.map(plainTombstone),
   });
   return {
     protocol: 'gero-vault/v1',
@@ -153,14 +172,13 @@ function plainOf(m: VaultManifest): P {
       backupHolders: byCredential(m.roles.backupHolders).map(participant),
       guardians: [],
       delegates: [],
-      viewers: m.roles.viewers.map(v => ({ credential: new Uint8Array(0), vaultKeys: {}, devices: v.devices.map(plainBinding) })),
+      viewers: m.roles.viewers.map(v => ({ credential: new Uint8Array(0), vaultKeys: {}, devices: v.devices.map(plainBinding), removedDevices: [] })),
       external: byCredential(m.roles.external).map((e: ExternalEntry) => ({
         credential: b(e.credential),
         vaultKeys: plainKeys(e.vaultKeys),
         label: e.label,
         role: e.role,
-        importerDeviceId: b(e.importerDeviceId),
-        importSig: b(e.importSig),
+        importSig: { method: e.importSig.method, proof: b(e.importSig.proof) },
       })),
     },
     viewersSeeProposalContents: false,
@@ -208,7 +226,7 @@ describe('manifest encoding', () => {
       else if (v && typeof v === 'object' && !(v instanceof Uint8Array)) for (const [k, x] of Object.entries(v)) { names.add(k); walk(x); }
     };
     walk(decoded);
-    for (const name of ['index', 'y', 'threshold', 'scriptHash', 'stakeScriptHash', 'createdAt', 'roleXpubs', 'xpub', 'importedBy']) expect(names.has(name)).toBe(false);
+    for (const name of ['index', 'y', 'threshold', 'scriptHash', 'stakeScriptHash', 'createdAt', 'roleXpubs', 'xpub', 'importedBy', 'importerDeviceId']) expect(names.has(name)).toBe(false);
     expect(Object.keys(at(decoded, 'roles')).sort()).toEqual(['backupHolders', 'delegates', 'external', 'guardians', 'owners', 'viewers']);
     expect(at(decoded, 'viewersSeeProposalContents')).toBe(false);
   });
@@ -253,6 +271,9 @@ describe('manifest encoding', () => {
     expect(externalImportDigest(id, ext.roles.external[0])).toBe(VECTORS.external.importDigest);
     expect(bindingDigest(laptop)).toBe(VECTORS.bindingDigest);
     expect(bindingDeviceDigest(laptop)).toBe(VECTORS.bindingDeviceDigest);
+    expect(deviceRemovalDigest(id, laptop)).toBe(VECTORS.removal.digest);
+    const removed = nextRevisionRemovingDevice(base, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, laptop), revisedAt: REVISED_AT + 60 });
+    expect(manifestHash(removed)).toBe(VECTORS.removal.hash);
   });
 
   it('has one encoding whatever order the input lists come in', async () => {
@@ -354,37 +375,54 @@ describe('the participants are exactly the scripts\' keys', () => {
     expect((await withExternal({ vault: backupVault, role: 'backupHolder' })).roles.external[0].role).toBe('backupHolder');
   });
 
-  it('carries external cosigners as keys imported and signed by an owner\'s device, the importer derived', async () => {
+  it('carries external cosigners as keys imported and attested by an owner\'s payment key, the importer derived', async () => {
     const m = await withExternal();
-    const device1 = deviceIdOf((await testDevice(1)).ed25519Pub);
-    expect(m.roles.external[0]).toMatchObject({ credential: people[2].credential, importerDeviceId: device1, importedBy: people[0].credential, role: 'owner' });
+    expect(m.roles.external[0]).toMatchObject({ credential: people[2].credential, importedBy: people[0].credential, role: 'owner' });
     expect(refusal(encodeManifest(m))).toBe('ok');
-    // The importer is never a free field: only an owner device in the manifest can be named.
-    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importerDeviceId'] = new Uint8Array(16); }, m))).toBe('IMPORTER_INVALID');
-    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importSig'] = new Uint8Array(63); }, m))).toBe('FIELD_INVALID');
-    expect(refusal(mutated(p => { delete at(p, 'roles', 'external', 0)['importSig']; }, m))).toBe('SCHEMA_INVALID');
+    // The importer is never a free field: it is the key that attested the import, an owner's.
+    const byOwner2 = signedExternal({ vaultId: id, participant: people[2], importer: people[1], method: 'expiredTx' });
+    expect(normalizeManifest({ ...m, roles: { ...m.roles, external: [byOwner2] } }).roles.external[0].importedBy).toBe(people[1].credential);
+    const byStranger = signedExternal({ vaultId: id, participant: people[2], importer: people[3] });
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importSig'] = { method: 0, proof: b(byStranger.importSig.proof) }; }, m))).toBe('IMPORTER_INVALID');
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0, 'importSig')['proof'] = new Uint8Array(4); }, m))).toBe('IMPORTER_INVALID');
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importSig'] = {}; }, m))).toBe('SCHEMA_INVALID');
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importerDeviceId'] = new Uint8Array(16); }, m))).toBe('SCHEMA_INVALID');
     expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['credential'] = b(people[3].credential); }, m))).toBe('CREDENTIAL_MISMATCH');
     expect(externalImportDigest(id, m.roles.external[0]))
       .toBe(sdkBlake2b.hash(HexBlob(Buffer.from(EXTERNAL_IMPORT_TAG, 'utf8').toString('hex') + hexOf(cborgEncode({
-        vaultId: b(id), credential: b(people[2].credential), vaultKeys: plainKeys(people[2].vaultKeys), label: 'Other wallet', role: 'owner', importerDeviceId: b(device1),
+        vaultId: b(id), credential: b(people[2].credential), vaultKeys: plainKeys(people[2].vaultKeys), label: 'Other wallet', role: 'owner',
       }))), 32));
   });
 
-  it('lets only an owner import, also for an external backup holder', async () => {
-    // A backup holder's device is bound in the manifest but is not an owner's.
+  it('lets only the owners slot import, not a backup holder, also for an external backup holder', async () => {
     const vid = vaultId(backupVault, 'preprod');
-    const make = async (importer: number) => newManifest({
+    const make = (importer: TestParticipant) => newManifest({
       vault: backupVault,
       network: 'preprod',
-      owners: [
-        { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[0], device: 1 })] },
-        { vaultKeys: people[1].vaultKeys },
-      ],
-      external: [await signedExternal({ vaultId: vid, participant: people[2], importer, role: 'backupHolder' })],
+      owners: ownersOf(people.slice(0, 2)),
+      external: [signedExternal({ vaultId: vid, participant: people[2], importer, role: 'backupHolder' })],
       revisedAt: REVISED_AT,
     });
-    expect((await make(1)).roles.external[0].importedBy).toBe(people[0].credential);
-    await expect(make(9)).rejects.toMatchObject({ message: expect.stringContaining('IMPORTER_INVALID') });
+    expect(make(people[0]).roles.external[0].importedBy).toBe(people[0].credential);
+    expect(() => make(people[2])).toThrow(expect.objectContaining({ message: expect.stringContaining('IMPORTER_INVALID') }));
+    expect(() => make(people[3])).toThrow(expect.objectContaining({ message: expect.stringContaining('IMPORTER_INVALID') }));
+    // A Gero backup holder of the vault cannot import an external owner either.
+    const mixed = await buildVaultFromParticipants({
+      template: { kind: 'backup', threshold: 2, backupThreshold: 1, backupAfterSlot: 200_000_000 },
+      owners: ownersOf([people[0], people[1], people[3]]),
+      backups: ownersOf([people[2]]),
+    });
+    const mid = vaultId(mixed, 'preprod');
+    const withImporter = (importer: TestParticipant) => () => newManifest({
+      vault: mixed,
+      network: 'preprod',
+      owners: ownersOf(people.slice(0, 2)),
+      backupHolders: ownersOf([people[2]]),
+      external: [signedExternal({ vaultId: mid, participant: people[3], importer })],
+      revisedAt: REVISED_AT,
+    });
+    expect(withImporter(people[1])().roles.external[0].importedBy).toBe(people[1].credential);
+    expect(withImporter(people[2])).toThrow(expect.objectContaining({ message: expect.stringContaining('IMPORTER_INVALID') }));
   });
 
   it('pins each owner\'s stake key to their binding: crossed stake keys are refused where a binding exists', () => {
@@ -492,6 +530,20 @@ describe('device bindings', () => {
     expect(make({ ed25519Pub: device.ed25519Pub, x25519Pub: '00'.repeat(32) })).toThrow(expect.objectContaining({ message: expect.stringContaining('DEVICE_KEY_INVALID') }));
   });
 
+  it('are admitted, for a viewer, by an owner device only, never by a backup holder\'s', async () => {
+    const vid = vaultId(backupVault, 'preprod');
+    const make = async (admitter: number) => newManifest({
+      vault: backupVault,
+      network: 'preprod',
+      owners: [{ vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[0], device: 1 })] }, { vaultKeys: people[1].vaultKeys }],
+      backupHolders: [{ vaultKeys: people[2].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'backupHolder', participant: people[2], device: 3 })] }],
+      viewers: [{ devices: [await signedBinding({ vaultId: vid, role: 'viewer', device: 9, admitter })] }],
+      revisedAt: REVISED_AT,
+    });
+    expect((await make(1)).roles.viewers).toHaveLength(1);
+    await expect(make(3)).rejects.toMatchObject({ message: expect.stringContaining('ADMISSION_INVALID') });
+  });
+
   it('refuse a bad binding with GeroVaultError INVALID_DEVICE_BINDING', async () => {
     const device = await testDevice(1);
     const ok = { vaultId: id, role: 'owner' as const, vaultKeys: people[0].vaultKeys, ed25519Pub: device.ed25519Pub, x25519Pub: device.x25519Pub, label: 'Laptop' };
@@ -517,8 +569,8 @@ describe('device bindings', () => {
 describe('labels in manifests', () => {
   it('are written with the write rule and read with the read rule only', async () => {
     // Builders apply the write rule: NFC, trimmed, no invisible characters.
-    expect(externalEntry({ vaultKeys: people[2].vaultKeys, label: `  Ren${'e'}${char(0x301)}  `, role: 'owner', importerDeviceId: '00'.repeat(16) }).label).toBe(`Ren${char(0xe9)}`);
-    expect(() => externalEntry({ vaultKeys: people[2].vaultKeys, label: `Al${char(0x200b)}ice`, role: 'owner', importerDeviceId: '00'.repeat(16) }))
+    expect(externalEntry({ vaultKeys: people[2].vaultKeys, label: `  Ren${'e'}${char(0x301)}  `, role: 'owner' }).label).toBe(`Ren${char(0xe9)}`);
+    expect(() => externalEntry({ vaultKeys: people[2].vaultKeys, label: `Al${char(0x200b)}ice`, role: 'owner' }))
       .toThrow(expect.objectContaining({ message: expect.stringContaining('LABEL_INVALID') }));
     // The decoder applies the read rule only, so a label written by a client with newer Unicode
     // tables is still read (the signatures over it are checked by the ack).
@@ -560,10 +612,132 @@ describe('revisions', () => {
 
   it('keep the script participants and their importers: a vault\'s keys never change', async () => {
     const m = await withExternal();
-    const relabelled = nextManifestRevision(m, { roles: { external: [await signedExternal({ vaultId: id, participant: people[2], importer: 1, label: 'Renamed' })] }, revisedAt: REVISED_AT });
+    const relabelled = nextManifestRevision(m, { roles: { external: [signedExternal({ vaultId: id, participant: people[2], importer: people[0], label: 'Renamed' })] }, revisedAt: REVISED_AT });
     expect(checkManifestRevision(m, relabelled)).toEqual({ ok: true });
     const moved = nextManifestRevision(bare, { roles: {}, revisedAt: REVISED_AT });
     expect(checkManifestRevision(m, { ...moved, prevManifestHash: manifestHash(m) })).toEqual({ ok: false, code: 'PARTICIPANTS_CHANGED' });
+    // Another owner imports again while the importer is still an owner: refused.
+    const reimported = { ...m, version: 2, prevManifestHash: manifestHash(m), roles: { ...m.roles, external: [signedExternal({ vaultId: id, participant: people[2], importer: people[1] })] } };
+    expect(checkManifestRevision(m, reimported)).toEqual({ ok: false, code: 'IMPORTER_CHANGED' });
+  });
+
+  it('carry every authorisation of an unchanged body forward, byte for byte', async () => {
+    const next = (roles: Partial<VaultManifest['roles']>, from: VaultManifest = base) =>
+      ({ ...from, version: from.version + 1, prevManifestHash: manifestHash(from), roles: { ...from.roles, ...roles } }) as VaultManifest;
+    // Owner 1's binding attested again, by the other method: the same body, another authorisation.
+    const reattested = { ...laptop, attestation: attestationBy(people[0], { kind: 'binding', digest: bindingDigest(laptop) }, 'expiredTx') };
+    expect(checkManifestRevision(base, next({ owners: base.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, devices: [reattested] } : e)) })))
+      .toEqual({ ok: false, code: 'AUTHORISATION_CHANGED' });
+    // The viewer admitted again by owner 2's device while owner 1's device, its admitter, is still bound.
+    const readmitted = await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 2 });
+    expect(checkManifestRevision(base, next({ viewers: [{ devices: [readmitted] }] }))).toEqual({ ok: false, code: 'AUTHORISATION_CHANGED' });
+    // An import attested again by the same owner with the other method.
+    const m = await withExternal();
+    const again = signedExternal({ vaultId: id, participant: people[2], importer: people[0], method: 'expiredTx' });
+    expect(checkManifestRevision(m, next({ external: [again] }, m))).toEqual({ ok: false, code: 'AUTHORISATION_CHANGED' });
+    // A changed body carries its new authorisation.
+    const renamed = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop 2', bindingVersion: 2 });
+    expect(checkManifestRevision(base, next({ owners: base.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, devices: [renamed] } : e)) })))
+      .toEqual({ ok: true });
+  });
+
+});
+
+describe('device removal', () => {
+  let removed: VaultManifest;
+  let phone: OwnerDeviceBinding;
+  const LATER = REVISED_AT + 60;
+  /** `from`'s next revision with the role slots given, unchecked. */
+  const next = (roles: Partial<VaultManifest['roles']>, from: VaultManifest) =>
+    ({ ...from, version: from.version + 1, prevManifestHash: manifestHash(from), roles: { ...from.roles, ...roles } }) as VaultManifest;
+  /** `m`'s owners with participant `n`'s entry changed. */
+  const ownersChanged = (m: VaultManifest, n: number, change: object) => m.roles.owners.map(e => (e.credential === people[n].credential ? { ...e, ...change } : e));
+
+  beforeAll(() => {
+    removed = nextRevisionRemovingDevice(base, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, laptop), revisedAt: LATER });
+    phone = base.roles.owners.find(e => e.credential === people[1].credential).devices[0];
+  });
+
+  it('drops the binding and keeps a tombstone, attested by the participant over { vaultId, deviceId, bindingVersion }', () => {
+    const entry = removed.roles.owners.find(e => e.credential === people[0].credential);
+    expect(entry.devices).toEqual([]);
+    expect(entry.removedDevices).toEqual([{ deviceId: laptop.deviceId, ed25519Pub: laptop.ed25519Pub, bindingVersion: 1, removal: removalBy(people[0], id, laptop) }]);
+    expect(deviceRemovalDigest(id, laptop)).toBe(sdkBlake2b.hash(HexBlob(Buffer.from(DEVICE_REMOVAL_TAG, 'utf8').toString('hex')
+      + hexOf(cborgEncode({ vaultId: b(id), deviceId: b(laptop.deviceId), bindingVersion: 1 }))), 32));
+    expect(checkManifestRevision(base, removed)).toEqual({ ok: true });
+    const decoded = decodeManifest(encodeManifest(removed));
+    expect(decoded.ok === true && decoded.manifest).toEqual(removed);
+    expect(() => deviceRemovalDigest(id, { deviceId: laptop.deviceId, bindingVersion: 0 })).toThrow(expect.objectContaining({ code: 'INVALID_DEVICE_BINDING' }));
+    expect(() => nextRevisionRemovingDevice(base, { deviceId: '00'.repeat(16), removal: removalBy(people[0], id, laptop), revisedAt: LATER }))
+      .toThrow(expect.objectContaining({ code: 'INVALID_DEVICE_BINDING' }));
+  });
+
+  it('leaves the removed device no standing and no key wraps, and lapses the admissions it made', async () => {
+    const viewer = base.roles.viewers[0].devices[0];
+    expect(deviceStanding(base, laptop.ed25519Pub)).toMatchObject({ status: 'bound', binding: { deviceId: laptop.deviceId } });
+    expect(deviceStanding(removed, laptop.ed25519Pub)).toEqual({ status: 'removed' });
+    expect(deviceStanding(removed, phone.ed25519Pub)).toMatchObject({ status: 'bound' });
+    expect(lapsedAdmissions(base)).toEqual([]);
+    expect(lapsedAdmissions(removed)).toEqual([viewer.deviceId]);
+    expect(deviceStanding(removed, viewer.ed25519Pub)).toMatchObject({ status: 'lapsed' });
+    expect(deviceStanding(removed, (await testDevice(50)).ed25519Pub)).toEqual({ status: 'unknown' });
+    expect(deviceStanding(removed, 'not a key')).toEqual({ status: 'unknown' });
+    expect(keyWrapRecipients(base).map(d => d.deviceId).sort()).toEqual([laptop.deviceId, phone.deviceId].sort());
+    expect(keyWrapRecipients(removed).map(d => d.deviceId)).toEqual([phone.deviceId]);
+  });
+
+  it('keeps every tombstone, and refuses a removal without one or a tombstone of nothing removed', async () => {
+    const byPhone = await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 2 });
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 0, { removedDevices: [] }), viewers: [{ devices: [byPhone] }] }, removed)))
+      .toEqual({ ok: false, code: 'TOMBSTONE_DROPPED' });
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [] }) }, removed))).toEqual({ ok: false, code: 'REMOVAL_UNATTESTED' });
+    const wrongVersion = { ...deviceTombstone(phone, removalBy(people[1], id, phone)), bindingVersion: 2 };
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [], removedDevices: [wrongVersion] }) }, removed)))
+      .toEqual({ ok: false, code: 'REMOVAL_UNATTESTED' });
+    const neverBound = await signedBinding({ vaultId: id, role: 'owner', participant: people[1], device: 5 });
+    const stray = deviceTombstone(neverBound, removalBy(people[1], id, neverBound));
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { removedDevices: [stray] }) }, removed))).toEqual({ ok: false, code: 'TOMBSTONE_INVALID' });
+  });
+
+  it('never binds a removed binding version again: the device comes back with a higher one and a new attestation', async () => {
+    expect(() => nextManifestRevision(removed, { roles: { owners: ownersChanged(removed, 0, { devices: [laptop] }) }, revisedAt: LATER }))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('REMOVED_DEVICE_BOUND') }));
+    expect(refusal(mutated(p => { list(ownerOf(p, 0), 'devices').push(plainBinding(laptop)); }, removed))).toBe('REMOVED_DEVICE_BOUND');
+    const back = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop', bindingVersion: 2 });
+    const readded = nextManifestRevision(removed, { roles: { owners: ownersChanged(removed, 0, { devices: [back] }) }, revisedAt: LATER });
+    expect(deviceStanding(readded, laptop.ed25519Pub)).toMatchObject({ status: 'bound', binding: { bindingVersion: 2 } });
+    expect(readded.roles.owners.find(e => e.credential === people[0].credential).removedDevices).toHaveLength(1);
+    // Its admissions count again: the owner bound it again with a new attestation.
+    expect(lapsedAdmissions(readded)).toEqual([]);
+  });
+
+  it('carries a lapsed admission forward or takes a new one by a bound owner device, never a new one by a removed device', async () => {
+    const byPhone = await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 2 });
+    const readmitted = nextManifestRevision(removed, { roles: { viewers: [{ devices: [byPhone] }] }, revisedAt: LATER });
+    expect(deviceStanding(readmitted, byPhone.ed25519Pub)).toMatchObject({ status: 'bound' });
+    expect(nextManifestRevision(removed, { roles: {}, revisedAt: LATER }).roles.viewers).toEqual(removed.roles.viewers);
+    const auditor = await signedBinding({ vaultId: id, role: 'viewer', device: 8, label: 'Auditor', admitter: 1 });
+    expect(() => nextManifestRevision(removed, { roles: { viewers: [...removed.roles.viewers, { devices: [auditor] }] }, revisedAt: LATER }))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('ADMITTED_BY_REMOVED_DEVICE') }));
+    // A first manifest cannot hold a lapsed admission at all.
+    expect(() => normalizeManifest({ ...removed, version: 1, prevManifestHash: undefined }))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('ADMISSION_INVALID') }));
+  });
+
+  it.each([
+    ['DEVICE_ID_MISMATCH', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['deviceId'] = new Uint8Array(16); }],
+    ['DEVICE_KEY_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['ed25519Pub'] = b(`01${'00'.repeat(31)}`); }],
+    ['FIELD_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['bindingVersion'] = 0; }],
+    ['SCHEMA_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['removal'] = {}; }],
+    ['TOMBSTONE_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['method'] = 7; }],
+    ['TOMBSTONE_INVALID', (p: P) => {
+      at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['proof'] = b(walletCip8Attestation(people[0].signer, people[0].credential, deviceRemovalDigest(id, laptop)).proof);
+    }],
+    ['DUPLICATE_DEVICE', (p: P) => { const t = list(ownerOf(p, 0), 'removedDevices'); t.push(structuredClone(t[0])); }],
+    ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0)['removedDevices'] = [structuredClone(at(ownerOf(p, 0), 'removedDevices', 0))]; }],
+    ['SCHEMA_INVALID', (p: P) => { delete ownerOf(p, 1)['removedDevices']; }],
+  ] as [string, (p: P) => void][])('refuses a tombstone that breaks the rules: %s (case %#)', (code, fn) => {
+    expect(refusal(mutated(fn, removed))).toBe(code);
   });
 });
 

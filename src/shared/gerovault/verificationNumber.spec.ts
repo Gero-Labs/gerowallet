@@ -3,8 +3,8 @@ import { blake2b as sdkBlake2b, Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { encode as cborgEncode } from 'cborg';
 import { encodeVaultPublicKeys, parseVaultPublicKeys } from './keys';
-import { VaultManifest, deviceIdOf, newManifest, nextManifestRevision } from './manifest';
-import { ManifestAck, checkManifestBeforeAck } from './manifestCheck';
+import { VaultManifest, newManifest, nextManifestRevision, nextRevisionRemovingDevice } from './manifest';
+import { AcceptedVault, ManifestAck, acceptRevision, checkManifestBeforeAck } from './manifestCheck';
 import { buildVaultFromParticipants } from './scripts';
 import {
   CosignerVerification,
@@ -16,7 +16,6 @@ import {
   cosignerVerificationStatus,
   endorsedVerification,
   externalAttestationHash,
-  externalEndorsementBody,
   externalEndorsementDigest,
   externalVerification,
   fundingVerified,
@@ -35,18 +34,28 @@ import {
 import { VaultPublicKeys, VaultScripts } from './types';
 import { vaultId } from './vaultId';
 import moduleSource from './verificationNumber.ts?raw';
-import { TestParticipant, VECTOR_REVISED_AT, expiredTxAttestation, signedBinding, signedExternal, testDevice, vectorFixture } from './__fixtures__/manifest';
+import {
+  TestParticipant,
+  VECTOR_REVISED_AT,
+  attestationBy,
+  expiredTxAttestation,
+  removalBy,
+  signedBinding,
+  signedEndorsement,
+  signedExternal,
+  vectorFixture,
+} from './__fixtures__/manifest';
 
 /**
  * PROVISIONAL vectors: not frozen until they match the other clients' vectors (GV-07). The
- * manifest is `vectorFixture()`; the endorsement is test device 2's over the external cosigner of
- * the external manifest below.
+ * manifest is `vectorFixture()`; the endorsement digest is owner 2's over the external cosigner
+ * of the external manifest below.
  */
 const VECTOR = {
   verificationDigest: '22efd723ccd592ab2ab8f1da2300544048d478f0a8193cd8499c8a3455326e4f',
   numberDigest: '4546bb0b9b747c7cc17171fc49924f0cf685befe531e6bb3a6c33f9217974612301f653fe6655001',
   number: '06747 57105 84463 67870 60390 61623 54373 38945',
-  endorsementDigest: '9752e2c663077587177c386f0ca455bb295daf64339afaf03a7ad823ddcfaf78',
+  endorsementDigest: 'b8d965ae8a0e096fd3e385b4c7a9bd8d01e3dae46ad99d093d4d08364ce3d04c',
 };
 
 const T = VECTOR_REVISED_AT + 100;
@@ -65,10 +74,21 @@ const ownersOf = (list: readonly VaultPublicKeys[]) => list.map(vaultKeys => ({ 
 const mix = (a: VaultPublicKeys, s: VaultPublicKeys) =>
   parseVaultPublicKeys({ payment: encodeVaultPublicKeys(a).payment, stake: encodeVaultPublicKeys(s).stake });
 
-async function ackOf(m: VaultManifest, n: number): Promise<ManifestAck> {
-  const r = await checkManifestBeforeAck({ manifest: m, network: m.network, own: { kind: 'participant', roleKeys: people[n].roleKeys, index: 1 } });
+async function ackOf(m: VaultManifest, n: number, accepted: readonly AcceptedVault[] = []): Promise<ManifestAck> {
+  const r = await checkManifestBeforeAck({ manifest: m, network: m.network, own: { kind: 'participant', roleKeys: people[n].roleKeys, index: 1 }, accepted });
   if (r.ok !== true) throw new Error(`fixture: ack refused ${r.code}`);
   return r;
+}
+
+/** The history index of `manifests` as participant `n`'s device accepts them, and its ack of the last. */
+async function acceptAll(manifests: readonly VaultManifest[], n: number): Promise<{ history: AcceptedVault; ack: ManifestAck }> {
+  let history: AcceptedVault | undefined;
+  let ack: ManifestAck;
+  for (const m of manifests) {
+    ack = await ackOf(m, n, history ? [history] : []);
+    history = acceptRevision(history, m, ack);
+  }
+  return { history, ack };
 }
 
 async function boundOwners(v: VaultScripts, n: readonly number[]) {
@@ -76,22 +96,20 @@ async function boundOwners(v: VaultScripts, n: readonly number[]) {
   return Promise.all(n.map(async i => ({ vaultKeys: people[i].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[i], device: i + 1 })] })));
 }
 
-/** Owners 1 and 2, both bound (devices 1 and 2); the third participant external, imported by device 1. */
+/** Owners 1 and 2, both bound (devices 1 and 2); the third participant external, imported by owner 1. */
 async function externalManifest(): Promise<VaultManifest> {
   return newManifest({
     vault,
     network: 'preprod',
     owners: await boundOwners(vault, [0, 1]),
-    external: [await signedExternal({ vaultId: id, participant: people[2], importer: 1 })],
+    external: [signedExternal({ vaultId: id, participant: people[2], importer: people[0] })],
     revisedAt: T,
   });
 }
 
-async function endorse(m: VaultManifest, device: number, proof: string, credential = people[2].credential, endorserDeviceId?: string): Promise<ExternalEndorsement> {
-  const d = await testDevice(device);
-  const body = externalEndorsementBody(m, credential, proof, endorserDeviceId ?? deviceIdOf(d.ed25519Pub));
-  return { ...body, signature: d.key.sign(HexBlob(externalEndorsementDigest(body))).hex() };
-}
+/** Participant `n`'s endorsement of the external attestation `proof`. */
+const endorse = (m: VaultManifest, n: number, proof: string, credential = people[2].credential, method?: 'cip8' | 'expiredTx'): ExternalEndorsement =>
+  signedEndorsement(m, people[n], credential, proof, method);
 
 beforeAll(async () => {
   ({ people, vault, id, manifest } = await vectorFixture());
@@ -148,7 +166,7 @@ describe('the verification number', () => {
       vault,
       network: 'preprod',
       owners: await boundOwners(vault, [0, 1]),
-      external: [await signedExternal({ vaultId: id, participant: people[2], importer: 2, label: 'Renamed' })],
+      external: [signedExternal({ vaultId: id, participant: people[2], importer: people[1], label: 'Renamed' })],
       revisedAt: T,
     });
     expect(verificationDigest(byOtherImporter)).toBe(verificationDigest(ext));
@@ -244,7 +262,7 @@ describe('the funding gate', () => {
     expect(qrVerification(bound, people[1].credential, 'not a payload', T)).toBeUndefined();
   });
 
-  it('keeps the ceremony across a device revision, does not depend on revision acceptance, and asks again when keys differ', async () => {
+  it('keeps the ceremony across device revisions, opens only on the latest accepted revision, and asks again when keys differ', async () => {
     const records = [numberVerification(bound, people[1].credential, T), numberVerification(bound, people[2].credential, T)];
     const extra = await signedBinding({ vaultId: id, role: 'owner', participant: people[2], device: 33 });
     const v2 = nextManifestRevision(bound, {
@@ -252,17 +270,18 @@ describe('the funding gate', () => {
       revisedAt: T,
     });
     expect(await fundingVerified(v2, ack, records)).toBe(false);
-    const ackV2 = await checkManifestBeforeAck({ manifest: v2, network: 'preprod', own: { kind: 'participant', roleKeys: people[0].roleKeys, index: 1 }, accepted: [{ manifest: bound, attestationsVerified: true, unverified: [] }] });
-    expect(ackV2).toMatchObject({ ok: true, attestationsVerified: true });
-    expect(await fundingVerified(v2, ackV2 as ManifestAck, records)).toBe(true);
-    // A revision that removes a device is not accepted until GV-22, but funding does not look at that.
-    const shrunk = nextManifestRevision(v2, {
-      roles: { owners: v2.roles.owners.map(e => (e.credential === people[2].credential ? { ...e, devices: e.devices.filter(d => d.deviceId !== extra.deviceId) } : e)) },
-      revisedAt: T,
-    });
-    const ackShrunk = await checkManifestBeforeAck({ manifest: shrunk, network: 'preprod', own: { kind: 'participant', roleKeys: people[0].roleKeys, index: 1 }, accepted: [{ manifest: bound, attestationsVerified: true, unverified: [] }, { manifest: v2, attestationsVerified: true, unverified: [] }] });
-    expect(ackShrunk).toMatchObject({ ok: true, attestationsVerified: false, unverified: ['DEVICE_REMOVED'] });
-    expect(await fundingVerified(shrunk, ackShrunk as ManifestAck, records)).toBe(true);
+    const { history: h2, ack: ackV2 } = await acceptAll([bound, v2], 0);
+    expect(ackV2).toMatchObject({ ok: true, attestationsVerified: true, latest: true });
+    expect(await fundingVerified(v2, ackV2, records)).toBe(true);
+    // A device removed by its own participant is accepted at once, and funding goes on.
+    const shrunk = nextRevisionRemovingDevice(v2, { deviceId: extra.deviceId, removal: removalBy(people[2], id, extra), revisedAt: T });
+    const ackShrunk = await ackOf(shrunk, 0, [h2]);
+    expect(ackShrunk).toMatchObject({ ok: true, attestationsVerified: true, latest: true });
+    expect(await fundingVerified(shrunk, ackShrunk, records)).toBe(true);
+    // Once that is accepted, the superseded revision checked again opens nothing.
+    const ackOld = await ackOf(v2, 0, [acceptRevision(h2, shrunk, ackShrunk)]);
+    expect(ackOld).toMatchObject({ ok: true, redelivery: true, latest: false });
+    expect(await fundingVerified(v2, ackOld, records)).toBe(false);
     // Records made on a manifest with crossed stake keys are stale on the honest one.
     const crossed = newManifest({ vault, network: 'preprod', owners: ownersOf([people[0].vaultKeys, mix(people[1].vaultKeys, people[2].vaultKeys), mix(people[2].vaultKeys, people[1].vaultKeys)]), revisedAt: T });
     const onCrossed = [numberVerification(crossed, people[1].credential, T), numberVerification(crossed, people[2].credential, T)];
@@ -324,16 +343,19 @@ describe('external cosigners: their own attestation, received directly or endors
     expect(await fundingVerified(ext, ack0, [numberVerification(ext, people[1].credential, T), record])).toBe(false);
   });
 
-  it('reaches the importer\'s device by an endorsement from the receiving owner\'s device', async () => {
-    const endorsement = await endorse(ext, 2, proof);
+  it('reaches the importer\'s device by an endorsement attested by the receiving owner\'s payment key', async () => {
+    const endorsement = endorse(ext, 1, proof);
+    expect(endorsement.endorserCredential).toBe(people[1].credential);
     expect(externalEndorsementDigest(endorsement)).toBe(VECTOR.endorsementDigest);
     expect(externalEndorsementDigest(endorsement)).toBe(sdkBlake2b.hash(HexBlob(Buffer.from(EXTERNAL_ENDORSEMENT_TAG, 'utf8').toString('hex') + hexOf(cborgEncode({
       verificationDigest: b(verificationDigest(ext)),
       externalCredential: b(people[2].credential),
-      externalAttestationHash: b(externalAttestationHash(proof)),
-      endorserDeviceId: b(endorsement.endorserDeviceId),
+      externalAttestationHash: b(sdkBlake2b.hash(HexBlob(proof), 32)),
+      endorserCredential: b(people[1].credential),
     }))), 32));
+    expect(externalAttestationHash(proof)).toBe(sdkBlake2b.hash(HexBlob(proof), 32));
     expect(await verifyExternalEndorsement(ext, endorsement, proof)).toEqual({ ok: true });
+    expect(await verifyExternalEndorsement(ext, endorse(ext, 1, proof, people[2].credential, 'expiredTx'), proof)).toEqual({ ok: true });
     const endorsed = await endorsedVerification(ext, endorsement, proof, T);
     expect(endorsed).toMatchObject({ ok: true, record: { method: 'endorsed' } });
     const record = endorsed.ok === true ? endorsed.record : undefined;
@@ -342,28 +364,86 @@ describe('external cosigners: their own attestation, received directly or endors
     expect(await fundingVerified(ext, ack0, [numberVerification(ext, people[1].credential, T)])).toBe(false);
   });
 
-  it('refuses an endorsement by the importer, for another digest, or from an unbound device', async () => {
-    expect(await verifyExternalEndorsement(ext, await endorse(ext, 1, proof), proof)).toEqual({ ok: false, code: 'ENDORSER_IS_IMPORTER' });
-    const other = newManifest({ vault, network: 'preprod', owners: await boundOwners(vault, [0, 1]), external: [await signedExternal({ vaultId: id, participant: people[2], importer: 1, label: 'Renamed' })], revisedAt: T });
+  it('keeps an endorsement valid when the endorsing owner\'s device is removed', async () => {
+    const endorsed = await endorsedVerification(ext, endorse(ext, 1, proof), proof, T);
+    const record = endorsed.ok === true ? endorsed.record : undefined;
+    const phone = ext.roles.owners.find(e => e.credential === people[1].credential).devices[0];
+    const v2 = nextRevisionRemovingDevice(ext, { deviceId: phone.deviceId, removal: removalBy(people[1], id, phone), revisedAt: T + 60 });
+    expect(v2.roles.owners.find(e => e.credential === people[1].credential).devices).toEqual([]);
+    const { ack: ackV2 } = await acceptAll([ext, v2], 0);
+    expect(ackV2).toMatchObject({ latest: true, unattested: [people[1].credential] });
+    expect(await verifyExternalEndorsement(v2, record.method === 'endorsed' ? record.endorsement : undefined, proof)).toEqual({ ok: true });
+    // Its owner now has no attested device, which closes funding until they bind one again.
+    expect(await fundingVerified(v2, ackV2, [numberVerification(v2, people[1].credential, T), record])).toBe(false);
+    const tablet = await signedBinding({ vaultId: id, role: 'owner', participant: people[1], device: 22 });
+    const v3 = nextManifestRevision(v2, { roles: { owners: v2.roles.owners.map(e => (e.credential === people[1].credential ? { ...e, devices: [tablet] } : e)) }, revisedAt: T + 120 });
+    const { ack: ackV3 } = await acceptAll([ext, v2, v3], 0);
+    expect(await fundingVerified(v3, ackV3, [numberVerification(v3, people[1].credential, T), record])).toBe(true);
+  });
+
+  it('refuses an endorsement by the importer, by anyone outside the owners slot, for another digest or attested by another key', async () => {
+    expect(await verifyExternalEndorsement(ext, endorse(ext, 0, proof), proof)).toEqual({ ok: false, code: 'ENDORSER_IS_IMPORTER' });
+    expect(await verifyExternalEndorsement(ext, endorse(ext, 3, proof), proof)).toEqual({ ok: false, code: 'NOT_AN_OWNER' });
     const crossedVault = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([people[0].vaultKeys, people[1].vaultKeys, people[3].vaultKeys]) });
-    expect(verificationDigest(other)).toBe(verificationDigest(ext));
     const elsewhere = newManifest({
       vault: crossedVault,
       network: 'preprod',
       owners: await boundOwners(crossedVault, [0, 1]),
-      external: [await signedExternal({ vaultId: vaultId(crossedVault, 'preprod'), participant: people[3], importer: 1 })],
+      external: [signedExternal({ vaultId: vaultId(crossedVault, 'preprod'), participant: people[3], importer: people[0] })],
       revisedAt: T,
     });
-    const foreign = await endorse(elsewhere, 2, proof, people[2].credential);
-    expect(await verifyExternalEndorsement(ext, foreign, proof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
-    expect(await verifyExternalEndorsement(ext, await endorse(ext, 50, proof), proof)).toEqual({ ok: false, code: 'UNBOUND_DEVICE' });
+    expect(await verifyExternalEndorsement(ext, endorse(elsewhere, 1, proof, people[2].credential), proof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
     const otherProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: 'ab'.repeat(32) }).proof;
-    expect(await verifyExternalEndorsement(ext, await endorse(ext, 2, proof), otherProof)).toEqual({ ok: false, code: 'ATTESTATION_HASH_MISMATCH' });
-    expect(await verifyExternalEndorsement(ext, await endorse(ext, 2, otherProof), otherProof)).toEqual({ ok: false, code: 'WRONG_PAYLOAD' });
-    const signedByOther = { ...await endorse(ext, 2, proof), signature: (await endorse(ext, 3, proof, people[2].credential, deviceIdOf((await testDevice(2)).ed25519Pub))).signature };
-    expect(await verifyExternalEndorsement(ext, signedByOther, proof)).toEqual({ ok: false, code: 'BAD_SIGNATURE' });
-    expect(await verifyExternalEndorsement(ext, { ...await endorse(ext, 2, proof), externalCredential: people[1].credential }, proof)).toEqual({ ok: false, code: 'NOT_AN_EXTERNAL' });
+    expect(await verifyExternalEndorsement(ext, endorse(ext, 1, proof), otherProof)).toEqual({ ok: false, code: 'ATTESTATION_HASH_MISMATCH' });
+    expect(await verifyExternalEndorsement(ext, endorse(ext, 1, otherProof), otherProof)).toEqual({ ok: false, code: 'WRONG_PAYLOAD' });
+    // Named as owner 2's, attested by owner 1's key.
+    const honest = endorse(ext, 1, proof);
+    const byOther = { ...honest, attestation: attestationBy(people[0], { kind: 'endorsement', digest: externalEndorsementDigest(honest) }) };
+    expect(await verifyExternalEndorsement(ext, byOther, proof)).toEqual({ ok: false, code: 'ENDORSEMENT_INVALID', attestation: 'WRONG_KEY' });
+    // Attested by owner 2 over another body.
+    const otherBody = { ...honest, attestation: attestationBy(people[1], { kind: 'endorsement', digest: 'cd'.repeat(32) }) };
+    expect(await verifyExternalEndorsement(ext, otherBody, proof)).toEqual({ ok: false, code: 'ENDORSEMENT_INVALID', attestation: 'WRONG_PAYLOAD' });
+    expect(await verifyExternalEndorsement(ext, { ...honest, externalCredential: people[1].credential }, proof)).toEqual({ ok: false, code: 'NOT_AN_EXTERNAL' });
     expect(await verifyExternalEndorsement(ext, undefined, proof)).toEqual({ ok: false, code: 'MALFORMED' });
+    expect(await verifyExternalEndorsement(ext, { ...honest, attestation: undefined }, proof)).toEqual({ ok: false, code: 'MALFORMED' });
+  });
+
+  it('opens only on the latest accepted revision: a relabel still waiting for threshold attestations opens nothing', async () => {
+    const received = await externalVerification(ext, ack1, people[2].credential, proof, T);
+    const records = [numberVerification(ext, people[0].credential, T), received.ok === true ? received.record : undefined];
+    const { history } = await acceptAll([ext], 1);
+    const relabelled = nextManifestRevision(ext, { roles: { external: [signedExternal({ vaultId: id, participant: people[2], importer: people[0], label: 'Renamed' })] }, revisedAt: T + 60 });
+    const pending = await ackOf(relabelled, 1, [history]);
+    expect(pending).toMatchObject({ attestationsVerified: false, latest: false, unverified: ['EXTERNAL_CHANGE'] });
+    expect(await fundingVerified(relabelled, pending, records)).toBe(false);
+    expect(await fundingVerified(ext, await ackOf(ext, 1, [history]), records)).toBe(true);
+  });
+
+  it('asks a new importer for an endorsement by another owner: deposits stay closed until one exists', async () => {
+    // The importer (owner 1) leaves: the remaining owners move to a new vault, where owner 2
+    // imports the external again. The old endorsement names the old verification digest.
+    const oldEndorsement = endorse(ext, 1, proof);
+    const moved = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([people[1].vaultKeys, people[2].vaultKeys, people[3].vaultKeys]) });
+    const movedId = vaultId(moved, 'preprod');
+    const next = newManifest({
+      vault: moved,
+      network: 'preprod',
+      owners: await boundOwners(moved, [1, 3]),
+      external: [signedExternal({ vaultId: movedId, participant: people[2], importer: people[1] })],
+      revisedAt: T,
+    });
+    expect(next.roles.external[0].importedBy).toBe(people[1].credential);
+    const nextProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(next) }).proof;
+    const ackNew = await ackOf(next, 1);
+    const ceremony = numberVerification(next, people[3].credential, T);
+    expect(await verifyExternalEndorsement(next, oldEndorsement, proof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
+    expect(await fundingVerified(next, ackNew, [ceremony])).toBe(false);
+    // The new importer's own endorsement or direct receipt does not count.
+    expect(await verifyExternalEndorsement(next, endorse(next, 1, nextProof), nextProof)).toEqual({ ok: false, code: 'ENDORSER_IS_IMPORTER' });
+    expect(await externalVerification(next, ackNew, people[2].credential, nextProof, T)).toEqual({ ok: false, code: 'WRONG_ROUTE' });
+    // Another owner's endorsement does.
+    const endorsed = await endorsedVerification(next, endorse(next, 3, nextProof), nextProof, T);
+    expect(await fundingVerified(next, ackNew, [ceremony, endorsed.ok === true ? endorsed.record : undefined])).toBe(true);
   });
 
   it('takes the attestation alone when the importer is the only owner', async () => {
@@ -378,7 +458,7 @@ describe('external cosigners: their own attestation, received directly or endors
       network: 'preprod',
       owners: await boundOwners(backupVault, [0]),
       backupHolders: [{ vaultKeys: people[2].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'backupHolder', participant: people[2], device: 3 })] }],
-      external: [await signedExternal({ vaultId: vid, participant: people[1], importer: 1 })],
+      external: [signedExternal({ vaultId: vid, participant: people[1], importer: people[0] })],
       revisedAt: T,
     });
     const extProof = expiredTxAttestation(people[1].signer, people[1].credential, { kind: 'verification', digest: verificationDigest(m) }).proof;
@@ -406,16 +486,16 @@ describe('external cosigners: their own attestation, received directly or endors
 
   it('discloses its residual: an importer who substitutes a key they hold can sign for it', async () => {
     // The importer (owner 1) puts in keys it controls (participant 4) instead of the external's,
-    // signs the attestation itself and hands the file to owner 2. Nothing in software can tell;
-    // owner 2 must obtain the file from the external person by a channel the importer does not
-    // control (spec 12; the wallet's screen says so).
+    // signs the attestation itself and hands the file to owner 2. Nothing in software can tell
+    // the difference; what protects owner 2 is taking the file from the external person
+    // themself, never by way of owner 1 (spec 12; the wallet's screen says so).
     const subVault = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([people[0].vaultKeys, people[1].vaultKeys, people[3].vaultKeys]) });
     const subId = vaultId(subVault, 'preprod');
     const sub = newManifest({
       vault: subVault,
       network: 'preprod',
       owners: await boundOwners(subVault, [0, 1]),
-      external: [await signedExternal({ vaultId: subId, participant: people[3], importer: 1 })],
+      external: [signedExternal({ vaultId: subId, participant: people[3], importer: people[0] })],
       revisedAt: T,
     });
     const subProof = expiredTxAttestation(people[3].signer, people[3].credential, { kind: 'verification', digest: verificationDigest(sub) }).proof;
