@@ -26,10 +26,13 @@
  *   RoleEntry {
  *     credential        bytes 28; vaultKeys { payment: bytes 32, stake: bytes 32 }
  *     devices           [OwnerDeviceBinding]
- *     removedDevices    [DeviceTombstone], kept in every later revision
+ *     removedDevices    [DeviceTombstone], one per device id
  *   }                   (a viewer: credential bytes 0, vaultKeys {}, removedDevices [])
  *   ExternalEntry   { credential, vaultKeys, label, role: "owner" | "backupHolder", importSig: attestation }
- *   DeviceTombstone { deviceId: bytes 16, ed25519Pub: bytes 32, bindingVersion: uint, removal: attestation }
+ *   DeviceTombstone {
+ *     deviceId: bytes 16, ed25519Pub: bytes 32, bindingVersion: uint, removal: attestation
+ *     removedIn         uint, the version of the revision that removed the device
+ *   }
  *   OwnerDeviceBinding {
  *     vaultId, role, credential, vaultKeys   the participant's, as in their entry ({} and bytes 0 for a viewer)
  *     deviceId          bytes 16, sha256(ed25519Pub)[0:16]
@@ -64,10 +67,16 @@
  * imports), so a relay cannot reassign an import, and device changes never strand one.
  *
  * Removing a device (spec 5.3): its participant's revision drops the binding and adds a
- * tombstone, which no later revision may drop. A binding of that device id must carry a
- * `bindingVersion` above every tombstone of it, and needs a new attestation. A viewer admitted by
- * a removed device keeps its binding, but its admission lapses: it has no standing
- * (`deviceStanding`) until an owner device admits it again.
+ * tombstone. A manifest keeps one tombstone per device id, the latest. A binding of that device
+ * id must carry a `bindingVersion` above its tombstone, and needs a new attestation; once a
+ * tombstone is gone, the high-water marks of each client's history still refuse it
+ * (`manifestCheck.ts`). A viewer admitted by a removed device keeps its binding, but its admission
+ * lapses: it has no standing (`deviceStanding`) until an owner device admits it again.
+ *
+ * Tombstones never stop a vault. When a revision would hold more than `MAX_REMOVED_DEVICES`
+ * tombstones, or its encoding would pass `MAX_MANIFEST_BYTES`, the oldest tombstones (lowest
+ * `removedIn`, then device id) are dropped until it fits, except one that a viewer admission
+ * names, whose key still verifies that admission. A revision drops no tombstone otherwise.
  *
  * Threshold, template and backup terms are read from the scripts (`parseVaultScript`) and never
  * stored twice. The participants are exactly the scripts' keys: each owner, backup holder and
@@ -138,8 +147,8 @@ export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_DEVICES_PER_ENTRY = 5;
 export const MAX_VIEWERS = 20;
 export const MAX_BINDINGS = 64;
-/** Tombstones in one manifest, all participants together. PROVISIONAL: the spec sets no bound. */
-export const MAX_REMOVED_DEVICES = 128;
+/** Tombstones in one manifest, all participants together; past it, the oldest are dropped. */
+export const MAX_REMOVED_DEVICES = 1024;
 const MAX_SCRIPT_BYTES = 8192;
 /** Owners, backup holders and external cosigners together: every key of the two scripts. */
 const MAX_SCRIPT_PARTICIPANTS = MAX_OWNERS + MAX_BACKUP_KEYS;
@@ -193,6 +202,8 @@ export interface DeviceTombstone {
   readonly bindingVersion: number;
   /** By the participant's vault payment key over `deviceRemovalDigest`. */
   readonly removal: OwnerAttestation;
+  /** The version of the revision that removed the device: the oldest tombstones are dropped first. */
+  readonly removedIn: number;
 }
 
 /** An owner, backup holder, guardian or delegate. */
@@ -200,7 +211,7 @@ export interface ParticipantEntry {
   readonly credential: Ed25519KeyHashHex;
   readonly vaultKeys: VaultPublicKeys;
   readonly devices: readonly OwnerDeviceBinding[];
-  /** Tombstones of the participant's removed devices; empty when none was removed. */
+  /** Tombstones of the participant's removed devices, one per device id; empty when none was removed. */
   readonly removedDevices: readonly DeviceTombstone[];
 }
 
@@ -485,7 +496,8 @@ function checkDevices(
   return Object.freeze(out.sort((a, b) => byText(a.deviceId, b.deviceId)));
 }
 
-const byDeviceThenVersion = (a: DeviceTombstone, b: DeviceTombstone) => byText(a.deviceId, b.deviceId) || a.bindingVersion - b.bindingVersion;
+/** The order tombstones are dropped in: the oldest removal first, then by device id. */
+const byAge = (a: DeviceTombstone, b: DeviceTombstone) => a.removedIn - b.removedIn || byText(a.deviceId, b.deviceId);
 
 function checkTombstones(list: readonly DeviceTombstone[] | undefined): readonly DeviceTombstone[] {
   const items = list ?? [];
@@ -496,10 +508,12 @@ function checkTombstones(list: readonly DeviceTombstone[] | undefined): readonly
     if (!isHex(t.ed25519Pub, 32) || !isUsableEd25519Key(t.ed25519Pub)) fault('DEVICE_KEY_INVALID', 'tombstone');
     if (t.deviceId !== deviceIdHex(t.ed25519Pub)) fault('DEVICE_ID_MISMATCH', 'tombstone');
     if (!isInt(t.bindingVersion, 1, MAX_VERSION)) fault('FIELD_INVALID', 'tombstone bindingVersion');
+    // A removal is always a revision, so never version 1.
+    if (!isInt(t.removedIn, 2, MAX_VERSION)) fault('FIELD_INVALID', 'tombstone removedIn');
     const removal = checkProof(t.removal, 'TOMBSTONE_INVALID', 'removal');
-    return Object.freeze({ deviceId: t.deviceId, ed25519Pub: t.ed25519Pub, bindingVersion: t.bindingVersion, removal });
+    return Object.freeze({ deviceId: t.deviceId, ed25519Pub: t.ed25519Pub, bindingVersion: t.bindingVersion, removal, removedIn: t.removedIn });
   });
-  return Object.freeze(out.sort(byDeviceThenVersion));
+  return Object.freeze(out.sort((a, b) => byText(a.deviceId, b.deviceId)));
 }
 
 function checkParticipant(e: ParticipantEntry, role: ManifestRole, vaultId: string): ParticipantEntry {
@@ -663,11 +677,11 @@ function normalize(m: VaultManifest): VaultManifest {
   }
   const tombstones = [...owners, ...backupHolders].flatMap(e => e.removedDevices);
   if (tombstones.length > MAX_REMOVED_DEVICES) fault('TOO_MANY_ENTRIES', 'removed devices');
-  if (!unique(tombstones.map(t => `${t.deviceId}:${t.bindingVersion}`))) fault('DUPLICATE_DEVICE', 'tombstone');
+  if (!unique(tombstones.map(t => t.deviceId))) fault('DUPLICATE_DEVICE', 'one tombstone per device id');
+  if (tombstones.some(t => t.removedIn > m.version)) fault('FIELD_INVALID', 'a tombstone is from a later revision');
   // A removed binding version never returns: a device bound again carries a higher one.
-  const removedUpTo = new Map<string, number>();
-  for (const t of tombstones) removedUpTo.set(t.deviceId, Math.max(removedUpTo.get(t.deviceId) ?? 0, t.bindingVersion));
-  if (bindings.some(b => (removedUpTo.get(b.deviceId) ?? 0) >= b.bindingVersion)) fault('REMOVED_DEVICE_BOUND');
+  const removedAt = new Map(tombstones.map(t => [t.deviceId, t.bindingVersion]));
+  if (bindings.some(b => (removedAt.get(b.deviceId) ?? 0) >= b.bindingVersion)) fault('REMOVED_DEVICE_BOUND');
 
   const placed: Placed[] = [
     ...owners.map(e => ({ role: 'owner' as const, payment: e.credential, stake: keyHashOf(e.vaultKeys.stake) })),
@@ -748,7 +762,13 @@ function bindingWritable(d: OwnerDeviceBinding): CborWritableMap {
 }
 
 function tombstoneWritable(t: DeviceTombstone): CborWritableMap {
-  return { deviceId: bytes(t.deviceId), ed25519Pub: bytes(t.ed25519Pub), bindingVersion: t.bindingVersion, removal: proofWritable(t.removal) };
+  return {
+    deviceId: bytes(t.deviceId),
+    ed25519Pub: bytes(t.ed25519Pub),
+    bindingVersion: t.bindingVersion,
+    removal: proofWritable(t.removal),
+    removedIn: t.removedIn,
+  };
 }
 
 function externalBodyWritable(e: ExternalEntryBody): CborWritableMap {
@@ -933,11 +953,14 @@ export function deviceRemovalDigest(vaultId: string, removed: { readonly deviceI
   }));
 }
 
-/** The tombstone a removal leaves: the binding's device id, key and version, and the removal attestation. */
-export function deviceTombstone(binding: DeviceBindingBody, removal: OwnerAttestation): DeviceTombstone {
+/**
+ * The tombstone a removal leaves: the binding's device id, key and version, the removal
+ * attestation, and `removedIn`, the version of the revision that removes it.
+ */
+export function deviceTombstone(binding: DeviceBindingBody, removal: OwnerAttestation, removedIn: number): DeviceTombstone {
   try {
     const body = checkBindingBody(binding);
-    const [tombstone] = checkTombstones([{ deviceId: body.deviceId, ed25519Pub: body.ed25519Pub, bindingVersion: body.bindingVersion, removal }]);
+    const [tombstone] = checkTombstones([{ deviceId: body.deviceId, ed25519Pub: body.ed25519Pub, bindingVersion: body.bindingVersion, removal, removedIn }]);
     return tombstone;
   } catch (e) {
     throw asGeroVaultError(e, 'INVALID_DEVICE_BINDING');
@@ -1008,7 +1031,8 @@ export type DeviceStanding =
 /**
  * What a device key is to a manifest this device accepted (spec 5.3). A client takes frames only
  * from a `bound` device. A `removed` device (a tombstone, not bound again), a viewer whose
- * admission `lapsed` and an `unknown` key are refused. Throws for an invalid manifest.
+ * admission `lapsed` and an `unknown` key (a removed device whose tombstone was dropped among them)
+ * are refused. Throws for an invalid manifest.
  */
 export function deviceStanding(manifest: VaultManifest, ed25519Pub: string): DeviceStanding {
   const m = normalizeOrThrow(manifest);
@@ -1113,25 +1137,115 @@ function scriptParticipants(m: VaultManifest): string {
   return JSON.stringify([keys(m.roles.owners), keys(m.roles.backupHolders), external]);
 }
 
-const tombstoneKey = (t: DeviceTombstone) => JSON.stringify([t.deviceId, t.ed25519Pub, t.bindingVersion, t.removal.method, t.removal.proof]);
+const tombstoneKey = (t: DeviceTombstone) => JSON.stringify([t.deviceId, t.ed25519Pub, t.bindingVersion, t.removedIn, t.removal.method, t.removal.proof]);
 const authorisationOf = (d: OwnerDeviceBinding) =>
   JSON.stringify([d.deviceSig, d.attestation?.method, d.attestation?.proof, d.admittedBy?.deviceId, d.admittedBy?.signature]);
 const externalBodyKey = (e: ExternalEntryBody) => JSON.stringify([e.credential, e.vaultKeys.payment, e.vaultKeys.stake, e.role, e.label]);
 
+const KEYED_SLOTS = ['owners', 'backupHolders'] as const;
+
+/** A tombstone and the participant entry that holds it. */
+interface HeldTombstone {
+  readonly slot: (typeof KEYED_SLOTS)[number];
+  readonly credential: string;
+  readonly t: DeviceTombstone;
+}
+
+function tombstonesIn(m: VaultManifest): HeldTombstone[] {
+  return KEYED_SLOTS.flatMap(slot => m.roles[slot].flatMap(e => e.removedDevices.map(t => ({ slot, credential: e.credential, t }))));
+}
+
+/** Device ids a viewer admission names: their tombstones stay, so the admission still verifies. */
+function admitterIds(viewers: readonly ViewerEntry[]): Set<string> {
+  return new Set(viewers.flatMap(v => (v?.devices ?? []).map(d => d?.admittedBy?.deviceId)));
+}
+
+const encodedSize = (m: VaultManifest): number => encodeCanonicalCbor(manifestWritable(m)).length;
+
+/** `m` with only the tombstones `keep` takes, and `extra` added back to its entry. */
+function withTombstones(m: VaultManifest, keep: (t: DeviceTombstone) => boolean, extra?: HeldTombstone): VaultManifest {
+  const entries = (slot: HeldTombstone['slot']) => m.roles[slot].map(e => ({
+    ...e,
+    removedDevices: [...(e.removedDevices ?? []).filter(keep), ...(extra?.slot === slot && extra.credential === e.credential ? [extra.t] : [])],
+  }));
+  return { ...m, roles: { ...m.roles, owners: entries('owners'), backupHolders: entries('backupHolders') } };
+}
+
+/**
+ * Before a revision is checked: one tombstone per device id (the one of the highest binding
+ * version), then at most `MAX_REMOVED_DEVICES`, the oldest dropped first. Input the caller built;
+ * anything malformed is left for `normalize` to refuse.
+ */
+function latestTombstones(m: VaultManifest): VaultManifest {
+  try {
+    const all = KEYED_SLOTS.flatMap(slot => m.roles[slot].flatMap(e => e.removedDevices ?? []));
+    const latest = new Map<string, DeviceTombstone>();
+    for (const t of all) if (!latest.has(t.deviceId) || t.bindingVersion > latest.get(t.deviceId).bindingVersion) latest.set(t.deviceId, t);
+    const keep = new Set(latest.values());
+    const named = admitterIds(m.roles.viewers);
+    for (const t of [...keep].filter(x => !named.has(x.deviceId)).sort(byAge)) {
+      if (keep.size <= MAX_REMOVED_DEVICES) break;
+      keep.delete(t);
+    }
+    return keep.size === all.length ? m : withTombstones(m, t => keep.has(t));
+  } catch {
+    return m;
+  }
+}
+
+/** A normalized revision brought within `MAX_MANIFEST_BYTES` by dropping its oldest tombstones, no more than needed. */
+function fitTombstones(m: VaultManifest): VaultManifest {
+  let excess = encodedSize(m) - MAX_MANIFEST_BYTES;
+  if (excess <= 0) return m;
+  const named = admitterIds(m.roles.viewers);
+  const order = tombstonesIn(m).map(x => x.t).filter(t => !named.has(t.deviceId)).sort(byAge);
+  const without = (n: number) => {
+    const dropped = new Set(order.slice(0, n));
+    return withTombstones(m, t => !dropped.has(t));
+  };
+  // An estimate from each tombstone's own size, then exact: list heads may shrink by a byte or two.
+  let n = 0;
+  while (excess > 0 && n < order.length) excess -= encodeCanonicalCbor(tombstoneWritable(order[n++])).length;
+  while (encodedSize(without(n)) > MAX_MANIFEST_BYTES) {
+    if (n === order.length) throw new GeroVaultError('INVALID_MANIFEST', 'TOO_LARGE: the manifest passes its bound with no tombstone left to drop');
+    n += 1;
+  }
+  while (n > 0 && encodedSize(without(n - 1)) <= MAX_MANIFEST_BYTES) n -= 1;
+  return normalizeOrThrow(without(n));
+}
+
 /** Removals and tombstones between two revisions with the same participants. */
 function removalRefusal(a: VaultManifest, b: VaultManifest): ManifestRevisionRefusal | undefined {
-  for (const slot of ['owners', 'backupHolders'] as const) {
-    for (const before of a.roles[slot]) {
-      const after = b.roles[slot].find(e => e.credential === before.credential);
-      const kept = new Set(after.removedDevices.map(tombstoneKey));
-      if (before.removedDevices.some(t => !kept.has(tombstoneKey(t)))) return 'TOMBSTONE_DROPPED';
-      const old = new Set(before.removedDevices.map(tombstoneKey));
-      const added = after.removedDevices.filter(t => !old.has(tombstoneKey(t)));
-      const removed = before.devices.filter(d => !after.devices.some(x => x.deviceId === d.deviceId));
-      if (removed.some(d => !added.some(t => t.deviceId === d.deviceId && t.bindingVersion === d.bindingVersion))) return 'REMOVAL_UNATTESTED';
-      if (added.some(t => !removed.some(d => d.deviceId === t.deviceId && d.bindingVersion === t.bindingVersion))) return 'TOMBSTONE_INVALID';
+  const before = tombstonesIn(a);
+  const after = tombstonesIn(b);
+  // A tombstone is the same only in the same participant's entry.
+  const held = (x: HeldTombstone) => `${x.credential}${tombstoneKey(x.t)}`;
+  const old = new Set(before.map(held));
+  const kept = new Set(after.map(held));
+  const added = after.filter(x => !old.has(held(x)));
+  for (const slot of KEYED_SLOTS) {
+    for (const prevEntry of a.roles[slot]) {
+      const entry = b.roles[slot].find(e => e.credential === prevEntry.credential);
+      const removed = prevEntry.devices.filter(d => !entry.devices.some(x => x.deviceId === d.deviceId));
+      const addedHere = added.filter(x => x.slot === slot && x.credential === entry.credential).map(x => x.t);
+      if (removed.some(d => !addedHere.some(t => t.deviceId === d.deviceId && t.bindingVersion === d.bindingVersion))) return 'REMOVAL_UNATTESTED';
+      if (addedHere.some(t => t.removedIn !== b.version || !removed.some(d => d.deviceId === t.deviceId && d.bindingVersion === t.bindingVersion))) {
+        return 'TOMBSTONE_INVALID';
+      }
     }
   }
+  // A tombstone leaves only when a newer one of its device replaces it, or, oldest first, to make room.
+  const replaced = new Set(added.map(x => x.t.deviceId));
+  const remaining = before.filter(x => !replaced.has(x.t.deviceId));
+  const dropped = remaining.filter(x => !kept.has(held(x)));
+  if (dropped.length === 0) return undefined;
+  const named = admitterIds(b.roles.viewers);
+  const order = [...remaining, ...added].filter(x => !named.has(x.t.deviceId)).sort((x, y) => byAge(x.t, y.t));
+  const oldest = new Set(order.slice(0, dropped.length).map(held));
+  if (dropped.some(x => !oldest.has(held(x)))) return 'TOMBSTONE_DROPPED';
+  // And no more than needed: with the newest of them back, a bound would be passed.
+  const last = order[dropped.length - 1];
+  if (after.length < MAX_REMOVED_DEVICES && encodedSize(withTombstones(b, () => true, last)) <= MAX_MANIFEST_BYTES) return 'TOMBSTONE_DROPPED';
   return undefined;
 }
 
@@ -1170,8 +1284,11 @@ function authorisationRefusal(a: VaultManifest, b: VaultManifest): ManifestRevis
  * - the same script participants with the same vault keys (a phase 1 vault's keys never change;
  *   new owners make a new vault), and the same importer for each external cosigner unless that
  *   importer has left the owners slot;
- * - every tombstone of `prev`, and for each binding it removes from a participant, a new tombstone
- *   of that participant with the same device id and binding version (and no other new one);
+ * - for each binding it removes from a participant, a new tombstone of that participant with the
+ *   same device id and binding version and `removedIn` its own version, and no other new one;
+ * - every tombstone of `prev`, except one replaced by a newer tombstone of its device, and the
+ *   oldest ones dropped to stay within `MAX_REMOVED_DEVICES` and `MAX_MANIFEST_BYTES` (never one a
+ *   viewer admission names, and no more than needed);
  * - every authorisation (`deviceSig`, attestation, `admittedBy`, `importSig`) of a body it does
  *   not change carried forward byte for byte, so a relay holding two valid authorisations of one
  *   body cannot choose between them. A viewer whose admission lapsed may be admitted again by a
@@ -1207,19 +1324,23 @@ export function checkManifestRevision(prev: VaultManifest, next: VaultManifest):
   return refusal ? { ok: false, code: refusal } : { ok: true };
 }
 
-/** The next revision of `prev`, with the role slots given replaced. Throws `GeroVaultError`. */
+/**
+ * The next revision of `prev`, with the role slots given replaced. Tombstones are kept as the
+ * revision rules ask: one per device id, the oldest dropped when a bound is reached. Throws
+ * `GeroVaultError`.
+ */
 export function nextManifestRevision(
   prev: VaultManifest,
   change: { readonly roles: Partial<ManifestRoles>; /** Unix seconds. */ readonly revisedAt: number },
 ): VaultManifest {
   const base = normalizeOrThrow(prev);
-  const next = normalizeOrThrow({
+  const next = fitTombstones(normalizeOrThrow(latestTombstones({
     ...base,
     roles: { ...base.roles, ...change?.roles },
     version: base.version + 1,
     prevManifestHash: manifestHash(base),
     revisedAt: change?.revisedAt,
-  });
+  })));
   const link = checkManifestRevision(base, next);
   if (link.ok === false) throw new GeroVaultError('INVALID_MANIFEST', link.code);
   return next;
@@ -1228,8 +1349,8 @@ export function nextManifestRevision(
 /**
  * The next revision of `prev` with one device removed by its own participant: the binding dropped
  * and its tombstone kept, with `removal`, that participant's attestation over
- * `deviceRemovalDigest`. Viewers it admitted keep their bindings, their admission lapsed. Throws
- * `GeroVaultError`.
+ * `deviceRemovalDigest`. The tombstone replaces an older one of the same device. Viewers it
+ * admitted keep their bindings, their admission lapsed. Throws `GeroVaultError`.
  */
 export function nextRevisionRemovingDevice(
   prev: VaultManifest,
@@ -1242,7 +1363,8 @@ export function nextRevisionRemovingDevice(
   const entries = base.roles[slot].map(e => {
     const binding = e.devices.find(d => d.deviceId === change.deviceId);
     if (!binding) return e;
-    return { ...e, devices: e.devices.filter(d => d !== binding), removedDevices: [...e.removedDevices, deviceTombstone(binding, change.removal)] };
+    const tombstone = deviceTombstone(binding, change.removal, base.version + 1);
+    return { ...e, devices: e.devices.filter(d => d !== binding), removedDevices: [...e.removedDevices, tombstone] };
   });
   return nextManifestRevision(base, { roles: { [slot]: entries }, revisedAt: change.revisedAt });
 }
@@ -1274,7 +1396,7 @@ const TOP_KEYS = [
 ] as const;
 const ENTRY_KEYS = ['credential', 'vaultKeys', 'devices', 'removedDevices'] as const;
 const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'role', 'importSig'] as const;
-const TOMBSTONE_KEYS = ['deviceId', 'ed25519Pub', 'bindingVersion', 'removal'] as const;
+const TOMBSTONE_KEYS = ['deviceId', 'ed25519Pub', 'bindingVersion', 'removal', 'removedIn'] as const;
 const BINDING_KEYS = [
   'vaultId', 'role', 'credential', 'vaultKeys', 'deviceId', 'ed25519Pub', 'x25519Pub', 'label', 'bindingVersion',
   'deviceSig', 'attestation', 'admittedBy',
@@ -1375,6 +1497,7 @@ function tombstoneFrom(v: Value): DeviceTombstone {
     ed25519Pub: byteString(f['ed25519Pub'], [32], 'tombstone ed25519Pub'),
     bindingVersion: uint(f['bindingVersion'], 'tombstone bindingVersion'),
     removal: attestationFrom(f['removal'], 'removal', 'TOMBSTONE_INVALID'),
+    removedIn: uint(f['removedIn'], 'tombstone removedIn'),
   };
 }
 

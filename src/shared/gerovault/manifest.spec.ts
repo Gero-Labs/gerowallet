@@ -79,7 +79,7 @@ const VECTORS = {
   external: { hash: '58e36cd2ca0a1df4e25375509441cbd4de23147857b95fb9c2b018f1b7bfcfbb', importDigest: 'e98294d111998ed9ce0bec88173c6d97a0a698d9cbff435fe9b59a3020a836d5' },
   bindingDigest: 'f09eae9d91d7b990115437ed3413ef2a6c1f65894236914ef71c4170917faef5',
   bindingDeviceDigest: '9ce4156618b7d473f1c2dd6465744d978e57e0a2e779a904d62bee031b66e750',
-  removal: { digest: '97c9561f63744a1f97afc5481f220dbfc0ee0da7df3ea02ca101ffc9a66ce7c6', hash: 'ec70929ce00408be48ef2377b523ee0957930541f90b9585115bbda89b11bade' },
+  removal: { digest: '97c9561f63744a1f97afc5481f220dbfc0ee0da7df3ea02ca101ffc9a66ce7c6', hash: 'be5149fa70fa2d40506166ed914259e5b589c0dcaad38529c93f40337ffa2b17' },
 };
 
 const REVISED_AT = VECTOR_REVISED_AT;
@@ -149,7 +149,7 @@ function plainBinding(d: OwnerDeviceBinding): P {
 }
 
 function plainTombstone(t: DeviceTombstone): P {
-  return { deviceId: b(t.deviceId), ed25519Pub: b(t.ed25519Pub), bindingVersion: t.bindingVersion, removal: { method: t.removal.method, proof: b(t.removal.proof) } };
+  return { deviceId: b(t.deviceId), ed25519Pub: b(t.ed25519Pub), bindingVersion: t.bindingVersion, removal: { method: t.removal.method, proof: b(t.removal.proof) }, removedIn: t.removedIn };
 }
 
 function plainOf(m: VaultManifest): P {
@@ -661,7 +661,7 @@ describe('device removal', () => {
   it('drops the binding and keeps a tombstone, attested by the participant over { vaultId, deviceId, bindingVersion }', () => {
     const entry = removed.roles.owners.find(e => e.credential === people[0].credential);
     expect(entry.devices).toEqual([]);
-    expect(entry.removedDevices).toEqual([{ deviceId: laptop.deviceId, ed25519Pub: laptop.ed25519Pub, bindingVersion: 1, removal: removalBy(people[0], id, laptop) }]);
+    expect(entry.removedDevices).toEqual([{ deviceId: laptop.deviceId, ed25519Pub: laptop.ed25519Pub, bindingVersion: 1, removal: removalBy(people[0], id, laptop), removedIn: 2 }]);
     expect(deviceRemovalDigest(id, laptop)).toBe(sdkBlake2b.hash(HexBlob(Buffer.from(DEVICE_REMOVAL_TAG, 'utf8').toString('hex')
       + hexOf(cborgEncode({ vaultId: b(id), deviceId: b(laptop.deviceId), bindingVersion: 1 }))), 32));
     expect(checkManifestRevision(base, removed)).toEqual({ ok: true });
@@ -686,17 +686,43 @@ describe('device removal', () => {
     expect(keyWrapRecipients(removed).map(d => d.deviceId)).toEqual([phone.deviceId]);
   });
 
-  it('keeps every tombstone, and refuses a removal without one or a tombstone of nothing removed', async () => {
+  it('keeps every tombstone it has no reason to drop, and refuses a removal without one or a tombstone of nothing removed', async () => {
     const byPhone = await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 2 });
     expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 0, { removedDevices: [] }), viewers: [{ devices: [byPhone] }] }, removed)))
       .toEqual({ ok: false, code: 'TOMBSTONE_DROPPED' });
     expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [] }) }, removed))).toEqual({ ok: false, code: 'REMOVAL_UNATTESTED' });
-    const wrongVersion = { ...deviceTombstone(phone, removalBy(people[1], id, phone)), bindingVersion: 2 };
-    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [], removedDevices: [wrongVersion] }) }, removed)))
+    const ofPhone = deviceTombstone(phone, removalBy(people[1], id, phone), 3);
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [], removedDevices: [ofPhone] }) }, removed))).toEqual({ ok: true });
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [], removedDevices: [{ ...ofPhone, bindingVersion: 2 }] }) }, removed)))
       .toEqual({ ok: false, code: 'REMOVAL_UNATTESTED' });
+    // A new tombstone names the revision that removes the device.
+    expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { devices: [], removedDevices: [{ ...ofPhone, removedIn: 2 }] }) }, removed)))
+      .toEqual({ ok: false, code: 'TOMBSTONE_INVALID' });
     const neverBound = await signedBinding({ vaultId: id, role: 'owner', participant: people[1], device: 5 });
-    const stray = deviceTombstone(neverBound, removalBy(people[1], id, neverBound));
+    const stray = deviceTombstone(neverBound, removalBy(people[1], id, neverBound), 3);
     expect(checkManifestRevision(removed, next({ owners: ownersChanged(removed, 1, { removedDevices: [stray] }) }, removed))).toEqual({ ok: false, code: 'TOMBSTONE_INVALID' });
+    // A tombstone moved to another participant's entry is a new tombstone there, of nothing removed.
+    const laptopTombstone = removed.roles.owners.find(e => e.credential === people[0].credential).removedDevices[0];
+    const moved = next({
+      owners: removed.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, removedDevices: [] } : e.credential === people[1].credential ? { ...e, removedDevices: [laptopTombstone] } : e)),
+    }, removed);
+    expect(checkManifestRevision(removed, moved)).toEqual({ ok: false, code: 'TOMBSTONE_INVALID' });
+  });
+
+  it('keeps one tombstone per device id, the latest', async () => {
+    const back = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop', bindingVersion: 2 });
+    const readded = nextManifestRevision(removed, { roles: { owners: ownersChanged(removed, 0, { devices: [back] }) }, revisedAt: LATER });
+    const again = nextRevisionRemovingDevice(readded, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, back), revisedAt: LATER });
+    expect(again.roles.owners.find(e => e.credential === people[0].credential).removedDevices)
+      .toEqual([{ deviceId: laptop.deviceId, ed25519Pub: laptop.ed25519Pub, bindingVersion: 2, removal: removalBy(people[0], id, back), removedIn: 4 }]);
+    expect(checkManifestRevision(readded, again)).toEqual({ ok: true });
+    // Keeping both is refused, and so is keeping the older one.
+    const old = removed.roles.owners.find(e => e.credential === people[0].credential).removedDevices[0];
+    const newer = again.roles.owners.find(e => e.credential === people[0].credential).removedDevices[0];
+    expect(() => normalizeManifest(next({ owners: ownersChanged(readded, 0, { devices: [], removedDevices: [old, newer] }) }, readded)))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('DUPLICATE_DEVICE') }));
+    expect(checkManifestRevision(readded, next({ owners: ownersChanged(readded, 0, { devices: [], removedDevices: [old] }) }, readded)))
+      .toEqual({ ok: false, code: 'REMOVAL_UNATTESTED' });
   });
 
   it('never binds a removed binding version again: the device comes back with a higher one and a new attestation', async () => {
@@ -734,10 +760,20 @@ describe('device removal', () => {
       at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['proof'] = b(walletCip8Attestation(people[0].signer, people[0].credential, deviceRemovalDigest(id, laptop)).proof);
     }],
     ['DUPLICATE_DEVICE', (p: P) => { const t = list(ownerOf(p, 0), 'removedDevices'); t.push(structuredClone(t[0])); }],
+    ['DUPLICATE_DEVICE', (p: P) => { const t = list(ownerOf(p, 0), 'removedDevices'); t.push({ ...(structuredClone(t[0]) as P), bindingVersion: 16 }); }],
+    ['FIELD_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['removedIn'] = 1; }],
+    ['FIELD_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0)['removedIn'] = 3; }],
+    ['SCHEMA_INVALID', (p: P) => { delete at(ownerOf(p, 0), 'removedDevices', 0)['removedIn']; }],
     ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0)['removedDevices'] = [structuredClone(at(ownerOf(p, 0), 'removedDevices', 0))]; }],
     ['SCHEMA_INVALID', (p: P) => { delete ownerOf(p, 1)['removedDevices']; }],
   ] as [string, (p: P) => void][])('refuses a tombstone that breaks the rules: %s (case %#)', (code, fn) => {
     expect(refusal(mutated(fn, removed))).toBe(code);
+  });
+
+  it('holds at most 1,024 tombstones', () => {
+    const tombstone = removed.roles.owners.find(e => e.credential === people[0].credential).removedDevices[0];
+    expect(() => normalizeManifest({ ...removed, roles: { ...removed.roles, owners: ownersChanged(removed, 0, { removedDevices: Array(1025).fill(tombstone) }) } }))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('TOO_MANY_ENTRIES') }));
   });
 });
 

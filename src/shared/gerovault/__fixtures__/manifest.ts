@@ -12,7 +12,6 @@ import { buildSignatureAndCoseKey } from '../../utils/converter';
 import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, canonicalAttestation, cip8Proof, expiredTxBodyHash } from '../attestation';
 import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes } from '../keys';
 import {
-  DeviceBindingBody,
   ExternalEntry,
   ExternalRole,
   ManifestRole,
@@ -163,9 +162,14 @@ export function signedExternal(input: {
   return { ...body, importSig: attestationBy(input.importer, { kind: 'import', digest: externalImportDigest(input.vaultId, body) }, input.method) };
 }
 
-/** The participant's attestation removing `binding` (the binding's own participant, unless another is given). */
-export function removalBy(participant: TestParticipant, vaultId: string, binding: DeviceBindingBody, method?: TestMethod): OwnerAttestation {
-  return attestationBy(participant, { kind: 'removal', digest: deviceRemovalDigest(vaultId, binding) }, method);
+/** `participant`'s attestation removing the binding of `removed`'s device id and binding version. */
+export function removalBy(
+  participant: TestParticipant,
+  vaultId: string,
+  removed: { readonly deviceId: string; readonly bindingVersion: number },
+  method?: TestMethod,
+): OwnerAttestation {
+  return attestationBy(participant, { kind: 'removal', digest: deviceRemovalDigest(vaultId, removed) }, method);
 }
 
 /** `endorser`'s endorsement of the external attestation `proof`, attested by their payment key. */

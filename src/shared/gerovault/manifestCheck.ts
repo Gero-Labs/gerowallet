@@ -12,12 +12,13 @@
  *   `admittedBy`, and each external entry's `importSig` by the importing owner's payment key;
  * - the manifest must agree with this device's accepted history of the vault: the same hash at a
  *   version already accepted (a redelivery), or the next version extending the latest accepted
- *   revision (`checkManifestRevision`: tombstones kept, removals attested, authorisations of
- *   unchanged bodies carried forward). A different manifest at an accepted version, or one that
+ *   revision (`checkManifestRevision`: removals attested, tombstones kept or dropped oldest first,
+ *   authorisations of unchanged bodies carried forward). A different manifest at an accepted version, or one that
  *   does not extend the latest revision, is a fork: both are refused and every owner alerted;
  * - a binding whose body changed, or a device that comes back after being removed, must carry a
  *   `bindingVersion` above the highest this device ever saw for that device id, tombstones
- *   included, so an old binding (an old key agreement key) cannot be replayed;
+ *   included, so an old binding (an old key agreement key) cannot be replayed. The marks come from
+ *   the whole accepted history, so they hold after a manifest has dropped an old tombstone;
  * - its scripts must not belong to another accepted vault on the same network.
  *
  * The history is a compact index per vault (`AcceptedVault`): the hash of every accepted
@@ -41,6 +42,7 @@ import { hexToBytes } from './cbor';
 import { GeroVaultError } from './errors';
 import { deriveVaultPublicKeys, vaultKeyHashes } from './keys';
 import {
+  DeviceTombstone,
   ManifestRevisionRefusal,
   OwnerDeviceBinding,
   VaultManifest,
@@ -349,7 +351,13 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       return refuse('INVALID_INPUT');
     }
 
-    // Every signature.
+    // Every signature. A tombstone carried unchanged from the latest accepted revision was verified
+    // when that revision was accepted; a manifest can hold hundreds of them.
+    const tombstoneKey = (credential: string, t: DeviceTombstone) =>
+      JSON.stringify([credential, t.deviceId, t.bindingVersion, t.removedIn, t.removal.method, t.removal.proof]);
+    const verifiedTombstones = new Set(!redelivery && latest
+      ? [...latest.roles.owners, ...latest.roles.backupHolders].flatMap(e => e.removedDevices.map(t => tombstoneKey(e.credential, t)))
+      : []);
     for (const entry of [...owners, ...backupHolders]) {
       for (const binding of entry.devices) {
         if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID', { credential: entry.credential });
@@ -357,6 +365,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
         if (check.ok === false) return refuse('ATTESTATION_INVALID', { credential: entry.credential, attestation: check.code });
       }
       for (const tombstone of entry.removedDevices) {
+        if (verifiedTombstones.has(tombstoneKey(entry.credential, tombstone))) continue;
         const check = await verifyAttestation(tombstone.removal, entry.credential, { kind: 'removal', digest: deviceRemovalDigest(manifest.vaultId, tombstone) });
         if (check.ok === false) return refuse('REMOVAL_INVALID', { credential: entry.credential, attestation: check.code });
       }

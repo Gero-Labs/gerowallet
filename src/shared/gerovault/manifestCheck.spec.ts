@@ -4,12 +4,20 @@ import { HexBlob } from '@cardano-sdk/util';
 import { isManifestAck } from './ackBrand';
 import { encodeVaultPublicKeys, parseVaultPublicKeys } from './keys';
 import {
+  DeviceTombstone,
+  MAX_MANIFEST_BYTES,
+  MAX_REMOVED_DEVICES,
   OwnerDeviceBinding,
   VaultManifest,
   bindingDeviceDigest,
   bindingDigest,
+  checkManifestRevision,
+  decodeManifest,
   deviceBinding,
+  deviceIdOf,
+  deviceStanding,
   deviceTombstone,
+  encodeManifest,
   manifestHash,
   newManifest,
   nextManifestRevision,
@@ -455,7 +463,7 @@ describe('device removal on the acknowledging device', () => {
   });
 
   it('refuses a removal attested by anyone but the device\'s participant', async () => {
-    const byOther = deviceTombstone(laptop, removalBy(people[1], id, laptop));
+    const byOther = deviceTombstone(laptop, removalBy(people[1], id, laptop), 2);
     const forged = normalizeManifest({
       ...removed,
       roles: { ...removed.roles, owners: removed.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, removedDevices: [byOther] } : e)) },
@@ -475,10 +483,10 @@ describe('device removal on the acknowledging device', () => {
       version: 4,
       prevManifestHash: manifestHash(readded),
       revisedAt: T + 180,
-      roles: { ...readded.roles, owners: withOwner(readded, 0, () => ({ devices: [], removedDevices })).roles.owners },
+      roles: { ...readded.roles, owners: readded.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, devices: [], removedDevices } : e)) },
     } as VaultManifest);
     // The old removal (of binding version 1) put on a tombstone of version 2: its attestation does not cover it.
-    const replayed = dropBack([old, { ...old, bindingVersion: 2 }]);
+    const replayed = dropBack([{ ...old, bindingVersion: 2, removedIn: 4 }]);
     expect(await check(replayed, owner(1), { accepted: [history] }))
       .toEqual({ ok: false, code: 'REMOVAL_INVALID', credential: people[0].credential, attestation: 'WRONG_PAYLOAD' });
     // The old tombstone alone removes nothing.
@@ -501,4 +509,123 @@ describe('device removal on the acknowledging device', () => {
     expect(gone.roles.external[0].importedBy).toBe(people[0].credential);
     expect(await check(gone, owner(1), { accepted: [await historyOf([m])] })).toMatchObject({ ok: true, attestationsVerified: true, externals: [people[2].credential] });
   });
+});
+
+describe('tombstones never stop a vault', () => {
+  const CHURN = 800;
+  const bytesOf = (m: VaultManifest) => encodeManifest(m).length / 2;
+  const tombstonesOfOwner = (m: VaultManifest, n: number) => m.roles.owners.find(e => e.credential === people[n].credential).removedDevices;
+  /** Owner 3's tombstones with `fn` applied, as an unchecked next revision of `from`. */
+  const owner3Tombstones = (from: VaultManifest, to: VaultManifest, fn: (list: readonly DeviceTombstone[]) => readonly DeviceTombstone[]) =>
+    ({ ...to, roles: { ...to.roles, owners: to.roles.owners.map(e => (e.credential === people[2].credential ? { ...e, removedDevices: fn(e.removedDevices) } : e)) } }) as VaultManifest;
+  let churned: VaultManifest;
+  let full: VaultManifest;
+  let index0: AcceptedVault;
+  let index1: AcceptedVault;
+
+  beforeAll(async () => {
+    // Owner 1 removed test device 1 first (it admitted the viewer); owner 3 then removed 800 devices.
+    const many: DeviceTombstone[] = [];
+    for (let i = 0; i < CHURN; i++) {
+      const pub = (await testDevice(1000 + i)).ed25519Pub;
+      const deviceId = deviceIdOf(pub);
+      many.push({ deviceId, ed25519Pub: pub, bindingVersion: 1, removedIn: 3 + i, removal: removalBy(people[2], id, { deviceId, bindingVersion: 1 }) });
+    }
+    const version = CHURN + 3;
+    churned = normalizeManifest({
+      ...base,
+      version,
+      prevManifestHash: 'ab'.repeat(32),
+      revisedAt: T + 1,
+      roles: {
+        ...base.roles,
+        owners: base.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, devices: [], removedDevices: [deviceTombstone(laptop, removalBy(people[0], id, laptop), 2)] }
+          : e.credential === people[2].credential ? { ...e, removedDevices: many } : e)),
+      },
+    });
+    // The index a device that accepted every one of those revisions would hold.
+    const marks = Object.fromEntries([...base.roles.owners, ...base.roles.viewers].flatMap(e => e.devices).map(d => [d.deviceId, 1]).concat(many.map(t => [t.deviceId, 1])));
+    index0 = { network: 'preprod', vaultId: id, paymentScript: base.paymentScript, stakeScript: base.stakeScript, revisions: [{ version, manifestHash: manifestHash(churned) }], bindingVersions: marks, latest: churned };
+    full = nextManifestRevision(churned, { roles: {}, revisedAt: T + 2 });
+    const ack = await check(full, owner(1), { accepted: [index0] });
+    if (ack.ok !== true) throw new Error(`fixture: ${ack.code} ${ack.revision ?? ''}`);
+    index1 = acceptRevision(index0, full, ack);
+  }, 120_000);
+
+  it('drops the oldest tombstones to fit, never the one a lapsed admission names, and no more than needed', () => {
+    expect(bytesOf(churned)).toBeGreaterThan(MAX_MANIFEST_BYTES);
+    expect(decodeManifest(encodeManifest(churned))).toMatchObject({ ok: false, code: 'TOO_LARGE' });
+    expect(bytesOf(full)).toBeLessThanOrEqual(MAX_MANIFEST_BYTES);
+    expect(decodeManifest(encodeManifest(full))).toMatchObject({ ok: true });
+    const kept = tombstonesOfOwner(full, 2);
+    // The byte bound binds long before the count bound.
+    expect(kept.length).toBeGreaterThan(600);
+    expect(kept.length).toBeLessThan(MAX_REMOVED_DEVICES);
+    const cutoff = CHURN + 3 - kept.length;
+    expect([...kept].map(t => t.removedIn).sort((x, y) => x - y)).toEqual(Array.from({ length: kept.length }, (_, i) => cutoff + i));
+    expect(tombstonesOfOwner(full, 0)).toHaveLength(1);
+    expect(deviceStanding(full, base.roles.viewers[0].devices[0].ed25519Pub)).toMatchObject({ status: 'lapsed' });
+    expect(checkManifestRevision(churned, full)).toEqual({ ok: true });
+    // One more dropped, a newer one dropped in place of the oldest, or the named one dropped: refused.
+    const all = tombstonesOfOwner(churned, 2);
+    const oldestKept = all.find(t => t.removedIn === cutoff);
+    const newest = all.find(t => t.removedIn === CHURN + 2);
+    const oldestDropped = all.find(t => t.removedIn === cutoff - 1);
+    expect(checkManifestRevision(churned, owner3Tombstones(churned, full, list => list.filter(t => t.removedIn !== oldestKept.removedIn))))
+      .toEqual({ ok: false, code: 'TOMBSTONE_DROPPED' });
+    expect(checkManifestRevision(churned, owner3Tombstones(churned, full, list => [...list.filter(t => t.removedIn !== newest.removedIn), oldestDropped])))
+      .toEqual({ ok: false, code: 'TOMBSTONE_DROPPED' });
+    const withoutNamed = { ...full, roles: { ...full.roles, owners: full.roles.owners.map(e => (e.credential === people[0].credential ? { ...e, removedDevices: [] } : e)) } };
+    expect(checkManifestRevision(churned, withoutNamed)).toEqual({ ok: false, code: 'INVALID_MANIFEST' });
+  });
+
+  it('keeps accepting removals and new devices once full, dropping the oldest tombstones as room is needed', async () => {
+    let history = index1;
+    let current = full;
+    let revisedAt = T + 3;
+    const accept = async (next: VaultManifest) => {
+      expect(bytesOf(next)).toBeLessThanOrEqual(MAX_MANIFEST_BYTES);
+      expect(checkManifestRevision(current, next)).toEqual({ ok: true });
+      const ack = await check(next, owner(2), { accepted: [history] });
+      expect(ack).toMatchObject({ ok: true, attestationsVerified: true, latest: true });
+      history = acceptRevision(history, next, ack as ManifestAck);
+      current = next;
+    };
+    const oldest = (m: VaultManifest) => Math.min(...tombstonesOfOwner(m, 2).map(t => t.removedIn));
+    const removeDevice = async (n: number, deviceId: string) => {
+      const binding = current.roles.owners.find(e => e.credential === people[n].credential).devices.find(d => d.deviceId === deviceId);
+      const next = nextRevisionRemovingDevice(current, { deviceId, removal: removalBy(people[n], id, binding), revisedAt: revisedAt++ });
+      expect(tombstonesOfOwner(next, n).find(t => t.deviceId === deviceId)).toMatchObject({ bindingVersion: binding.bindingVersion, removedIn: next.version });
+      await accept(next);
+    };
+    // A removal: its tombstone is smaller than the binding it replaces.
+    await removeDevice(1, deviceIdOf((await testDevice(2)).ed25519Pub));
+    for (const device of [61, 62]) {
+      // A new device needs room: the oldest tombstones go.
+      const added = await signedBinding({ vaultId: id, role: 'owner', participant: people[1], device });
+      const before = oldest(current);
+      const next = nextManifestRevision(current, { roles: { owners: current.roles.owners.map(e => (e.credential === people[1].credential ? { ...e, devices: [...e.devices, added] } : e)) }, revisedAt: revisedAt++ });
+      expect(oldest(next)).toBeGreaterThan(before);
+      await accept(next);
+      await removeDevice(1, added.deviceId);
+    }
+    expect(history.revisions.map(r => r.version)).toEqual(Array.from({ length: 7 }, (_, i) => CHURN + 3 + i));
+  }, 120_000);
+
+  it('still refuses a re-add at a dropped tombstone\'s version, through the history marks', async () => {
+    const first = await testDevice(1000);
+    const deviceId = deviceIdOf(first.ed25519Pub);
+    expect(tombstonesOfOwner(full, 2).some(t => t.deviceId === deviceId)).toBe(false);
+    expect(deviceStanding(full, first.ed25519Pub)).toEqual({ status: 'unknown' });
+    expect(index1.bindingVersions[deviceId]).toBe(1);
+    const readd = async (bindingVersion: number) => {
+      const binding = await signedBinding({ vaultId: id, role: 'owner', participant: people[2], device: 1000, bindingVersion });
+      return nextManifestRevision(full, {
+        roles: { owners: full.roles.owners.map(e => (e.credential === people[2].credential ? { ...e, devices: [binding] } : e)) },
+        revisedAt: T + 3,
+      });
+    };
+    expect(await check(await readd(1), owner(1), { accepted: [index1] })).toEqual({ ok: false, code: 'BINDING_REPLAY', credential: people[2].credential });
+    expect(await check(await readd(2), owner(1), { accepted: [index1] })).toMatchObject({ ok: true, attestationsVerified: true });
+  }, 120_000);
 });

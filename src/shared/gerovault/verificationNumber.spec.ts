@@ -419,6 +419,44 @@ describe('external cosigners: their own attestation, received directly or endors
     expect(await fundingVerified(ext, await ackOf(ext, 1, [history]), records)).toBe(true);
   });
 
+  it('never carries an endorsement across a change of importer: a migration changes the verification set', async () => {
+    // Owners 1, 2 and 4, with the third participant external, imported by owner 1 and endorsed by owner 4.
+    const before = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([0, 1, 2, 3].map(i => people[i].vaultKeys)) });
+    const old = newManifest({
+      vault: before,
+      network: 'preprod',
+      owners: await boundOwners(before, [0, 1, 3]),
+      external: [signedExternal({ vaultId: vaultId(before, 'preprod'), participant: people[2], importer: people[0] })],
+      revisedAt: T,
+    });
+    const oldProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(old) }).proof;
+    const oldEndorsement = endorse(old, 3, oldProof);
+    expect(await verifyExternalEndorsement(old, oldEndorsement, oldProof)).toEqual({ ok: true });
+    // Owner 1 leaves: the vault migrates to owners 2 and 4, and owner 2 imports the external again.
+    const after = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([1, 2, 3].map(i => people[i].vaultKeys)) });
+    const migrated = newManifest({
+      vault: after,
+      network: 'preprod',
+      owners: await boundOwners(after, [1, 3]),
+      external: [signedExternal({ vaultId: vaultId(after, 'preprod'), participant: people[2], importer: people[1] })],
+      revisedAt: T,
+    });
+    expect(migrated.paymentScript).not.toBe(old.paymentScript);
+    expect(verificationDigest(migrated)).not.toBe(verificationDigest(old));
+    // Owner 4 is still an owner and still not the importer, yet the old endorsement names the old set.
+    expect(await verifyExternalEndorsement(migrated, oldEndorsement, oldProof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
+    const stale = await endorsedVerification(old, oldEndorsement, oldProof, T);
+    const ackMigrated = await ackOf(migrated, 1);
+    const ceremony = numberVerification(migrated, people[3].credential, T);
+    expect(await fundingVerified(migrated, ackMigrated, [ceremony, stale.ok === true ? stale.record : undefined])).toBe(false);
+    const status = await cosignerVerificationStatus(migrated, ackMigrated, [ceremony, stale.ok === true ? stale.record : undefined]);
+    expect(status.find(c => c.credential === people[2].credential)).toMatchObject({ role: 'external', state: 'stale' });
+    // A new attestation by the external and a new endorsement by owner 4 open it.
+    const newProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(migrated) }).proof;
+    const fresh = await endorsedVerification(migrated, endorse(migrated, 3, newProof), newProof, T);
+    expect(await fundingVerified(migrated, ackMigrated, [ceremony, fresh.ok === true ? fresh.record : undefined])).toBe(true);
+  });
+
   it('asks a new importer for an endorsement by another owner: deposits stay closed until one exists', async () => {
     // The importer (owner 1) leaves: the remaining owners move to a new vault, where owner 2
     // imports the external again. The old endorsement names the old verification digest.
