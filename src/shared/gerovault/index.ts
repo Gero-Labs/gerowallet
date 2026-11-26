@@ -99,7 +99,6 @@ export {
   MAX_ADDRESS_BOOK_ENTRIES,
   MAX_ENDORSEMENTS,
   MAX_EXTERNAL_ATTESTATIONS,
-  MAX_EXTERNAL_ATTESTATION_BYTES,
   MAX_MANIFEST_REVISIONS,
   MAX_PACKAGE_PARTICIPANTS,
   MAX_PROPOSALS,
@@ -109,15 +108,12 @@ export {
   decodeRecoveryPayload,
   encodeRecoveryPayload,
   fitRecoveryHistory,
-  manifestRevisionHash,
 } from './recoveryPayload';
 export type {
   AddressBookEntry,
   BackupTerms,
   DecodeRecoveryPayloadResult,
-  ExternalAttestationRecord,
   ExternalCosignerInput,
-  ExternalEndorsement,
   FittedRecoveryHistory,
   ManifestRevision,
   NativeVaultRecord,
@@ -141,6 +137,7 @@ export {
   openRecoveryPackage,
   recoveryPackageStaleness,
   restoreVaultFromPackage,
+  verifyOwnAttestationInManifests,
 } from './recoveryPackage';
 export type {
   ExportedRecoveryPackage,

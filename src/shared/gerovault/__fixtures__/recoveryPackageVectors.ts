@@ -19,12 +19,15 @@
  *   reader accept.
  */
 import { Cardano } from '@cardano-sdk/core';
-import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { OwnerAttestation } from '../attestation';
 import { bech32 } from 'bech32';
 import { BECH32_PREFIX, deriveRoleKeys, deriveVaultPublicKeys } from '../keys';
 import { buildVaultFromParticipants } from '../scripts';
 import { PackageParticipant, RecoveryPackageContents } from '../recoveryPayload';
 import { RoleKeys, VaultScripts } from '../types';
+import { ExternalEndorsement, externalAttestationHash, externalEndorsementDigest } from '../verificationNumber';
+import { attestationBy, testParticipants } from './manifest';
 import { publishedAccountKey, testCosignerAccount } from './vectors';
 
 export const RECOVERY_PASSPHRASE = 'GeroVault recovery vector: correct horse battery staple';
@@ -92,18 +95,29 @@ export const ADDRESS_BOOK_ADDRESS = Cardano.EnterpriseAddress.fromCredentials(Ca
   hash: Hash28ByteBase16('1c'.repeat(28)),
 }).toAddress().toBech32();
 
-/** Opaque stand-ins: the manifest code defines and checks them (GV-61). */
-export const ENDORSEMENT = Object.freeze({
-  verificationDigest: '11'.repeat(32),
-  externalCredential: Ed25519KeyHashHex('22'.repeat(28)),
-  externalAttestationHash: '33'.repeat(32),
-  endorserDeviceId: '44'.repeat(16),
-  signature: '55'.repeat(64),
-});
-export const EXTERNAL_ATTESTATION = Object.freeze({ method: 1, proof: '84a40081825820' });
+/**
+ * An external attestation and an endorsement of it in the manifest code's stored form, built with
+ * its own test signers (`manifest.ts` fixtures): cosigner 1's expired-transaction attestation of a
+ * verification digest, endorsed by the published key's owner with CIP-8. Their meaning is the
+ * manifest code's (GV-61); the package only carries them.
+ */
+export async function vectorEndorsement(): Promise<{ endorsement: ExternalEndorsement; externalAttestation: OwnerAttestation }> {
+  const [endorser, external] = await testParticipants();
+  const digest = '11'.repeat(32);
+  const externalAttestation = attestationBy(external, { kind: 'verification', digest }, 'expiredTx');
+  const body = {
+    verificationDigest: digest,
+    externalCredential: external.credential,
+    externalAttestationHash: externalAttestationHash(externalAttestation.proof),
+    endorserCredential: endorser.credential,
+  };
+  const endorsement = { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body) }) };
+  return { endorsement, externalAttestation };
+}
 
 export async function backupContents(people: readonly RoleKeys[]): Promise<RecoveryPackageContents> {
   const vault = await backupVault(people);
+  const { endorsement, externalAttestation } = await vectorEndorsement();
   const [owner0, owner1, holder] = await Promise.all([
     participantAt(people[0], 1, 'owner'),
     participantAt(people[1], 1, 'owner'),
@@ -123,8 +137,8 @@ export async function backupContents(people: readonly RoleKeys[]): Promise<Recov
     proposals: [{ id: '5a'.repeat(32), cbor: '8301020c' }],
     addressBook: [{ address: ADDRESS_BOOK_ADDRESS, label: 'Payroll' }],
     referenceScripts: [{ txId: 'be'.repeat(32), index: 0 }],
-    endorsements: [ENDORSEMENT],
-    externalAttestations: [EXTERNAL_ATTESTATION],
+    endorsements: [endorsement],
+    externalAttestations: [externalAttestation],
   };
 }
 

@@ -20,7 +20,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import * as library from './index';
 import { deriveRoleKeys, deriveVaultPublicKeys, vaultKeyHashes } from './keys';
 import { sealRecoveryFile } from './recoveryFormat';
-import { MAX_ADDRESS_BOOK_ENTRIES, MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHash } from './recoveryPayload';
+import { MAX_ADDRESS_BOOK_ENTRIES, MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHashOf } from './recoveryPayload';
 import {
   OwnAttestationQuery,
   MAX_CHAIN_REGISTRATIONS,
@@ -38,12 +38,13 @@ import {
 import { RegistrationInput, encodeRegistration } from './registration';
 import { buildVaultFromParticipants, vaultAddresses } from './scripts';
 import { vaultId } from './vaultId';
+import { encodeManifest } from './manifest';
+import { verificationDigest } from './verificationNumber';
+import { VECTOR_REVISED_AT, vectorFixture } from './__fixtures__/manifest';
 import { RoleKeys, VaultScripts } from './types';
 import { testCosignerAccount } from './__fixtures__/vectors';
 import {
   BACKUP_OPENS_AT_MS,
-  ENDORSEMENT,
-  EXTERNAL_ATTESTATION,
   PLUTUS_VALIDATOR,
   backupContents,
   backupVault,
@@ -52,6 +53,7 @@ import {
   plutusContents,
   standardContents,
   standardVault,
+  vectorEndorsement,
   vectorPeople,
 } from './__fixtures__/recoveryPackageVectors';
 
@@ -286,8 +288,9 @@ describe('export', () => {
 
   it('carries the endorsements and external attestations as they are', async () => {
     const pkg = await opened(await backupContents(people));
-    expect(pkg.endorsements).toEqual([ENDORSEMENT]);
-    expect(pkg.externalAttestations).toEqual([EXTERNAL_ATTESTATION]);
+    const { endorsement, externalAttestation } = await vectorEndorsement();
+    expect(pkg.endorsements).toEqual([endorsement]);
+    expect(pkg.externalAttestations).toEqual([externalAttestation]);
   });
 
   it('exports a Plutus package for its owner or guardian: the seed is checked, the payment key only', async () => {
@@ -405,6 +408,44 @@ describe('restore of a native vault', () => {
       const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: onChain(backup), verifyOwnAttestation: hook }));
       expect(c).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
     }
+  });
+
+  it('verifies the restorer\'s own attestation from the manifest history by default, with the manifest code\'s verifier', async () => {
+    const { manifest, people: signers } = await vectorFixture();
+    const manifests = [{ version: manifest.version, cbor: encodeManifest(manifest) }];
+    const credentials = await Promise.all(people.map(async p => (await vaultKeyHashes(await deriveVaultPublicKeys(p, 1))).payment));
+    expect(credentials).toEqual(signers.slice(0, 3).map(s => s.credential));
+    // Owner 1 has a device attested with CIP-8, owner 2 one attested with an expired transaction.
+    for (const i of [0, 1]) {
+      const pkg = await opened({ ...(await standardContents(people, i)), manifests });
+      const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[i], chain: nothing }));
+      expect(c).toMatchObject({
+        depositsBlocked: false,
+        ownAttestation: { verified: true, acceptedAtMs: VECTOR_REVISED_AT * 1000, vaultId: vaultId(standard, 'preprod'), credential: credentials[i], verificationDigest: verificationDigest(manifest) },
+      });
+    }
+    // Owner 3 has no device yet, so no attestation of theirs: deposits stay blocked.
+    const third = await opened({ ...(await standardContents(people, 2)), manifests });
+    expect(candidateOf(await restoreVaultFromPackage(third, { roleKeys: people[2], chain: nothing })))
+      .toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+  });
+
+  it('refuses by default an attestation that is not this restorer\'s, in this vault, untampered', async () => {
+    const { manifest } = await vectorFixture();
+    const cbor = encodeManifest(manifest);
+    const restore = async (contents: RecoveryPackageContents, roleKeys: RoleKeys) =>
+      candidateOf(await restoreVaultFromPackage(await opened(contents, roleKeys), { roleKeys, chain: nothing }));
+    const blocked = { ownAttestation: { verified: false }, depositsBlocked: true };
+    // The standard vault's manifest copied into a package of another vault that shares the key.
+    const backupPackage = await backupContents(people);
+    expect(await restore({ ...backupPackage, self: { position: 0, index: 1 }, manifests: [{ version: 1, cbor }] }, people[0])).toMatchObject(blocked);
+    // One flipped byte in the stored attestation: it no longer verifies, or the revision no longer decodes.
+    const at = cbor.indexOf(manifest.roles.owners[0].devices[0].attestation?.proof.slice(-40) ?? 'none');
+    expect(at).toBeGreaterThan(0);
+    const flipped = `${cbor.slice(0, at)}${cbor[at] === '0' ? '1' : '0'}${cbor.slice(at + 1)}`;
+    expect(await restore({ ...(await standardContents(people, 0)), manifests: [{ version: 1, cbor: flipped }] }, people[0])).toMatchObject(blocked);
+    // Bytes that are not a manifest.
+    expect(await restore({ ...(await standardContents(people, 0)), manifests: [{ version: 1, cbor: 'a0' }] }, people[0])).toMatchObject(blocked);
   });
 
   it('keeps deposits blocked when a careless verifier accepts an attestation copied from another vault', async () => {
@@ -769,7 +810,7 @@ describe('staleness reminder', () => {
     expect(recoveryPackageStaleness({ manifests: [] }, { version: 0 })).toEqual({ stale: true, reason: 'NO_MANIFEST' });
     expect(recoveryPackageStaleness({ manifests: [m(4, 'a0')] }, { version: 5 })).toEqual({ stale: true, reason: 'OLDER_REVISION' });
     // The newest revision is the highest version, whatever order a list gives.
-    expect(recoveryPackageStaleness({ manifests: [m(5, 'a1'), m(4, 'a0')] }, { version: 5, hash: manifestRevisionHash('a1') })).toEqual({ stale: false });
+    expect(recoveryPackageStaleness({ manifests: [m(5, 'a1'), m(4, 'a0')] }, { version: 5, hash: manifestRevisionHashOf('a1') })).toEqual({ stale: false });
   });
 
   it('reads a malformed package manifest list as stale, without throwing', () => {

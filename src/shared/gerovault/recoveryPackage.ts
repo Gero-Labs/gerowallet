@@ -34,6 +34,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { bech32 } from 'bech32';
 import { bytesToHex, hexToBytes } from './cbor';
+import { verifyAttestation } from './attestation';
 import { GeroVaultError } from './errors';
 import {
   BECH32_PREFIX,
@@ -58,10 +59,12 @@ import {
   decodeRecoveryPayload,
   encodeRecoveryPayload,
   fitRecoveryHistory,
-  manifestRevisionHash,
+  manifestRevisionHashOf,
 } from './recoveryPayload';
+import { VaultManifest, bindingDigest, decodeManifest } from './manifest';
 import { DecodedRegistration, EXTERNAL_SCAN_MAX, RebuildParticipant, RegistrationInput, decodeRegistration, rebuildFromRegistration } from './registration';
 import { vaultAddresses } from './scripts';
+import { verificationDigest } from './verificationNumber';
 import { vaultId } from './vaultId';
 import { ROLE, RoleKeys, VaultAddresses, VaultNetwork, VaultPublicKeys, VaultScripts, VaultWarning } from './types';
 
@@ -349,15 +352,71 @@ export type OwnAttestationResult =
       /** The vault and the credential the verified attestation is bound to. */
       readonly vaultId: string;
       readonly credential: Ed25519KeyHashHex;
+      /** The verification digest of the manifest revision that holds it, when the verifier gives it. */
+      readonly verificationDigest?: string;
     }
   | { readonly verified: false };
 
 /**
  * Verifies the restorer's own owner attestation in the manifest history, signed by their vault
- * key at their index. The verifier belongs to the manifest work (GV-22); until it is wired in, no
- * caller passes one and every restore takes the "no attestation" path.
+ * key at their index. A restore with no verifier given uses `verifyOwnAttestationInManifests`.
  */
 export type OwnAttestationVerifier = (query: OwnAttestationQuery) => Promise<OwnAttestationResult>;
+
+const HASH224 = (hex: string) => bytesToHex(blake2b(hexToBytes(hex) as Uint8Array, { dkLen: 28 }));
+
+/** Whether a manifest revision names exactly the package's participants, with their roles and keys. */
+function sameParticipants(m: VaultManifest, participants: readonly PackageParticipant[]): boolean {
+  const key = (role: string, payment: string, stake: string | undefined, credential: string) => `${role}|${payment}|${stake ?? ''}|${credential}`;
+  const inManifest = [
+    ...m.roles.owners.map(e => key('owner', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.backupHolders.map(e => key('backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.guardians.map(e => key('guardian', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.external.map(e => key(e.role === 'owner' ? 'owner' : 'backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+  ].sort();
+  const inPackage = participants.map(p => key(p.role, p.payment, p.stake, HASH224(p.payment))).sort();
+  return inManifest.length === inPackage.length && inManifest.every((k, i) => k === inPackage[i]);
+}
+
+/**
+ * The default verifier (spec 5.3, GV-22): the restorer's own owner attestation in the package's
+ * manifest history, verified with the manifest code's attestation verifier. A revision counts
+ * only when it decodes, names this vault's identifier, network and both scripts, and names
+ * exactly the package's participants with their keys, so that its verification digest is this
+ * vault's; then the restorer's entry must hold their own vault keys, and one of its device bindings
+ * must carry an attestation by their vault payment key over that binding's digest, which names
+ * this vault. The earliest such revision gives the acceptance time. An attestation from another
+ * vault, a tampered one, or one by another key never verifies. Never throws.
+ */
+export const verifyOwnAttestationInManifests: OwnAttestationVerifier = async query => {
+  try {
+    const revisions = [...query.manifests].sort((a, b) => a.version - b.version);
+    for (const revision of revisions) {
+      if (query.signal?.aborted) return { verified: false };
+      const decoded = decodeManifest(revision.cbor);
+      if (decoded.ok !== true) continue;
+      const m = decoded.manifest;
+      if (m.vaultId !== query.vaultId || m.network !== query.network
+        || m.paymentScript !== query.scripts.payment.cbor || m.stakeScript !== query.scripts.stake.cbor
+        || !sameParticipants(m, query.participants)) {
+        continue;
+      }
+      const digest = verificationDigest(m);
+      const mine = [...m.roles.owners, ...m.roles.backupHolders, ...m.roles.guardians].find(e => e.credential === query.credential);
+      if (!mine || mine.vaultKeys.payment !== query.vaultKeys.payment || mine.vaultKeys.stake !== query.vaultKeys.stake) continue;
+      for (const binding of mine.devices) {
+        if (!binding.attestation || binding.vaultId !== query.vaultId || binding.credential !== query.credential) continue;
+        const check = await verifyAttestation(binding.attestation, query.credential, { kind: 'binding', digest: bindingDigest(binding) });
+        if (check.ok === true) {
+          return { verified: true, acceptedAtMs: m.revisedAt * 1000, vaultId: m.vaultId, credential: query.credential, verificationDigest: digest };
+        }
+      }
+    }
+  } catch {
+    return { verified: false };
+  }
+  return { verified: false };
+};
 
 /** How long a restore waits for the verifier by default, in milliseconds. */
 export const ATTESTATION_TIMEOUT_MS = 10000;
@@ -366,6 +425,7 @@ export interface RestoreOptions {
   /** The restoring participant's own CIP-1854 role keys, derived from their seed. */
   readonly roleKeys: RoleKeys;
   readonly chain: RecoveryChainFacts;
+  /** The own-attestation verifier; `verifyOwnAttestationInManifests` when not given. */
   readonly verifyOwnAttestation?: OwnAttestationVerifier;
   /** How long to wait for the verifier before taking the "no attestation" path; 10 s by default. */
   readonly attestationTimeoutMs?: number;
@@ -544,7 +604,7 @@ async function ownAttestation(
   options: RestoreOptions,
   query: Omit<OwnAttestationQuery, 'signal'>,
 ): Promise<OwnAttestationResult> {
-  const verify = options.verifyOwnAttestation;
+  const verify = options.verifyOwnAttestation ?? verifyOwnAttestationInManifests;
   if (typeof verify !== 'function') return { verified: false };
   const ms = Number.isSafeInteger(options.attestationTimeoutMs) && (options.attestationTimeoutMs as number) > 0
     ? (options.attestationTimeoutMs as number)
@@ -564,7 +624,13 @@ async function ownAttestation(
     // Only an answer bound to this vault and this restorer counts.
     return r?.verified === true && Number.isSafeInteger(r.acceptedAtMs) && r.acceptedAtMs >= 0
       && r.vaultId === query.vaultId && r.credential === query.credential
-      ? Object.freeze({ verified: true, acceptedAtMs: r.acceptedAtMs, vaultId: r.vaultId, credential: r.credential })
+      ? Object.freeze({
+        verified: true,
+        acceptedAtMs: r.acceptedAtMs,
+        vaultId: r.vaultId,
+        credential: r.credential,
+        ...(typeof r.verificationDigest === 'string' ? { verificationDigest: r.verificationDigest } : {}),
+      })
       : { verified: false };
   } catch {
     return { verified: false };
@@ -734,7 +800,7 @@ export function recoveryPackageStaleness(
   let newest: { version: number; hash: string } | undefined;
   for (const m of manifests as unknown[]) {
     const r = m as Partial<ManifestRevision> | undefined;
-    const hash = manifestRevisionHash(r?.cbor);
+    const hash = manifestRevisionHashOf(r?.cbor);
     if (!Number.isSafeInteger(r?.version) || (r?.version as number) < 0 || hash === undefined) return { stale: true, reason: 'UNREADABLE_PACKAGE' };
     // A decoded package lists revisions in ascending order; any other list is not assumed to.
     if (!newest || (r?.version as number) > newest.version) newest = { version: r?.version as number, hash };

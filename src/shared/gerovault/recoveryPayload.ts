@@ -3,9 +3,9 @@
  * rebuild a vault and spend from it with every Gero service unavailable. It is the plaintext of
  * the file in `recoveryFormat.ts`, and it holds no spending key.
  *
- * Canonical CBOR (RFC 8949 section 4.2.1: definite lengths, minimal heads, map keys in bytewise
- * order of their encoding, which for the unsigned keys used here is numeric order). Payload
- * version 1, in CDDL:
+ * Canonical CBOR (RFC 8949 section 4.2.1), written by the library's one canonical writer
+ * (`canonicalCbor.ts`): definite lengths, minimal heads, map keys in bytewise order of their
+ * encoding (numeric order for the unsigned keys used here). Payload version 1, in CDDL:
  *
  *   payload = {
  *     0: 1,                          ; payload version
@@ -21,7 +21,7 @@
  *     10: uint,                      ; proposals left out (the oldest, to fit, or not carriable)
  *     11: uint,                      ; address book entries left out, likewise
  *     12: [* endorsement],           ; the vault's external endorsements, never left out
- *     13: [* external-attestation],  ; the external attestations they cover, never left out
+ *     13: [* attestation],           ; the external attestations they cover, never left out
  *   }
  *   native-vault = {
  *     0: 0,
@@ -56,18 +56,21 @@
  *   proposal-record    = [bstr, bstr]                    ; proposal id, the proposal's own encoding
  *   address-book-entry = [bstr, tstr]                    ; Shelley payment address bytes, label
  *   output-reference   = [bstr .size 32, uint]           ; transaction id, output index
- *   endorsement = [
- *     bstr .size 32,                 ; verification digest
- *     bstr .size 28,                 ; the external cosigner's credential
- *     bstr .size 32,                 ; hash of the external attestation it covers
- *     bstr .size 16,                 ; the endorsing device's id
- *     bstr .size 64,                 ; that device's Ed25519 signature
- *   ]
- *   external-attestation = [uint, bstr]                  ; method, proof (at most 4096 bytes)
+ *   endorsement = {                  ; text keys: the fields the endorsing owner signs (GV-61)
+ *     "verificationDigest": bstr .size 32,
+ *     "externalCredential": bstr .size 28,
+ *     "externalAttestationHash": bstr .size 32,
+ *     "endorserCredential": bstr .size 28,
+ *     "attestation": attestation,    ; by the endorsing owner's vault payment key
+ *   }
+ *   attestation = { "method": uint, "proof": bstr }      ; as a manifest stores one (`attestation.ts`)
  *
- * Endorsements and external attestations are carried opaque: their meaning and their checks
- * belong to the manifest code (GV-60, GV-61). They are small and never left out; a package that
- * cannot hold them is refused like one that cannot hold its manifests.
+ * Endorsements and external attestations use the manifest code's own types
+ * (`ExternalEndorsement`, `OwnerAttestation`) and field names, and must be in its stored form; their
+ * meaning and their signature checks belong to the manifest code (GV-60, GV-61). An external
+ * attestation is an external cosigner's expired-transaction proof over the verification digest.
+ * They are small and never left out; a package that cannot hold them is refused like one that
+ * cannot hold its manifests.
  *
  * Labels follow the read rule of `labels.ts` (well-formed, at most 64 bytes, no control character)
  * and are never empty, in the decoder and at export alike: an export copies existing labels as
@@ -82,13 +85,13 @@
  * (`backupPathOpensAtMs`). The Plutus validator's hash `h` is not carried either: it is the hash
  * of the validator bytes, which a restore computes and checks against the chain.
  *
- * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
- * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision is
- * kept: a revision that cannot be carried is corruption of the wallet's own history, and an export
- * refuses it (`MANIFEST_HISTORY_CORRUPT`). When the rest does not fit, the oldest proposals and the oldest address
- * book entries are left out, and keys 10 and 11 count them (`fitRecoveryHistory`). Address book
- * entries carry no usage time, so "oldest" means added first. The counts are claims from the
- * writer: no reader can tell from them that a history is complete.
+ * Manifests and proposals are carried as their own encoded bytes, each manifest at most the
+ * manifest codec's `MAX_MANIFEST_BYTES`; this file never reads inside them. Every manifest revision
+ * is kept: a revision that cannot be carried is corruption of the wallet's own history, and an
+ * export refuses it (`MANIFEST_HISTORY_CORRUPT`). When the rest does not fit, the oldest proposals
+ * and the oldest address book entries are left out, and keys 10 and 11 count them
+ * (`fitRecoveryHistory`). Address book entries carry no usage time, so "oldest" means added first.
+ * The counts are claims from the writer: no reader can tell from them that a history is complete.
  *
  * The decoder takes untrusted bytes and never throws. It uses the strict bounded reader of
  * `cbor.ts`, refuses unknown keys and anything out of bounds, and requires the bytes to be
@@ -100,14 +103,17 @@
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { blake2b } from '@noble/hashes/blake2.js';
 import { bech32 } from 'bech32';
+import { ATTESTATION_METHOD, MAX_ATTESTATION_BYTES, OwnerAttestation, isCanonicalAttestation } from './attestation';
+import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 import { CborError, CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX } from './keys';
 import { readLabel } from './labels';
+import { MANIFEST_HASH_TAG, MAX_MANIFEST_BYTES, taggedHash } from './manifest';
 import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import { decodeRegistration } from './registration';
+import { ExternalEndorsement, externalEndorsementDigest } from './verificationNumber';
 import { NETWORK_MAGIC } from './vaultId';
 import { MAX_VAULT_INDEX, ROLE, VaultNetwork, VaultScript } from './types';
 
@@ -115,16 +121,13 @@ export const RECOVERY_PAYLOAD_VERSION = 1;
 
 /** Bounds on a payload. The whole payload also fits the file bound (`MAX_RECOVERY_PAYLOAD_BYTES`). */
 export const MAX_PACKAGE_PARTICIPANTS = 64;
+/** The same bound as the client's accepted history; the 16 MiB file may bind first. */
 export const MAX_MANIFEST_REVISIONS = 16384;
 export const MAX_PROPOSALS = 10000;
 export const MAX_ADDRESS_BOOK_ENTRIES = 1024;
 export const MAX_REFERENCE_SCRIPTS = 16;
 export const MAX_ENDORSEMENTS = 256;
 export const MAX_EXTERNAL_ATTESTATIONS = 64;
-/** An external attestation proof is at most 4 KiB (the manifest codec allows up to that). */
-export const MAX_EXTERNAL_ATTESTATION_BYTES = 4096;
-/** A manifest revision is at most 256 KiB, the manifest codec's own bound. */
-export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_PROPOSAL_BYTES = 65536;
 const MAX_SCRIPT_BYTES = 16384;
 const MAX_VALIDATOR_BYTES = 65536;
@@ -134,8 +137,6 @@ const MAX_OUTPUT_INDEX = 0xffff;
 const PAYLOAD_LIMITS = { maxDepth: 6, maxItems: 131072 };
 const BECH32_LIMIT = 1023;
 const XPUB_BYTES = 64;
-/** The manifest hash's domain tag, as the manifest codec writes it (GV-60). */
-const MANIFEST_HASH_TAG = new TextEncoder().encode('gero-vault/v1|manifest|');
 
 export type PackageRole = 'owner' | 'backup' | 'guardian';
 const ROLE_CODES: readonly PackageRole[] = ['owner', 'backup', 'guardian'];
@@ -210,26 +211,6 @@ export interface AddressBookEntry {
   readonly label: string;
 }
 
-/** An endorsement of an external cosigner's attestation by another owner's device (GV-61), opaque here. */
-export interface ExternalEndorsement {
-  /** 32 bytes, lowercase hex. */
-  readonly verificationDigest: string;
-  readonly externalCredential: Ed25519KeyHashHex;
-  /** 32 bytes, lowercase hex. */
-  readonly externalAttestationHash: string;
-  /** 16 bytes, lowercase hex. */
-  readonly endorserDeviceId: string;
-  /** The endorsing device's Ed25519 signature, 64 bytes, lowercase hex. */
-  readonly signature: string;
-}
-
-/** An external cosigner's attestation as the manifest code encodes it, opaque here. */
-export interface ExternalAttestationRecord {
-  readonly method: number;
-  /** Lowercase hex, 1 to 4096 bytes. */
-  readonly proof: string;
-}
-
 /** What `exportRecoveryPackage` writes. */
 export interface RecoveryPackageContents {
   readonly network: VaultNetwork;
@@ -248,14 +229,16 @@ export interface RecoveryPackageContents {
   readonly proposalsDropped?: number;
   /** Address book entries already left out of `addressBook`, counted from the oldest; 0 when absent. */
   readonly addressBookDropped?: number;
+  /** The vault's external endorsements, in the manifest code's stored form. */
   readonly endorsements?: readonly ExternalEndorsement[];
-  readonly externalAttestations?: readonly ExternalAttestationRecord[];
+  /** The external cosigners' expired-transaction attestations the endorsements cover, stored form. */
+  readonly externalAttestations?: readonly OwnerAttestation[];
 }
 
 /** A decoded payload. Its vault facts are claims until a restore checks them. */
 export interface RecoveryPackage extends RecoveryPackageContents {
   readonly version: number;
-  /** Each revision with its hash: blake2b-256 over the tag and its canonical CBOR (spec 5.2). */
+  /** Each revision with its manifest hash: the manifest code's tagged blake2b-256 of its canonical CBOR. */
   readonly manifests: readonly (ManifestRevision & { readonly hash: string })[];
   /**
    * The counts below are claims from the package's writer, as the history itself is: a writer that
@@ -269,7 +252,7 @@ export interface RecoveryPackage extends RecoveryPackageContents {
   /** The writer says some address book entries were left out. */
   readonly addressBookTruncated: boolean;
   readonly endorsements: readonly ExternalEndorsement[];
-  readonly externalAttestations: readonly ExternalAttestationRecord[];
+  readonly externalAttestations: readonly OwnerAttestation[];
 }
 
 export type RecoveryPayloadRefusalCode = 'UNKNOWN_PAYLOAD_VERSION' | 'PAYLOAD_INVALID';
@@ -302,43 +285,17 @@ const PAYMENT_ADDRESS_TYPES: ReadonlySet<Cardano.AddressType> = new Set([
   Cardano.AddressType.EnterpriseScript,
 ]);
 
-// ---------------------------------------------------------------------------------------------
-// Canonical CBOR writer: the subset the payload uses.
-
-function concat(parts: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let offset = 0;
-  for (const p of parts) {
-    out.set(p, offset);
-    offset += p.length;
-  }
-  return out;
+/** A map with unsigned keys; `undefined` values are left out. */
+function intMap(entries: Readonly<Record<number, CborWritable | undefined>>): CborWritable {
+  return new Map(Object.keys(entries).map(Number).filter(k => entries[k] !== undefined).map(k => [k, entries[k] as CborWritable]));
 }
 
-function head(major: number, n: number): Uint8Array {
-  if (!Number.isSafeInteger(n) || n < 0) throw new GeroVaultError('INVALID_PACKAGE', 'A CBOR argument is a non-negative safe integer');
-  const m = major << 5;
-  if (n < 24) return Uint8Array.of(m | n);
-  if (n < 0x100) return Uint8Array.of(m | 24, n);
-  if (n < 0x10000) return Uint8Array.of(m | 25, n >> 8, n & 0xff);
-  if (n < 0x100000000) return Uint8Array.of(m | 26, (n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff);
-  const out = new Uint8Array(9);
-  out[0] = m | 27;
-  new DataView(out.buffer).setBigUint64(1, BigInt(n), false);
-  return out;
-}
+const sizeOf = (value: CborWritable): number => encodeCanonicalCbor(value).length;
 
-const cUint = (n: number) => head(0, n);
-const cBytes = (b: Uint8Array) => concat([head(2, b.length), b]);
-const cText = (s: string) => {
-  const b = new TextEncoder().encode(s);
-  return concat([head(3, b.length), b]);
-};
-const cArray = (items: readonly Uint8Array[]) => concat([head(4, items.length), ...items]);
-/** A map with unsigned keys, written in canonical (numeric) key order; `undefined` values are left out. */
-function cMap(entries: Readonly<Record<number, Uint8Array | undefined>>): Uint8Array {
-  const keys = Object.keys(entries).map(Number).filter(k => entries[k] !== undefined).sort((a, b) => a - b);
-  return concat([head(5, keys.length), ...keys.flatMap(k => [cUint(k), entries[k] as Uint8Array])]);
+/** The manifest code's hash of a manifest revision's bytes; `undefined` for anything but lowercase hex. */
+export function manifestRevisionHashOf(cborHex: unknown): string | undefined {
+  if (typeof cborHex !== 'string' || !ANY_LOWER_HEX.test(cborHex)) return undefined;
+  return taggedHash(MANIFEST_HASH_TAG, hexToBytes(cborHex) as Uint8Array);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -383,11 +340,11 @@ function nativeScripts(payment: Uint8Array, stake: Uint8Array): { payment: Vault
   return { payment: p, stake: s as VaultScript };
 }
 
-function outputReference(ref: OutputReference | undefined, what: string): Uint8Array {
+function outputReference(ref: OutputReference | undefined, what: string): CborWritable {
   if (!isObject(ref)) invalid(`${what} is an output reference`);
   const txId = hexBytes(ref?.txId, TX_ID_HEX, `${what} transaction id`);
   if (!isUint(ref?.index, MAX_OUTPUT_INDEX)) invalid(`${what} output index is 0 to ${MAX_OUTPUT_INDEX}`);
-  return cArray([cBytes(txId), cUint(ref.index)]);
+  return [txId, ref.index];
 }
 
 function xpubBytes(value: unknown, prefix: string, what: string): Uint8Array {
@@ -402,18 +359,16 @@ function xpubBytes(value: unknown, prefix: string, what: string): Uint8Array {
   return bytes;
 }
 
-function externalKey(external: unknown): Uint8Array {
+function externalKey(external: unknown): CborWritable {
   if (!isObject(external)) invalid('An external key is an account key or two role keys');
   const roles = external as { readonly account?: unknown; readonly payment?: unknown; readonly stake?: unknown };
-  if ('account' in roles) {
-    return cArray([cUint(0), cBytes(xpubBytes(roles.account, BECH32_PREFIX.ACCOUNT_XVK, 'An external account key'))]);
-  }
+  if ('account' in roles) return [0, xpubBytes(roles.account, BECH32_PREFIX.ACCOUNT_XVK, 'An external account key')];
   const payment = xpubBytes(roles.payment, BECH32_PREFIX.PAYMENT_XVK, 'An external payment role key');
   const stake = xpubBytes(roles.stake, BECH32_PREFIX.STAKE_XVK, 'An external stake role key');
-  return cArray([cUint(1), cBytes(payment), cBytes(stake)]);
+  return [1, payment, stake];
 }
 
-function vaultBytes(vault: RecoveryPackageContents['vault']): Uint8Array {
+function vaultWritable(vault: RecoveryPackageContents['vault']): CborWritable {
   if (!isObject(vault)) invalid('A vault is native or plutus');
   if (vault.kind === 'native') {
     const paymentCbor = boundedHex(vault.payment?.cbor, MAX_SCRIPT_BYTES, 'The payment script');
@@ -422,25 +377,25 @@ function vaultBytes(vault: RecoveryPackageContents['vault']): Uint8Array {
     if (decoded.payment.hash !== vault.payment.hash || decoded.stake.hash !== vault.stake.hash) {
       invalid('A vault script does not hash to its recorded hash');
     }
-    let backup: Uint8Array | undefined;
+    let backup: CborWritable | undefined;
     if (vault.backup !== undefined) {
       const { threshold, afterSlot } = isObject(vault.backup) ? vault.backup : ({} as Partial<BackupTerms>);
       if (!isUint(threshold) || threshold < 1 || !isUint(afterSlot) || afterSlot < 1) {
         invalid('The backup terms are a threshold and a slot');
       }
-      backup = cMap({ 0: cUint(threshold), 1: cUint(afterSlot) });
+      backup = intMap({ 0: threshold, 1: afterSlot });
     }
-    return cMap({ 0: cUint(0), 1: cBytes(paymentCbor), 2: cBytes(stakeCbor), 3: backup });
+    return intMap({ 0: 0, 1: paymentCbor, 2: stakeCbor, 3: backup });
   }
   if (vault.kind === 'plutus') {
     if (!isUint(vault.templateVersion, MAX_TEMPLATE_VERSION)) invalid('The template version is a 32-bit unsigned integer');
-    const validator = cBytes(boundedHex(vault.validator, MAX_VALIDATOR_BYTES, 'The validator'));
-    return cMap({ 0: cUint(1), 1: outputReference(vault.seed, 'The seed'), 2: cUint(vault.templateVersion), 3: validator });
+    const validator = boundedHex(vault.validator, MAX_VALIDATOR_BYTES, 'The validator');
+    return intMap({ 0: 1, 1: outputReference(vault.seed, 'The seed'), 2: vault.templateVersion, 3: validator });
   }
   return invalid('A vault is native or plutus');
 }
 
-function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
+function participantsWritable(contents: RecoveryPackageContents): CborWritable {
   const list: readonly PackageParticipant[] = Array.isArray(contents.participants) ? contents.participants : invalid('Participants are a list');
   if (list.length === 0 || list.length > MAX_PACKAGE_PARTICIPANTS) invalid(`A package has 1 to ${MAX_PACKAGE_PARTICIPANTS} participants`);
   const native = contents.vault.kind === 'native';
@@ -449,7 +404,7 @@ function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
     if (keys.has(hex)) invalid('The same vault key appears twice');
     keys.add(hex);
   };
-  return cArray(list.map(p => {
+  return list.map(p => {
     if (!isObject(p)) invalid('A participant is a record');
     const code = ROLE_CODES.indexOf(p.role);
     if (code < 0) invalid('A role is owner, backup or guardian');
@@ -466,17 +421,17 @@ function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
       invalid('A Plutus vault participant has no stake vault key');
     }
     const external = p.external === undefined ? undefined : externalKey(p.external);
-    const text = p.label === undefined ? undefined : cText(storedLabel(p.label, 'A participant label'));
-    return cMap({ 0: cUint(code), 1: cBytes(payment), 2: stake ? cBytes(stake) : undefined, 3: external, 4: text });
-  }));
+    const text = p.label === undefined ? undefined : storedLabel(p.label, 'A participant label');
+    return intMap({ 0: code, 1: payment, 2: stake, 3: external, 4: text });
+  });
 }
 
-function selfBytes(contents: RecoveryPackageContents): Uint8Array {
+function selfWritable(contents: RecoveryPackageContents): CborWritable {
   const { position, index } = isObject(contents.self) ? contents.self : ({} as Partial<PackageSelf>);
   if (!isUint(position, contents.participants.length - 1)) invalid('The exporter is one of the participants');
   if (!isUint(index, MAX_VAULT_INDEX)) invalid(`A vault index is 0 to ${MAX_VAULT_INDEX}`);
   if (contents.participants[position].external !== undefined) invalid('The exporter is not an external wallet');
-  return cMap({ 0: cUint(position), 1: cUint(index) });
+  return intMap({ 0: position, 1: index });
 }
 
 function list<T>(value: readonly T[] | undefined, max: number, what: string): readonly T[] {
@@ -484,28 +439,28 @@ function list<T>(value: readonly T[] | undefined, max: number, what: string): re
   return value as readonly T[];
 }
 
-function manifestsBytes(manifests: readonly ManifestRevision[]): Uint8Array {
+function manifestsWritable(manifests: readonly ManifestRevision[]): CborWritable {
   let previous = -1;
-  return cArray(list(manifests, MAX_MANIFEST_REVISIONS, 'The manifest history').map(m => {
+  return list(manifests, MAX_MANIFEST_REVISIONS, 'The manifest history').map(m => {
     if (!isObject(m) || !isUint(m.version) || m.version <= previous) invalid('Manifest versions are unsigned and strictly ascending');
     previous = m.version;
-    return cArray([cUint(m.version), cBytes(boundedHex(m.cbor, MAX_MANIFEST_BYTES, 'A manifest'))]);
-  }));
+    return [m.version, boundedHex(m.cbor, MAX_MANIFEST_BYTES, 'A manifest')];
+  });
 }
 
-function proposalBytes(p: ProposalRecord): Uint8Array {
+function proposalWritable(p: ProposalRecord): CborWritable {
   if (!isObject(p)) invalid('A proposal is a record');
-  return cArray([cBytes(boundedHex(p.id, MAX_PROPOSAL_ID_BYTES, 'A proposal id')), cBytes(boundedHex(p.cbor, MAX_PROPOSAL_BYTES, 'A proposal'))]);
+  return [boundedHex(p.id, MAX_PROPOSAL_ID_BYTES, 'A proposal id'), boundedHex(p.cbor, MAX_PROPOSAL_BYTES, 'A proposal')];
 }
 
-function proposalsBytes(proposals: readonly ProposalRecord[]): Uint8Array {
+function proposalsWritable(proposals: readonly ProposalRecord[]): CborWritable {
   const ids = new Set<string>();
-  return cArray(list(proposals, MAX_PROPOSALS, 'The proposal history').map(p => {
-    const bytes = proposalBytes(p);
+  return list(proposals, MAX_PROPOSALS, 'The proposal history').map(p => {
+    const item = proposalWritable(p);
     if (ids.has(p.id)) invalid('The same proposal appears twice');
     ids.add(p.id);
-    return bytes;
-  }));
+    return item;
+  });
 }
 
 function addressBytes(address: unknown, network: VaultNetwork): Uint8Array {
@@ -521,59 +476,67 @@ function addressBytes(address: unknown, network: VaultNetwork): Uint8Array {
   return hexToBytes(parsed.toBytes()) as Uint8Array;
 }
 
-function addressBookEntryBytes(e: AddressBookEntry, network: VaultNetwork): { bytes: Uint8Array; address: string } {
+function addressBookEntryWritable(e: AddressBookEntry, network: VaultNetwork): { item: CborWritable; address: string } {
   if (!isObject(e)) invalid('An address book entry is a record');
   const address = addressBytes(e.address, network);
-  return { bytes: cArray([cBytes(address), cText(storedLabel(e.label, 'An address book label'))]), address: bytesToHex(address) };
+  return { item: [address, storedLabel(e.label, 'An address book label')], address: bytesToHex(address) };
 }
 
-function addressBookBytes(entries: readonly AddressBookEntry[], network: VaultNetwork): Uint8Array {
+function addressBookWritable(entries: readonly AddressBookEntry[], network: VaultNetwork): CborWritable {
   const seen = new Set<string>();
-  return cArray(list(entries, MAX_ADDRESS_BOOK_ENTRIES, 'The address book').map(e => {
-    const { bytes, address } = addressBookEntryBytes(e, network);
+  return list(entries, MAX_ADDRESS_BOOK_ENTRIES, 'The address book').map(e => {
+    const { item, address } = addressBookEntryWritable(e, network);
     if (seen.has(address)) invalid('The same address appears twice in the address book');
     seen.add(address);
-    return bytes;
-  }));
+    return item;
+  });
 }
 
-function referenceScriptsBytes(refs: readonly OutputReference[]): Uint8Array {
+function referenceScriptsWritable(refs: readonly OutputReference[]): CborWritable {
   const seen = new Set<string>();
-  return cArray(list(refs, MAX_REFERENCE_SCRIPTS, 'The reference scripts').map(r => {
-    const bytes = outputReference(r, 'A reference script');
+  return list(refs, MAX_REFERENCE_SCRIPTS, 'The reference scripts').map(r => {
+    const item = outputReference(r, 'A reference script');
     const key = `${r.txId}#${r.index}`;
     if (seen.has(key)) invalid('The same reference script UTxO appears twice');
     seen.add(key);
-    return bytes;
-  }));
+    return item;
+  });
 }
 
-function endorsementBytes(e: ExternalEndorsement): Uint8Array {
+/** An attestation as a manifest stores one: `{ method, proof }`, in the stored form only. */
+function attestationWritable(a: OwnerAttestation, what: string): CborWritable {
+  if (!isObject(a) || !isUint(a.method) || !isCanonicalAttestation(a)) invalid(`${what} is an attestation in the stored form`);
+  return { method: a.method, proof: hexToBytes(a.proof) as Uint8Array };
+}
+
+function endorsementWritable(e: ExternalEndorsement): CborWritable {
   if (!isObject(e)) invalid('An endorsement is a record');
-  return cArray([
-    cBytes(hexBytes(e.verificationDigest, LOWER_HEX(32), 'An endorsement verification digest')),
-    cBytes(hexBytes(e.externalCredential, LOWER_HEX(28), 'An endorsement external credential')),
-    cBytes(hexBytes(e.externalAttestationHash, LOWER_HEX(32), 'An endorsement attestation hash')),
-    cBytes(hexBytes(e.endorserDeviceId, LOWER_HEX(16), 'An endorsement device id')),
-    cBytes(hexBytes(e.signature, LOWER_HEX(64), 'An endorsement signature')),
-  ]);
+  // The manifest code's own body check: a digest, two credentials and an attestation hash.
+  if (attempt(() => externalEndorsementDigest(e)) === undefined) invalid('An endorsement names a verification digest, two credentials and an attestation hash');
+  return {
+    verificationDigest: hexToBytes(e.verificationDigest) as Uint8Array,
+    externalCredential: hexToBytes(e.externalCredential) as Uint8Array,
+    externalAttestationHash: hexToBytes(e.externalAttestationHash) as Uint8Array,
+    endorserCredential: hexToBytes(e.endorserCredential) as Uint8Array,
+    attestation: attestationWritable(e.attestation, 'An endorsement attestation'),
+  };
 }
 
-function externalAttestationBytes(a: ExternalAttestationRecord): Uint8Array {
-  if (!isObject(a) || !isUint(a.method, 255)) invalid('An external attestation has a method from 0 to 255');
-  return cArray([cUint(a.method), cBytes(boundedHex(a.proof, MAX_EXTERNAL_ATTESTATION_BYTES, 'An external attestation proof'))]);
+function externalAttestationWritable(a: OwnerAttestation): CborWritable {
+  if (!isObject(a) || a.method !== ATTESTATION_METHOD.EXPIRED_TX) invalid('An external attestation is an expired-transaction proof');
+  return attestationWritable(a, 'An external attestation');
 }
 
-/** A list of distinct items, each encoded. */
-function distinctList<T>(items: readonly T[] | undefined, max: number, what: string, encode: (x: T) => Uint8Array): Uint8Array {
+/** A list of distinct items, each written. */
+function distinctList<T>(items: readonly T[] | undefined, max: number, what: string, write: (x: T) => CborWritable): CborWritable {
   const seen = new Set<string>();
-  return cArray(list(items ?? [], max, what).map(x => {
-    const bytes = encode(x);
-    const key = bytesToHex(bytes);
+  return list(items ?? [], max, what).map(x => {
+    const item = write(x);
+    const key = bytesToHex(encodeCanonicalCbor(item));
     if (seen.has(key)) invalid(`The same entry appears twice in ${what.toLowerCase()}`);
     seen.add(key);
-    return bytes;
-  }));
+    return item;
+  });
 }
 
 /** The payload's bytes with no bound on their total size. */
@@ -584,24 +547,24 @@ function encodeContents(contents: RecoveryPackageContents): Uint8Array {
   if (!isUint(contents.exportedAtMs)) invalid('The export time is Unix milliseconds');
   const counts = [contents.proposalsDropped, contents.addressBookDropped].map(n => n ?? 0);
   if (!counts.every(n => isUint(n))) invalid('A count of entries left out is an unsigned integer');
-  const vault = vaultBytes(contents.vault);
-  const participants = participantsBytes(contents);
-  return cMap({
-    0: cUint(RECOVERY_PAYLOAD_VERSION),
-    1: cUint(magic),
-    2: cUint(contents.exportedAtMs),
+  const vault = vaultWritable(contents.vault);
+  const participants = participantsWritable(contents);
+  return encodeCanonicalCbor(intMap({
+    0: RECOVERY_PAYLOAD_VERSION,
+    1: magic,
+    2: contents.exportedAtMs,
     3: vault,
-    4: selfBytes(contents),
+    4: selfWritable(contents),
     5: participants,
-    6: manifestsBytes(contents.manifests),
-    7: proposalsBytes(contents.proposals),
-    8: addressBookBytes(contents.addressBook, contents.network),
-    9: referenceScriptsBytes(contents.referenceScripts),
-    10: cUint(counts[0]),
-    11: cUint(counts[1]),
-    12: distinctList(contents.endorsements, MAX_ENDORSEMENTS, 'The endorsements', endorsementBytes),
-    13: distinctList(contents.externalAttestations, MAX_EXTERNAL_ATTESTATIONS, 'The external attestations', externalAttestationBytes),
-  });
+    6: manifestsWritable(contents.manifests),
+    7: proposalsWritable(contents.proposals),
+    8: addressBookWritable(contents.addressBook, contents.network),
+    9: referenceScriptsWritable(contents.referenceScripts),
+    10: counts[0],
+    11: counts[1],
+    12: distinctList(contents.endorsements, MAX_ENDORSEMENTS, 'The endorsements', endorsementWritable),
+    13: distinctList(contents.externalAttestations, MAX_EXTERNAL_ATTESTATIONS, 'The external attestations', externalAttestationWritable),
+  }));
 }
 
 /**
@@ -630,14 +593,14 @@ export interface FittedRecoveryHistory {
   readonly skipped: RecoverySkipped;
 }
 
-const attempt = <T>(f: () => T): T | undefined => {
+function attempt<T>(f: () => T): T | undefined {
   try {
     return f();
   } catch (e) {
     if (e instanceof GeroVaultError) return undefined;
     throw e;
   }
-};
+}
 
 /** The entries `encode` accepts, the last copy of each key kept in place. */
 function newestValid<T>(items: readonly T[], keyOf: (x: T) => string | undefined): T[] {
@@ -686,7 +649,7 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
   const rawManifests = list(contents.manifests, Number.MAX_SAFE_INTEGER, 'The manifest history');
   const byVersion = new Map<number, ManifestRevision>();
   rawManifests.forEach((m, i) => {
-    if (attempt(() => manifestsBytes([m])) === undefined) {
+    if (attempt(() => manifestsWritable([m])) === undefined) {
       throw new GeroVaultError('MANIFEST_HISTORY_CORRUPT', `Manifest revision ${i} cannot be carried: it is malformed or over ${MAX_MANIFEST_BYTES} bytes`);
     }
     const seen = byVersion.get(m.version);
@@ -700,10 +663,10 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
     throw new GeroVaultError('HISTORY_TOO_LARGE', `The manifest history has ${manifests.length} revisions; a package holds at most ${MAX_MANIFEST_REVISIONS}`);
   }
   const rawProposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
-  const proposals = newestValid(rawProposals, p => (attempt(() => proposalBytes(p)) ? p.id : undefined));
+  const proposals = newestValid(rawProposals, p => (attempt(() => proposalWritable(p)) ? p.id : undefined));
   const rawBook = list(contents.addressBook, Number.MAX_SAFE_INTEGER, 'The address book');
   // The encoder applies the read rule to every label, so an entry it accepts is carried as it is.
-  const book = newestValid(rawBook, e => attempt(() => addressBookEntryBytes(e, network))?.address);
+  const book = newestValid(rawBook, e => attempt(() => addressBookEntryWritable(e, network))?.address);
   let participantLabels = 0;
   const participants = Array.isArray(contents.participants)
     ? contents.participants.map(p => {
@@ -714,17 +677,17 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
       return rest;
     })
     : contents.participants;
-  const unique = <T>(items: readonly T[] | undefined, encode: (x: T) => Uint8Array): T[] => {
+  const unique = <T>(items: readonly T[] | undefined, write: (x: T) => CborWritable): T[] => {
     const seen = new Set<string>();
     return (Array.isArray(items) ? items : []).filter(x => {
-      const key = bytesToHex(encode(x));
+      const key = bytesToHex(encodeCanonicalCbor(write(x)));
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   };
-  const endorsements = unique(contents.endorsements, endorsementBytes);
-  const externalAttestations = unique(contents.externalAttestations, externalAttestationBytes);
+  const endorsements = unique(contents.endorsements, endorsementWritable);
+  const externalAttestations = unique(contents.externalAttestations, externalAttestationWritable);
   const skipped: RecoverySkipped = Object.freeze({
     proposals: rawProposals.length - proposals.length,
     addressBook: rawBook.length - book.length,
@@ -746,13 +709,13 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
     addressBookDropped: earlierBook + rawBook.length,
   });
   if (base.length > MAX_RECOVERY_PAYLOAD_BYTES) {
-    const bytes = (items: readonly { readonly cbor?: string; readonly proof?: string }[]) =>
-      items.reduce((n, m) => n + ((m.cbor ?? m.proof ?? '').length / 2), 0);
+    const sum = (sizes: readonly number[]) => sizes.reduce((n, s) => n + s, 0);
     throw new GeroVaultError(
       'HISTORY_TOO_LARGE',
       `The package is ${base.length} bytes, over ${MAX_RECOVERY_PAYLOAD_BYTES}, without any proposal or address book entry: `
-        + `its ${manifests.length} manifest revisions are ${bytes(manifests)} bytes, `
-        + `its ${endorsements.length} endorsements and ${externalAttestations.length} external attestations ${endorsements.length * 172 + bytes(externalAttestations)} bytes`,
+        + `its ${manifests.length} manifest revisions are ${sum(manifests.map(m => m.cbor.length / 2))} bytes, `
+        + `its ${endorsements.length} endorsements and ${externalAttestations.length} external attestations `
+        + `${sum([...endorsements.map(e => sizeOf(endorsementWritable(e))), ...externalAttestations.map(a => sizeOf(externalAttestationWritable(a)))])} bytes`,
     );
   }
   // Room for both lists: their heads and their counts grow by at most 8 bytes each.
@@ -767,8 +730,8 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
     }
     return kept;
   };
-  const keptBook = newest(book, MAX_ADDRESS_BOOK_ENTRIES, e => addressBookEntryBytes(e, network).bytes.length);
-  const keptProposals = newest(proposals, MAX_PROPOSALS, p => proposalBytes(p).length);
+  const keptBook = newest(book, MAX_ADDRESS_BOOK_ENTRIES, e => sizeOf(addressBookEntryWritable(e, network).item));
+  const keptProposals = newest(proposals, MAX_PROPOSALS, p => sizeOf(proposalWritable(p)));
   return Object.freeze({
     contents: {
       ...clean,
@@ -779,16 +742,6 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
     },
     skipped,
   });
-}
-
-/** The tagged manifest hash, blake2b-256 over the tag and the canonical CBOR; `undefined` for anything but lowercase hex. */
-export function manifestRevisionHash(cborHex: unknown): string | undefined {
-  if (typeof cborHex !== 'string' || !ANY_LOWER_HEX.test(cborHex)) return undefined;
-  const bytes = hexToBytes(cborHex) as Uint8Array;
-  const preimage = new Uint8Array(MANIFEST_HASH_TAG.length + bytes.length);
-  preimage.set(MANIFEST_HASH_TAG, 0);
-  preimage.set(bytes, MANIFEST_HASH_TAG.length);
-  return bytesToHex(blake2b(preimage, { dkLen: 32 }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -813,6 +766,18 @@ function fields(item: CborItem, what: string, required: readonly number[], optio
     out.set(k, value);
   }
   for (const k of required) if (!out.has(k)) bad(`${what} lacks key ${k}`);
+  return out;
+}
+
+/** A map with exactly these text keys. */
+function textFields(item: CborItem | undefined, what: string, keys: readonly string[]): Map<string, CborItem> {
+  if (item?.value.type !== 'map') bad(`${what} is not a map`);
+  const out = new Map<string, CborItem>();
+  for (const [key, value] of (item?.value as { value: readonly (readonly [CborItem, CborItem])[] }).value) {
+    if (key.value.type !== 'text' || !keys.includes(key.value.value)) bad(`${what} has an unknown key`);
+    out.set((key.value as { value: string }).value, value);
+  }
+  for (const k of keys) if (!out.has(k)) bad(`${what} lacks ${k}`);
   return out;
 }
 
@@ -913,6 +878,22 @@ function decodeAddress(item: CborItem | undefined): string {
   }
 }
 
+function decodeAttestation(item: CborItem | undefined, what: string): OwnerAttestation {
+  const f = textFields(item, what, ['method', 'proof']);
+  return Object.freeze({ method: uintOf(f.get('method'), `${what} method`), proof: hexOf(bytesOf(f.get('proof'), `${what} proof`, 1, MAX_ATTESTATION_BYTES)) });
+}
+
+function decodeEndorsement(item: CborItem): ExternalEndorsement {
+  const f = textFields(item, 'endorsement', ['verificationDigest', 'externalCredential', 'externalAttestationHash', 'endorserCredential', 'attestation']);
+  return Object.freeze({
+    verificationDigest: hexOf(bytesOf(f.get('verificationDigest'), 'verification digest', 32, 32)),
+    externalCredential: Ed25519KeyHashHex(hexOf(bytesOf(f.get('externalCredential'), 'external credential', 28, 28))),
+    externalAttestationHash: hexOf(bytesOf(f.get('externalAttestationHash'), 'attestation hash', 32, 32)),
+    endorserCredential: Ed25519KeyHashHex(hexOf(bytesOf(f.get('endorserCredential'), 'endorser credential', 28, 28))),
+    attestation: decodeAttestation(f.get('attestation'), 'endorsement attestation'),
+  });
+}
+
 function decode(bytes: Uint8Array): RecoveryPackage {
   let root: CborItem;
   try {
@@ -952,20 +933,8 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     referenceScripts: Object.freeze(arrayOf(f.get(9), 'reference scripts', MAX_REFERENCE_SCRIPTS).map(r => decodeOutputReference(r, 'reference script'))),
     proposalsDropped: uintOf(f.get(10), 'proposals left out'),
     addressBookDropped: uintOf(f.get(11), 'address book entries left out'),
-    endorsements: Object.freeze(arrayOf(f.get(12), 'endorsements', MAX_ENDORSEMENTS).map(e => {
-      const [digest, credential, attestation, device, signature] = tuple(e, 'endorsement', 5);
-      return Object.freeze({
-        verificationDigest: hexOf(bytesOf(digest, 'verification digest', 32, 32)),
-        externalCredential: Ed25519KeyHashHex(hexOf(bytesOf(credential, 'external credential', 28, 28))),
-        externalAttestationHash: hexOf(bytesOf(attestation, 'attestation hash', 32, 32)),
-        endorserDeviceId: hexOf(bytesOf(device, 'device id', 16, 16)),
-        signature: hexOf(bytesOf(signature, 'signature', 64, 64)),
-      });
-    })),
-    externalAttestations: Object.freeze(arrayOf(f.get(13), 'external attestations', MAX_EXTERNAL_ATTESTATIONS).map(a => {
-      const [method, proof] = tuple(a, 'external attestation', 2);
-      return Object.freeze({ method: uintOf(method, 'attestation method', 255), proof: hexOf(bytesOf(proof, 'attestation proof', 1, MAX_EXTERNAL_ATTESTATION_BYTES)) });
-    })),
+    endorsements: Object.freeze(arrayOf(f.get(12), 'endorsements', MAX_ENDORSEMENTS).map(decodeEndorsement)),
+    externalAttestations: Object.freeze(arrayOf(f.get(13), 'external attestations', MAX_EXTERNAL_ATTESTATIONS).map(a => decodeAttestation(a, 'external attestation'))),
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
@@ -975,7 +944,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   return Object.freeze({
     version: RECOVERY_PAYLOAD_VERSION,
     ...contents,
-    manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestRevisionHash(m.cbor) as string }))),
+    manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestRevisionHashOf(m.cbor) as string }))),
     proposalsDropped: dropped,
     proposalHistoryTruncated: dropped > 0,
     addressBookDropped: bookDropped,

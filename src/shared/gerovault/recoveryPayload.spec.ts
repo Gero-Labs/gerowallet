@@ -8,7 +8,6 @@ import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import {
   MAX_ADDRESS_BOOK_ENTRIES,
   MAX_EXTERNAL_ATTESTATIONS,
-  MAX_MANIFEST_BYTES,
   MAX_MANIFEST_REVISIONS,
   MAX_PROPOSAL_BYTES,
   MAX_PROPOSALS,
@@ -16,11 +15,15 @@ import {
   decodeRecoveryPayload,
   encodeRecoveryPayload,
   fitRecoveryHistory,
-  manifestRevisionHash,
+  manifestRevisionHashOf,
 } from './recoveryPayload';
+import { MAX_MANIFEST_BYTES } from './manifest';
+import { OwnerAttestation } from './attestation';
+import { ExternalEndorsement } from './verificationNumber';
+import { attestationBy, testParticipants } from './__fixtures__/manifest';
 import { vaultScript } from './scripts';
 import { ROLE, RoleKeys } from './types';
-import { ENDORSEMENT, EXTERNAL_ATTESTATION, backupContents, plutusContents, standardContents, standardVault, vectorPeople } from './__fixtures__/recoveryPackageVectors';
+import { backupContents, plutusContents, standardContents, standardVault, vectorEndorsement, vectorPeople } from './__fixtures__/recoveryPackageVectors';
 
 /** An order-preserving CBOR tree, to write payloads the encoder never would. */
 type T =
@@ -111,6 +114,8 @@ function detail(bytes: unknown): string {
 const RLO = String.fromCharCode(0x202e);
 const UNASSIGNED = String.fromCharCode(0x0378);
 
+let ENDORSEMENT: ExternalEndorsement;
+let EXTERNAL_ATTESTATION: OwnerAttestation;
 let people: RoleKeys[];
 let ownerKeyHash: Ed25519KeyHashHex;
 let standard: RecoveryPackageContents;
@@ -122,6 +127,7 @@ let plutusTree: T;
 
 beforeAll(async () => {
   people = await vectorPeople();
+  ({ endorsement: ENDORSEMENT, externalAttestation: EXTERNAL_ATTESTATION } = await vectorEndorsement());
   ownerKeyHash = (await standardVault(people)).owners[0].payment;
   [standard, backup, plutus] = await Promise.all([standardContents(people), backupContents(people), plutusContents(people)]);
   standardTree = treeOf(encodeRecoveryPayload(standard));
@@ -164,11 +170,11 @@ describe('round trip', () => {
     const tag = Buffer.from('gero-vault/v1|manifest|', 'utf8').toString('hex');
     for (const m of decoded.package.manifests) {
       expect(m.hash).toBe(sdkBlake2b.hash(HexBlob(`${tag}${m.cbor}`), 32));
-      expect(manifestRevisionHash(m.cbor)).toBe(m.hash);
+      expect(manifestRevisionHashOf(m.cbor)).toBe(m.hash);
     }
-    expect(manifestRevisionHash('AB')).toBeUndefined();
-    expect(manifestRevisionHash('abc')).toBeUndefined();
-    expect(manifestRevisionHash(42)).toBeUndefined();
+    expect(manifestRevisionHashOf('AB')).toBeUndefined();
+    expect(manifestRevisionHashOf('abc')).toBeUndefined();
+    expect(manifestRevisionHashOf(42)).toBeUndefined();
   });
 
   it('writes map keys in canonical order whatever order the contents list them in', () => {
@@ -290,16 +296,26 @@ describe('strict decoding of untrusted bytes', () => {
     for (const stored of ['Alice' + RLO + 'ecila', 'new' + UNASSIGNED]) expect(refusal(withLabel(stored))).toBe('ACCEPTED');
   });
 
-  it('refuses endorsements and external attestations of the wrong shape, and repeated ones', () => {
+  it('carries endorsements and external attestations in the manifest code\'s own layout and stored form', () => {
     const endorsements = field(backupTree, 12);
     const one = at(endorsements, 0);
+    // Text keys, exactly the fields the endorsing owner signs, and the attestation as a manifest stores one.
+    if (one.t !== 'map') throw new Error('map');
+    expect(one.v.map(([k]) => (k as { v: string }).v).sort()).toEqual(['attestation', 'endorserCredential', 'externalAttestationHash', 'externalCredential', 'verificationDigest']);
     expect(detail(bytesOf(put(backupTree, 12, { t: 'array', v: [one, one] })))).toBe('The same entry appears twice in the endorsements');
-    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withItem(one, 3, { t: 'bytes', v: new Uint8Array(32) })] })))).toBe('PAYLOAD_INVALID');
-    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withItem(one, 4, { t: 'bytes', v: new Uint8Array(63) })] })))).toBe('PAYLOAD_INVALID');
+    const withField = (m: T, key: string, value: T): T => {
+      if (m.t !== 'map') throw new Error('map');
+      return { t: 'map', v: m.v.map(([k, v]) => [k, (k as { v: string }).v === key ? value : v] as [T, T]) };
+    };
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withField(one, 'endorserCredential', { t: 'bytes', v: new Uint8Array(16) })] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withField(one, 'verificationDigest', { t: 'bytes', v: new Uint8Array(31) })] })))).toBe('PAYLOAD_INVALID');
     const attestation = at(field(backupTree, 13), 0);
-    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 1, { t: 'bytes', v: new Uint8Array(4097) })] })))).toBe('PAYLOAD_INVALID');
-    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 0, int(256))] })))).toBe('PAYLOAD_INVALID');
-    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 1, { t: 'bytes', v: new Uint8Array(4096) })] })))).toBe('ACCEPTED');
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withField(attestation, 'proof', { t: 'bytes', v: new Uint8Array(40) })] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withField(attestation, 'method', int(0))] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withField(attestation, 'proof', { t: 'bytes', v: new Uint8Array(2049) })] })))).toBe('PAYLOAD_INVALID');
+    // An extra key, of either kind, is refused.
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [{ t: 'map', v: [...one.v, [int(0), int(1)]] }] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [{ t: 'map', v: [...one.v, [{ t: 'text', v: 'x' }, int(1)]] }] })))).toBe('PAYLOAD_INVALID');
   });
 
   it('refuses an exporter who is not a participant or is an external wallet', () => {
@@ -622,15 +638,26 @@ describe('fitting the history into one package', () => {
       .toEqual([{ version: 2, cbor: 'a2' }]);
   });
 
-  it('never leaves out endorsements or external attestations, merging repeated copies', () => {
+  it('never leaves out endorsements or external attestations, merging repeated copies', async () => {
     const { contents: fitted } = fitRecoveryHistory({ ...backup, endorsements: [ENDORSEMENT, ENDORSEMENT], externalAttestations: [EXTERNAL_ATTESTATION, EXTERNAL_ATTESTATION] });
     expect(fitted.endorsements).toEqual([ENDORSEMENT]);
     expect(fitted.externalAttestations).toEqual([EXTERNAL_ATTESTATION]);
-    expect(() => fitRecoveryHistory({ ...backup, endorsements: [{ ...ENDORSEMENT, signature: 'ab' }] })).toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
+    const err = expect.objectContaining({ code: 'INVALID_PACKAGE' });
+    expect(() => fitRecoveryHistory({ ...backup, endorsements: [{ ...ENDORSEMENT, endorserCredential: 'ab' as never }] })).toThrow(err);
+    expect(() => fitRecoveryHistory({ ...backup, endorsements: [{ ...ENDORSEMENT, attestation: { method: 0, proof: 'ab' } }] })).toThrow(err);
+    // An external attestation is an expired-transaction proof in the stored form, never CIP-8.
+    expect(() => fitRecoveryHistory({ ...backup, externalAttestations: [ENDORSEMENT.attestation] })).toThrow(err);
     // They count toward the bound like the manifests: a package that cannot hold them is refused.
-    const manifests = Array.from({ length: 63 }, (_, i) => ({ version: i + 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES) }));
-    const attestations = Array.from({ length: MAX_EXTERNAL_ATTESTATIONS }, (_, i) => ({ method: 1, proof: i.toString(16).padStart(4, '0') + 'ab'.repeat(4094) }));
-    expect(() => fitRecoveryHistory({ ...backup, manifests, externalAttestations: attestations })).toThrow(expect.objectContaining({
+    const [, external] = await testParticipants();
+    const attestations = Array.from({ length: MAX_EXTERNAL_ATTESTATIONS }, (_, i) =>
+      attestationBy(external, { kind: 'verification', digest: i.toString(16).padStart(64, '0') }, 'expiredTx'));
+    const bare = { ...backup, endorsements: [], externalAttestations: [], proposals: [], addressBook: [] };
+    const full = Array.from({ length: 63 }, (_, i) => ({ version: i + 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES) }));
+    const used = encodeRecoveryPayload({ ...bare, manifests: [...full, { version: 64, cbor: 'cd' }] }).length;
+    // A last revision that leaves about 2 KiB of room: enough without the attestations, not with them.
+    const manifests = [...full, { version: 64, cbor: 'cd'.repeat(MAX_RECOVERY_PAYLOAD_BYTES - used - 2048) }];
+    expect(() => fitRecoveryHistory({ ...bare, manifests })).not.toThrow();
+    expect(() => fitRecoveryHistory({ ...bare, manifests, externalAttestations: attestations })).toThrow(expect.objectContaining({
       code: 'HISTORY_TOO_LARGE',
       message: expect.stringContaining(`${MAX_EXTERNAL_ATTESTATIONS} external attestations`),
     }));
