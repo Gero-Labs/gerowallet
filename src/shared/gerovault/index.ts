@@ -1,6 +1,7 @@
 /**
- * GeroVault core: CIP-1854 role keys, native vault scripts, the CIP-0146 registration codec and
- * vault index allocation. Pure TypeScript: no Vue, no storage, no network, no `chrome.*`.
+ * GeroVault core: CIP-1854 role keys, native vault scripts, the CIP-0146 registration codec,
+ * vault index allocation and the `gero-vault/v1` manifest. Pure TypeScript: no Vue, no storage,
+ * no network, no `chrome.*`.
  */
 export * from './types';
 export * from './errors';
@@ -44,3 +45,7 @@ export type {
   VaultDescription,
 } from './registration';
 export { CIP83_DEFAULT_PASSPHRASE, cip83Decrypt, cip83Encrypt } from './cip83';
+export { encodeCanonicalCbor } from './canonicalCbor';
+export type { CborWritable, CborWritableMap } from './canonicalCbor';
+export * from './manifest';
+export * from './manifestCheck';
