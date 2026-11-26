@@ -1,5 +1,5 @@
-// The slice's spend and import-signatures placeholders: a title, an empty state and a way
-// back to the vault. No data.
+// The slice's spend and import-signatures screens without an open wallet: a title, the reason
+// nothing can be done here, and a way back to the same vault.
 import { afterEach, describe, expect, it } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
@@ -52,9 +52,9 @@ async function mountAt(path: string) {
 }
 
 describe.each([
-  ['/vaults/abc/spend', 'gerovault.spend.title', 'gerovault.spend.unavailable'],
-  ['/vaults/abc/import-signatures', 'gerovault.spend.importSignatures.title', 'gerovault.spend.importSignatures.unavailable'],
-])('GeroVault placeholder at %s', (path, title, message) => {
+  ['/vaults/abc/spend', 'gerovault.spend.title', 'gerovault.spend.state.noWallet'],
+  ['/vaults/abc/import-signatures', 'gerovault.spend.importSignatures.title', 'gerovault.spend.state.noWallet'],
+])('GeroVault spend screen at %s with no wallet open', (path, title, message) => {
   it('shows its title and empty state, and leads back to the same vault', async () => {
     const { wrapper, router } = await mountAt(path);
     expect(wrapper.get('h1').text()).toBe(title);
