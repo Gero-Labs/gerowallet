@@ -20,6 +20,12 @@ import {
   type SolanaRemoteSimulation,
 } from '@/chains/solana/solanaNexusAccounts';
 
+/** The bearer token a refused request sent, so re-authentication never hands that one back. */
+function sentBearerToken(config: AxiosRequestConfig): string | undefined {
+  const header: unknown = config.headers?.Authorization;
+  return typeof header === 'string' && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+}
+
 export type SolanaNetwork = 'mainnet' | 'devnet';
 
 const NEXUS_BASE = (typeof import.meta !== 'undefined'
@@ -97,7 +103,7 @@ export class SolanaApi {
         if ((status === 401 || status === 403) && cfg && !cfg._retried) {
           cfg._retried = true;
           try {
-            const token = await reauthenticateNexus();
+            const token = await reauthenticateNexus(sentBearerToken(cfg));
             if (cfg.headers) cfg.headers.Authorization = `Bearer ${token}`;
             return this.http.request(cfg);
           } catch (refreshErr) {

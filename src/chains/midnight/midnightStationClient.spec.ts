@@ -67,6 +67,8 @@ describe('station client: challenge', () => {
     fetchMock.mockResolvedValueOnce(answer(401, {})).mockResolvedValueOnce(answer(200, eligible));
     await fetchStationChallenge(NET, STAKE);
     expect(auth.reauth).toHaveBeenCalledOnce();
+    // The refused token goes with it, so the login never hands that one back.
+    expect(auth.reauth).toHaveBeenCalledWith('token-1');
     expect(headersOf(1)['Authorization']).toBe('Bearer token-2');
     fetchMock.mockReset().mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await codeOf(fetchStationChallenge(NET, STAKE))).toBe('STATION_UNAVAILABLE');

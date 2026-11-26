@@ -335,14 +335,52 @@ async function findIncomingRegistrations(
   return results.filter((stake): stake is string => stake !== null);
 }
 
-function start() {
-  if (pollTimer) return;
+/**
+ * No polls while the view is hidden (`document.visibilityState`, which also covers a popup
+ * or side panel being closed): the old loop asked every 60s in every open view, hidden or
+ * not. Shown again, it asks at once (unless a poll started under 5s ago) and the 60s loop
+ * restarts from there. A view that is visible but not focused keeps polling.
+ */
+const SHOWN_AGAIN_MIN_GAP_MS = 5_000;
+let running = false;
+let lastPollStartedAt = 0;
+
+function viewVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+}
+
+function poll(): void {
+  lastPollStartedAt = Date.now();
   void refreshOnce();
-  pollTimer = setInterval(() => { void refreshOnce(); }, POLL_MS);
+}
+
+function resumePolling(): void {
+  if (pollTimer || !running || !viewVisible()) return;
+  if (Date.now() - lastPollStartedAt >= SHOWN_AGAIN_MIN_GAP_MS) poll();
+  pollTimer = setInterval(poll, POLL_MS);
+}
+
+function pausePolling(): void {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function onVisibilityChange(): void {
+  if (viewVisible()) resumePolling();
+  else pausePolling();
+}
+
+function start() {
+  if (running) return;
+  running = true;
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibilityChange);
+  lastPollStartedAt = 0;
+  resumePolling();
 }
 
 function stop() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  running = false;
+  pausePolling();
+  if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibilityChange);
   // Don't zero out the sums — keep the last value visible until next start,
   // same rationale as useMidnightDustLive.
 }
@@ -369,11 +407,26 @@ function stop() {
  * first `start()` (or after the last `stop()`, when nobody is mounted) is a
  * no-op rather than waking up a poll loop nobody asked for.
  */
+function identityKey(): string {
+  return `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`;
+}
+
 watch(
-  () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`,
+  identityKey,
   () => {
     if (consumers <= 0) return;
-    void refreshOnce();
+    lastPollStartedAt = 0;
+    if (viewVisible()) {
+      poll();
+      return;
+    }
+    // Hidden: no request, but the previous wallet's sums go now (as refreshOnce would);
+    // being shown again asks for the new wallet's.
+    const key = identityKey();
+    if (key !== committedKey) {
+      committedKey = key;
+      resetPathBState();
+    }
   },
 );
 

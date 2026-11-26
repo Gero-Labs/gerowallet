@@ -446,3 +446,77 @@ describe('useDustPathB — fallback for a Nexus without dust/destination', () =>
 
   });
 });
+
+describe('useDustPathB poll pace while hidden', () => {
+  let visibility: DocumentVisibilityState = 'visible';
+  function setVisibility(state: DocumentVisibilityState) {
+    visibility = state;
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+  beforeEach(() => {
+    visibility = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility });
+    mocks.destination.mockImplementation(async () => destination());
+  });
+  afterEach(() => { delete (document as unknown as { visibilityState?: string }).visibilityState; });
+
+  it('polls every 60 s while visible, none while hidden, and at once when shown again', async () => {
+    mount();
+    await settle();
+    expect(mocks.destination).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.destination).toHaveBeenCalledTimes(2);
+
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(mocks.destination).toHaveBeenCalledTimes(2);
+
+    setVisibility('visible');
+    await settle();
+    expect(mocks.destination).toHaveBeenCalledTimes(3);
+    // The 60 s loop restarts from the poll on showing.
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(mocks.destination).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.destination).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not ask again when shown within 5 s of the last poll', async () => {
+    mount();
+    await settle();
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(2_000);
+    setVisibility('visible');
+    await settle();
+    expect(mocks.destination).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.destination).toHaveBeenCalledTimes(2);
+  });
+
+  it('a view mounted hidden asks only once it is shown', async () => {
+    visibility = 'hidden';
+    const pathB = mount();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(mocks.destination).not.toHaveBeenCalled();
+    setVisibility('visible');
+    await settle();
+    expect(mocks.destination).toHaveBeenCalledTimes(1);
+    expect(pathB.pathBNight.value).toBe(BigInt(NIGHT));
+  });
+
+  it('a wallet switch while hidden clears the old figures without a request, and asks when shown', async () => {
+    const pathB = mount();
+    await settle();
+    expect(pathB.pathBNight.value).toBe(BigInt(NIGHT));
+    setVisibility('hidden');
+    const next = switchToNewWallet();
+    await settle();
+    expect(pathB.pathBNight.value).toBe(0n);
+    expect(mocks.destination).toHaveBeenCalledTimes(1);
+    setVisibility('visible');
+    await settle();
+    expect(mocks.destination).toHaveBeenCalledTimes(2);
+    expect(mocks.destination).toHaveBeenLastCalledWith(next);
+    expect(pathB.pathBNight.value).toBe(BigInt(NIGHT));
+  });
+});

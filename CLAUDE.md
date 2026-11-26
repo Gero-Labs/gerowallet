@@ -264,6 +264,8 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Sync (Gero Sync tip push)**: Event-driven in `walletManager.service.ts`. The two-minute value is a mutex acquisition timeout, not a locked-state polling throttle.
 - **Risk scores**: Every 12 hours (via Nexus)
 - **Fiat rates (USD→EUR)**: Fetched on demand by `useCurrencyConverter.ts` via `/api/price/fiatRates`. No background polling.
+- **DUST gauge** (`useMidnightDustLive.ts`, `dust/account-state`): 5s after news, a view shown again or the user acting, doubling to 60s while readings only confirm the extrapolation; none while the view is hidden; one poller per wallet and network across open views (BroadcastChannel + Web Lock). Never go back to a fixed interval per view. Its Path B poll (`useDustPathB.ts`, `dust/destination`) runs every 60s, none while hidden, at once when shown again.
+- **DUST light-sync** (`midnightDustLightTransport.ts`): every attempt waits for a slot, at most 4 a second per network in each context (monotonic clock, room left for other Midnight calls); a 429's Retry-After holds every queued request.
 - **Price data**: Provided by the market data API (`market-api.ts`, via backend), NOT by background alarms. No third-party price/mcap polling in the background.
 
 ## Performance

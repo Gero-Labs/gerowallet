@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDustLightTransport } from './midnightDustLightTransport';
+import { createDustLightTransport, DUST_LIGHT_SYNC_REQUESTS_PER_SECOND, resetDustLightSyncPaceForTest } from './midnightDustLightTransport';
 import { getMidnightEndpoints } from './midnightConfig';
 import type { DustSyncBlock } from './midnightDustLightSync';
 
@@ -12,6 +12,7 @@ describe('DUST projection transport', () => {
   const endpoints = getMidnightEndpoints('Mainnet')!;
   const block = { hash: 'ab'.repeat(32) } as DustSyncBlock;
   beforeEach(() => {
+    resetDustLightSyncPaceForTest();
     vi.resetAllMocks(); vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(console, 'warn').mockImplementation(log.warn);
     auth.token.mockResolvedValue('first'); auth.refresh.mockResolvedValue('fresh');
@@ -104,6 +105,9 @@ describe('DUST projection transport', () => {
       .mockResolvedValueOnce(Response.json({ version: 1 }));
     const result = createDustLightTransport(endpoints, new AbortController().signal).snapshot('public-address');
     await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The retry with the fresh token waits for its own slot, one pace step after the 401.
+    await vi.advanceTimersByTimeAsync(250);
     await expect(result).resolves.toEqual({ version: 1 });
     expect(auth.refresh).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe('Bearer fresh');
@@ -120,6 +124,7 @@ describe('DUST projection transport', () => {
     const signal = new AbortController().signal;
     await createDustLightTransport(endpoints, signal).spends(block, ['12'], 0, 100);
     expect(auth.refresh).toHaveBeenCalledOnce();
+    expect(auth.refresh).toHaveBeenCalledWith('first');
     expect(fetchMock.mock.calls[1]).toEqual([expect.stringContaining('/midnight-mainnet/dust/light-sync'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer fresh' },
       body: JSON.stringify({ operation: 'spends', blockHash: block.hash, prefixes: ['12'], fromBlock: 0, toBlock: 100 }), signal,
@@ -233,5 +238,101 @@ describe('DUST projection transport', () => {
         .rejects.toThrow('Failed to fetch');
       expect(fetchMock).toHaveBeenCalledOnce();
     });
+  });
+  describe('request pace', () => {
+    const page = (fromBlock: number) => Response.json({ blockHash: block.hash, transactions: [], nextBlock: fromBlock + 1 });
+    /** Most fetch starts inside any one-second window. */
+    const busiestSecond = (starts: number[]) => Math.max(...starts.map(at => starts.filter(t => t >= at && t < at + 1000).length));
+
+    it('spaces a burst of pages to four a second, across transports, and still answers every page', async () => {
+      vi.useFakeTimers();
+      const starts: number[] = [];
+      const origin = Date.now();
+      fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+        starts.push(Date.now() - origin);
+        return page(JSON.parse(String(init.body)).fromBlock);
+      });
+      const signal = new AbortController().signal;
+      // A spend scan's side-by-side slices, plus a second build of the same network at once.
+      const first = createDustLightTransport(endpoints, signal);
+      const second = createDustLightTransport(endpoints, signal);
+      const pages = Array.from({ length: 12 }, (_, i) => (i % 2 ? second : first).spends(block, ['12'], i * 10, i * 10 + 9));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1_800);
+      await expect(Promise.all(pages)).resolves.toHaveLength(12);
+      expect(starts).toEqual(Array.from({ length: 12 }, (_, i) => i * 250));
+      expect(busiestSecond(starts)).toBe(4);
+      expect(DUST_LIGHT_SYNC_REQUESTS_PER_SECOND).toBe(4);
+    });
+
+    it('keeps a quiet transport immediate: a lone request does not wait', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementationOnce(async () => Response.json({ version: 1 }));
+      const transport = createDustLightTransport(endpoints, new AbortController().signal);
+      await expect(transport.snapshot('public-address')).resolves.toEqual({ version: 1 });
+      await vi.advanceTimersByTimeAsync(5_000);
+      fetchMock.mockImplementationOnce(async () => Response.json({ version: 2 }));
+      await expect(transport.snapshot('public-address')).resolves.toEqual({ version: 2 });
+    });
+
+    it('holds every request to the network for a 429\'s Retry-After, not only the one refused', async () => {
+      vi.useFakeTimers();
+      const starts: number[] = [];
+      const origin = Date.now();
+      let refused = false;
+      fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+        starts.push(Date.now() - origin);
+        if (!refused) {
+          refused = true;
+          return new Response('', { status: 429, headers: { 'Retry-After': '3' } });
+        }
+        return page(JSON.parse(String(init.body)).fromBlock);
+      });
+      const transport = createDustLightTransport(endpoints, new AbortController().signal);
+      const pages = [0, 10, 20, 30].map(from => transport.spends(block, ['12'], from, from + 9));
+      await vi.advanceTimersByTimeAsync(2_999);
+      // The others had their slots at 250, 500 and 750 ms: the refusal came first and moved them.
+      expect(starts).toEqual([0]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(starts).toEqual([0, 3_000]);
+      await vi.advanceTimersByTimeAsync(750);
+      await expect(Promise.all(pages)).resolves.toHaveLength(4);
+      expect(starts).toEqual([0, 3_000, 3_250, 3_500, 3_750]);
+    });
+
+    it('lets a request waiting for its slot be cancelled, and leaves no timer behind', async () => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(async () => page(0));
+      const controller = new AbortController();
+      const transport = createDustLightTransport(endpoints, controller.signal);
+      const firstPage = transport.spends(block, ['12'], 0, 9);
+      const waiting = expect(transport.spends(block, ['12'], 10, 19)).rejects.toThrow('cancelled');
+      await vi.advanceTimersByTimeAsync(100);
+      controller.abort(new Error('cancelled'));
+      await waiting;
+      await expect(firstPage).resolves.toBeDefined();
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([['back', -3_600_000], ['forward', 3_600_000], ['back a little', -2_000]])(
+      'keeps the same pace when the wall clock is set %s', async (_direction, step) => {
+        vi.useFakeTimers();
+        fetchMock.mockImplementation(async () => Response.json({ version: 1 }));
+        const transport = createDustLightTransport(endpoints, new AbortController().signal);
+        await transport.snapshot('public-address');
+        vi.setSystemTime(Date.now() + step);
+        const next = transport.snapshot('public-address');
+        // Neither held until the wall clock catches up nor let through early.
+        await vi.advanceTimersByTimeAsync(249);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(next).resolves.toEqual({ version: 1 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      },
+    );
   });
 });

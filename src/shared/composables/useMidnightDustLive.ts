@@ -5,9 +5,15 @@
  * gero-sync ships a one-shot `AccountInfo` snapshot when a wallet session
  * subscribes — fine for the initial paint, but the on-chain DUST balance
  * grows every second so the snapshot goes stale immediately. We poll the
- * Nexus public dust account-state endpoint every 5s for an authoritative
- * value and use the per-second `dust_generating` rate to extrapolate
- * smoothly between polls via a 1s nowTick.
+ * Nexus public dust account-state endpoint for an authoritative value and
+ * use the per-second `dust_generating` rate to extrapolate smoothly between
+ * polls via a 1s nowTick.
+ *
+ * Poll pace (see "Poll pace" below): every 5s after a reading brings news,
+ * the view is shown again or the user acts, slowing to every 60s while the
+ * readings only confirm the extrapolation; no polls at all while the view is
+ * hidden; and one poller per wallet and network across the extension's open
+ * views, which share their readings.
  *
  * DUST reaches a wallet two ways: Path A is
  * native NIGHT UTxOs on Midnight — everything this file computed before the
@@ -40,9 +46,10 @@
 import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { getMidnightApi } from '@/api/midnight-api';
+import { getMidnightApi, type MidnightApi } from '@/api/midnight-api';
 import { debugLog } from '@/utils/debug';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
+import { dustPendingRevision } from '@/shared/composables/useDustPending';
 import { dustAccountStateHasSignal } from '@/chains/midnight/midnightDustBalance';
 import { isMidnightDataPaused, midnightTipAgeMs, MIDNIGHT_DATA_PAUSED_AFTER_MS } from '@/chains/midnight/midnightDataFreshness';
 import { knownMidnightLedger } from '@/chains/midnight/midnightLedger';
@@ -63,11 +70,71 @@ const nowTickMs = ref<number>(Date.now());
 let previousEmptyTip: { height: number; hash: string | null } | null = null;
 const nativeClearObservedAt = ref(0);
 
+type DustAccountState = Awaited<ReturnType<MidnightApi['getDustAccountState']>>;
+
+/**
+ * Poll pace.
+ *
+ * The old loop asked every 5s in every open view, hidden or not, for as long as the view
+ * stayed open. Now:
+ * - A reading that brings news, the view being shown again, and the user acting (a click
+ *   or key press in the view, or the wallet starting or finishing a send, a new
+ *   transaction, a registration) all put the poll back on the 5s pace. Being shown again
+ *   and acting also fetch at once, unless a fetch started less than 5s ago.
+ * - Each reading that only confirms the extrapolation (`readingBringsNews`), and each
+ *   failed poll, doubles the gap up to 60s: after news the polls are 5, 5, 10, 20 and
+ *   40s apart, then every 60s.
+ * - A hidden view (`document.visibilityState`, which also covers a popup or side panel
+ *   being closed) does not poll at all. A view that is visible but not focused keeps
+ *   polling, because its gauge is still on screen.
+ * - Views of the same wallet and network share one poller: a reading fetched by one view
+ *   goes to the others (BroadcastChannel, which only the extension's own pages can join)
+ *   and pushes back their next poll, and a Web Lock keeps two views from fetching the
+ *   same reading at once. Without those APIs each view polls on its own, as before.
+ */
+export const DUST_POLL_FAST_MS = 5_000;
+export const DUST_POLL_SLOW_MS = 60_000;
+/**
+ * How far a balance may sit from the previous reading's extrapolation and still count as
+ * nothing new, in seconds of generation: the server computes the balance when it answers,
+ * so request latency separates the two clocks. It only decides when the next poll runs;
+ * the reading itself is always applied.
+ */
+const BALANCE_SLACK_SECONDS = 15n;
+const SHARED_CHANNEL = 'gero-dust-account-state';
+
 let consumers = 0;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let running = false;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let pollDueAt = 0;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let inFlight: object | null = null;
 let unavailableIdentity: string | null = null;
+/** Consecutive polls that brought nothing new (or failed); sets the next delay. */
+let quietPolls = 0;
+/** When the last fetch for the current identity started, in this view or another. */
+let lastAttemptAt = 0;
+let channel: BroadcastChannel | null = null;
+
+interface DustReading {
+  identity: string;
+  asOf: number;
+  balance: bigint;
+  generating: bigint;
+  cap: bigint;
+  night: bigint;
+  status: string;
+  generation: string;
+}
+let lastReading: DustReading | null = null;
+
+/** A reading one view fetched, as sent to the extension's other views. */
+interface SharedReading {
+  identity: string;
+  startedAt: number;
+  asOf: number;
+  state: DustAccountState;
+}
 
 function pollIdentity(): string {
   return `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`;
@@ -102,78 +169,240 @@ function isUnavailable(error: unknown): boolean {
   } catch { return false; }
 }
 
-async function refreshOnce() {
+/**
+ * Whether `next` tells the view anything the previous reading's extrapolation did not.
+ * Rate, cap, registered NIGHT and both statuses must match exactly, and the balance must be
+ * within `BALANCE_SLACK_SECONDS` of generation of where the previous reading said it would
+ * be. A first reading, a spend, a registration change or NIGHT moving is news.
+ */
+function readingBringsNews(previous: DustReading | null, next: DustReading): boolean {
+  if (!previous || previous.identity !== next.identity) return true;
+  if (next.generating !== previous.generating || next.cap !== previous.cap || next.night !== previous.night
+    || next.status !== previous.status || next.generation !== previous.generation) return true;
+  const elapsedMs = BigInt(Math.max(0, next.asOf - previous.asOf));
+  let expected = previous.balance + (previous.generating * elapsedMs) / 1000n;
+  if (previous.cap > 0n && expected > previous.cap) expected = previous.cap;
+  const slack = previous.generating > 0n ? previous.generating * BALANCE_SLACK_SECONDS : 0n;
+  const drift = next.balance > expected ? next.balance - expected : expected - next.balance;
+  return drift > slack;
+}
+
+/** Apply a reading this view fetched or another view shared. Throws on a malformed one. */
+function applyReading(identity: string, res: DustAccountState, startedAt: number, asOf: number): void {
+  const network = walletStore.loggedWallet?.network;
+  const reading: DustReading = {
+    identity,
+    asOf,
+    balance: BigInt(res.dust_balance ?? '0'),
+    generating: BigInt(res.dust_generating ?? '0'),
+    cap: BigInt(res.dust_cap ?? '0'),
+    night: BigInt(res.night_registered ?? '0'),
+    status: res.dust_registration_status ?? 'Unregistered',
+    generation: res.dust_generation_status ?? '',
+  };
+  quietPolls = readingBringsNews(lastReading, reading) ? 0 : quietPolls + 1;
+  lastReading = reading;
+  polledBalance.value = reading.balance;
+  polledGenerating.value = reading.generating;
+  polledCap.value = reading.cap;
+  polledNightRegistered.value = reading.night;
+  polledRegistrationStatus.value = reading.status;
+  polledAsOfMs.value = asOf;
+  nativeRegistrationConfirmedAt.value = res.dust_registration_status === 'Registered' ? startedAt : 0;
+  const now = asOf;
+  const tip = midnightStore.tip;
+  const age = midnightTipAgeMs(tip, now);
+  const explicitEmpty = res.dust_registration_status === 'Unregistered' && res.dust_generation_status === 'empty'
+    && [res.dust_balance, res.dust_generating, res.dust_cap, res.night_registered].every(value => value === '0');
+  const eligible = network === Network.PREPROD && knownMidnightLedger(network) === 9
+    && midnightStore.dustState?.registrationStatus === 'Registered' && (midnightStore.balances?.nightRegistered ?? 0n) > 0n
+    && !midnightStore.refreshing && midnightStore.networkStatus === 'connected'
+    && age !== null && age <= MIDNIGHT_DATA_PAUSED_AFTER_MS && tip.height > 0;
+  if (eligible && explicitEmpty) {
+    if (previousEmptyTip && (tip.height < previousEmptyTip.height || (tip.height === previousEmptyTip.height && tip.hash !== previousEmptyTip.hash))) {
+      nativeClearObservedAt.value = 0;
+    } else if (previousEmptyTip && tip.height > previousEmptyTip.height && !nativeClearObservedAt.value) {
+      nativeClearObservedAt.value = now;
+    }
+    previousEmptyTip = { height: tip.height, hash: tip.hash };
+  } else {
+    previousEmptyTip = null;
+    if (!explicitEmpty || midnightStore.refreshing) nativeClearObservedAt.value = 0;
+  }
+}
+
+/**
+ * Fetch unless another of the extension's views is fetching the same reading right now
+ * (null then: its reading will arrive on the channel).
+ */
+async function fetchUnlessElsewhere(identity: string, fetch: () => Promise<DustAccountState>): Promise<DustAccountState | null> {
+  const locks = channel && typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks) return fetch();
+  return locks.request(`${SHARED_CHANNEL}|${identity}`, { ifAvailable: true }, lock => (lock ? fetch() : null));
+}
+
+/** 'ended': nothing to schedule (superseded, paused, no wallet, or a poll already running). */
+type PollOutcome = 'applied' | 'failed' | 'elsewhere' | 'ended';
+
+async function refreshOnce(): Promise<PollOutcome> {
   // Read network + address fresh each tick — the active wallet can change.
   const network = walletStore.loggedWallet?.network;
   const address = midnightStore.addresses?.unshielded;
   const identity = pollIdentity();
-  if (!network || !address || inFlight || unavailableIdentity === identity) return;
+  if (!network || !address || inFlight || unavailableIdentity === identity) return 'ended';
   const request = {};
   const startedAt = Date.now();
   inFlight = request;
+  lastAttemptAt = startedAt;
   try {
     const api = getMidnightApi(network);
-    const res = await api.getDustAccountState(address);
-    if (inFlight !== request || identity !== pollIdentity()) return;
-    polledBalance.value = BigInt(res.dust_balance ?? '0');
-    polledGenerating.value = BigInt(res.dust_generating ?? '0');
-    polledCap.value = BigInt(res.dust_cap ?? '0');
-    polledNightRegistered.value = BigInt(res.night_registered ?? '0');
-    polledRegistrationStatus.value = res.dust_registration_status ?? 'Unregistered';
-    polledAsOfMs.value = Date.now();
-    nativeRegistrationConfirmedAt.value = res.dust_registration_status === 'Registered' ? startedAt : 0;
-    const now = polledAsOfMs.value;
-    const tip = midnightStore.tip;
-    const age = midnightTipAgeMs(tip, now);
-    const explicitEmpty = res.dust_registration_status === 'Unregistered' && res.dust_generation_status === 'empty'
-      && [res.dust_balance, res.dust_generating, res.dust_cap, res.night_registered].every(value => value === '0');
-    const eligible = network === Network.PREPROD && knownMidnightLedger(network) === 9
-      && midnightStore.dustState?.registrationStatus === 'Registered' && (midnightStore.balances?.nightRegistered ?? 0n) > 0n
-      && !midnightStore.refreshing && midnightStore.networkStatus === 'connected'
-      && age !== null && age <= MIDNIGHT_DATA_PAUSED_AFTER_MS && tip.height > 0;
-    if (eligible && explicitEmpty) {
-      if (previousEmptyTip && (tip.height < previousEmptyTip.height || (tip.height === previousEmptyTip.height && tip.hash !== previousEmptyTip.hash))) {
-        nativeClearObservedAt.value = 0;
-      } else if (previousEmptyTip && tip.height > previousEmptyTip.height && !nativeClearObservedAt.value) {
-        nativeClearObservedAt.value = now;
-      }
-      previousEmptyTip = { height: tip.height, hash: tip.hash };
-    } else {
-      previousEmptyTip = null;
-      if (!explicitEmpty || midnightStore.refreshing) nativeClearObservedAt.value = 0;
-    }
+    const res = await fetchUnlessElsewhere(identity, () => api.getDustAccountState(address));
+    if (inFlight !== request || identity !== pollIdentity()) return 'ended';
+    if (!res) return 'elsewhere';
+    const asOf = Date.now();
+    applyReading(identity, res, startedAt, asOf);
+    const shared: SharedReading = { identity, startedAt, asOf, state: res };
+    try { channel?.postMessage(shared); } catch { /* the other views poll on their own */ }
+    return 'applied';
   } catch (e) {
-    if (inFlight !== request || identity !== pollIdentity()) return;
+    if (inFlight !== request || identity !== pollIdentity()) return 'ended';
     previousEmptyTip = null;
     if (isUnavailable(e)) {
       unavailableIdentity = identity;
       forgetPolledIdentity();
       debugLog('🌙 DUST account-state unavailable; polling paused until the wallet or view changes', network);
-      return;
+      return 'ended';
     }
     // Keep last successful values; extrapolation continues until next success.
     // Log it — a silently-failing poll once masqueraded as "wallet stopped
     // generating DUST" (it was an auth-base 404 loop).
     debugLog('🌙 dust account-state poll failed', e);
+    return 'failed';
   } finally {
     if (inFlight === request) inFlight = null;
   }
 }
 
-function start() {
-  if (pollTimer) return;
+function viewVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+}
+
+/** 5s after news, then 5, 10, 20, 40 and 60s while the readings say nothing new. */
+function nextDelay(): number {
+  return Math.min(DUST_POLL_FAST_MS * 2 ** Math.max(0, quietPolls - 1), DUST_POLL_SLOW_MS);
+}
+
+function clearPollTimer(): void {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = null;
+}
+
+/** The next poll in `delay` ms, replacing one already due. Never while hidden. */
+function reschedule(delay: number): void {
+  clearPollTimer();
+  if (!running || !viewVisible()) return;
+  pollDueAt = Date.now() + delay;
+  pollTimer = setTimeout(() => { pollTimer = null; void poll(); }, delay);
+}
+
+/** A poll within `delay` ms, keeping one already due sooner (so steady input never starves it). */
+function pollWithin(delay: number): void {
+  if (pollTimer && pollDueAt <= Date.now() + delay) return;
+  reschedule(delay);
+}
+
+async function poll(): Promise<void> {
+  clearPollTimer();
+  const outcome = await refreshOnce();
+  if (outcome === 'ended') return;
+  if (outcome === 'failed') quietPolls += 1;
+  reschedule(nextDelay());
+}
+
+/**
+ * The view was shown again or the user acted: back to the 5s pace, and fetch now unless a
+ * fetch (here or in another view) started less than 5s ago.
+ */
+function nudge(): void {
+  if (!running || !viewVisible()) return;
+  quietPolls = 0;
+  if (inFlight) return;
+  const since = Date.now() - lastAttemptAt;
+  if (since >= DUST_POLL_FAST_MS) void poll();
+  else pollWithin(DUST_POLL_FAST_MS - since);
+}
+
+function onVisibilityChange(): void {
+  if (viewVisible()) nudge();
+  else clearPollTimer();
+}
+
+function onSharedReading(event: MessageEvent<SharedReading>): void {
+  const shared = event.data;
+  if (!running || !shared || shared.identity !== pollIdentity() || !(shared.asOf > polledAsOfMs.value)) return;
+  try {
+    applyReading(shared.identity, shared.state, shared.startedAt, shared.asOf);
+  } catch {
+    return;
+  }
+  lastAttemptAt = Math.max(lastAttemptAt, shared.startedAt);
+  // The endpoint answered for this wallet again, so a pause after a 501 is over.
   unavailableIdentity = null;
-  void refreshOnce();
-  pollTimer = setInterval(refreshOnce, 5_000);
+  if (!inFlight) reschedule(nextDelay());
+}
+
+function listenToView(): void {
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('pointerdown', nudge, { capture: true, passive: true });
+    document.addEventListener('keydown', nudge, { capture: true, passive: true });
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', nudge);
+    window.addEventListener('pagehide', clearPollTimer);
+  }
+  if (typeof BroadcastChannel !== 'undefined' && typeof navigator !== 'undefined' && navigator.locks) {
+    try {
+      channel = new BroadcastChannel(SHARED_CHANNEL);
+      channel.onmessage = onSharedReading;
+    } catch {
+      channel = null;
+    }
+  }
+}
+
+function stopListening(): void {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.removeEventListener('pointerdown', nudge, { capture: true });
+    document.removeEventListener('keydown', nudge, { capture: true });
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', nudge);
+    window.removeEventListener('pagehide', clearPollTimer);
+  }
+  channel?.close();
+  channel = null;
+}
+
+function start() {
+  if (running) return;
+  running = true;
+  unavailableIdentity = null;
+  quietPolls = 0;
+  listenToView();
   tickTimer = setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
+  if (viewVisible()) void poll();
 }
 
 function stop() {
+  running = false;
   previousEmptyTip = null;
   inFlight = null;
   unavailableIdentity = null;
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  clearPollTimer();
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  stopListening();
   // Don't zero out polledBalance — keep the last value visible until next start
   // so navigation back to a dust view shows the previous reading instantly.
 }
@@ -223,6 +452,9 @@ function forgetPolledIdentity(): void {
   polledRegistrationStatus.value = 'Unregistered';
   polledAsOfMs.value = 0;
   nativeRegistrationConfirmedAt.value = 0;
+  lastReading = null;
+  quietPolls = 0;
+  lastAttemptAt = 0;
 }
 
 watch(
@@ -234,9 +466,27 @@ watch(
     // successful poll is exactly where the stale value used to be shown.
     forgetPolledIdentity();
     if (consumers <= 0) return;
-    void refreshOnce();
+    nudge();
   },
   { flush: 'sync' },
+);
+
+/**
+ * The wallet doing something counts as the user acting (see "Poll pace"): a send starting
+ * or finishing, a new transaction reaching sync, a registration being submitted, NIGHT
+ * moving or the registration status changing. Module-scoped for the same reason as the
+ * identity watcher above.
+ */
+watch(
+  () => [
+    midnightStore.lastMidnightTxId ?? '',
+    midnightStore.sendProgress == null,
+    midnightStore.dustState?.registrationStatus ?? '',
+    String(midnightStore.balances?.nightRegistered ?? ''),
+    String(midnightStore.balances?.nightUnshielded ?? ''),
+    dustPendingRevision.value,
+  ].join('|'),
+  () => nudge(),
 );
 
 /**

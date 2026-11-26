@@ -123,36 +123,93 @@ async function refresh(refreshToken: string): Promise<CachedTokens> {
 }
 
 /**
- * Returns a valid access token for nexus, refreshing or re-logging in as needed.
- * Safe to call from request interceptors — it caches and only contacts the
- * server when the cached token is missing or near expiry.
+ * The one token acquisition (refresh or device login) running in this context, if any.
+ * Every caller that needs new tokens awaits it, so N requests made at once on first start
+ * send one POST /api/auth/device for one device id, instead of N each with its own id.
+ * Cleared once it settles, success or failure, so the next caller after a failure tries again.
  */
-export async function getNexusAccessToken(): Promise<string> {
+let pendingTokens: Promise<CachedTokens> | null = null;
+
+/**
+ * The background and every extension page each load this module, so the promise above
+ * covers one context. Where the Web Locks API exists (extension pages and the MV3 worker),
+ * the acquisition also runs under one lock for the whole extension; it re-reads the store
+ * first, so a context that waited takes the tokens and device id the other one just wrote.
+ */
+const DEVICE_AUTH_LOCK = 'gero-nexus-device-auth';
+
+async function acrossContexts(work: () => Promise<CachedTokens>): Promise<CachedTokens> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? locks.request(DEVICE_AUTH_LOCK, work) : work();
+}
+
+function singleFlight(acquire: () => Promise<CachedTokens>): Promise<CachedTokens> {
+  if (pendingTokens) return pendingTokens;
+  const attempt = acrossContexts(acquire);
+  pendingTokens = attempt;
+  const release = () => { if (pendingTokens === attempt) pendingTokens = null; };
+  attempt.then(release, release);
+  return attempt;
+}
+
+function stillValid(tokens: CachedTokens): boolean {
+  return tokens.expiresAt > Date.now() + EXPIRY_BUFFER_MS;
+}
+
+/** Tokens that are still good (another caller may have just written them), else refreshed, else a login. */
+async function acquireTokens(): Promise<CachedTokens> {
   const cached = await readCachedTokens();
-
-  if (cached && cached.expiresAt > Date.now() + EXPIRY_BUFFER_MS) {
-    return cached.accessToken;
-  }
-
+  if (cached && stillValid(cached)) return cached;
   if (cached?.refreshToken) {
     try {
-      const refreshed = await refresh(cached.refreshToken);
-      return refreshed.accessToken;
+      return await refresh(cached.refreshToken);
     } catch (err) {
       debugLog('[nexusAuth] Refresh failed, falling back to fresh login:', err);
       await clearCachedTokens();
     }
   }
-
-  const fresh = await login();
-  return fresh.accessToken;
+  return login();
 }
 
 /**
- * Force a fresh login (used by the API client's 401 handler).
+ * Returns a valid access token for nexus, refreshing or re-logging in as needed.
+ * Safe to call from request interceptors: it caches and only contacts the
+ * server when the cached token is missing or near expiry, once for all callers.
  */
-export async function reauthenticateNexus(): Promise<string> {
+export async function getNexusAccessToken(): Promise<string> {
+  const cached = await readCachedTokens();
+  if (cached && stillValid(cached)) return cached.accessToken;
+  return (await singleFlight(acquireTokens)).accessToken;
+}
+
+/**
+ * A login that never answers with `refused`: tokens another caller or context wrote since
+ * that request was refused are taken as they are, anything else is a fresh login.
+ */
+async function freshLogin(refused: string | undefined): Promise<CachedTokens> {
+  const current = await readCachedTokens();
+  if (current && stillValid(current) && current.accessToken !== refused) return current;
   await clearCachedTokens();
-  const fresh = await login();
-  return fresh.accessToken;
+  return login();
+}
+
+/**
+ * Force a fresh login (used by the API clients' 401/403 handlers).
+ *
+ * @param refusedToken the access token the refused request sent. Never handed back: a
+ *   login or refresh already running is joined, but when it answers with that same token
+ *   (it read the cache before the refusal), a fresh login is started or joined instead.
+ *   Without it, the token cached now stands in for it.
+ *
+ * Requests refused together share one login, here and across contexts.
+ */
+export async function reauthenticateNexus(refusedToken?: string): Promise<string> {
+  const refused = refusedToken ?? (await readCachedTokens())?.accessToken;
+  // A joined acquisition can answer with the refused token once; the login after it cannot.
+  // Three rounds only bound a pathological run of other callers' acquisitions.
+  for (let round = 0; round < 3; round++) {
+    const tokens = await singleFlight(() => freshLogin(refused));
+    if (tokens.accessToken !== refused) return tokens.accessToken;
+  }
+  throw new Error('Nexus re-authentication kept answering with the refused token');
 }
