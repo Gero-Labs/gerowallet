@@ -57,14 +57,18 @@ const GerovaultOverview = lazyPage(() => import('@/modules/gerovault/views/Gerov
 const GerovaultCreate = lazyPage(() => import('@/modules/gerovault/views/GerovaultCreate.vue'));
 const GerovaultVault = lazyPage(() => import('@/modules/gerovault/views/GerovaultVault.vue'));
 const GerovaultTabPanel = lazyPage(() => import('@/modules/gerovault/views/GerovaultTabPanel.vue'));
+const GerovaultSpend = lazyPage(() => import('@/modules/gerovault/views/GerovaultSpend.vue'));
+const GerovaultImportSignatures = lazyPage(() => import('@/modules/gerovault/views/GerovaultImportSignatures.vue'));
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
 import {
   GEROVAULT_CREATE_ROUTE,
+  GEROVAULT_IMPORT_SIGNATURES_ROUTE,
   GEROVAULT_OVERVIEW_ROUTE,
   GEROVAULT_ROUTE_NAMES,
+  GEROVAULT_SPEND_ROUTE,
   GEROVAULT_TAB_ROUTES,
   GEROVAULT_TABS,
   GEROVAULT_VAULT_ROUTE,
@@ -264,6 +268,9 @@ const routes: RouteRecordRaw[] = [
           ...GEROVAULT_TABS.map(tab => ({ path: tab, name: GEROVAULT_TAB_ROUTES[tab], component: GerovaultTabPanel })),
         ],
       },
+      // Spend and import-signatures are pages of their own, outside the vault's tabs.
+      { path: ':vaultId/spend', name: GEROVAULT_SPEND_ROUTE, component: GerovaultSpend },
+      { path: ':vaultId/import-signatures', name: GEROVAULT_IMPORT_SIGNATURES_ROUTE, component: GerovaultImportSignatures },
     ],
   },
   {
@@ -552,6 +559,8 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
     case GEROVAULT_TAB_ROUTES.policy:
     case GEROVAULT_TAB_ROUTES.history:
     case GEROVAULT_TAB_ROUTES.settings:
+    case GEROVAULT_SPEND_ROUTE:
+    case GEROVAULT_IMPORT_SIGNATURES_ROUTE:
       return !featureFlagsStore.isVaultsEnabled();
 
     // Add other routes that can be under maintenance here

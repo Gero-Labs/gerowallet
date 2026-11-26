@@ -3085,6 +3085,18 @@ export default {
   'gerovault.tabEmpty.policy': 'Eigentümer und Richtlinie erscheinen hier.',
   'gerovault.tabEmpty.history': 'Noch keine Aktivität.',
   'gerovault.tabEmpty.settings': 'Tresoreinstellungen erscheinen hier.',
+  // GeroVault slice, create flow (/vaults/create): keys gerovault.create.* only. Add new keys above the end line.
+  // end gerovault.create
+
+  // GeroVault slice, vault list, vault screen and its tabs: keys gerovault.detail.* only. Add new keys above the end line.
+  // end gerovault.detail
+
+  // GeroVault slice, spend and import signatures: keys gerovault.spend.* only. Add new keys above the end line.
+  'gerovault.spend.title': 'Aus dem Tresor senden',
+  'gerovault.spend.unavailable': 'Das Senden aus einem Tresor ist noch nicht verfügbar.',
+  'gerovault.spend.importSignatures.title': 'Signaturen importieren',
+  'gerovault.spend.importSignatures.unavailable': 'Das Importieren von Signaturen ist noch nicht verfügbar.',
+  // end gerovault.spend
   'detailsLayer.peekHint': 'Halten Sie Alt (auf dem Mac die Wahltaste), um Details kurz einzublenden',
 
   // Strike v2 Vaults

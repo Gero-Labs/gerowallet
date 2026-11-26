@@ -92,7 +92,10 @@ describe('production options router guards', () => {
 });
 
 describe('GeroVault routes', () => {
-  const VAULT_PATHS = ['/vaults', '/vaults/create', '/vaults/abc', '/vaults/abc/proposals', '/vaults/abc/policy', '/vaults/abc/history', '/vaults/abc/settings'];
+  const VAULT_PATHS = [
+    '/vaults', '/vaults/create', '/vaults/abc', '/vaults/abc/proposals', '/vaults/abc/policy', '/vaults/abc/history', '/vaults/abc/settings',
+    '/vaults/abc/spend', '/vaults/abc/import-signatures',
+  ];
 
   it.each(VAULT_PATHS)('sends %s home while the flag is off', async path => {
     state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
@@ -109,6 +112,15 @@ describe('GeroVault routes', () => {
     expect(router.currentRoute.value.name).toBe('gerovaultCreate');
     for (const [tab, name] of [['proposals', 'gerovaultProposals'], ['policy', 'gerovaultPolicy'], ['history', 'gerovaultHistory'], ['settings', 'gerovaultSettings']]) {
       await router.push(`/vaults/abc/${tab}`);
+      expect(router.currentRoute.value.name).toBe(name);
+      expect(router.currentRoute.value.params['vaultId']).toBe('abc');
+    }
+  });
+
+  it('opens the spend and import-signatures pages of a vault with the flag on', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'preprod' };
+    for (const [page, name] of [['spend', 'gerovaultSpend'], ['import-signatures', 'gerovaultImportSignatures']]) {
+      await router.push(`/vaults/abc/${page}`);
       expect(router.currentRoute.value.name).toBe(name);
       expect(router.currentRoute.value.params['vaultId']).toBe('abc');
     }

@@ -2828,6 +2828,18 @@ export default {
   'gerovault.tabEmpty.policy': 'Owners and policy will appear here.',
   'gerovault.tabEmpty.history': 'No activity yet.',
   'gerovault.tabEmpty.settings': 'Vault settings will appear here.',
+  // GeroVault slice, create flow (/vaults/create): keys gerovault.create.* only. Add new keys above the end line.
+  // end gerovault.create
+
+  // GeroVault slice, vault list, vault screen and its tabs: keys gerovault.detail.* only. Add new keys above the end line.
+  // end gerovault.detail
+
+  // GeroVault slice, spend and import signatures: keys gerovault.spend.* only. Add new keys above the end line.
+  'gerovault.spend.title': 'Send from vault',
+  'gerovault.spend.unavailable': 'Sending from a vault is not available yet.',
+  'gerovault.spend.importSignatures.title': 'Import signatures',
+  'gerovault.spend.importSignatures.unavailable': 'Importing signatures is not available yet.',
+  // end gerovault.spend
   'detailsLayer.peekHint': 'Hold Alt (Option on a Mac) to show details for a moment',
 
   // Strike v2 Vaults

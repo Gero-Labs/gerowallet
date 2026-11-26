@@ -20,6 +20,10 @@ export const GEROVAULT_OVERVIEW_ROUTE = 'gerovault';
 export const GEROVAULT_CREATE_ROUTE = 'gerovaultCreate';
 /** `/vaults/:vaultId` itself, which redirects to the first tab. */
 export const GEROVAULT_VAULT_ROUTE = 'gerovaultVault';
+/** `/vaults/:vaultId/spend`: build a spend and save its unsigned bundle. A page of its own, outside the tabs. */
+export const GEROVAULT_SPEND_ROUTE = 'gerovaultSpend';
+/** `/vaults/:vaultId/import-signatures`: load witness files and submit. A page of its own, outside the tabs. */
+export const GEROVAULT_IMPORT_SIGNATURES_ROUTE = 'gerovaultImportSignatures';
 
 /** Every GeroVault route name: all of them share one gate. */
 export const GEROVAULT_ROUTE_NAMES: readonly string[] = [
@@ -27,6 +31,8 @@ export const GEROVAULT_ROUTE_NAMES: readonly string[] = [
   GEROVAULT_CREATE_ROUTE,
   GEROVAULT_VAULT_ROUTE,
   ...Object.values(GEROVAULT_TAB_ROUTES),
+  GEROVAULT_SPEND_ROUTE,
+  GEROVAULT_IMPORT_SIGNATURES_ROUTE,
 ];
 
 /** The tab a GeroVault tab route shows, or null for any other route. */

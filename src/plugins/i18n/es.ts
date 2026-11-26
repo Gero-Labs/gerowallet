@@ -2764,6 +2764,18 @@ export default {
   'gerovault.tabEmpty.policy': 'Aquí aparecerán los propietarios y la política.',
   'gerovault.tabEmpty.history': 'Aún no hay actividad.',
   'gerovault.tabEmpty.settings': 'Aquí aparecerá la configuración de la bóveda.',
+  // GeroVault slice, create flow (/vaults/create): keys gerovault.create.* only. Add new keys above the end line.
+  // end gerovault.create
+
+  // GeroVault slice, vault list, vault screen and its tabs: keys gerovault.detail.* only. Add new keys above the end line.
+  // end gerovault.detail
+
+  // GeroVault slice, spend and import signatures: keys gerovault.spend.* only. Add new keys above the end line.
+  'gerovault.spend.title': 'Enviar desde la bóveda',
+  'gerovault.spend.unavailable': 'Enviar desde una bóveda aún no está disponible.',
+  'gerovault.spend.importSignatures.title': 'Importar firmas',
+  'gerovault.spend.importSignatures.unavailable': 'Importar firmas aún no está disponible.',
+  // end gerovault.spend
   'detailsLayer.peekHint': 'Mantén presionada Alt (Option en Mac) para ver los detalles por un momento',
 
   'vaults.title': 'Bóvedas',

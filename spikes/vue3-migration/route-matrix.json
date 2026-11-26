@@ -331,9 +331,13 @@
         {
           "kind": "unit",
           "ref": "src/modules/gerovault/views/gerovaultViews.spec.ts"
+        },
+        {
+          "kind": "unit",
+          "ref": "src/modules/gerovault/views/gerovaultSpendViews.spec.ts"
         }
       ],
-      "note": "GeroVault parent route with no view of its own, behind isVaultsEnabled (off) and Cardano wallets only. Its children (the overview, create, and :vaultId with the proposals, policy, history and settings tabs) are placeholders: the guard spec pushes every child path with the flag off and on, and gerovaultViews.spec.ts renders each placeholder."
+      "note": "GeroVault parent route with no view of its own, behind isVaultsEnabled (off) and Cardano wallets only. Its children (the overview, create, :vaultId with the proposals, policy, history and settings tabs, and the :vaultId/spend and :vaultId/import-signatures pages) are placeholders: the guard spec pushes every child path with the flag off and on, and gerovaultViews.spec.ts and gerovaultSpendViews.spec.ts render each placeholder."
     },
     "options:/media-player": {
       "checks": [
