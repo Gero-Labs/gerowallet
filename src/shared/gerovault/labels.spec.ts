@@ -91,6 +91,12 @@ describe('labels: display', () => {
     expect(displayLabel(undefined)).toBe(ISOLATE(''));
   });
 
+  it('escapes the spaces of other widths the writer keeps inside a label', () => {
+    expect(writeLabel('Bob\u2003Alice')).toBe('Bob\u2003Alice');
+    expect(displayLabel('Bob\u2003Alice')).toBe(ISOLATE('Bob[U+2003]Alice'));
+    expect(displayLabel('a\u2000b\u200Ac\u202Fd\u205Fe f')).toBe(ISOLATE('a[U+2000]b[U+200A]c[U+202F]d[U+205F]e f'));
+  });
+
   it('leaves no character that could break out of the isolation', () => {
     const shown = displayLabel('\u2069\u202E\u2066\u200F\u061C');
     expect(shown.slice(1, -1)).toBe('[U+2069][U+202E][U+2066][U+200F][U+061C]');

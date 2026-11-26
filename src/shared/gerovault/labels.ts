@@ -18,7 +18,9 @@
  *   (U+2068 FIRST STRONG ISOLATE before, U+2069 POP DIRECTIONAL ISOLATE after), and every format,
  *   unassigned, private-use, separator, control or surrogate code point, filler or blank-looking
  *   code point is shown as a visible escape `[U+XXXX]`, so a right-to-left override or an
- *   invisible character cannot change what the rest of the screen says.
+ *   invisible character cannot change what the rest of the screen says. The spaces of other widths
+ *   the writer keeps inside a label (U+2000 to U+200A, U+202F, U+205F) are escaped too, so two
+ *   labels that differ only by them never look the same.
  */
 import { GeroVaultError } from './errors';
 
@@ -26,7 +28,7 @@ const MAX_BYTES = 64;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const REFUSED = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}\p{Cs}\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u2800\u3000\u00A0]/u;
-const ESCAPED = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}\p{Cs}\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u2800\u3000\u00A0]/gu;
+const ESCAPED = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}\p{Cs}\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u2800\u3000\u00A0\u2000-\u200A\u202F\u205F]/gu;
 const TRIMMED = '[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]';
 const TRIM = new RegExp(`^${TRIMMED}+|${TRIMMED}+$`, 'g');
 const ISOLATE_START = '\u2068';
