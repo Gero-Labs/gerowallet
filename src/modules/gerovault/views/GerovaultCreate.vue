@@ -103,6 +103,7 @@ import { UNAVAILABLE_KEYS, saveProblemKey } from '@/modules/gerovault/create/mes
 import { passKeyMultisigAccountKey, requestMultisigAccountKey } from '@/modules/gerovault/create/ownAccountKey';
 import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
 import { useCreateVault } from '@/modules/gerovault/create/useCreateVault';
+import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
 import '@/modules/gerovault/create/createCard.css';
 
 defineOptions({ name: 'GerovaultCreate' });
@@ -120,6 +121,7 @@ const flow = eligibility.ok
     store: vaultStore,
     walletId: eligibility.walletId,
     network: eligibility.network,
+    reader: createVaultChainReader(eligibility.network),
     unlockAccountKey: async (password: string) => {
       const wallet = walletStore.loggedWallet;
       if (!wallet || wallet.id !== eligibility.walletId) throw new OwnAccountKeyError('not-found');

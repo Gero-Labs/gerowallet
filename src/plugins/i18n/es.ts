@@ -2905,6 +2905,8 @@ export default {
   'gerovault.create.summary.signaturesValue': '{threshold} de {owners}',
   'gerovault.create.summary.registration': 'Registro',
   'gerovault.create.summary.registrationValue': 'etiqueta 1854, CIP-0146',
+  'gerovault.create.vault.addressUsed': 'Esta dirección ya tiene transacciones en la cadena, así que una bóveda con estas mismas claves ya se usó antes. Confírmalo con tus cofirmantes antes de guardarla.',
+  'gerovault.create.vault.addressUnreadable': 'No se pudo consultar la cadena para esta dirección.',
   // end gerovault.create
 
   // GeroVault slice, vault list, vault screen and its tabs: keys gerovault.detail.* only. Add new keys above the end line.

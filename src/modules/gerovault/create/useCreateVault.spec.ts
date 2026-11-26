@@ -136,6 +136,45 @@ describe('cosigners step', () => {
   });
 });
 
+describe('the vault address on chain', () => {
+  async function verifyWith(reader: CreateVaultDeps['reader']) {
+    const started = start({ reader });
+    const { flow } = started;
+    flow.goToCosigners();
+    await flow.unlock('right');
+    const [first, second] = flow.drafts.value;
+    flow.updateDraft(first.id, { label: 'Dana', keys: texts[1] });
+    flow.updateDraft(second.id, { label: 'Yuval', keys: texts[2] });
+    await vi.waitFor(() => expect(flow.cosignersReady.value).toBe(true));
+    await flow.goToVerify();
+    return flow;
+  }
+
+  it('reads the built vault\'s base address once, as a display', async () => {
+    const history = vi.fn(async () => []);
+    const flow = await verifyWith({ history });
+    await vi.waitFor(() => expect(flow.addressActivity.value).toBe('none'));
+    expect(history).toHaveBeenCalledWith(String(flow.vault.value!.addresses.base), { pageSize: 1 });
+  });
+
+  it('says when the address was used before, or could not be read, and saves either way', async () => {
+    const used = await verifyWith({ history: async () => [{ txHash: 'ab'.repeat(32), blockHeight: 1, blockTime: 1 }] });
+    await vi.waitFor(() => expect(used.addressActivity.value).toBe('used'));
+    expect(await used.save()).not.toBeNull();
+    const broken = await verifyWith({ history: async () => { throw new Error('offline'); } });
+    await vi.waitFor(() => expect(broken.addressActivity.value).toBe('unreadable'));
+  });
+
+  it('does not read without a reader, and forgets the answer when going back', async () => {
+    const none = await verifyWith(undefined);
+    expect(none.addressActivity.value).toBe('unknown');
+    const flow = await verifyWith({ history: async () => [] });
+    await vi.waitFor(() => expect(flow.addressActivity.value).toBe('none'));
+    flow.back();
+    expect(flow.addressActivity.value).toBe('unknown');
+  });
+});
+
 describe('verify and save', () => {
   it('builds the vault every cosigner builds, verifies, saves, and keeps later records', async () => {
     const { flow, walletId } = await readyToVerify();
@@ -188,6 +227,22 @@ describe('verify and save', () => {
     expect(flow.step.value).toBe('cosigners');
     expect(flow.vault.value).toBeNull();
     expect(flow.records.value).toEqual([]);
+  });
+
+  it('keeps a record made after the save on screen when the store cannot write it, and says so', async () => {
+    const failing = { ...vaultStore, update: async () => { throw Object.assign(new Error('x'), { code: 'STORE_UNAVAILABLE' }); } };
+    const { flow } = start({ store: failing });
+    flow.goToCosigners();
+    await flow.unlock('right');
+    const [a, b] = flow.drafts.value;
+    flow.updateDraft(a.id, { label: 'Dana', keys: texts[1] });
+    flow.updateDraft(b.id, { label: 'Yuval', keys: texts[2] });
+    await vi.waitFor(() => expect(flow.cosignersReady.value).toBe(true));
+    await flow.goToVerify();
+    expect(await flow.save()).not.toBeNull();
+    await flow.confirmNumber(flow.vault.value!.cosigners[0].hashes.payment);
+    expect(flow.verification.value?.verified).toBe(1);
+    expect(flow.saveProblem.value).toBe('STORE_UNAVAILABLE');
   });
 
   it('says why a save failed', async () => {

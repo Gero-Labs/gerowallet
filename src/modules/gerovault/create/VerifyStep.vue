@@ -12,6 +12,12 @@
           <CopyButton :value="String(vault.addresses.base)" x-small />
         </dd>
       </dl>
+      <GNote v-if="addressActivity === 'used'" icon="mdi-alert-outline" role="status" data-test="create-address-used">
+        {{ $t('gerovault.create.vault.addressUsed') }}
+      </GNote>
+      <p v-else-if="addressActivity === 'unreadable'" class="t-caption gvc-faint" data-test="create-address-unreadable">
+        {{ $t('gerovault.create.vault.addressUnreadable') }}
+      </p>
       <template v-if="details">
         <dl class="gvc-facts t-caption" data-test="create-vault-details">
           <dt>{{ $t('gerovault.create.vault.reward') }}</dt>
@@ -144,7 +150,7 @@ import VerificationQr from './VerificationQr.vue';
 import type { CreateVaultFlow } from './useCreateVault';
 
 const props = defineProps<{ flow: CreateVaultFlow; details: boolean }>();
-const { vault, view, manifestState, verification, saved } = props.flow;
+const { vault, view, manifestState, verification, saved, addressActivity } = props.flow;
 
 interface HolderRow {
   readonly credential: string;

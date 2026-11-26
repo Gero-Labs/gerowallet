@@ -14,7 +14,7 @@
       <AnimatedQRScanner v-if="isOpen" mode="text" @scan="submit($event)" @error="cameraError = String($event)" />
       <p v-if="cameraError" class="t-caption gvc-error">{{ cameraError }}</p>
     </div>
-    <form v-else class="qr-scan__paste" @submit.prevent="submit(pasted)">
+    <div v-else class="qr-scan__paste">
       <v-textarea
         v-model="pasted"
         :label="$t('gerovault.create.qr.pasteLabel')"
@@ -26,10 +26,10 @@
         hide-details="auto"
         data-test="create-qr-paste"
       />
-      <GButton tier="secondary" type="submit" :disabled="!pasted.trim() || checking" :loading="checking" data-test="create-qr-check">
+      <GButton tier="secondary" :disabled="!pasted.trim() || checking" :loading="checking" data-test="create-qr-check" @click="submit(pasted)">
         {{ $t('gerovault.create.qr.check') }}
       </GButton>
-    </form>
+    </div>
     <GNote v-if="refusal" tone="error" icon="mdi-alert-circle-outline" role="alert" class="mt-3">{{ $t(refusal) }}</GNote>
   </BaseDialog>
 </template>

@@ -8,7 +8,7 @@
  */
 import { computed, reactive, ref, shallowRef, watch } from 'vue';
 import type { CosignerVerification, MultisigAccountPublicKey, VaultNetwork } from '@/shared/gerovault';
-import type { VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
+import type { VaultChainReader, VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
 import {
   DEFAULT_TEMPLATE,
   EMPTY_COSIGNER,
@@ -49,9 +49,20 @@ export interface CreateVaultDeps {
   readonly network: VaultNetwork;
   /** This wallet's CIP-1854 account key after its credential (`ownAccountKey.ts`). */
   readonly unlockAccountKey: (password: string) => Promise<MultisigAccountPublicKey>;
+  /**
+   * The vault network's chain reader (`createVaultChainReader`), to say whether the new vault's
+   * address already has transactions. A display only: nothing waits on it. Absent: not checked.
+   */
+  readonly reader?: Pick<VaultChainReader, 'history'>;
   /** Milliseconds since the epoch. */
   readonly now?: () => number;
 }
+
+/**
+ * What the chain says about the built vault's address, as a provider reports it (never proof):
+ * `used` means a vault with these very scripts has been paid or spent from before.
+ */
+export type AddressActivity = 'unknown' | 'checking' | 'none' | 'used' | 'unreadable';
 
 /** Why this wallet's keys could not be unlocked. */
 export type UnlockProblem = OwnAccountKeyErrorCode | 'TOO_MANY_PENDING' | 'INDEX_SPACE_EXHAUSTED' | 'INVALID_HISTORY' | 'STORE_UNAVAILABLE';
@@ -163,6 +174,22 @@ export function useCreateVault(deps: CreateVaultDeps) {
   const building = ref(false);
   const buildProblem = ref<string | null>(null);
 
+  const addressActivity = ref<AddressActivity>('unknown');
+  let activitySeq = 0;
+
+  async function checkAddress(address: string): Promise<void> {
+    const seq = ++activitySeq;
+    if (!deps.reader) return;
+    addressActivity.value = 'checking';
+    let activity: AddressActivity;
+    try {
+      activity = (await deps.reader.history(address, { pageSize: 1 })).length > 0 ? 'used' : 'none';
+    } catch {
+      activity = 'unreadable';
+    }
+    if (seq === activitySeq) addressActivity.value = activity;
+  }
+
   async function refreshVerification(): Promise<void> {
     const state = manifestState.value;
     verification.value = state?.ok ? await verificationState(state.manifest, state.ack, records.value) : null;
@@ -188,9 +215,17 @@ export function useCreateVault(deps: CreateVaultDeps) {
         buildProblem.value = codeOf(error) ?? 'UNKNOWN';
         return;
       }
-      manifestState.value = await firstManifest(vault.value, nowSeconds());
-      records.value = [];
-      await refreshVerification();
+      try {
+        manifestState.value = await firstManifest(vault.value, nowSeconds());
+        records.value = [];
+        await refreshVerification();
+      } catch (error) {
+        vault.value = null;
+        manifestState.value = null;
+        buildProblem.value = codeOf(error) ?? 'UNKNOWN';
+        return;
+      }
+      void checkAddress(String(vault.value.addresses.base));
       step.value = 'verify';
     } finally {
       building.value = false;
@@ -205,6 +240,8 @@ export function useCreateVault(deps: CreateVaultDeps) {
       manifestState.value = null;
       records.value = [];
       verification.value = null;
+      activitySeq++;
+      addressActivity.value = 'unknown';
       step.value = 'cosigners';
     } else if (step.value === 'cosigners') {
       step.value = 'template';
@@ -214,8 +251,14 @@ export function useCreateVault(deps: CreateVaultDeps) {
   // Records made after the save are written to the stored vault as well.
   async function keepRecords(next: readonly CosignerVerification[]): Promise<void> {
     records.value = next;
-    if (saved.value && vault.value) saved.value = await deps.store.update(deps.walletId, vault.value.vaultId, { verifications: next });
     await refreshVerification();
+    if (!saved.value || !vault.value) return;
+    try {
+      saved.value = await deps.store.update(deps.walletId, vault.value.vaultId, { verifications: next });
+      saveProblem.value = null;
+    } catch (error) {
+      saveProblem.value = codeOf(error) ?? 'UNKNOWN';
+    }
   }
 
   async function confirmNumber(credential: string): Promise<void> {
@@ -276,6 +319,7 @@ export function useCreateVault(deps: CreateVaultDeps) {
     view,
     records,
     verification,
+    addressActivity,
     building,
     buildProblem,
     goToCosigners,

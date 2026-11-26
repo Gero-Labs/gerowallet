@@ -10,7 +10,7 @@
 
     <template v-if="!own">
       <p class="t-body-sm gvc-muted">{{ $t('gerovault.create.own.unlockText') }}</p>
-      <form class="own-keys__unlock" @submit.prevent="submit()">
+      <div class="own-keys__unlock">
         <v-text-field
           v-if="keySource === 'password'"
           v-model="password"
@@ -22,17 +22,18 @@
           hide-details="auto"
           :disabled="unlocking"
           data-test="create-password"
+          @keyup.enter="submit()"
         />
         <GButton
           tier="secondary"
-          type="submit"
           :loading="unlocking"
           :disabled="keySource === 'password' && !password"
           data-test="create-unlock"
+          @click="submit()"
         >
           {{ keySource === 'passkey' ? $t('gerovault.create.own.unlockPassKey') : $t('gerovault.create.own.unlock') }}
         </GButton>
-      </form>
+      </div>
       <GNote v-if="unlockProblem" tone="error" icon="mdi-alert-circle-outline" role="alert">{{ $t(UNLOCK_PROBLEM_KEYS[unlockProblem]) }}</GNote>
     </template>
 
@@ -74,7 +75,7 @@ const { own, unlocking, unlockProblem, unlock } = props.flow;
 const password = ref('');
 
 async function submit(): Promise<void> {
-  if (props.keySource === 'password' && !password.value) return;
+  if (unlocking.value || (props.keySource === 'password' && !password.value)) return;
   try {
     await unlock(password.value);
   } finally {

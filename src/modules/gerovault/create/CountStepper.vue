@@ -5,11 +5,11 @@
       <InfoTooltip v-if="info" :label="label" :text="info" />
     </div>
     <div class="count-stepper__controls" role="group" :aria-labelledby="labelId">
-      <GButton compact :aria-label="decreaseLabel" :disabled="value <= min" @click="emit('update', value - 1)">
+      <GButton compact :aria-label="decreaseLabel" :disabled="value <= min" data-test="count-decrease" @click="emit('update', value - 1)">
         <v-icon size="small" aria-hidden="true">mdi-minus</v-icon>
       </GButton>
       <output class="count-stepper__value t-heading g-mono" aria-live="polite">{{ display ?? value }}</output>
-      <GButton compact :aria-label="increaseLabel" :disabled="value >= max" @click="emit('update', value + 1)">
+      <GButton compact :aria-label="increaseLabel" :disabled="value >= max" data-test="count-increase" @click="emit('update', value + 1)">
         <v-icon size="small" aria-hidden="true">mdi-plus</v-icon>
       </GButton>
     </div>

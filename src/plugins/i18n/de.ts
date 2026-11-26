@@ -3226,6 +3226,8 @@ export default {
   'gerovault.create.summary.signaturesValue': '{threshold} von {owners}',
   'gerovault.create.summary.registration': 'Registrierung',
   'gerovault.create.summary.registrationValue': 'Label 1854, CIP-0146',
+  'gerovault.create.vault.addressUsed': 'Diese Adresse hat bereits Transaktionen on-chain, ein Tresor mit genau diesen Schlüsseln wurde also schon verwendet. Klären Sie das mit Ihren Mitunterzeichnern, bevor Sie ihn speichern.',
+  'gerovault.create.vault.addressUnreadable': 'Die Chain konnte für diese Adresse nicht geprüft werden.',
   // end gerovault.create
 
   // GeroVault slice, vault list, vault screen and its tabs: keys gerovault.detail.* only. Add new keys above the end line.
