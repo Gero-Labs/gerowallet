@@ -8,7 +8,10 @@
  *
  * 1. They never sign with a CIP-1854 key other than `m/1854'/1815'/<account>'/0/0`, the one
  *    multisig key Ledger and Trezor are asked for today. A key at index 1 or above (`0/i`), or any
- *    multisig stake key (`2/i`), is refused, whatever the transaction.
+ *    multisig stake key (`2/i`), is refused, whatever the transaction. Once a stored vault holds a
+ *    wallet's own index 0 (knownVaults.ts, `ownIndexZero`), `m/1854'/1815'/0'/0/0` is that vault's
+ *    key too, and is refused as well (`assertMultisigPathsAllowed`), whatever the transaction: its
+ *    inputs cannot always be resolved here, so rule 2 alone could miss a spend.
  * 2. They never sign a transaction that touches a known vault (knownVaults.ts): an input whose UTxO
  *    sits at a vault's payment script, or a withdrawal or certificate under a vault's stake script.
  *    Matched by credential, never by whole address, so a spend from the vault's payment script
@@ -72,6 +75,36 @@ export function assertGenericSigningPaths(paths: Iterable<SigningKeyPath | null 
       throw new Error(VAULT_SIGN_REFUSAL_MESSAGE);
     }
   }
+}
+
+/** Whether `path` is the CIP-1854 payment key 0 of account 0', the key a vault at index 0 uses. */
+export function isVaultIndexZeroPath(path: SigningKeyPath): boolean {
+  const levels = typeof path === 'string' ? withoutRoot(path).split('/').map(level) : [...path];
+  return levels.length === 5
+    && levels[0] === MULTISIG_PURPOSE
+    && levels[1] === CARDANO_COIN
+    && levels[2] === HARDENED
+    && levels[3] === 0
+    && levels[4] === 0;
+}
+
+function refuseIndexZero(paths: readonly (SigningKeyPath | null | undefined)[], vaults: KnownVaultScriptHashes): void {
+  if (vaults.ownIndexZero === true && paths.some(path => path !== null && path !== undefined && path !== '' && isVaultIndexZeroPath(path))) {
+    debugLog('Vault guard: refusing the 0/0 multisig key, which a stored vault holds');
+    throw new Error(VAULT_SIGN_REFUSAL_MESSAGE);
+  }
+}
+
+/**
+ * Rule 1 for the multisig witness paths a hardware signer adds to its request on its own (Ledger and
+ * Trezor ask for 0/0 in multisig mode): every path must pass rule 1, and 0/0 of account 0' is
+ * refused while a stored vault holds it. Reads the known vaults only when that path is asked for.
+ */
+export async function assertMultisigPathsAllowed(paths: Iterable<SigningKeyPath | null | undefined>): Promise<void> {
+  const list = [...paths];
+  assertGenericSigningPaths(list);
+  if (!list.some(path => path !== null && path !== undefined && path !== '' && isVaultIndexZeroPath(path))) return;
+  refuseIndexZero(list, await knownVaultScriptHashes());
 }
 
 /** Whether an error is this guard's refusal, so a signer that wraps device errors passes it through as it is. */
@@ -145,8 +178,11 @@ export function findVaultTouch(tx: Cardano.Tx, vaults: KnownVaultScriptHashes, u
  * cannot read its store throws too, and that refuses as well.
  */
 export async function assertNoVaultSignature(tx: Cardano.Tx, keys: KeySet, utxos: Utxos): Promise<void> {
-  assertGenericSigningPaths(plannedSigningPaths(tx, keys, utxos));
-  const hits = findVaultTouch(tx, await knownVaultScriptHashes(), utxos);
+  const paths = plannedSigningPaths(tx, keys, utxos);
+  assertGenericSigningPaths(paths);
+  const vaults = await knownVaultScriptHashes();
+  refuseIndexZero(paths, vaults);
+  const hits = findVaultTouch(tx, vaults, utxos);
   if (hits.length > 0) {
     debugLog('Vault guard: refusing a transaction that touches a known vault:', hits);
     throw new Error(VAULT_SIGN_REFUSAL_MESSAGE);

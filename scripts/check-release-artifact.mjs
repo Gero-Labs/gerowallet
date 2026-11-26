@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, matchesGlob, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findRemoteCode, isScannable } from './remote-code-guard.mjs';
+import { gerovaultSwitchIn } from './check-gerovault-switch.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export function extensionIdForKey(key) {
@@ -76,6 +77,8 @@ export function inspectReleaseArtifact(directory, { expectedVersion, expectedId 
     if (!isScannable(file)) continue;
     const code = bytes.toString('utf8');
     for (const hit of findRemoteCode(code)) problems.push(`${file}: ${hit.reason}`);
+    // A local test switch (check-gerovault-switch.mjs): no release carries GeroVault forced on.
+    if (/\.(?:js|mjs|cjs)$/.test(file) && gerovaultSwitchIn(code) === 'on') problems.push(`${file}: built with VITE_GEROVAULT_FORCE_ON on`);
     if (!file.endsWith('.html')) continue;
     if (/<script\b[^>]*>\s*[^<\s]/i.test(code)) problems.push(`${file}: inline script is incompatible with production CSP`);
     for (const match of code.matchAll(/<(script|link)\b([^>]+)>/gi)) {

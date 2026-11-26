@@ -42,7 +42,7 @@ import { solanaAccountPath } from '@/chains/solana/solanaPaths';
 import { solanaDeviceAccount, type SolanaDeviceAccount } from '@/chains/solana/solanaHardwarePolicy';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
-import { assertGenericSigningPaths, assertNoVaultSignature } from '@/shared/utils/vaultSignGuard';
+import { assertMultisigPathsAllowed, assertNoVaultSignature } from '@/shared/utils/vaultSignGuard';
 
 /**
  * Trezor transaction transformer context
@@ -684,8 +684,8 @@ export default {
           : {})
       };
       // The device witnesses every path the request carries (a Plutus one keeps them all, below):
-      // none may be a CIP-1854 key other than 0/0.
-      assertGenericSigningPaths(requestSigningPaths(fullTrezorParams));
+      // none may be a CIP-1854 key other than 0/0, nor 0/0 while a stored vault holds it.
+      await assertMultisigPathsAllowed(requestSigningPaths(fullTrezorParams));
 
       const result = await TrezorConnect.cardanoSignTransaction(fullTrezorParams);
 

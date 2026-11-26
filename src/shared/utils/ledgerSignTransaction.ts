@@ -21,19 +21,20 @@ import {
   util,
 } from '@cardano-sdk/key-management';
 import { areStringsEqualInConstantTime } from '@cardano-sdk/util';
-import { assertGenericSigningPaths, isVaultSignRefusal } from '@/shared/utils/vaultSignGuard';
+import { assertMultisigPathsAllowed, isVaultSignRefusal } from '@/shared/utils/vaultSignGuard';
 
 /**
  * The multisig witness to ask the device for: the CIP-1854 key of the wallet's own account.
  * LedgerKeyAgent always asks for account 0's, which is the right key only on account #0.
  * Only key 0/0: any other 1854' key is a vault owner's, signed for on the vault screen alone
- * (vaultSignGuard.ts), and asking for one is refused before the device is.
+ * (vaultSignGuard.ts), and asking for one is refused before the device is. So is 0/0 itself while a
+ * stored vault holds it.
  */
-const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => {
+const multiSigWitnessPaths = async (accountIndex: number): Promise<BIP32Path[]> => {
   const paths = [
     util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG),
   ];
-  assertGenericSigningPaths(paths);
+  await assertMultisigPathsAllowed(paths);
   return paths;
 };
 
@@ -73,7 +74,7 @@ const witnessPublicKeys = (agent: LedgerKeyAgent, deviceConnection: Pick<Ada, 'g
       return agent.derivePublicKey({ index, role });
     }
     if (ownAccount && purpose === util.harden(KeyPurpose.MULTI_SIG)) {
-      assertGenericSigningPaths([path]);
+      await assertMultisigPathsAllowed([path]);
       multiSigAccount ??= exportMultiSigAccount();
       return (await multiSigAccount).derivePublicKey({ index, role });
     }
@@ -185,15 +186,17 @@ export async function signLedgerTransaction(
     if (tx.collateralOutput && collateralReturn) tx.collateralOutput = withOriginalBytes(tx.collateralOutput, collateralReturn);
     tx.includeNetworkId = body.networkId !== undefined;
 
+    // Checked before the device is reached (vaultSignGuard.ts).
+    const additionalWitnessPaths = signingMode === TransactionSigningMode.MULTISIG_TRANSACTION
+      ? await multiSigWitnessPaths(agent.accountIndex)
+      : undefined;
     const { communicationType } = agent.serializableData as SerializableLedgerKeyAgentData;
     const deviceConnection = await LedgerKeyAgent.checkDeviceConnection(communicationType, agent.deviceConnection);
     const result = await deviceConnection.signTransaction({
       options: { tagCborSets: txBody.hasTaggedSets() },
       signingMode,
       tx,
-      ...(signingMode === TransactionSigningMode.MULTISIG_TRANSACTION && {
-        additionalWitnessPaths: multiSigWitnessPaths(agent.accountIndex),
-      }),
+      ...(additionalWitnessPaths && { additionalWitnessPaths }),
     });
     if (!areStringsEqualInConstantTime(result.txHashHex, hash)) {
       throw new errors.HwMappingError('Ledger computed a different transaction id');
