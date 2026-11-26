@@ -43,6 +43,14 @@ export const MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE = 'Gero does not sign a transac
 export const TREZOR_GOVERNANCE_REFUSAL_MESSAGE = 'Trezor cannot sign governance votes, proposals or treasury donations';
 
 /**
+ * The refusal of every generic signer (software, Ledger, Trezor, Keystone) for a transaction that
+ * would get a vault owner's signature outside the vault screen: a CIP-1854 key other than
+ * `0/0`, or a transaction that touches a known vault (vaultSignGuard.ts). Same fixed-English-string
+ * contract as CIP113_SIGN_REFUSAL_MESSAGE: friendlyTxError() localises it.
+ */
+export const VAULT_SIGN_REFUSAL_MESSAGE = 'Gero signs a vault transaction only from the vault screen';
+
+/**
  * Fixed marker for "we never learned what happened to this transaction" (5xx, or no
  * response at all) as opposed to the node rejecting it (4xx, where the node's own
  * reason is the useful part). The background has no i18n, so — like

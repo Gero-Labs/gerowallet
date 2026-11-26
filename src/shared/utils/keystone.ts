@@ -18,6 +18,7 @@ import { debugLog } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
 import { isMarkedToFail, walletWitnessPlan, type WitnessRole } from '@/shared/utils/keyCreds';
 import { assertCip113SignAllowed } from '@/shared/utils/cip113SignPreflight';
+import { assertNoVaultSignature } from '@/shared/utils/vaultSignGuard';
 import { bitcoinAccountPath } from '@/chains/bitcoin/bitcoinPaths';
 import {
   InvalidAccountIndexError,
@@ -333,6 +334,9 @@ export const createKeystoneSignRequest = async (tx: Serialization.Transaction, w
   // A transaction marked to fail only forfeits its collateral, which an input's witness can
   // authorise on its own.
   if (isMarkedToFail(txCore)) throw new Error(i18n.t('errors.markedToFailRefused') as string);
+  // The firmware signs at whatever path each key carries, so a CIP-1854 key other than 0/0, or a
+  // transaction that touches a known vault, is refused before any QR is built (vaultSignGuard.ts).
+  await assertNoVaultSignature(txCore, keys, utxos);
   assertFirmwareShowsCertificates(txCore, walletData.firmwareVersion);
 
   const xfp = walletData.xfp ?? "";
