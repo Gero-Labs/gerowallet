@@ -61,7 +61,10 @@ export interface ManifestAckInput {
   readonly own: OwnParticipant;
   /** Keyed by the external entry's credential. Every external cosigner needs an entry here. */
   readonly externalKeys?: Readonly<Record<string, ExternalCosignerKeys>>;
-  /** Ids of the vaults this device has accepted. */
+  /**
+   * The ids of every vault this device has accepted, all of them: an id left out loses the refusal
+   * of a second first manifest for that vault.
+   */
   readonly acceptedVaultIds?: readonly string[];
 }
 
@@ -95,6 +98,11 @@ export type ManifestAckResult =
       readonly vaultId: string;
       readonly template: VaultTemplate;
       readonly ownRole: Extract<ManifestRole, 'owner' | 'backupHolder' | 'viewer'>;
+      /**
+       * This device's own payment key hash, derived from its own keys (absent for a viewer). It is
+       * the `self` to give the funding gate (`fundingVerified`).
+       */
+      readonly ownCredential?: Ed25519KeyHashHex;
     }
   | {
       readonly ok: false;
@@ -167,6 +175,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
 
     const { owners, backupHolders, viewers, external } = manifest.roles;
     let ownRole: 'owner' | 'backupHolder' | 'viewer';
+    let ownCredential: Ed25519KeyHashHex | undefined;
     if (own.kind === 'viewer') {
       if (!viewers.some(v => hasDevice(v.devices, own.device))) return refuse('OWN_DEVICE_MISMATCH');
       ownRole = 'viewer';
@@ -186,6 +195,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       ownRole = asOwner ? 'owner' : 'backupHolder';
       if (own.role !== undefined && own.role !== ownRole) return refuse('OWN_ROLE_MISMATCH', credential);
       if (own.device !== undefined && !hasDevice(entry.devices, own.device)) return refuse('OWN_DEVICE_MISMATCH', credential);
+      ownCredential = credential;
     } else {
       return refuse('INVALID_INPUT');
     }
@@ -234,7 +244,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
     if (misplaced) return misplaced;
     if (rebuilt.vault.template.threshold !== manifest.threshold) return refuse('THRESHOLD_MISMATCH');
 
-    return { ok: true, vaultId: id, template: rebuilt.vault.template, ownRole };
+    return { ok: true, vaultId: id, template: rebuilt.vault.template, ownRole, ...(ownCredential ? { ownCredential } : {}) };
   } catch {
     return refuse('INVALID_INPUT');
   }

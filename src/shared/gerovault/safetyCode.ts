@@ -237,8 +237,9 @@ function cosignersOf(m: VaultManifest, self: string | undefined): { credential: 
 
 /**
  * How this device verified each cosigner of the manifest. `self` is this device's own payment key
- * hash (omit it on a viewer's device). Malformed records are ignored. Throws only for an invalid
- * manifest.
+ * hash, as `checkManifestBeforeAck` derived it from the device's own keys (`ownCredential`), never
+ * a value from user input or the relay: whoever `self` names is left out. Omit it on a viewer's
+ * device. Malformed records are ignored. Throws only for an invalid manifest.
  */
 export function cosignerVerificationStatus(
   manifest: VaultManifest,
@@ -264,7 +265,8 @@ export function cosignerVerificationStatus(
  * verified every cosigner of this manifest by the 12 words or the QR. It takes no amount: there is
  * no value below which the ceremony may be skipped. The other steps of the funding order
  * (acceptance by everyone, signer diversity, the first-spend drill, the caps) are checked
- * elsewhere. Never throws: an invalid manifest keeps funding closed.
+ * elsewhere. `self` is as for `cosignerVerificationStatus`. Never throws: an invalid manifest
+ * keeps funding closed.
  */
 export function fundingVerified(manifest: VaultManifest, records: readonly CosignerVerification[], self?: Ed25519KeyHashHex): boolean {
   try {

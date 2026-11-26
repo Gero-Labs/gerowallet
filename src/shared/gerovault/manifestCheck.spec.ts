@@ -46,7 +46,8 @@ describe('checks before acknowledging a manifest', () => {
   it('accepts an honest manifest on every participant\'s device', async () => {
     const manifest = manifestOf(standard, keys.slice(0, 3));
     for (let i = 0; i < 3; i++) {
-      expect(await check(manifest, owner(i))).toEqual({ ok: true, vaultId: id, template: { kind: 'standard', threshold: 2 }, ownRole: 'owner' });
+      expect(await check(manifest, owner(i)))
+        .toEqual({ ok: true, vaultId: id, template: { kind: 'standard', threshold: 2 }, ownRole: 'owner', ownCredential: cred[i] });
     }
   });
 
@@ -93,7 +94,9 @@ describe('checks before acknowledging a manifest', () => {
 
   it('lets a viewer check its own binding', async () => {
     const manifest = manifestOf(standard, keys.slice(0, 3), { viewers: [{ devices: [await boundDevice(id, 'viewer', undefined, 9)] }] });
-    expect(await check(manifest, { kind: 'viewer', device: await testDevice(9) })).toMatchObject({ ok: true, ownRole: 'viewer' });
+    const viewer = await check(manifest, { kind: 'viewer', device: await testDevice(9) });
+    expect(viewer).toMatchObject({ ok: true, ownRole: 'viewer' });
+    expect(viewer.ok === true && 'ownCredential' in viewer).toBe(false);
     expect(await check(manifest, { kind: 'viewer', device: await testDevice(8) })).toEqual({ ok: false, code: 'OWN_DEVICE_MISMATCH' });
   });
 
