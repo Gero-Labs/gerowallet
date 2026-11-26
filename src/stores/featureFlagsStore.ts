@@ -127,6 +127,9 @@ export interface FeatureFlags {
   // Choose accounts step, Add account and the account switchers. A record already
   // holding an account other than #0 keeps signing for it whatever this says.
   isMultiAccountEnabled: boolean;
+  // GeroVault (multisig vaults): the /vaults routes and the Vaults navigation item.
+  // Default OFF, ships dark. Gates the UI ONLY; nothing in the background reads it.
+  isVaultsEnabled: boolean;
   // Gero Card "Complete your cardholder details" step. Default ON and a remote KILL-SWITCH:
   // false skips Zione's cardholder-details endpoints, and an order refused for missing
   // details then points the user to Zione support. Only an explicit false turns it off.
@@ -198,6 +201,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isMidnightSponsoredFeesEnabled: false,
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
+    isVaultsEnabled: false,
     isCardholderDetailsEnabled: true,
     isAnnouncementsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
@@ -302,6 +306,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNftMarketEnabled = featureFlagService.getFlag('isNftMarketEnabled', false);
     // Multi-account ships DARK (default false); UI-only gate.
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
+    // GeroVault ships DARK (default false); UI-only gate for the routes and the nav item.
+    featureFlagsState.flags.isVaultsEnabled = featureFlagService.getFlag('isVaultsEnabled', false);
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
     featureFlagsState.flags.isCardholderDetailsEnabled =
       featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
@@ -429,6 +435,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isMultiAccountEnabled', (newValue) => {
       featureFlagsState.flags['isMultiAccountEnabled'] = newValue === true;
+    });
+    featureFlagService.onFlagChange('isVaultsEnabled', (newValue) => {
+      featureFlagsState.flags['isVaultsEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
       featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
@@ -765,6 +774,14 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if GeroVault (multisig vaults) is offered: the /vaults routes and the
+   * Vaults navigation item. Ships DARK (default false). Gates the UI only.
+   */
+  isVaultsEnabled(): boolean {
+    return featureFlagsState.flags.isVaultsEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -804,6 +821,7 @@ export const featureFlagsStore = {
       isMidnightSponsoredFeesEnabled: false,
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
+      isVaultsEnabled: false,
       isCardholderDetailsEnabled: true,
       isAnnouncementsEnabled: true,
       isKeyEnvelopeV2Enabled: false,

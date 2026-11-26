@@ -164,6 +164,25 @@ test('exposes isNftMarketEnabled, defaulting to false, following the remote flag
   expect(featureFlagsStore.isNftMarketEnabled()).toBe(false);
 });
 
+test('exposes isVaultsEnabled, defaulting to false, following the remote flag and a live flip', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isVaultsEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isVaultsEnabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+});
+
 // After a failed first fetch the service retries (issue 1195); the store must
 // pick the real values up then, and must not hand the background all-off
 // fallbacks in the meantime.

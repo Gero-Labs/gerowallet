@@ -53,10 +53,22 @@ const RealFi = lazyPage(() => import('@/modules/realfi/RealFi.vue'));
 const NexusPage = lazyPage(() => import('@/modules/nexus/NexusPage.vue'));
 const ProofServerPage = lazyPage(() => import('@/modules/midnight/ProofServerPage.vue'));
 const MidnightSwapDeskPage = lazyPage(() => import('@/modules/midnight/swap/MidnightSwapDeskPage.vue'));
+const GerovaultOverview = lazyPage(() => import('@/modules/gerovault/views/GerovaultOverview.vue'));
+const GerovaultCreate = lazyPage(() => import('@/modules/gerovault/views/GerovaultCreate.vue'));
+const GerovaultVault = lazyPage(() => import('@/modules/gerovault/views/GerovaultVault.vue'));
+const GerovaultTabPanel = lazyPage(() => import('@/modules/gerovault/views/GerovaultTabPanel.vue'));
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
+import {
+  GEROVAULT_CREATE_ROUTE,
+  GEROVAULT_OVERVIEW_ROUTE,
+  GEROVAULT_ROUTE_NAMES,
+  GEROVAULT_TAB_ROUTES,
+  GEROVAULT_TABS,
+  GEROVAULT_VAULT_ROUTE,
+} from '@/modules/gerovault/gerovaultRoutes';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -225,6 +237,34 @@ const routes: RouteRecordRaw[] = [
       layout: ContentLayout,
       requiresAuth: true,
     },
+  },
+  // GeroVault (multisig vaults). Every route under /vaults is gated by the
+  // isVaultsEnabled flag and a Cardano wallet (the guards below), so with the flag
+  // off none is reachable. One parent without a component of its own, so the
+  // drawer's Vaults item stays active on every vault screen.
+  {
+    path: '/vaults',
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+    children: [
+      { path: '', name: GEROVAULT_OVERVIEW_ROUTE, component: GerovaultOverview },
+      { path: 'create', name: GEROVAULT_CREATE_ROUTE, component: GerovaultCreate },
+      {
+        // The vault screen; its tabs are child routes rendered inside it.
+        path: ':vaultId',
+        component: GerovaultVault,
+        children: [
+          {
+            path: '',
+            name: GEROVAULT_VAULT_ROUTE,
+            redirect: (to: RouteLocationNormalized) => ({ name: GEROVAULT_TAB_ROUTES.proposals, params: to.params }),
+          },
+          ...GEROVAULT_TABS.map(tab => ({ path: tab, name: GEROVAULT_TAB_ROUTES[tab], component: GerovaultTabPanel })),
+        ],
+      },
+    ],
   },
   {
     path: '/media-player',
@@ -504,6 +544,16 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // Gero Copilot feed gated by the master feature flag (ships dark)
       return !featureFlagsStore.isCopilotEnabled();
 
+    // GeroVault ships dark: every one of its routes follows the one flag.
+    case GEROVAULT_OVERVIEW_ROUTE:
+    case GEROVAULT_CREATE_ROUTE:
+    case GEROVAULT_VAULT_ROUTE:
+    case GEROVAULT_TAB_ROUTES.proposals:
+    case GEROVAULT_TAB_ROUTES.policy:
+    case GEROVAULT_TAB_ROUTES.history:
+    case GEROVAULT_TAB_ROUTES.settings:
+      return !featureFlagsStore.isVaultsEnabled();
+
     // Add other routes that can be under maintenance here
     // case 'someOtherRoute':
     //   return !featureFlagsStore.isSomeOtherFeatureEnabled();
@@ -613,6 +663,9 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
       proofServer: (c) => c === Blockchain.MIDNIGHT,
       // Midnight P2P swap: a Midnight wallet on a network of MIDNIGHT_SWAP_NETWORKS (build time).
       midnightSwap: (c, n) => c === Blockchain.MIDNIGHT && isMidnightSwapNetwork(n),
+      // GeroVault: a Cardano wallet AND the live flag, read here too so a cold refresh
+      // before the flags load cannot open a vault route. Matches the drawer item.
+      ...Object.fromEntries(GEROVAULT_ROUTE_NAMES.map(name => [name, (c: string) => c === Blockchain.CARDANO && featureFlagsStore.isVaultsEnabled()])),
     };
     const guard = routeNetworkGuards[String(to.name)];
     if (guard && !guard(chain, network)) {
