@@ -11,8 +11,8 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { VaultSpendError } from './errors';
 import { useVaultChainReaderFactory } from './chainReader';
-import { spendContextOf, vaultBaseAddress, type VaultSpendContext } from './vaultSpendContext';
-import type { KnownVault } from './review';
+import { spendContextOf, type VaultSpendContext } from './vaultSpendContext';
+import { knownVaultsOf, type KnownVault } from './review';
 
 /**
  * - `no_wallet`: no Cardano wallet is open.
@@ -84,13 +84,7 @@ export function useVaultSpend(vaultId: Ref<string>, store: VaultStore = defaultV
     }
     const reader = readerFactory(record.network);
     if (!reader || reader.network !== record.network) return settle({ status: 'unavailable', reason: 'no_reader' });
-    const knownVaults = accepted
-      .filter(other => other.vaultId !== record.vaultId)
-      .map(other => ({
-        vaultId: other.vaultId,
-        ...(other.name !== undefined ? { name: other.name } : {}),
-        baseAddressHex: vaultBaseAddress(other.network, other.paymentScriptHash, other.stakeScriptHash).hex,
-      }));
+    const knownVaults = knownVaultsOf(accepted, record.vaultId);
     settle({ status: 'ready', record, context, reader, knownVaults });
   }
 

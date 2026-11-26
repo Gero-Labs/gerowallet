@@ -1,7 +1,8 @@
 // The two spend screens driven as a user would, with a chain reader provided to them: the
 // proposer builds, checks the sheet, signs and saves the bundle; a cosigner opens the file, signs
 // and saves a signature file; the proposer adds it and submits through the reader at threshold.
-// Signing runs on keys generated here; only the password check is replaced. Errors and file
+// Signing runs through the real background flow (signBundleFlow.ts) on keys generated here; only
+// the messaging, the password check and the stored key are stood in for. Errors and file
 // results are composed in script with the English messages; template text shows its keys.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -33,15 +34,30 @@ vi.mock('@/db/vaultStore', () => ({
   },
 }));
 
-// The background's password check stands in as "the password is right"; the rest is real.
+// The page asks the background (GEROVAULT_SIGN_VAULT_BUNDLE); here the message runs the real
+// background flow, with "right" as the password and the owner's generated root key as the stored one.
 const keys = vi.hoisted(() => ({ rootKey: new Uint8Array() as Uint8Array }));
-vi.mock('./signer', async (original) => {
-  const real = await original<typeof import('./signer')>();
+vi.mock('./signClient', async (original) => {
+  const real = await original<typeof import('./signClient')>();
+  const { signVaultBundleFlow } = await import('./signBundleFlow');
+  const { walletStore: wallets } = await import('@/stores/walletStore');
   return {
     ...real,
-    signWithSpendingPassword: (input: Parameters<typeof real.signWithSpendingPassword>[0]) => real.signWithSpendingPassword(input, {
-      verifyPassword: async (password: string) => password === 'right',
-      openRootKey: async () => Uint8Array.from(keys.rootKey),
+    requestVaultWitnessFile: (input: Parameters<typeof real.requestVaultWitnessFile>[0]) => real.requestVaultWitnessFile(input, async ({ data }) => {
+      try {
+        const witnessFile = await signVaultBundleFlow(data as never, {
+          wallet: () => wallets.loggedWallet as never,
+          verifyPassword: async (password: string) => password === 'right',
+          decryptRootKey: () => Uint8Array.from(keys.rootKey),
+          getVault: async (walletId: number, vaultId: string) => store.records.get(walletId)?.find(r => r.vaultId === vaultId),
+          acceptedVaults: async (walletId: number) => store.records.get(walletId) ?? [],
+          currentSlot: () => TIP,
+        });
+        return { data: { success: true, witnessFile } };
+      } catch (error) {
+        const { code, detail } = error as { code?: string; detail?: string };
+        return { data: { success: false, error: code, detail } };
+      }
     }),
   };
 });

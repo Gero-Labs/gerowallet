@@ -144,7 +144,8 @@ import { errorText, participantName, unavailableKey } from '@/modules/gerovault/
 import { VaultSpendError } from '@/modules/gerovault/spend/errors';
 import { readTextFile, saveTextFile } from '@/modules/gerovault/spend/files';
 import { reviewBundle, type SpendReview } from '@/modules/gerovault/spend/review';
-import { signWithSpendingPassword, signerSupport } from '@/modules/gerovault/spend/signer';
+import { signerSupport } from '@/modules/gerovault/spend/signer';
+import { requestVaultWitnessFile } from '@/modules/gerovault/spend/signClient';
 import { clearSpendSession, spendSession, spendSessionKey, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
 import { useVaultSpend } from '@/modules/gerovault/spend/useVaultSpend';
 import {
@@ -153,7 +154,6 @@ import {
   createWitnessFile,
   parseWitnessFile,
   signingProgress,
-  verifyOwnWitness,
   verifyWitnessFile,
   witnessFileName,
 } from '@/modules/gerovault/spend/witnesses';
@@ -234,14 +234,10 @@ async function sign(password: string): Promise<void> {
   signing.value = true;
   signError.value = null;
   try {
-    const witness = await signWithSpendingPassword({
-      wallet: wallet.value,
-      password,
-      ownIndex: current.context.ownIndex,
-      expectedCredential: current.context.self.credential,
-      txId: active.bundle.txId,
-    });
-    const verified = await verifyOwnWitness(witness, active.bundle, current.context);
+    if (walletId.value === null) throw new VaultSpendError('UNSUPPORTED_WALLET', 'No wallet');
+    // Signed in the background worker, where the root key is; only the witness file comes back.
+    const file = await requestVaultWitnessFile({ walletId: walletId.value, vaultId: current.context.vaultId, bundle: active.bundle, password });
+    const verified = await verifyWitnessFile(file, active.bundle, current.context);
     updateSpendSession(key, { collection: addSignature(active.collection, verified).collection });
   } catch (error) {
     signError.value = describe(error);

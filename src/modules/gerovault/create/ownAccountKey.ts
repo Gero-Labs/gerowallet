@@ -10,19 +10,17 @@
  * The account key stays in memory for the create flow and is never stored, logged or shown.
  */
 import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import type { Wallet } from '@/models/types';
 import { multisigAccountPublicKey, type MultisigAccountPublicKey } from '@/shared/gerovault';
 import { secretsWalletId } from '@/shared/utils/walletAccount';
 import { OwnAccountKeyError, multisigAccountKeyOfRoot, ownAccountKeyErrorCode } from './ownAccountKeyFlow';
 
 /**
- * The background request. TODO(gerovault-slice): the background has no handler for it yet. Wiring
- * it is a shared change outside this module: add `GEROVAULT_DERIVE_ACCOUNT_KEY` to `MessageTypes`
- * and register `app.addToOptions(MessageTypes.GEROVAULT_DERIVE_ACCOUNT_KEY, ...)` in
- * `background.ts`, calling `deriveMultisigAccountKeyFlow` with the same dependencies as
- * `DERIVE_ACCOUNT_XPUB`. Until then a password wallet gets `unavailable`.
+ * The background request (`background.ts`, `deriveMultisigAccountKeyFlow` with the same
+ * dependencies as `DERIVE_ACCOUNT_XPUB`). An older background answers nothing: `unavailable`.
  */
-export const GEROVAULT_DERIVE_ACCOUNT_KEY = 'GEROVAULT_DERIVE_ACCOUNT_KEY';
+export const GEROVAULT_DERIVE_ACCOUNT_KEY = MessageTypes.GEROVAULT_DERIVE_ACCOUNT_KEY;
 
 interface DeriveResponse {
   data?: { success?: boolean; publicKey?: unknown; error?: unknown };

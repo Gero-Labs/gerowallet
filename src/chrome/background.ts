@@ -85,7 +85,7 @@ import { marketPrepareHandler, type MarketHandlerDeps } from '@/chrome/nftMarket
 import { rememberVerifiedListing, watchListingsHandler, type ListingWatchDeps } from '@/chrome/nftMarket/listingWatch';
 import { fetchListingUtxoProven } from '@/chrome/nftMarket/listingChainUtxo';
 import { nftMarketApi } from '@/api/nft-market-api';
-import NetworkStore from '@/stores/networkStore';
+import NetworkStore, { isBitcoinTip } from '@/stores/networkStore';
 import { openDappMarketPass } from '@/chrome/nftMarket/dappMarketPass';
 import { transactionFromSignRequest } from '@/chrome/signTxRequest';
 import { Cip113PrepareError, ownKeys, prepareCip113Transfer } from '@/chrome/cip113PrepareTransfer';
@@ -109,6 +109,8 @@ import { assertAccountIndices, secretsWallet, secretsWalletId } from '@/shared/u
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { deriveAccountXpubFlow } from '@/chrome/addAccountKeys';
+import { gerovaultDeriveAccountKeyHandler, gerovaultSignVaultBundleHandler } from '@/chrome/gerovaultHandlers';
+import { vaultStore } from '@/db/vaultStore';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // Static, deliberately. The background is bundled as ONE iife
 // (vite.config.background.mts: format 'iife', manualChunks undefined), so a
@@ -3056,6 +3058,37 @@ app.addToOptions(MessageTypes.DERIVE_ACCOUNT_XPUB, async (request, sendResponse)
   }
   return true;
 });
+
+// GeroVault: the wallet's CIP-1854 account public key (m/1854'/1815'/0'), for the create flow and
+// the recovery package, with the same dependencies as DERIVE_ACCOUNT_XPUB; and the wallet's own
+// witness file for a vault spend, signed here so no page holds the root key (gerovaultHandlers.ts).
+// Never log request.data (spending password). Only a public key or a witness file leaves.
+app.addToOptions(MessageTypes.GEROVAULT_DERIVE_ACCOUNT_KEY, gerovaultDeriveAccountKeyHandler(async () => {
+  const { getAllWallets } = await import('@/db/gero-db');
+  const { decryptPrivateKey } = await import('@/shared/utils/crypto');
+  return {
+    getWallets: getAllWallets,
+    sessionRootKey: (walletId) => mpcSessionCache.get(walletId),
+    decryptRootKey: decryptPrivateKey,
+  };
+}));
+
+app.addToOptions(MessageTypes.GEROVAULT_SIGN_VAULT_BUNDLE, gerovaultSignVaultBundleHandler(async () => {
+  const { decryptPrivateKey } = await import('@/shared/utils/crypto');
+  const walletBg = walletManager.getWallet();
+  return {
+    wallet: () => walletBg ?? null,
+    verifyPassword: (password) => walletBg.verifySpendingPassword(password),
+    decryptRootKey: decryptPrivateKey,
+    getVault: (walletId, vaultId) => vaultStore.get(walletId, vaultId),
+    acceptedVaults: (walletId, network) => vaultStore.list(walletId, { status: 'accepted', network }),
+    currentSlot: () => {
+      const tip = NetworkStore.state.tip;
+      const slot = tip && !isBitcoinTip(tip) ? Number(tip.slot) : Number.NaN;
+      return Number.isSafeInteger(slot) && slot >= 0 ? slot : null;
+    },
+  };
+}));
 
 app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, sendResponse) => {
   try {

@@ -22,10 +22,10 @@
  */
 import { decodeVaultTransaction } from '@/shared/gerovault/decode';
 import type { OutputView, Refusal, RefusalCode, TokenAmount, ValueView, VaultTxSummary } from '@/shared/gerovault/decode';
-import type { UnsignedTxBundle } from '@/modules/gerovault/contracts';
+import type { UnsignedTxBundle, VaultRecord } from '@/modules/gerovault/contracts';
 import { MAX_VALIDITY_SLOTS, NATIVE_FEE_MAX_LOVELACE, NATIVE_FEE_WARN_LOVELACE } from './constants';
 import { bundleTxSource, unsignedTransaction } from './bundle';
-import type { VaultSpendContext } from './vaultSpendContext';
+import { vaultBaseAddress, type VaultSpendContext } from './vaultSpendContext';
 
 /** Refusals of the vault rules, added to the decoder's own. */
 export type VaultSpendRefusalCode =
@@ -122,6 +122,17 @@ export interface KnownVault {
   readonly name?: string;
   /** Its full address, raw bytes as lowercase hex. */
   readonly baseAddressHex: string;
+}
+
+/** The other accepted vaults of `records`, as the sheet names them: every one but `vaultId`. */
+export function knownVaultsOf(records: readonly VaultRecord[], vaultId: string): KnownVault[] {
+  return records
+    .filter(other => other.vaultId !== vaultId && other.status === 'accepted')
+    .map(other => ({
+      vaultId: other.vaultId,
+      ...(other.name !== undefined ? { name: other.name } : {}),
+      baseAddressHex: vaultBaseAddress(other.network, other.paymentScriptHash, other.stakeScriptHash).hex,
+    }));
 }
 
 export interface ReviewOptions {
