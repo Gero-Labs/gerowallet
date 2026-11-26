@@ -25,7 +25,7 @@
  *   }
  *   RoleEntry     { credential: bytes 28, vaultKeys: { payment: bytes 32, stake: bytes 32 }, devices: [OwnerDeviceBinding] }
  *                 (a viewer: credential bytes 0, vaultKeys {})
- *   ExternalEntry { credential, vaultKeys, label: text, importedBy: bytes 28, role: "owner" | "backupHolder" }
+ *   ExternalEntry { credential, vaultKeys, label, role: "owner" | "backupHolder", importerDeviceId: bytes 16, importSig: bytes 64 }
  *   OwnerDeviceBinding {
  *     vaultId, role, credential, vaultKeys   the participant's, as in their entry ({} and bytes 0 for a viewer)
  *     deviceId          bytes 16, sha256(ed25519Pub)[0:16]
@@ -33,28 +33,40 @@
  *     x25519Pub         bytes 32, the device's separate, random, static key agreement key
  *     label             text
  *     bindingVersion    uint >= 1
- *     deviceSig         bytes 64, Ed25519 by ed25519Pub over the device digest of the body
- *     attestation       { method: uint, proof: bytes } by the participant's vault payment key over the
- *                       binding digest (`attestation.ts`); {} for a viewer
+ *     deviceSig         bytes 64, by ed25519Pub over the device digest of the body
+ *     attestation       { method: uint, proof: bytes } by the participant's vault payment key over
+ *                       the binding digest (`attestation.ts`); {} for a viewer
+ *     admittedBy        a viewer's: { deviceId: bytes 16, signature: bytes 64 }, an owner device's
+ *                       signature over the viewer admission digest; {} for anyone else
  *   }
  *
- * The binding body is the binding without `deviceSig` and `attestation`. Three tagged hashes:
- * - manifest hash  blake2b-256( "gero-vault/v1|manifest|" || CBOR of the manifest )
- * - binding digest blake2b-256( "gero-vault/v1|binding|" || CBOR of the binding body ): attested
- * - device digest  blake2b-256( "gero-vault/v1|binding-device|" || CBOR of the binding body ): `deviceSig`
+ * The binding body is every field of the binding except `deviceSig`, `attestation` and
+ * `admittedBy`. Tagged hashes, each `blake2b-256( tag || canonical CBOR )`:
+ * - manifest hash      "gero-vault/v1|manifest|", the manifest
+ * - binding digest     "gero-vault/v1|binding|", the binding body: what the attestation signs
+ * - device digest      "gero-vault/v1|binding-device|", the binding body: what `deviceSig` signs
+ * - viewer admission   "gero-vault/v1|viewer-admission|", the binding digest's 32 bytes
+ * - external import    "gero-vault/v1|external-import|", `{ vaultId, credential, vaultKeys, role,
+ *                      label, importerDeviceId }`: what `importSig` signs
+ *
+ * Every field outside the verification set is signed by a bound device: an owner's binding by
+ * the owner's vault key, a viewer's binding by an owner device (`admittedBy`), an external entry by
+ * the importing owner's device (`importSig`). `importedBy` is not stored: it is the owner whose
+ * device made `importSig`, so only an owner can import, and a relay cannot reassign the import.
  *
  * Threshold, template and backup terms are read from the scripts (`parseVaultScript`) and never
  * stored twice. The participants are exactly the scripts' keys: each owner, backup holder and
  * external cosigner's payment key in the payment script and stake key in the stake script, in the
- * branch of their role. No field carries a vault index: each participant keeps their own index
- * to themselves (spec 4.0). Lists are sorted, so one manifest has exactly one encoding, and every hex string in
- * or out of this module is lowercase.
+ * branch of their role. No field carries a vault index: each participant keeps their own index to
+ * themselves (spec 4.0). Lists are sorted and proofs are in their one stored form, so one manifest
+ * has exactly one encoding; every hex string in or out of this module is lowercase. Stored labels
+ * follow the read rule of `labels.ts`; builders apply its write rule.
  *
  * Phase 1 (native vaults) fixes some fields: no guardians or delegates (they arrive with Plutus
  * vaults), `viewersSeeProposalContents` false, `policiesDisplay` empty.
  *
- * This module checks structure, keys and scripts. Signatures (`deviceSig`, attestations) are
- * verified by `checkManifestBeforeAck`, which is asynchronous.
+ * This module checks structure, keys and scripts. Signatures are verified by
+ * `checkManifestBeforeAck`, which is asynchronous.
  *
  * PROVISIONAL: field encodings, tags and vectors are not frozen until they are checked against the
  * other clients' vectors (GV-07 #1675).
@@ -63,11 +75,20 @@ import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bech32 } from 'bech32';
-import { ATTESTATION_METHOD, MAX_ATTESTATION_BYTES, OwnerAttestation, verifyEd25519 } from './attestation';
+import {
+  ATTESTATION_METHOD,
+  MAX_ATTESTATION_BYTES,
+  OwnerAttestation,
+  atLeastP,
+  isCanonicalAttestation,
+  isUsableEd25519Key,
+  verifyEd25519,
+} from './attestation';
 import { CborBoolean, CborError, CborItemOf, CborValueOf, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { CborWritableMap, encodeCanonicalCbor } from './canonicalCbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX, parseVaultPublicKeys } from './keys';
+import { readLabel, writeLabel } from './labels';
 import { decodeRegistration } from './registration';
 import {
   MAX_BACKUP_KEYS,
@@ -85,6 +106,8 @@ export const MANIFEST_SCHEMA = 1;
 export const MANIFEST_HASH_TAG = 'gero-vault/v1|manifest|';
 export const BINDING_DIGEST_TAG = 'gero-vault/v1|binding|';
 export const BINDING_DEVICE_TAG = 'gero-vault/v1|binding-device|';
+export const VIEWER_ADMISSION_TAG = 'gero-vault/v1|viewer-admission|';
+export const EXTERNAL_IMPORT_TAG = 'gero-vault/v1|external-import|';
 
 /** Network ids as `gero-xdev/v1` writes them. */
 export const WIRE_NETWORK: Readonly<Record<VaultNetwork, string>> = Object.freeze({
@@ -98,7 +121,6 @@ export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_DEVICES_PER_ENTRY = 5;
 export const MAX_VIEWERS = 20;
 export const MAX_BINDINGS = 64;
-export const MAX_LABEL_BYTES = 64;
 const MAX_SCRIPT_BYTES = 8192;
 /** Owners, backup holders and external cosigners together: every key of the two scripts. */
 const MAX_SCRIPT_PARTICIPANTS = MAX_OWNERS + MAX_BACKUP_KEYS;
@@ -112,7 +134,7 @@ const ROLES: readonly ManifestRole[] = ['owner', 'backupHolder', 'guardian', 'de
 /** The script branch of an external cosigner (phase 1). */
 export type ExternalRole = 'owner' | 'backupHolder';
 
-/** A device binding without `deviceSig` and `attestation`: what both of them sign. */
+/** A device binding without `deviceSig`, `attestation` and `admittedBy`: what they sign. */
 export interface DeviceBindingBody {
   readonly vaultId: string;
   readonly role: ManifestRole;
@@ -127,11 +149,21 @@ export interface DeviceBindingBody {
   readonly bindingVersion: number;
 }
 
+/** An owner device's admission of a viewer's binding. */
+export interface ViewerAdmission {
+  /** The admitting owner device. */
+  readonly deviceId: string;
+  /** 64 bytes, lowercase hex: by that device's key over `viewerAdmissionDigest`. */
+  readonly signature: string;
+}
+
 export interface OwnerDeviceBinding extends DeviceBindingBody {
   /** 64 bytes, lowercase hex: Ed25519 by `ed25519Pub` over `bindingDeviceDigest`. */
   readonly deviceSig: string;
   /** Required for every role with a script key; absent for a viewer. */
   readonly attestation?: OwnerAttestation;
+  /** Required for a viewer; absent for anyone else. */
+  readonly admittedBy?: ViewerAdmission;
 }
 
 /** An owner, backup holder, guardian or delegate with a Gero device. */
@@ -146,17 +178,26 @@ export interface ViewerEntry {
   readonly devices: readonly OwnerDeviceBinding[];
 }
 
-/**
- * A cosigner with no Gero device. `vaultKeys` are the raw keys the importing owner (`importedBy`)
- * derived from the external wallet's role or account key; the manifest never carries an extended
- * key. `role` is the script branch the keys sit in.
- */
-export interface ExternalEntry {
+/** What `importSig` signs, with the vault id. */
+export interface ExternalEntryBody {
   readonly credential: Ed25519KeyHashHex;
   readonly vaultKeys: VaultPublicKeys;
   readonly label: string;
-  readonly importedBy: Ed25519KeyHashHex;
   readonly role: ExternalRole;
+  /** The importing owner's device. */
+  readonly importerDeviceId: string;
+}
+
+/**
+ * A cosigner with no Gero device. `vaultKeys` are the raw keys the importing owner derived from
+ * the external wallet's role or account key; the manifest never carries an extended key. `role` is
+ * the script branch the keys sit in.
+ */
+export interface ExternalEntry extends ExternalEntryBody {
+  /** 64 bytes, lowercase hex: by the importer device's key over `externalImportDigest`. */
+  readonly importSig: string;
+  /** Derived, not stored: the owner whose device is `importerDeviceId`. */
+  readonly importedBy?: Ed25519KeyHashHex;
 }
 
 export interface ManifestRoles {
@@ -208,6 +249,7 @@ export type ManifestRefusalCode =
   | 'TOO_MANY_ENTRIES'
   | 'CREDENTIAL_MISMATCH'
   | 'IMPORTER_INVALID'
+  | 'ADMISSION_INVALID'
   | 'DUPLICATE_PARTICIPANT'
   | 'DUPLICATE_DEVICE'
   | 'BINDING_MISMATCH'
@@ -246,12 +288,6 @@ const HEX_LENGTH: Readonly<Record<number, RegExp>> = {
   64: /^[0-9a-f]{128}$/,
 };
 const HEX_BYTES = /^(?:[0-9a-f]{2})+$/;
-/**
- * Refused in labels: the field separator, control and format characters (bidirectional controls
- * and zero-width characters among them), surrogates, private use and unassigned code points, line
- * and paragraph separators, and the Hangul fillers that render as blank.
- */
-const FORBIDDEN_IN_LABEL = /[|\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0]/u;
 const EMPTY = new Uint8Array(0);
 
 function isHex(value: unknown, bytes: 16 | 28 | 32 | 64): value is string {
@@ -266,12 +302,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+/** A stored label: the read rule of `labels.ts`. */
 function checkLabel(label: unknown, what: string): string {
-  if (typeof label !== 'string' || label.length === 0) return fault('LABEL_INVALID', `${what} is a non-empty string`);
-  if (FORBIDDEN_IN_LABEL.test(label)) fault('LABEL_INVALID', `${what} has a forbidden character`);
-  if (label.normalize('NFC') !== label) fault('LABEL_INVALID', `${what} is not in NFC`);
-  if (new TextEncoder().encode(label).length > MAX_LABEL_BYTES) fault('LABEL_INVALID', `${what} is at most ${MAX_LABEL_BYTES} bytes`);
-  return label;
+  return readLabel(label) ?? fault('LABEL_INVALID', `${what} breaks the read rule`);
+}
+
+/** A label being written: the write rule of `labels.ts`, which also normalises it. */
+function writtenLabel(label: unknown, what: string): string {
+  try {
+    return writeLabel(label);
+  } catch (e) {
+    if (e instanceof GeroVaultError) fault('LABEL_INVALID', `${what}: ${e.message}`);
+    throw e;
+  }
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -294,15 +337,8 @@ function checkVaultKeys(k: VaultPublicKeys, what: string): VaultPublicKeys {
   return vaultKeysOf(k.payment, k.stake);
 }
 
-// Device keys (spec 5.3): small-order and non-canonical points are refused. The lists are the
-// curve's 8-torsion points; the specs check them against an independent implementation.
-const ED25519_SMALL_ORDER = [
-  '0000000000000000000000000000000000000000000000000000000000000000',
-  '0100000000000000000000000000000000000000000000000000000000000000',
-  '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
-  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
-  'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
-];
+// X25519 device keys (spec 5.3): small-order and non-canonical values are refused. The list is
+// the curve's small-order u coordinates; the specs check it against an independent implementation.
 const X25519_SMALL_ORDER = [
   '0000000000000000000000000000000000000000000000000000000000000000',
   '0100000000000000000000000000000000000000000000000000000000000000',
@@ -310,21 +346,6 @@ const X25519_SMALL_ORDER = [
   '5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157',
   'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
 ];
-
-/** Whether 255 bits, little-endian, are at least p = 2^255 - 19 (a non-canonical field element). */
-function atLeastP(bytes: Uint8Array): boolean {
-  if ((bytes[31] & 0x7f) !== 0x7f) return false;
-  for (let i = 30; i >= 1; i--) if (bytes[i] !== 0xff) return false;
-  return bytes[0] >= 0xed;
-}
-
-/** An Ed25519 device key: canonical, and not a small-order point (the identity among them). */
-export function isUsableEd25519Key(hex: string): boolean {
-  if (!isHex(hex, 32)) return false;
-  const y = hexToBytes(hex);
-  y[31] &= 0x7f;
-  return !atLeastP(y) && !ED25519_SMALL_ORDER.includes(bytesToHex(y));
-}
 
 /** An X25519 device key: canonical (top bit clear, below p), not zero and not of small order. */
 export function isUsableX25519Key(hex: string): boolean {
@@ -384,7 +405,18 @@ function checkAttestation(role: ManifestRole, a: OwnerAttestation | undefined): 
   if (typeof a.proof !== 'string' || !HEX_BYTES.test(a.proof) || a.proof.length > MAX_ATTESTATION_BYTES * 2) {
     fault('ATTESTATION_INVALID', 'attestation proof');
   }
+  if (!isCanonicalAttestation(a)) fault('ATTESTATION_INVALID', 'not the canonical stored form');
   return Object.freeze({ method: a.method, proof: a.proof });
+}
+
+function checkAdmission(role: ManifestRole, a: ViewerAdmission | undefined, ownerDevices: ReadonlySet<string>): ViewerAdmission | undefined {
+  if (role !== 'viewer') {
+    if (a !== undefined && a !== null) fault('ADMISSION_INVALID', 'only a viewer binding is admitted');
+    return undefined;
+  }
+  if (!a || !isHex(a.deviceId, 16) || !isHex(a.signature, 64)) return fault('ADMISSION_INVALID', 'a viewer binding carries admittedBy');
+  if (!ownerDevices.has(a.deviceId)) fault('ADMISSION_INVALID', 'admittedBy names an owner device of the manifest');
+  return Object.freeze({ deviceId: a.deviceId, signature: a.signature });
 }
 
 interface BindingContext {
@@ -394,7 +426,12 @@ interface BindingContext {
   readonly vaultKeys?: VaultPublicKeys;
 }
 
-function checkDevices(list: readonly OwnerDeviceBinding[], ctx: BindingContext, min: number): readonly OwnerDeviceBinding[] {
+function checkDevices(
+  list: readonly OwnerDeviceBinding[],
+  ctx: BindingContext,
+  min: number,
+  ownerDevices: ReadonlySet<string>,
+): readonly OwnerDeviceBinding[] {
   if (!Array.isArray(list)) return fault('SCHEMA_INVALID', 'devices');
   if (list.length > MAX_DEVICES_PER_ENTRY) fault('TOO_MANY_ENTRIES', 'devices of one participant');
   if (list.length < min) fault('FIELD_INVALID', 'a viewer has at least one device');
@@ -406,7 +443,8 @@ function checkDevices(list: readonly OwnerDeviceBinding[], ctx: BindingContext, 
     }
     if (!isHex(b.deviceSig, 64)) fault('FIELD_INVALID', 'deviceSig');
     const attestation = checkAttestation(body.role, b.attestation);
-    return Object.freeze({ ...body, deviceSig: b.deviceSig, ...(attestation ? { attestation } : {}) });
+    const admittedBy = checkAdmission(body.role, b.admittedBy, ownerDevices);
+    return Object.freeze({ ...body, deviceSig: b.deviceSig, ...(attestation ? { attestation } : {}), ...(admittedBy ? { admittedBy } : {}) });
   });
   return Object.freeze(out.sort((a, b) => byText(a.deviceId, b.deviceId)));
 }
@@ -416,24 +454,32 @@ function checkParticipant(e: ParticipantEntry, role: ManifestRole, vaultId: stri
   const vaultKeys = checkVaultKeys(e.vaultKeys, 'vaultKeys');
   const credential = keyHashOf(vaultKeys.payment);
   if (e.credential !== credential) fault('CREDENTIAL_MISMATCH');
-  return Object.freeze({ credential, vaultKeys, devices: checkDevices(e.devices, { vaultId, role, credential, vaultKeys }, 0) });
+  return Object.freeze({ credential, vaultKeys, devices: checkDevices(e.devices, { vaultId, role, credential, vaultKeys }, 0, new Set()) });
 }
 
-function checkViewer(e: ViewerEntry, vaultId: string): ViewerEntry {
+function checkViewer(e: ViewerEntry, vaultId: string, ownerDevices: ReadonlySet<string>): ViewerEntry {
   if (!e || typeof e !== 'object') return fault('SCHEMA_INVALID', 'viewer');
   const keyed = e as { credential?: unknown; vaultKeys?: unknown };
   if (keyed.credential || keyed.vaultKeys) fault('FIELD_INVALID', 'a viewer has no script key');
-  return Object.freeze({ devices: checkDevices(e.devices, { vaultId, role: 'viewer' }, 1) });
+  return Object.freeze({ devices: checkDevices(e.devices, { vaultId, role: 'viewer' }, 1, ownerDevices) });
 }
 
-function checkExternal(e: ExternalEntry, importers: ReadonlySet<string>): ExternalEntry {
+function checkExternalBody(e: ExternalEntryBody): ExternalEntryBody {
   if (!e || typeof e !== 'object') return fault('SCHEMA_INVALID', 'external');
   const vaultKeys = checkVaultKeys(e.vaultKeys, 'external vaultKeys');
   const credential = keyHashOf(vaultKeys.payment);
   if (e.credential !== credential) fault('CREDENTIAL_MISMATCH', 'external');
   if (e.role !== 'owner' && e.role !== 'backupHolder') fault('FIELD_INVALID', 'external role');
-  if (!isHex(e.importedBy, 28) || !importers.has(e.importedBy)) fault('IMPORTER_INVALID', 'importedBy names an owner of the manifest');
-  return Object.freeze({ credential, vaultKeys, label: checkLabel(e.label, 'An external label'), importedBy: e.importedBy, role: e.role });
+  if (!isHex(e.importerDeviceId, 16)) fault('IMPORTER_INVALID', 'importerDeviceId');
+  return Object.freeze({ credential, vaultKeys, label: checkLabel(e.label, 'An external label'), role: e.role, importerDeviceId: e.importerDeviceId });
+}
+
+function checkExternal(e: ExternalEntry, ownerOfDevice: ReadonlyMap<string, Ed25519KeyHashHex>): ExternalEntry {
+  const body = checkExternalBody(e);
+  // Only an owner imports: the signing device must be an owner's.
+  const importedBy = ownerOfDevice.get(body.importerDeviceId) ?? fault('IMPORTER_INVALID', 'importerDeviceId names an owner device of the manifest');
+  if (!isHex(e.importSig, 64)) fault('IMPORTER_INVALID', 'an external entry carries importSig');
+  return Object.freeze({ ...body, importSig: e.importSig, importedBy });
 }
 
 const SLOTS = ['owners', 'backupHolders', 'guardians', 'delegates', 'viewers', 'external'] as const;
@@ -537,9 +583,11 @@ function normalize(m: VaultManifest): VaultManifest {
   const byCredential = <T extends { credential: string }>(a: T, b: T) => byText(a.credential, b.credential);
   const owners = r.owners.map(e => checkParticipant(e, 'owner', m.vaultId)).sort(byCredential);
   const backupHolders = r.backupHolders.map(e => checkParticipant(e, 'backupHolder', m.vaultId)).sort(byCredential);
-  const viewers = r.viewers.map(e => checkViewer(e, m.vaultId)).sort((a, b) => byText(a.devices[0].deviceId, b.devices[0].deviceId));
-  const importers = new Set<string>(owners.map(e => e.credential));
-  const external = r.external.map(e => checkExternal(e, importers)).sort(byCredential);
+  const ownerOfDevice = new Map<string, Ed25519KeyHashHex>(owners.flatMap(e => e.devices.map(d => [d.deviceId, e.credential] as const)));
+  const ownerDevices = new Set(ownerOfDevice.keys());
+  const viewers = r.viewers.map(e => checkViewer(e, m.vaultId, ownerDevices))
+    .sort((a, b) => byText(a.devices[0].deviceId, b.devices[0].deviceId));
+  const external = r.external.map(e => checkExternal(e, ownerOfDevice)).sort(byCredential);
 
   if (!unique([...owners, ...backupHolders, ...external].map(e => e.credential))) fault('DUPLICATE_PARTICIPANT', 'credential');
   if (!unique([...owners, ...backupHolders, ...external].flatMap(e => [e.vaultKeys.payment, e.vaultKeys.stake]))) {
@@ -623,6 +671,17 @@ function bindingWritable(d: OwnerDeviceBinding): CborWritableMap {
     ...bindingBodyWritable(d),
     deviceSig: bytes(d.deviceSig),
     attestation: d.attestation ? { method: d.attestation.method, proof: bytes(d.attestation.proof) } : {},
+    admittedBy: d.admittedBy ? { deviceId: bytes(d.admittedBy.deviceId), signature: bytes(d.admittedBy.signature) } : {},
+  };
+}
+
+function externalBodyWritable(e: ExternalEntryBody): CborWritableMap {
+  return {
+    credential: bytes(e.credential),
+    vaultKeys: keysWritable(e.vaultKeys),
+    label: e.label,
+    role: e.role,
+    importerDeviceId: bytes(e.importerDeviceId),
   };
 }
 
@@ -645,13 +704,7 @@ function manifestWritable(m: VaultManifest): CborWritableMap {
       guardians: m.roles.guardians.map(participant),
       delegates: m.roles.delegates.map(participant),
       viewers: m.roles.viewers.map(e => ({ credential: EMPTY, vaultKeys: {}, devices: e.devices.map(bindingWritable) })),
-      external: m.roles.external.map(e => ({
-        credential: bytes(e.credential),
-        vaultKeys: keysWritable(e.vaultKeys),
-        label: e.label,
-        importedBy: bytes(e.importedBy),
-        role: e.role,
-      })),
+      external: m.roles.external.map(e => ({ ...externalBodyWritable(e), importSig: bytes(e.importSig) })),
     },
     viewersSeeProposalContents: m.viewersSeeProposalContents,
     policiesDisplay: {},
@@ -715,7 +768,7 @@ export function scriptsHaveCanonicalKeyOrder(scripts: Pick<VaultScripts, 'paymen
 }
 
 // ---------------------------------------------------------------------------------------------
-// Device bindings
+// Device bindings, viewer admission and external import
 
 export interface DeviceBindingInput {
   readonly vaultId: string;
@@ -724,8 +777,9 @@ export interface DeviceBindingInput {
   readonly vaultKeys?: VaultPublicKeys;
   readonly ed25519Pub: string;
   readonly x25519Pub: string;
+  /** Written with the write rule of `labels.ts`. */
   readonly label: string;
-  /** Defaults to 1. */
+  /** Defaults to 1. A changed binding of a device must carry a higher one (`manifestCheck.ts`). */
   readonly bindingVersion?: number;
 }
 
@@ -740,7 +794,7 @@ export function deviceBinding(input: DeviceBindingInput): DeviceBindingBody {
       deviceId: isHex(input?.ed25519Pub, 32) ? deviceIdHex(input.ed25519Pub) : '',
       ed25519Pub: input?.ed25519Pub,
       x25519Pub: input?.x25519Pub,
-      label: input?.label,
+      label: writtenLabel(input?.label, 'A device label'),
       bindingVersion: input?.bindingVersion ?? 1,
     });
   } catch (e) {
@@ -758,7 +812,7 @@ function bodyBytes(binding: DeviceBindingBody): Uint8Array {
   return encodeCanonicalCbor(bindingBodyWritable(body));
 }
 
-/** The canonical CBOR of a binding body, hex. Any `deviceSig` or attestation is ignored. */
+/** The canonical CBOR of a binding body, hex. Any `deviceSig`, attestation or `admittedBy` is ignored. */
 export function deviceBindingCbor(binding: DeviceBindingBody): string {
   return bytesToHex(bodyBytes(binding));
 }
@@ -776,6 +830,11 @@ export function bindingDeviceDigest(binding: DeviceBindingBody): string {
   return taggedHash(BINDING_DEVICE_TAG, bodyBytes(binding));
 }
 
+/** What an owner device signs to admit a viewer: `blake2b-256( "gero-vault/v1|viewer-admission|" || binding digest )`, hex. */
+export function viewerAdmissionDigest(binding: DeviceBindingBody): string {
+  return taggedHash(VIEWER_ADMISSION_TAG, hexToBytes(bindingDigest(binding)));
+}
+
 /** Whether `deviceSig` is the device key's signature over the device digest. Never throws. */
 export async function verifyDeviceSignature(binding: OwnerDeviceBinding): Promise<boolean> {
   try {
@@ -784,6 +843,46 @@ export async function verifyDeviceSignature(binding: OwnerDeviceBinding): Promis
   } catch {
     return false;
   }
+}
+
+/** An external entry before its import signature; the credential is computed. */
+export interface ExternalEntryInput {
+  readonly vaultKeys: VaultPublicKeys;
+  /** Written with the write rule of `labels.ts`. */
+  readonly label: string;
+  readonly role: ExternalRole;
+  readonly importerDeviceId: string;
+}
+
+/** Builds an external entry body. Throws `GeroVaultError('INVALID_MANIFEST')`. */
+export function externalEntry(input: ExternalEntryInput): ExternalEntryBody {
+  try {
+    const keys = input?.vaultKeys;
+    return checkExternalBody({
+      credential: isHex(keys?.payment, 32) ? keyHashOf(keys.payment) : undefined,
+      vaultKeys: keys,
+      label: writtenLabel(input?.label, 'An external label'),
+      role: input?.role,
+      importerDeviceId: input?.importerDeviceId,
+    });
+  } catch (e) {
+    throw asGeroVaultError(e, 'INVALID_MANIFEST');
+  }
+}
+
+/**
+ * What the importing owner's device signs (`importSig`):
+ * `blake2b-256( "gero-vault/v1|external-import|" || CBOR of { vaultId, credential, vaultKeys, role, label, importerDeviceId } )`.
+ */
+export function externalImportDigest(vaultId: string, entry: ExternalEntryBody): string {
+  let body: ExternalEntryBody;
+  try {
+    if (!isHex(vaultId, 32)) fault('FIELD_INVALID', 'vaultId');
+    body = checkExternalBody(entry);
+  } catch (e) {
+    throw asGeroVaultError(e, 'INVALID_MANIFEST');
+  }
+  return taggedHash(EXTERNAL_IMPORT_TAG, encodeCanonicalCbor({ vaultId: bytes(vaultId), ...externalBodyWritable(body) }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -795,14 +894,6 @@ export interface ManifestParticipantInput {
   readonly devices?: readonly OwnerDeviceBinding[];
 }
 
-/** An external cosigner of a new manifest; the credential is computed. */
-export interface ExternalInput {
-  readonly vaultKeys: VaultPublicKeys;
-  readonly label: string;
-  readonly importedBy: Ed25519KeyHashHex;
-  readonly role: ExternalRole;
-}
-
 export interface NewManifestInput {
   /** The vault's scripts, carried in the manifest; they give the vault id and the template. */
   readonly vault: Pick<VaultScripts, 'payment' | 'stake'>;
@@ -810,7 +901,8 @@ export interface NewManifestInput {
   readonly owners: readonly ManifestParticipantInput[];
   readonly backupHolders?: readonly ManifestParticipantInput[];
   readonly viewers?: readonly ViewerEntry[];
-  readonly external?: readonly ExternalInput[];
+  /** Signed external entries (`externalEntry`, then `importSig` over `externalImportDigest`). */
+  readonly external?: readonly ExternalEntry[];
   /** Unix seconds. */
   readonly revisedAt: number;
   /**
@@ -845,7 +937,7 @@ export function newManifest(input: NewManifestInput): VaultManifest {
       guardians: [],
       delegates: [],
       viewers: input.viewers ?? [],
-      external: (input.external ?? []).map(e => ({ ...e, credential: credentialOf(e?.vaultKeys) })),
+      external: input.external ?? [],
     },
     viewersSeeProposalContents: false,
     policiesDisplay: {},
@@ -873,9 +965,9 @@ function scriptParticipants(m: VaultManifest): string {
 /**
  * Whether `next` is the next revision of `prev` (spec 5.3): the same vault and scripts, `version`
  * one higher, `prevManifestHash` the hash of `prev`, the same script participants with the same
- * vault keys (a phase 1 vault's keys never change; new owners make a new vault), and `revisedAt`
- * not earlier. Devices, viewers and labels may change; which attestations such a change needs is
- * GV-22 (#1690). Never throws.
+ * vault keys and importers (a phase 1 vault's keys never change; new owners make a new vault), and
+ * `revisedAt` not earlier. Devices, viewers and labels may change; which changes can be accepted
+ * is `checkManifestBeforeAck`. Never throws.
  */
 export function checkManifestRevision(prev: VaultManifest, next: VaultManifest): ManifestRevisionCheck {
   let a: VaultManifest;
@@ -942,10 +1034,10 @@ const TOP_KEYS = [
   'viewersSeeProposalContents', 'policiesDisplay', 'version', 'prevManifestHash', 'revisedAt',
 ] as const;
 const ENTRY_KEYS = ['credential', 'vaultKeys', 'devices'] as const;
-const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'importedBy', 'role'] as const;
+const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'role', 'importerDeviceId', 'importSig'] as const;
 const BINDING_KEYS = [
   'vaultId', 'role', 'credential', 'vaultKeys', 'deviceId', 'ed25519Pub', 'x25519Pub', 'label', 'bindingVersion',
-  'deviceSig', 'attestation',
+  'deviceSig', 'attestation', 'admittedBy',
 ] as const;
 
 type Fields = Readonly<Record<string, Value>>;
@@ -1008,6 +1100,11 @@ function bindingFrom(v: Value): OwnerDeviceBinding {
     if (proof.type === 'bytes' && proof.value.length > MAX_ATTESTATION_BYTES) fault('ATTESTATION_INVALID', 'attestation proof too large');
     attestation = { method: uint(a['method'], 'attestation method'), proof: byteString(proof, undefined, 'attestation proof') };
   }
+  let admittedBy: ViewerAdmission | undefined;
+  if (!emptyMap(f['admittedBy'], 'admittedBy')) {
+    const a = fields(f['admittedBy'], ['deviceId', 'signature'], 'admittedBy');
+    admittedBy = { deviceId: byteString(a['deviceId'], [16], 'admittedBy deviceId'), signature: byteString(a['signature'], [64], 'admittedBy signature') };
+  }
   const credential = byteString(f['credential'], [0, 28], 'binding credential');
   const keyed = !emptyMap(f['vaultKeys'], 'binding vaultKeys');
   return {
@@ -1022,6 +1119,7 @@ function bindingFrom(v: Value): OwnerDeviceBinding {
     bindingVersion: uint(f['bindingVersion'], 'bindingVersion'),
     deviceSig: byteString(f['deviceSig'], [64], 'deviceSig'),
     ...(attestation ? { attestation } : {}),
+    ...(admittedBy ? { admittedBy } : {}),
   };
 }
 
@@ -1051,8 +1149,9 @@ function externalFrom(v: Value): ExternalEntry {
     credential: Ed25519KeyHashHex(byteString(f['credential'], [28], 'external credential')),
     vaultKeys: keysFrom(f['vaultKeys'], 'external vaultKeys'),
     label: text(f['label'], 'external label'),
-    importedBy: Ed25519KeyHashHex(byteString(f['importedBy'], [28], 'importedBy')),
     role: text(f['role'], 'external role') as ExternalRole,
+    importerDeviceId: byteString(f['importerDeviceId'], [16], 'importerDeviceId'),
+    importSig: byteString(f['importSig'], [64], 'importSig'),
   };
 }
 
@@ -1102,9 +1201,9 @@ const LOWER_HEX = /^(?:[0-9a-f]{2})*$/;
 
 /**
  * Decodes an untrusted manifest: its canonical CBOR, as lowercase hex or bytes. The bytes must be
- * exactly the canonical encoding of a valid manifest (one manifest, one encoding), so the hash
- * returned is the hash of what was received. Signatures are not verified here
- * (`checkManifestBeforeAck`). Never throws: anything else is a typed refusal.
+ * exactly the canonical encoding of a valid manifest (one manifest, one encoding, proofs in their
+ * stored form), so the hash returned is the hash of what was received. Signatures are not
+ * verified here (`checkManifestBeforeAck`). Never throws: anything else is a typed refusal.
  */
 export function decodeManifest(input: string | Uint8Array): DecodeManifestResult {
   try {

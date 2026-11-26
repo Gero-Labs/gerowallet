@@ -9,16 +9,22 @@ import { Bip32PrivateKey, Ed25519KeyHashHex, Ed25519PrivateKey, Hash28ByteBase16
 import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { buildSignatureAndCoseKey } from '../../utils/converter';
-import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, cip8Proof, expiredTxBodyHash } from '../attestation';
+import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, canonicalAttestation, cip8Proof, expiredTxBodyHash } from '../attestation';
 import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes } from '../keys';
 import {
+  ExternalEntry,
+  ExternalRole,
   ManifestRole,
   OwnerDeviceBinding,
   VaultManifest,
   bindingDeviceDigest,
   bindingDigest,
   deviceBinding,
+  deviceIdOf,
+  externalEntry,
+  externalImportDigest,
   newManifest,
+  viewerAdmissionDigest,
 } from '../manifest';
 import { buildVaultFromParticipants } from '../scripts';
 import { RoleKeys, VaultPublicKeys, VaultScripts } from '../types';
@@ -75,8 +81,8 @@ export async function testDevice(n: number): Promise<{ ed25519Pub: string; x2551
   return { ed25519Pub: key.toPublic().hex(), x25519Pub: hex(x), key };
 }
 
-/** A CIP-8 attestation of `digest` by `signer`, through the wallet's own `signData` builder. */
-export function cip8Attestation(signer: Ed25519PrivateKey, credential: string, digest: string): OwnerAttestation {
+/** A CIP-8 attestation of `digest` by `signer` as the wallet's own `signData` builder returns it. */
+export function walletCip8Attestation(signer: Ed25519PrivateKey, credential: string, digest: string): OwnerAttestation {
   const address = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
     type: Cardano.CredentialType.KeyHash,
     hash: Hash28ByteBase16(credential),
@@ -85,13 +91,23 @@ export function cip8Attestation(signer: Ed25519PrivateKey, credential: string, d
   return { method: ATTESTATION_METHOD.CIP8, proof: cip8Proof(signature, key) };
 }
 
+/** The same, in the canonical stored form a manifest carries. */
+export function cip8Attestation(signer: Ed25519PrivateKey, credential: string, digest: string): OwnerAttestation {
+  const canonical = canonicalAttestation(walletCip8Attestation(signer, credential, digest));
+  if (canonical.ok === false) throw new Error(`fixture: ${canonical.code}`);
+  return canonical.attestation;
+}
+
 /** An expired-transaction attestation of `subject` by `signer`. */
 export function expiredTxAttestation(signer: Ed25519PrivateKey, credential: string, subject: AttestedDigest): OwnerAttestation {
   const signature = signer.sign(HexBlob(expiredTxBodyHash(credential, subject))).hex();
   return { method: ATTESTATION_METHOD.EXPIRED_TX, proof: assembleExpiredTx(credential, subject, signer.toPublic().hex(), signature) };
 }
 
-/** A bound device, signed by the device and attested by the participant (none for a viewer). */
+/**
+ * A bound device, signed by the device and attested by the participant. A viewer's binding is
+ * admitted by the owner device `admitter` instead.
+ */
 export async function signedBinding(input: {
   readonly vaultId: string;
   readonly role: ManifestRole;
@@ -99,6 +115,9 @@ export async function signedBinding(input: {
   readonly device: number;
   readonly label?: string;
   readonly method?: 'cip8' | 'expiredTx';
+  readonly admitter?: number;
+  readonly bindingVersion?: number;
+  readonly x25519Pub?: string;
 }): Promise<OwnerDeviceBinding> {
   const device = await testDevice(input.device);
   const body = deviceBinding({
@@ -106,11 +125,16 @@ export async function signedBinding(input: {
     role: input.role,
     ...(input.participant ? { vaultKeys: input.participant.vaultKeys } : {}),
     ed25519Pub: device.ed25519Pub,
-    x25519Pub: device.x25519Pub,
+    x25519Pub: input.x25519Pub ?? device.x25519Pub,
     label: input.label ?? `Device ${input.device}`,
+    ...(input.bindingVersion ? { bindingVersion: input.bindingVersion } : {}),
   });
   const deviceSig = device.key.sign(HexBlob(bindingDeviceDigest(body))).hex();
-  if (input.role === 'viewer') return { ...body, deviceSig };
+  if (input.role === 'viewer') {
+    const admitter = await testDevice(input.admitter ?? 1);
+    const signature = admitter.key.sign(HexBlob(viewerAdmissionDigest(body))).hex();
+    return { ...body, deviceSig, admittedBy: { deviceId: deviceIdOf(admitter.ed25519Pub), signature } };
+  }
   const { signer, credential } = input.participant;
   const digest = bindingDigest(body);
   const attestation = input.method === 'expiredTx'
@@ -119,13 +143,31 @@ export async function signedBinding(input: {
   return { ...body, deviceSig, attestation };
 }
 
+/** An external entry for `participant`'s keys, imported and signed by the owner device `importer`. */
+export async function signedExternal(input: {
+  readonly vaultId: string;
+  readonly participant: TestParticipant;
+  readonly importer: number;
+  readonly role?: ExternalRole;
+  readonly label?: string;
+}): Promise<ExternalEntry> {
+  const device = await testDevice(input.importer);
+  const body = externalEntry({
+    vaultKeys: input.participant.vaultKeys,
+    label: input.label ?? 'Other wallet',
+    role: input.role ?? 'owner',
+    importerDeviceId: deviceIdOf(device.ed25519Pub),
+  });
+  return { ...body, importSig: device.key.sign(HexBlob(externalImportDigest(input.vaultId, body))).hex() };
+}
+
 export const VECTOR_REVISED_AT = 1795651200;
 
 /**
  * The vector manifest of the specs: owners the published key and test cosigners 1 and 2, all at
  * vault index 1, 2 of 3, preprod. Owner 1 has test device 1 ("Laptop", CIP-8 attestation), owner 2
  * test device 2 ("Phone", expired-transaction attestation), owner 3 no device yet; one viewer with
- * test device 9 ("Accountant").
+ * test device 9 ("Accountant"), admitted by test device 1.
  */
 export async function vectorFixture(): Promise<{
   people: TestParticipant[];
@@ -150,7 +192,7 @@ export async function vectorFixture(): Promise<{
       },
       { vaultKeys: people[2].vaultKeys },
     ],
-    viewers: [{ devices: [await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant' })] }],
+    viewers: [{ devices: [await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant', admitter: 1 })] }],
     revisedAt: VECTOR_REVISED_AT,
   });
   return { people, vault, id, manifest };

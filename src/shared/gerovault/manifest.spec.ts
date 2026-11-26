@@ -5,13 +5,17 @@ import { HexBlob } from '@cardano-sdk/util';
 import { ed25519 as nobleEd25519, x25519 as nobleX25519 } from '@noble/curves/ed25519.js';
 import { decode as cborgDecode, encode as cborgEncode } from 'cborg';
 import { deviceIdFromPubKey } from '../../services/crossDevice/deviceIdentity';
+import { isUsableEd25519Key } from './attestation';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 import { encodeVaultPublicKeys, parseVaultPublicKeys } from './keys';
 import {
   BINDING_DEVICE_TAG,
   BINDING_DIGEST_TAG,
+  EXTERNAL_IMPORT_TAG,
+  ExternalEntry,
   MANIFEST_HASH_TAG,
   OwnerDeviceBinding,
+  VIEWER_ADMISSION_TAG,
   VaultManifest,
   bindingDeviceDigest,
   bindingDigest,
@@ -21,32 +25,45 @@ import {
   deviceBindingCbor,
   deviceIdOf,
   encodeManifest,
+  externalEntry,
+  externalImportDigest,
   isManifestFork,
-  isUsableEd25519Key,
   isUsableX25519Key,
   manifestHash,
   manifestTemplate,
   newManifest,
   nextManifestRevision,
-  normalizeManifest,
   scriptsHaveCanonicalKeyOrder,
   verifyDeviceSignature,
+  viewerAdmissionDigest,
 } from './manifest';
 import { buildVaultFromParticipants, instantiateVaultScripts, vaultScript } from './scripts';
 import { ROLE, VaultPublicKeys, VaultScripts } from './types';
 import { vaultId } from './vaultId';
-import { TestParticipant, VECTOR_REVISED_AT, signedBinding, testDevice, vectorFixture } from './__fixtures__/manifest';
+import {
+  TestParticipant,
+  VECTOR_REVISED_AT,
+  signedBinding,
+  signedExternal,
+  testDevice,
+  vectorFixture,
+  walletCip8Attestation,
+} from './__fixtures__/manifest';
 
 /**
  * PROVISIONAL vectors: not frozen until they match the other clients' vectors (GV-07).
  * - standard: `vectorFixture()`, revisedAt 1795651200.
- * - backup: owners the first two test participants, threshold 2; backup holder the third, with
- *   test device 3 (CIP-8); backup threshold 1 after slot 200000000; preprod; no viewer.
+ * - backup: owners the first two test participants, threshold 2, owner 1 with test device 1;
+ *   backup holder the third, with test device 3 (CIP-8); backup threshold 1 after slot 200000000;
+ *   preprod; no viewer.
+ * - external: owners the first two, owner 1 with test device 1; the third as an external owner
+ *   imported by test device 1, label "Other wallet".
  * - binding: owner 1's binding of test device 1, its body's two tagged digests.
  */
 const VECTORS = {
-  standard: { hash: '53952fe39fddb04d6cdc2632635b8e7465c2f5bc46f98af50180140b769e6ada', bytes: '2665' },
-  backup: { hash: 'c4ccb351130b9ed42d2134cf68d064cd8037f3cf26ed6aa6833c2cfe1b92910a' },
+  standard: { hash: '435ccf55b1ac6836ae88c6e3c3f429709b52d7328299575d5915f14831824c7a', bytes: '2762' },
+  backup: { hash: 'f40c4032832b092d02ae424793300a30a347db8a2fe3c0654dd89e121174b69e' },
+  external: { hash: '122851390c033bc20fbc6f702fb13e3b20531a82d4819046da2a4fcf6f4a6c10', importDigest: '2c9639cf8502a42d17c7e6fd9d085a78e342be363f36e2315fdc27f2e8f13e98' },
   bindingDigest: 'f09eae9d91d7b990115437ed3413ef2a6c1f65894236914ef71c4170917faef5',
   bindingDeviceDigest: '9ce4156618b7d473f1c2dd6465744d978e57e0a2e779a904d62bee031b66e750',
 };
@@ -62,8 +79,25 @@ let backupVault: VaultScripts;
 let id: string;
 let base: VaultManifest;
 let bare: VaultManifest;
+let laptop: OwnerDeviceBinding;
 
 const ownersOf = (list: readonly TestParticipant[]) => list.map(p => ({ vaultKeys: p.vaultKeys }));
+
+/** Owners 1 and 2 (owner 1 with test device 1), and the third participant as an external cosigner. */
+async function withExternal(input: { vault?: VaultScripts; role?: 'owner' | 'backupHolder'; importer?: number; label?: string } = {}): Promise<VaultManifest> {
+  const v = input.vault ?? vault;
+  const vid = vaultId(v, 'preprod');
+  return newManifest({
+    vault: v,
+    network: 'preprod',
+    owners: [
+      { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[0], device: 1 })] },
+      { vaultKeys: people[1].vaultKeys },
+    ],
+    external: [await signedExternal({ vaultId: vid, participant: people[2], importer: input.importer ?? 1, role: input.role, label: input.label })],
+    revisedAt: REVISED_AT,
+  });
+}
 
 beforeAll(async () => {
   ({ people, vault, id, manifest: base } = await vectorFixture());
@@ -73,6 +107,7 @@ beforeAll(async () => {
     backups: ownersOf(people.slice(2, 3)),
   });
   bare = newManifest({ vault, network: 'preprod', owners: ownersOf(people.slice(0, 3)), revisedAt: REVISED_AT });
+  laptop = base.roles.owners.find(e => e.credential === people[0].credential).devices[0];
 });
 
 type P = Record<string, unknown>;
@@ -95,6 +130,7 @@ function plainBinding(d: OwnerDeviceBinding): P {
     bindingVersion: d.bindingVersion,
     deviceSig: b(d.deviceSig),
     attestation: d.attestation ? { method: d.attestation.method, proof: b(d.attestation.proof) } : {},
+    admittedBy: d.admittedBy ? { deviceId: b(d.admittedBy.deviceId), signature: b(d.admittedBy.signature) } : {},
   };
 }
 
@@ -118,12 +154,13 @@ function plainOf(m: VaultManifest): P {
       guardians: [],
       delegates: [],
       viewers: m.roles.viewers.map(v => ({ credential: new Uint8Array(0), vaultKeys: {}, devices: v.devices.map(plainBinding) })),
-      external: byCredential(m.roles.external).map(e => ({
+      external: byCredential(m.roles.external).map((e: ExternalEntry) => ({
         credential: b(e.credential),
         vaultKeys: plainKeys(e.vaultKeys),
         label: e.label,
-        importedBy: b(e.importedBy),
         role: e.role,
+        importerDeviceId: b(e.importerDeviceId),
+        importSig: b(e.importSig),
       })),
     },
     viewersSeeProposalContents: false,
@@ -156,7 +193,7 @@ const mix = (a: VaultPublicKeys, s: VaultPublicKeys) =>
   parseVaultPublicKeys({ payment: encodeVaultPublicKeys(a).payment, stake: encodeVaultPublicKeys(s).stake });
 
 describe('manifest encoding', () => {
-  it('builds a first manifest with every role slot, the scripts, and no threshold or index', () => {
+  it('builds a first manifest with every role slot, the scripts, and no threshold, index or importer field', async () => {
     expect(base.schema).toBe(1);
     expect(base.version).toBe(1);
     expect(base.prevManifestHash).toBeUndefined();
@@ -164,20 +201,22 @@ describe('manifest encoding', () => {
     expect(base.paymentScript).toBe(vault.payment.cbor);
     expect(base.stakeScript).toBe(vault.stake.cbor);
     expect(manifestTemplate(base)).toEqual({ kind: 'standard', threshold: 2 });
-    const decoded = cborgDecode(b(encodeManifest(base)), { useMaps: false }) as P;
+    const decoded = cborgDecode(b(encodeManifest(await withExternal())), { useMaps: false }) as P;
     const names = new Set<string>();
     const walk = (v: unknown) => {
       if (Array.isArray(v)) v.forEach(walk);
       else if (v && typeof v === 'object' && !(v instanceof Uint8Array)) for (const [k, x] of Object.entries(v)) { names.add(k); walk(x); }
     };
     walk(decoded);
-    for (const name of ['index', 'y', 'threshold', 'scriptHash', 'stakeScriptHash', 'createdAt', 'roleXpubs', 'xpub']) expect(names.has(name)).toBe(false);
+    for (const name of ['index', 'y', 'threshold', 'scriptHash', 'stakeScriptHash', 'createdAt', 'roleXpubs', 'xpub', 'importedBy']) expect(names.has(name)).toBe(false);
     expect(Object.keys(at(decoded, 'roles')).sort()).toEqual(['backupHolders', 'delegates', 'external', 'guardians', 'owners', 'viewers']);
     expect(at(decoded, 'viewersSeeProposalContents')).toBe(false);
   });
 
-  it('writes the spec 5.3 data model in canonical CBOR (checked with cborg)', () => {
+  it('writes the spec 5.3 data model in canonical CBOR (checked with cborg)', async () => {
     expect(encodeManifest(base)).toBe(hexOf(cborgEncode(plainOf(base))));
+    const m = await withExternal();
+    expect(encodeManifest(m)).toBe(hexOf(cborgEncode(plainOf(m))));
   });
 
   it('round-trips byte for byte and hashes tag || CBOR (checked with a second blake2b)', () => {
@@ -200,20 +239,25 @@ describe('manifest encoding', () => {
     const backup = newManifest({
       vault: backupVault,
       network: 'preprod',
-      owners: ownersOf(people.slice(0, 2)),
+      owners: [
+        { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: backupId, role: 'owner', participant: people[0], device: 1 })] },
+        { vaultKeys: people[1].vaultKeys },
+      ],
       backupHolders: [{ vaultKeys: people[2].vaultKeys, devices: [await signedBinding({ vaultId: backupId, role: 'backupHolder', participant: people[2], device: 3 })] }],
       revisedAt: REVISED_AT,
     });
     expect(manifestHash(backup)).toBe(VECTORS.backup.hash);
     expect(manifestTemplate(backup)).toEqual({ kind: 'backup', threshold: 2, backupThreshold: 1, backupAfterSlot: 200_000_000 });
-    const laptop = base.roles.owners.find(e => e.credential === people[0].credential).devices[0];
+    const ext = await withExternal();
+    expect(manifestHash(ext)).toBe(VECTORS.external.hash);
+    expect(externalImportDigest(id, ext.roles.external[0])).toBe(VECTORS.external.importDigest);
     expect(bindingDigest(laptop)).toBe(VECTORS.bindingDigest);
     expect(bindingDeviceDigest(laptop)).toBe(VECTORS.bindingDeviceDigest);
   });
 
   it('has one encoding whatever order the input lists come in', async () => {
     const d = await Promise.all([1, 4, 5, 6].map(n => signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: n })));
-    const v = await Promise.all([7, 8, 9].map(n => signedBinding({ vaultId: id, role: 'viewer', device: n })));
+    const v = await Promise.all([7, 8, 9].map(n => signedBinding({ vaultId: id, role: 'viewer', device: n, admitter: 1 })));
     const build = (devs: OwnerDeviceBinding[], viewers: OwnerDeviceBinding[][], owners = [0, 1, 2]) => encodeManifest(newManifest({
       vault,
       network: 'preprod',
@@ -303,49 +347,55 @@ describe('the participants are exactly the scripts\' keys', () => {
     expect(refusal(make())).toBe(code);
   });
 
-  it('refuses a participant in the other branch, external cosigners included', () => {
-    const backupId = vaultId(backupVault, 'preprod');
-    expect(backupId).toBeDefined();
+  it('refuses a participant in the other branch, external cosigners included', async () => {
     const asOwner = { vault: backupVault, network: 'preprod' as const, owners: ownersOf(people.slice(0, 3)), revisedAt: REVISED_AT };
     expect(() => newManifest(asOwner)).toThrow(expect.objectContaining({ message: expect.stringContaining('ROLE_MISMATCH') }));
-    const external = (role: 'owner' | 'backupHolder') => ({
-      vault: backupVault,
-      network: 'preprod' as const,
-      owners: ownersOf(people.slice(0, 2)),
-      external: [{ vaultKeys: people[2].vaultKeys, label: 'Heir', importedBy: people[0].credential, role }],
-      revisedAt: REVISED_AT,
-    });
-    expect(() => newManifest(external('owner'))).toThrow(expect.objectContaining({ message: expect.stringContaining('ROLE_MISMATCH') }));
-    expect(newManifest(external('backupHolder')).roles.external[0].role).toBe('backupHolder');
+    await expect(withExternal({ vault: backupVault, role: 'owner' })).rejects.toMatchObject({ message: expect.stringContaining('ROLE_MISMATCH') });
+    expect((await withExternal({ vault: backupVault, role: 'backupHolder' })).roles.external[0].role).toBe('backupHolder');
   });
 
-  it('carries external cosigners as keys imported by an owner', () => {
-    const make = (importedBy: Ed25519KeyHashHex) => () => newManifest({
-      vault,
+  it('carries external cosigners as keys imported and signed by an owner\'s device, the importer derived', async () => {
+    const m = await withExternal();
+    const device1 = deviceIdOf((await testDevice(1)).ed25519Pub);
+    expect(m.roles.external[0]).toMatchObject({ credential: people[2].credential, importerDeviceId: device1, importedBy: people[0].credential, role: 'owner' });
+    expect(refusal(encodeManifest(m))).toBe('ok');
+    // The importer is never a free field: only an owner device in the manifest can be named.
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importerDeviceId'] = new Uint8Array(16); }, m))).toBe('IMPORTER_INVALID');
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['importSig'] = new Uint8Array(63); }, m))).toBe('FIELD_INVALID');
+    expect(refusal(mutated(p => { delete at(p, 'roles', 'external', 0)['importSig']; }, m))).toBe('SCHEMA_INVALID');
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['credential'] = b(people[3].credential); }, m))).toBe('CREDENTIAL_MISMATCH');
+    expect(externalImportDigest(id, m.roles.external[0]))
+      .toBe(sdkBlake2b.hash(HexBlob(Buffer.from(EXTERNAL_IMPORT_TAG, 'utf8').toString('hex') + hexOf(cborgEncode({
+        vaultId: b(id), credential: b(people[2].credential), vaultKeys: plainKeys(people[2].vaultKeys), label: 'Other wallet', role: 'owner', importerDeviceId: b(device1),
+      }))), 32));
+  });
+
+  it('lets only an owner import, also for an external backup holder', async () => {
+    // A backup holder's device is bound in the manifest but is not an owner's.
+    const vid = vaultId(backupVault, 'preprod');
+    const make = async (importer: number) => newManifest({
+      vault: backupVault,
       network: 'preprod',
-      owners: ownersOf(people.slice(0, 2)),
-      external: [{ vaultKeys: people[2].vaultKeys, label: 'Other wallet', importedBy, role: 'owner' }],
+      owners: [
+        { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: vid, role: 'owner', participant: people[0], device: 1 })] },
+        { vaultKeys: people[1].vaultKeys },
+      ],
+      external: [await signedExternal({ vaultId: vid, participant: people[2], importer, role: 'backupHolder' })],
       revisedAt: REVISED_AT,
     });
-    const m = make(people[0].credential)();
-    expect(m.roles.external[0]).toMatchObject({ credential: people[2].credential, importedBy: people[0].credential, role: 'owner' });
-    expect(refusal(encodeManifest(m))).toBe('ok');
-    expect(make(people[2].credential)).toThrow(expect.objectContaining({ message: expect.stringContaining('IMPORTER_INVALID') }));
-    expect(make(people[3].credential)).toThrow(expect.objectContaining({ message: expect.stringContaining('IMPORTER_INVALID') }));
-    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['credential'] = b(people[3].credential); }, m))).toBe('CREDENTIAL_MISMATCH');
+    expect((await make(1)).roles.external[0].importedBy).toBe(people[0].credential);
+    await expect(make(9)).rejects.toMatchObject({ message: expect.stringContaining('IMPORTER_INVALID') });
   });
 
   it('pins each owner\'s stake key to their binding: crossed stake keys are refused where a binding exists', () => {
-    // Owners 0 and 1 have bindings. Swapping their stake keys in the entries leaves the scripts
-    // satisfied, but each binding carries its owner's own keys.
     const crossed = mutated(p => {
       const a = ownerOf(p, 0)['vaultKeys'] as P;
       const c = ownerOf(p, 1)['vaultKeys'] as P;
       [a['stake'], c['stake']] = [c['stake'], a['stake']];
     });
     expect(refusal(crossed)).toBe('BINDING_MISMATCH');
-    // Without bindings the scripts alone cannot tell; the owners' own checks and the ceremony do
-    // (manifestCheck.spec.ts, verificationNumber.spec.ts).
+    // Without bindings the scripts alone cannot tell; the owners' own checks, the every-participant
+    // rule of the funding gate and the ceremony do (manifestCheck.spec.ts, verificationNumber.spec.ts).
     const unbound = newManifest({ vault, network: 'preprod', owners: [people[0].vaultKeys, mix(people[1].vaultKeys, people[2].vaultKeys), mix(people[2].vaultKeys, people[1].vaultKeys)].map(vaultKeys => ({ vaultKeys })), revisedAt: REVISED_AT });
     expect(refusal(encodeManifest(unbound))).toBe('ok');
   });
@@ -365,23 +415,29 @@ describe('device bindings', () => {
     expect(deviceIdOf(device.ed25519Pub)).toBe(body.deviceId);
     const cbor = deviceBindingCbor(body);
     const plain = plainBinding({ ...body, deviceSig: '' } as OwnerDeviceBinding);
-    delete plain['deviceSig'];
-    delete plain['attestation'];
+    for (const outside of ['deviceSig', 'attestation', 'admittedBy']) delete plain[outside];
     expect(cbor).toBe(hexOf(cborgEncode(plain)));
     const tagged = (tag: string) => sdkBlake2b.hash(HexBlob(Buffer.from(tag, 'utf8').toString('hex') + cbor), 32);
     expect(bindingDigest(body)).toBe(tagged(BINDING_DIGEST_TAG));
     expect(bindingDeviceDigest(body)).toBe(tagged(BINDING_DEVICE_TAG));
     expect(bindingDigest(body)).not.toBe(bindingDeviceDigest(body));
-    const signed = base.roles.owners.find(e => e.credential === people[0].credential).devices[0];
-    expect(bindingDigest(signed)).toBe(bindingDigest({ ...signed, label: 'Laptop' }));
-    expect(deviceBindingCbor({ ...signed, attestation: undefined, deviceSig: '00' } as OwnerDeviceBinding)).toBe(deviceBindingCbor(signed));
+  });
+
+  it('leave deviceSig, attestation and admittedBy out of the body both digests cover', () => {
+    const viewer = base.roles.viewers[0].devices[0];
+    const changed = { ...viewer, deviceSig: '11'.repeat(64), admittedBy: { deviceId: '22'.repeat(16), signature: '33'.repeat(64) } };
+    expect(bindingDigest(changed)).toBe(bindingDigest(viewer));
+    expect(bindingDeviceDigest(changed)).toBe(bindingDeviceDigest(viewer));
+    expect(deviceBindingCbor(changed)).toBe(deviceBindingCbor(viewer));
+    expect(bindingDigest({ ...laptop, attestation: undefined } as OwnerDeviceBinding)).toBe(bindingDigest(laptop));
+    // The admission signs the binding digest under its own tag.
+    expect(viewerAdmissionDigest(viewer)).toBe(sdkBlake2b.hash(HexBlob(Buffer.from(VIEWER_ADMISSION_TAG, 'utf8').toString('hex') + bindingDigest(viewer)), 32));
   });
 
   it('verify the device signature over the device digest', async () => {
-    const signed = base.roles.owners.find(e => e.credential === people[0].credential).devices[0];
-    expect(await verifyDeviceSignature(signed)).toBe(true);
-    expect(await verifyDeviceSignature({ ...signed, label: 'Another label' })).toBe(false);
-    expect(await verifyDeviceSignature({ ...signed, deviceSig: '00'.repeat(64) })).toBe(false);
+    expect(await verifyDeviceSignature(laptop)).toBe(true);
+    expect(await verifyDeviceSignature({ ...laptop, label: 'Another label' })).toBe(false);
+    expect(await verifyDeviceSignature({ ...laptop, deviceSig: '00'.repeat(64) })).toBe(false);
     expect(await verifyDeviceSignature(undefined)).toBe(false);
   });
 
@@ -408,6 +464,7 @@ describe('device bindings', () => {
     const p = 'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f';
     expect(isUsableEd25519Key(p)).toBe(false);
     expect(isUsableEd25519Key('01' + '00'.repeat(31))).toBe(false);
+    expect(isUsableEd25519Key('01' + '00'.repeat(30) + '80')).toBe(false);
     for (let n = 1; n <= 9; n++) expect(isUsableEd25519Key((await testDevice(n)).ed25519Pub)).toBe(true);
 
     const smallX = [
@@ -448,6 +505,8 @@ describe('device bindings', () => {
       { ...ok, role: 'admin' },
       { ...ok, vaultId: id.slice(2) },
       { ...ok, bindingVersion: 0 },
+      { ...ok, label: '   ' },
+      { ...ok, label: `x${char(0x200b)}` },
     ]) {
       expect(() => deviceBinding(bad as typeof ok)).toThrow(err);
     }
@@ -455,49 +514,20 @@ describe('device bindings', () => {
   });
 });
 
-describe('labels', () => {
-  const withLabel = (label: string) => {
-    try {
-      normalizeManifest(newManifest({
-        vault,
-        network: 'preprod',
-        owners: ownersOf(people.slice(0, 2)),
-        external: [{ vaultKeys: people[2].vaultKeys, label, importedBy: people[0].credential, role: 'owner' }],
-        revisedAt: REVISED_AT,
-      }));
-      return 'accepted';
-    } catch (e) {
-      return (e as Error).message.split(':')[0];
-    }
-  };
-
-  it.each([
-    ['a zero-width space', `Al${char(0x200b)}ice`],
-    ['a zero-width joiner', `Bob${char(0x200d)}`],
-    ['a byte order mark', `${char(0xfeff)}Carol`],
-    ['a line separator', `line${char(0x2028)}break`],
-    ['a paragraph separator', `para${char(0x2029)}break`],
-    ['a soft hyphen', `Da${char(0x00ad)}vid`],
-    ['a word joiner', `Er${char(0x2060)}in`],
-    ['tag characters', `Eve${char(0xe0041)}${char(0xe0042)}`],
-    ['a right-to-left override', `evil${char(0x202e)}gpj.exe`],
-    ['a private use character', `x${char(0xe000)}`],
-    ['an unassigned code point', `x${char(0x0378)}`],
-    ['a Hangul filler (U+115F)', `x${char(0x115f)}`],
-    ['a Hangul filler (U+1160)', `x${char(0x1160)}`],
-    ['a Hangul filler (U+3164)', `x${char(0x3164)}`],
-    ['a halfwidth Hangul filler', `x${char(0xffa0)}`],
-    ['a decomposed accent (not NFC)', `Rene${char(0x0301)}`],
-    ['the field separator', 'Bob|Alice'],
-    ['a newline', 'line\nbreak'],
-    ['an empty label', ''],
-    ['65 bytes', char(0xe9).repeat(33)],
-  ])('refuses %s', (_what, label) => {
-    expect(withLabel(label)).toBe('LABEL_INVALID');
-  });
-
-  it('accepts ordinary text in NFC, other scripts and emoji', () => {
-    for (const label of [`Ren${char(0xe9)}`, 'Treasury 2027', char(0x6c34), `Team ${char(0x1f680)}`]) expect(withLabel(label)).toBe('accepted');
+describe('labels in manifests', () => {
+  it('are written with the write rule and read with the read rule only', async () => {
+    // Builders apply the write rule: NFC, trimmed, no invisible characters.
+    expect(externalEntry({ vaultKeys: people[2].vaultKeys, label: `  Ren${'e'}${char(0x301)}  `, role: 'owner', importerDeviceId: '00'.repeat(16) }).label).toBe(`Ren${char(0xe9)}`);
+    expect(() => externalEntry({ vaultKeys: people[2].vaultKeys, label: `Al${char(0x200b)}ice`, role: 'owner', importerDeviceId: '00'.repeat(16) }))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('LABEL_INVALID') }));
+    // The decoder applies the read rule only, so a label written by a client with newer Unicode
+    // tables is still read (the signatures over it are checked by the ack).
+    const unassigned = [0x0378, 0x0379, 0x1fafa].map(c => char(c)).find(c => /\p{Cn}/u.test(c));
+    const m = await withExternal();
+    expect(refusal(mutated(p => { at(p, 'roles', 'external', 0)['label'] = `new${unassigned}`; }, m))).toBe('ok');
+    expect(refusal(mutated(p => { at(ownerOf(p, 0), 'devices', 0)['label'] = `x${char(0x200b)}y`; }))).toBe('ok');
+    expect(refusal(mutated(p => { at(ownerOf(p, 0), 'devices', 0)['label'] = 'line\nbreak'; }))).toBe('LABEL_INVALID');
+    expect(refusal(mutated(p => { at(ownerOf(p, 0), 'devices', 0)['label'] = char(0xe9).repeat(33); }))).toBe('LABEL_INVALID');
   });
 });
 
@@ -524,26 +554,16 @@ describe('revisions', () => {
     expect(checkManifestRevision(v2, base)).toEqual({ ok: false, code: 'VERSION_NOT_NEXT' });
     expect(checkManifestRevision(base, { ...v2, revisedAt: REVISED_AT - 1 })).toEqual({ ok: false, code: 'TIME_BACKWARDS' });
     expect(checkManifestRevision(base, { ...v2, revisedAt: REVISED_AT })).toEqual({ ok: true });
-    expect(checkManifestRevision(bare, { ...nextManifestRevision(bare, { roles: {}, revisedAt: REVISED_AT }), network: 'preview' })).toEqual({ ok: false, code: 'INVALID_MANIFEST' });
     expect(checkManifestRevision(base, { ...v2, revisedAt: -1 })).toEqual({ ok: false, code: 'INVALID_MANIFEST' });
     expect(() => nextManifestRevision(base, { roles: {}, revisedAt: REVISED_AT - 1 })).toThrow(expect.objectContaining({ code: 'INVALID_MANIFEST' }));
   });
 
-  it('keep the script participants: a vault\'s keys never change', () => {
-    const withExternal = newManifest({
-      vault,
-      network: 'preprod',
-      owners: ownersOf(people.slice(0, 2)),
-      external: [{ vaultKeys: people[2].vaultKeys, label: 'Other wallet', importedBy: people[0].credential, role: 'owner' }],
-      revisedAt: REVISED_AT,
-    });
-    // The same scripts, the third key now claimed by an owner entry instead of the external entry.
+  it('keep the script participants and their importers: a vault\'s keys never change', async () => {
+    const m = await withExternal();
+    const relabelled = nextManifestRevision(m, { roles: { external: [await signedExternal({ vaultId: id, participant: people[2], importer: 1, label: 'Renamed' })] }, revisedAt: REVISED_AT });
+    expect(checkManifestRevision(m, relabelled)).toEqual({ ok: true });
     const moved = nextManifestRevision(bare, { roles: {}, revisedAt: REVISED_AT });
-    const relabelled = nextManifestRevision(withExternal, { roles: { external: [{ ...withExternal.roles.external[0], label: 'Renamed' }] }, revisedAt: REVISED_AT });
-    expect(checkManifestRevision(withExternal, relabelled)).toEqual({ ok: true });
-    expect(checkManifestRevision(withExternal, { ...moved, prevManifestHash: manifestHash(withExternal) })).toEqual({ ok: false, code: 'PARTICIPANTS_CHANGED' });
-    expect(() => nextManifestRevision(withExternal, { roles: { external: [{ ...withExternal.roles.external[0], importedBy: people[1].credential }] }, revisedAt: REVISED_AT }))
-      .toThrow(expect.objectContaining({ code: 'INVALID_MANIFEST' }));
+    expect(checkManifestRevision(m, { ...moved, prevManifestHash: manifestHash(m) })).toEqual({ ok: false, code: 'PARTICIPANTS_CHANGED' });
   });
 });
 
@@ -579,9 +599,6 @@ describe('decoding untrusted manifests', () => {
     ['FIELD_INVALID', (p: P) => { at(ownerOf(p, 2), 'vaultKeys')['stake'] = new Uint8Array(64); }],
     ['SCHEMA_INVALID', (p: P) => { ownerOf(p, 2)['vaultKeys'] = { payment: new Uint8Array(32) }; }],
     ['DUPLICATE_PARTICIPANT', (p: P) => { const o = list(p, 'roles', 'owners'); o.splice(1, 0, o[0]); }],
-    ['IMPORTER_INVALID', (p: P) => {
-      list(p, 'roles', 'external').push({ credential: b(people[3].credential), vaultKeys: plainKeys(people[3].vaultKeys), label: 'X', importedBy: new Uint8Array(28), role: 'owner' });
-    }],
     ['BINDING_MISMATCH', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['role'] = 'backupHolder'; }],
     ['BINDING_MISMATCH', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['vaultId'] = new Uint8Array(32); }],
     ['BINDING_MISMATCH', (p: P) => {
@@ -606,11 +623,19 @@ describe('decoding untrusted manifests', () => {
     ['ATTESTATION_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0, 'attestation')['proof'] = new Uint8Array(0); }],
     ['ATTESTATION_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0, 'attestation')['proof'] = new Uint8Array(2049); }],
     ['SCHEMA_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['attestation'] = { method: 0 }; }],
+    ['ATTESTATION_INVALID', (p: P) => {
+      // The wallet's own signData output is valid, but not the stored form: refused at decode.
+      at(ownerOf(p, 0), 'devices', 0, 'attestation')['proof'] = b(walletCip8Attestation(people[0].signer, people[0].credential, bindingDigest(laptop)).proof);
+    }],
     ['ATTESTATION_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0, 'devices', 0)['attestation'] = { method: 0, proof: new Uint8Array(4) }; }],
+    ['ADMISSION_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0, 'devices', 0)['admittedBy'] = {}; }],
+    ['ADMISSION_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0, 'devices', 0, 'admittedBy')['deviceId'] = new Uint8Array(16); }],
+    ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0, 'devices', 0, 'admittedBy')['signature'] = new Uint8Array(63); }],
+    ['ADMISSION_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['admittedBy'] = at(p, 'roles', 'viewers', 0, 'devices', 0, 'admittedBy'); }],
     ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0)['credential'] = new Uint8Array(28); }],
     ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0)['vaultKeys'] = { payment: new Uint8Array(32), stake: new Uint8Array(32) }; }],
     ['FIELD_INVALID', (p: P) => { at(p, 'roles', 'viewers', 0)['devices'] = []; }],
-    ['LABEL_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['label'] = `x${char(0x200b)}`; }],
+    ['LABEL_INVALID', (p: P) => { at(ownerOf(p, 0), 'devices', 0)['label'] = `x${char(0x85)}`; }],
     ['DUPLICATE_DEVICE', (p: P) => {
       const d = structuredClone(at(ownerOf(p, 0), 'devices', 0));
       d['credential'] = ownerOf(p, 2)['credential'];
@@ -665,13 +690,12 @@ describe('decoding untrusted manifests', () => {
     expect(refusal(new Proxy(new Uint8Array(4), { get() { throw new Error('boom'); } }))).toBe('MALFORMED_INPUT');
     expect(refusal('00'.repeat(262145))).toBe('TOO_LARGE');
     expect(refusal(new Uint8Array(262145))).toBe('TOO_LARGE');
-    // Bytes in any Uint8Array view decode the same.
     expect(refusal(Buffer.from(cbor, 'hex'))).toBe('ok');
     const padded = b(`ff${cbor}ff`);
     expect(refusal(padded.subarray(1, padded.length - 1))).toBe('ok');
   });
 
-  it('never throws on structural mutations and random bytes, and accepts only canonical bytes', () => {
+  it('never throws on structural mutations and random bytes, and accepts only canonical bytes', async () => {
     let seed = 12345;
     const rand = () => {
       seed ^= seed << 13; seed >>>= 0;
@@ -680,7 +704,7 @@ describe('decoding untrusted manifests', () => {
       return seed;
     };
     const pick = <T>(xs: readonly T[]): T => xs[rand() % xs.length];
-    const baseBytes = b(encodeManifest(base));
+    const baseBytes = b(encodeManifest(await withExternal()));
     const INTS = [0, 1, 2, 3, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296, Number.MAX_SAFE_INTEGER, -1, -24, -25];
     const leaf = (): unknown => {
       switch (rand() % 8) {

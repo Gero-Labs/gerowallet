@@ -1,5 +1,5 @@
 /**
- * The checks a device makes before it acknowledges a manifest (spec 5.3, GV-60 #1728).
+ * The checks a device makes before it acknowledges and accepts a manifest (spec 5.3, GV-60 #1728).
  *
  * `decodeManifest` and `normalizeManifest` already guarantee that the manifest is well formed and
  * that its participants are exactly the keys of the scripts it carries, each in the branch of their
@@ -7,20 +7,32 @@
  *
  * - the device's own entry must hold the vault keys it derives locally at its own index, in the
  *   role it agreed to, and its own binding when it expects one;
- * - every device binding's `deviceSig` and every participant binding's attestation must verify;
- * - the manifest must follow the latest manifest this device accepted for the vault: a first
- *   manifest only for a vault it never accepted (or the same one again), a revision only as the
- *   next version of the latest accepted one, never two different manifests of one version;
+ * - every signature must verify (strict Ed25519): each binding's `deviceSig`, each participant
+ *   binding's owner attestation, each viewer binding's `admittedBy` by an owner device, and each
+ *   external entry's `importSig` by the importing owner's device;
+ * - the manifest must agree with this device's full accepted history of the vault: the same bytes
+ *   at any version already accepted (a redelivery), or the next version extending the latest
+ *   accepted revision. A different manifest at an accepted version, or one that does not extend
+ *   the latest revision, is a fork: both are refused and every owner alerted;
+ * - a binding whose body changed, or a device that comes back after being removed, must carry a
+ *   `bindingVersion` above the highest this device ever accepted for that device id, so an old
+ *   binding (an old key agreement key) cannot be replayed;
  * - its scripts must not belong to another accepted vault on the same network.
  *
- * A revision can change devices, viewers and labels. A participant's new binding carries that
- * participant's own attestation, which is verified here; removing a device or changing viewers or
- * external labels needs the owners' threshold attestations of the revision (GV-22 #1690), which
- * this module cannot check yet. Such a result has `attestationsVerified: false`, and no
- * `VAULT_ACK` may be sent on it.
+ * Accepting a revision is a separate condition from passing these checks: removing a device,
+ * removing a viewer or changing an external label needs the owners' threshold attestations of the
+ * revision (GV-22 #1690), which this module cannot check yet. Such a result has
+ * `attestationsVerified: false`; the revision is not accepted, the vault stays at its last
+ * accepted revision, and no `VAULT_ACK` is sent on it. Funding does not depend on it
+ * (`verificationNumber.ts`).
+ *
+ * An acknowledgement is branded: only this module creates one, so the funding gate never takes a
+ * hand-made result. It lives in memory only; after a restart the stored manifest is checked again.
  */
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
-import { AttestationRefusalCode, verifyAttestation } from './attestation';
+import { brandAck } from './ackBrand';
+import { AttestationRefusalCode, verifyAttestation, verifyEd25519 } from './attestation';
+import { hexToBytes } from './cbor';
 import { GeroVaultError } from './errors';
 import { deriveVaultPublicKeys, vaultKeyHashes } from './keys';
 import {
@@ -29,12 +41,14 @@ import {
   VaultManifest,
   bindingDigest,
   checkManifestRevision,
+  externalImportDigest,
   manifestHash,
   manifestScripts,
   manifestTemplate,
   normalizeManifest,
   scriptsHaveCanonicalKeyOrder,
   verifyDeviceSignature,
+  viewerAdmissionDigest,
 } from './manifest';
 import { RoleKeys, VaultNetwork, VaultPublicKeys, VaultTemplate } from './types';
 import { verificationDigest } from './verificationNumber';
@@ -62,19 +76,32 @@ export type OwnParticipant =
     }
   | { readonly kind: 'viewer'; readonly device: OwnDevice };
 
+/** Revision changes that need the owners' threshold attestations (GV-22), not verified here. */
+export type UnverifiedChange = 'VIEWER_REMOVED' | 'DEVICE_REMOVED' | 'EXTERNAL_CHANGE';
+
+/** An accepted revision as this device stores it, with the status its check returned. */
+export interface AcceptedManifest {
+  readonly manifest: VaultManifest;
+  readonly attestationsVerified: boolean;
+  readonly unverified: readonly UnverifiedChange[];
+}
+
 export interface ManifestAckInput {
   readonly manifest: VaultManifest;
   readonly network: VaultNetwork;
   readonly own: OwnParticipant;
   /**
-   * The latest accepted manifest of every vault this device has accepted, on every network. A
-   * vault left out loses the fork, duplicate and chain checks.
+   * Every accepted revision of every vault this device has accepted, on every network: the full
+   * history of each vault, not only its latest revision. A revision left out loses the fork and
+   * replay checks.
    */
-  readonly accepted?: readonly VaultManifest[];
+  readonly accepted?: readonly AcceptedManifest[];
+  /**
+   * This vault's high-water mark of `bindingVersion` per device id, as the device stored it (removed
+   * devices included). Combined with what the history shows, the higher of the two counts.
+   */
+  readonly bindingVersions?: Readonly<Record<string, number>>;
 }
-
-/** Revision changes whose authorisation (threshold attestations, GV-22) is not verified here. */
-export type UnverifiedChange = 'VIEWER_CHANGE' | 'DEVICE_REMOVED' | 'EXTERNAL_CHANGE';
 
 export type ManifestAckRefusalCode =
   | 'INVALID_INPUT'
@@ -86,13 +113,16 @@ export type ManifestAckRefusalCode =
   | 'STALE_REVISION'
   | 'REVISION_GAP'
   | 'REVISION_INVALID'
+  | 'BINDING_REPLAY'
   | 'SCRIPT_OF_ANOTHER_VAULT'
   | 'OWN_ENTRY_MISSING'
   | 'OWN_KEYS_MISMATCH'
   | 'OWN_ROLE_MISMATCH'
   | 'OWN_DEVICE_MISMATCH'
   | 'DEVICE_SIGNATURE_INVALID'
-  | 'ATTESTATION_INVALID';
+  | 'ATTESTATION_INVALID'
+  | 'ADMISSION_INVALID'
+  | 'IMPORT_SIGNATURE_INVALID';
 
 export interface ManifestAck {
   readonly ok: true;
@@ -105,13 +135,22 @@ export interface ManifestAck {
   readonly ownRole: 'owner' | 'backupHolder' | 'viewer';
   /** This device's payment key hash, derived from its own keys; absent for a viewer. */
   readonly ownCredential?: Ed25519KeyHashHex;
-  /** The same manifest as the one accepted (a redelivery). */
+  /** The same manifest as one already accepted (its status is the stored one). */
   readonly redelivery: boolean;
   /** False when the scripts list keys in another order than this wallet writes. */
   readonly canonicalKeyOrder: boolean;
-  /** True only when every change this manifest makes is authorised by a verified signature. */
+  /**
+   * Revision acceptance: true only when every change this manifest makes is authorised by a
+   * verified signature. When false, do not accept the revision or send `VAULT_ACK`.
+   */
   readonly attestationsVerified: boolean;
   readonly unverified: readonly UnverifiedChange[];
+  /** Owners and backup holders with no attested binding yet: funding waits for each of them. */
+  readonly unattested: readonly Ed25519KeyHashHex[];
+  /** External cosigners: funding waits for each one's own attestation (`verificationNumber.ts`). */
+  readonly externals: readonly Ed25519KeyHashHex[];
+  /** The high-water mark of `bindingVersion` per device id after this manifest, to store. */
+  readonly bindingVersions: Readonly<Record<string, number>>;
 }
 
 export type ManifestAckResult =
@@ -135,14 +174,18 @@ function hasDevice(devices: readonly OwnerDeviceBinding[], own: OwnDevice): bool
   return devices.some(d => d.ed25519Pub === own?.ed25519Pub && d.x25519Pub === own?.x25519Pub);
 }
 
+function allBindings(m: VaultManifest): OwnerDeviceBinding[] {
+  return [...m.roles.owners, ...m.roles.backupHolders, ...m.roles.viewers].flatMap(e => e.devices);
+}
+
 /** What changed between two revisions that only threshold attestations (GV-22) can authorise. */
 function unverifiedChanges(prev: VaultManifest, next: VaultManifest): UnverifiedChange[] {
   const out: UnverifiedChange[] = [];
-  const viewers = (m: VaultManifest) => JSON.stringify(m.roles.viewers.map(v => v.devices.map(d => [d.deviceId, d.x25519Pub, d.label, d.bindingVersion])));
-  if (viewers(prev) !== viewers(next)) out.push('VIEWER_CHANGE');
-  const bound = (m: VaultManifest) => new Set([...m.roles.owners, ...m.roles.backupHolders].flatMap(e => e.devices.map(d => d.deviceId)));
-  const now = bound(next);
-  if ([...bound(prev)].some(id => !now.has(id))) out.push('DEVICE_REMOVED');
+  const ids = (list: readonly { devices: readonly OwnerDeviceBinding[] }[]) => new Set(list.flatMap(e => e.devices.map(d => d.deviceId)));
+  const viewersNow = ids(next.roles.viewers);
+  if ([...ids(prev.roles.viewers)].some(id => !viewersNow.has(id))) out.push('VIEWER_REMOVED');
+  const boundNow = ids([...next.roles.owners, ...next.roles.backupHolders]);
+  if ([...ids([...prev.roles.owners, ...prev.roles.backupHolders])].some(id => !boundNow.has(id))) out.push('DEVICE_REMOVED');
   const labels = (m: VaultManifest) => JSON.stringify(m.roles.external.map(e => [e.credential, e.label]));
   if (labels(prev) !== labels(next)) out.push('EXTERNAL_CHANGE');
   return out;
@@ -164,47 +207,76 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
     const { network, own } = input;
     if (!own) return refuse('INVALID_INPUT');
     if (manifest.network !== network) return refuse('NETWORK_MISMATCH');
-    let accepted: VaultManifest[];
+    let accepted: AcceptedManifest[];
     try {
-      accepted = (Array.isArray(input.accepted) ? input.accepted : []).map(normalizeManifest);
+      accepted = (Array.isArray(input.accepted) ? input.accepted : []).map(a => ({
+        manifest: normalizeManifest(a?.manifest),
+        attestationsVerified: a?.attestationsVerified === true,
+        unverified: Array.isArray(a?.unverified) ? a.unverified : [],
+      }));
     } catch {
       return refuse('INVALID_INPUT');
     }
     const hash = manifestHash(manifest);
 
     // The same scripts are one vault: no second vault id for a script of an accepted vault.
-    for (const other of accepted) {
+    for (const { manifest: other } of accepted) {
       if (other.network === manifest.network && other.vaultId !== manifest.vaultId
         && (other.paymentScript === manifest.paymentScript || other.stakeScript === manifest.stakeScript)) {
         return refuse('SCRIPT_OF_ANOTHER_VAULT');
       }
     }
 
-    // The chain: follow the latest accepted manifest of this vault.
-    const latest = accepted.find(m => m.network === manifest.network && m.vaultId === manifest.vaultId);
-    let redelivery = false;
+    // The full history of this vault, by version.
+    const history = accepted.filter(a => a.manifest.network === manifest.network && a.manifest.vaultId === manifest.vaultId);
+    const byVersion = new Map<number, AcceptedManifest>();
+    for (const a of history) {
+      const seen = byVersion.get(a.manifest.version);
+      if (seen && manifestHash(seen.manifest) !== manifestHash(a.manifest)) return refuse('MANIFEST_FORK', { alert: true });
+      byVersion.set(a.manifest.version, a);
+    }
+    const latest = history.reduce<AcceptedManifest | undefined>((best, a) => (!best || a.manifest.version > best.manifest.version ? a : best), undefined);
+
+    let redelivery: AcceptedManifest | undefined;
     let unverified: UnverifiedChange[] = [];
-    if (!latest) {
-      if (manifest.version !== 1) return refuse('UNKNOWN_VAULT');
-    } else if (manifest.version === latest.version) {
-      if (manifestHash(latest) !== hash) {
+    const atVersion = byVersion.get(manifest.version);
+    if (atVersion) {
+      if (manifestHash(atVersion.manifest) !== hash) {
         return refuse(manifest.version === 1 ? 'VAULT_ALREADY_ACCEPTED' : 'MANIFEST_FORK', { alert: true });
       }
-      redelivery = true;
-    } else if (manifest.version < latest.version) {
+      redelivery = atVersion;
+    } else if (!latest) {
+      if (manifest.version !== 1) return refuse('UNKNOWN_VAULT');
+    } else if (manifest.version < latest.manifest.version) {
       return refuse('STALE_REVISION');
-    } else if (manifest.version > latest.version + 1) {
+    } else if (manifest.version > latest.manifest.version + 1) {
       return refuse('REVISION_GAP');
     } else {
-      const link = checkManifestRevision(latest, manifest);
+      const link = checkManifestRevision(latest.manifest, manifest);
       if (link.ok === false) {
         return refuse('REVISION_INVALID', { revision: link.code, ...(link.code === 'PREV_HASH_MISMATCH' ? { alert: true as const } : {}) });
       }
-      unverified = unverifiedChanges(latest, manifest);
+      unverified = unverifiedChanges(latest.manifest, manifest);
     }
 
+    // Binding replay: a changed or returning device needs a higher bindingVersion.
+    const marks = new Map<string, number>();
+    const mark = (id: string, v: number) => marks.set(id, Math.max(marks.get(id) ?? 0, v));
+    for (const [id, v] of Object.entries(input.bindingVersions ?? {})) if (Number.isSafeInteger(v)) mark(id, v);
+    for (const a of history) for (const b of allBindings(a.manifest)) mark(b.deviceId, b.bindingVersion);
+    if (!redelivery) {
+      // A binding is the same when its body is: a new attestation or admission of an unchanged body
+      // changes nothing a replay could exploit.
+      const current = new Map((latest ? allBindings(latest.manifest) : []).map(b => [b.deviceId, bindingDigest(b)]));
+      for (const b of allBindings(manifest)) {
+        if (current.get(b.deviceId) === bindingDigest(b)) continue;
+        if (marks.has(b.deviceId) && b.bindingVersion <= marks.get(b.deviceId)) return refuse('BINDING_REPLAY', b.credential ? { credential: b.credential } : {});
+      }
+    }
+    for (const b of allBindings(manifest)) mark(b.deviceId, b.bindingVersion);
+
     // The device's own entry.
-    const { owners, backupHolders, viewers } = manifest.roles;
+    const { owners, backupHolders, viewers, external } = manifest.roles;
     let ownRole: 'owner' | 'backupHolder' | 'viewer';
     let ownCredential: Ed25519KeyHashHex | undefined;
     if (own.kind === 'viewer') {
@@ -231,7 +303,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       return refuse('INVALID_INPUT');
     }
 
-    // Every binding: the device's own signature, and the participant's attestation.
+    // Every signature.
     for (const entry of [...owners, ...backupHolders]) {
       for (const binding of entry.devices) {
         if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID', { credential: entry.credential });
@@ -239,13 +311,27 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
         if (check.ok === false) return refuse('ATTESTATION_INVALID', { credential: entry.credential, attestation: check.code });
       }
     }
+    const ownerDevice = new Map(owners.flatMap(e => e.devices.map(d => [d.deviceId, d] as const)));
     for (const viewer of viewers) {
       for (const binding of viewer.devices) {
         if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID');
+        const admitter = ownerDevice.get(binding.admittedBy?.deviceId);
+        const admitted = admitter && await verifyEd25519(
+          hexToBytes(admitter.ed25519Pub), hexToBytes(binding.admittedBy.signature), hexToBytes(viewerAdmissionDigest(binding)),
+        );
+        if (!admitted) return refuse('ADMISSION_INVALID');
       }
     }
+    for (const entry of external) {
+      const importer = ownerDevice.get(entry.importerDeviceId);
+      const signed = importer && await verifyEd25519(
+        hexToBytes(importer.ed25519Pub), hexToBytes(entry.importSig), hexToBytes(externalImportDigest(manifest.vaultId, entry)),
+      );
+      if (!signed) return refuse('IMPORT_SIGNATURE_INVALID', { credential: entry.credential });
+    }
 
-    return {
+    const attestationsVerified = redelivery ? redelivery.attestationsVerified : unverified.length === 0;
+    return brandAck({
       ok: true,
       vaultId: manifest.vaultId,
       manifestHash: hash,
@@ -253,11 +339,14 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       template: manifestTemplate(manifest),
       ownRole,
       ...(ownCredential ? { ownCredential } : {}),
-      redelivery,
+      redelivery: Boolean(redelivery),
       canonicalKeyOrder: scriptsHaveCanonicalKeyOrder(manifestScripts(manifest)),
-      attestationsVerified: unverified.length === 0,
-      unverified: Object.freeze(unverified),
-    };
+      attestationsVerified,
+      unverified: Object.freeze(redelivery ? [...redelivery.unverified] : unverified),
+      unattested: Object.freeze([...owners, ...backupHolders].filter(e => e.devices.length === 0).map(e => e.credential)),
+      externals: Object.freeze(external.map(e => e.credential)),
+      bindingVersions: Object.freeze(Object.fromEntries([...marks.entries()].sort(([a], [b]) => (a < b ? -1 : 1)))),
+    });
   } catch {
     return refuse('INVALID_INPUT');
   }

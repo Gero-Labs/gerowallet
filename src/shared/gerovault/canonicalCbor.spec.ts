@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encode as cborgEncode } from 'cborg';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 import { readCbor } from './cbor';
+import { decodeRegistration } from './registration';
 
 const hex = (v: CborWritable) => Buffer.from(encodeCanonicalCbor(v)).toString('hex');
 
@@ -134,6 +135,12 @@ describe('the strict reader and booleans (opt in)', () => {
     expect(() => readCbor(Uint8Array.from([0xf5]), limits)).toThrow(expect.objectContaining({ reason: 'UNSUPPORTED_TYPE' }));
     expect(readCbor(Uint8Array.from([0xf5]), { ...limits, booleans: true }).value).toEqual({ type: 'bool', value: true });
     expect(readCbor(Uint8Array.from([0x82, 0xf4, 0x01]), { ...limits, booleans: true }).value.type).toBe('array');
+  });
+
+  it('leaves the registration decoder refusing booleans, in metadata and in scripts', () => {
+    expect(decodeRegistration({ metadata: { cbor: 'a119073ea1657479706573f5' }, nativeScripts: { cbors: ['8200581c' + '00'.repeat(28)] } }))
+      .toMatchObject({ ok: false, code: 'MALFORMED_CBOR' });
+    expect(decodeRegistration({ metadata: { json: { types: [0] } }, nativeScripts: { cbors: ['8200f5'] } })).toMatchObject({ ok: false, code: 'MALFORMED_CBOR' });
   });
 
   it('still refuses every other simple value and floats with booleans on', () => {

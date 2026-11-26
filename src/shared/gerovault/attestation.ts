@@ -1,14 +1,17 @@
 /**
- * Attestations by a participant's vault payment key (spec 5.3; the flows are GV-22 #1690).
+ * Attestations by a participant's vault payment key (spec 5.3; the flows are GV-22 #1690), and
+ * the strict Ed25519 check every signature of this library goes through.
  *
  * An owner attests each of their device bindings, and an external cosigner attests the vault's
  * verification digest (`verificationNumber.ts`). Either way the attestation is
- * `{ method, proof }` over one 32-byte digest:
+ * `{ method, proof }` over one 32-byte digest, and it is stored in exactly one canonical form:
  *
  * - method 0, CIP-8 (device bindings only): `proof` is the CBOR array
- *   `[ bstr COSE_Sign1, bstr COSE_Key ]`, the pair a CIP-30 `signData` returns. It verifies when the
- *   COSE_Key's Ed25519 key hashes to the participant's credential, the COSE_Sign1 payload is
- *   exactly the digest, and the signature verifies over the Sig_structure (RFC 8152 section 4.4).
+ *   `[ bstr COSE_Sign1, bstr COSE_Key ]`. Stored, the COSE_Sign1 is
+ *   `[ protected header bytes as signed, {}, payload, signature ]` and the COSE_Key is exactly
+ *   `{ 1: 1, 3: -8, -1: 6, -2: key }`. It verifies when the key hashes to the participant's
+ *   credential, the payload is exactly the digest, and the signature verifies over the
+ *   Sig_structure (RFC 8152 section 4.4).
  * - method 1, an expired transaction: `proof` is a complete signed transaction that can never be
  *   submitted. Its body is exactly
  *     { 0: [[32 zero bytes, 0]], 1: [], 2: 0, 3: 1, 7: auxiliary data hash, 14: [credential] }
@@ -16,10 +19,17 @@
  *   the one required signer), its witness set is exactly one vkey witness by the vault payment
  *   key, and its auxiliary data is exactly `{ 18541: { 0: binding digest } }`, or
  *   `{ 18541: { 1: verification digest } }` for an external cosigner. Label 1854 is never used,
- *   because CIP-0146 wallets scan it for vault registrations.
+ *   because CIP-0146 wallets scan it for vault registrations. Stored, the whole transaction is
+ *   canonical CBOR (definite lengths, no set tags).
  *
- * The verifiers are pure TypeScript over the bounded reader of `cbor.ts`, with Ed25519 from
- * `@cardano-sdk/crypto`. They never throw.
+ * `ingestAttestation` takes what a wallet returns (a COSE_Key with a `kid` or no `alg` or in
+ * another order, an unprotected `{ hashed: false }`, a tagged COSE_Sign1, a witness set with set
+ * tags or indefinite lengths), checks it, and gives the canonical form. `verifyAttestation` takes
+ * the canonical form only, which is what manifests store.
+ *
+ * Every Ed25519 check here is strict (RFC 8032): a key or an `R` that is not a canonical encoding
+ * or is of small order, or an `S` that is not below the group order, is refused before the
+ * signature is checked. The verifiers never throw.
  *
  * PROVISIONAL: the proof layouts, label 18541 and the expired transaction body are fixed with the
  * hardware results (GV-06 #1674) and the other clients' vectors (GV-07 #1675).
@@ -27,6 +37,7 @@
 import { Ed25519PublicKey, Ed25519PublicKeyHex, Ed25519Signature, ready } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
+import { decode as lenientDecode } from 'cborg';
 import { CborBoolean, CborError, CborItemOf, CborValueOf, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 
@@ -105,15 +116,60 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 const blake2b256 = (bytes: Uint8Array) => blake2b(bytes, { dkLen: 32 });
 const keyHashOf = (key: Uint8Array) => bytesToHex(blake2b(key, { dkLen: 28 }));
 
-/** Ed25519 verification of `signature` over `message` by `publicKey` (raw bytes). False on any error. */
+// ---------------------------------------------------------------------------------------------
+// Strict Ed25519 (RFC 8032)
+
+// The curve's 8-torsion points by their y coordinate (the sign bit is ignored); the specs check
+// them against an independent implementation.
+const ED25519_SMALL_ORDER = [
+  '0000000000000000000000000000000000000000000000000000000000000000',
+  '0100000000000000000000000000000000000000000000000000000000000000',
+  '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+  'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+];
+/** The order of the Ed25519 base point. */
+const GROUP_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
+
+/** Whether 255 bits, little-endian, are at least p = 2^255 - 19 (a non-canonical field element). */
+export function atLeastP(bytes: Uint8Array): boolean {
+  if ((bytes[31] & 0x7f) !== 0x7f) return false;
+  for (let i = 30; i >= 1; i--) if (bytes[i] !== 0xff) return false;
+  return bytes[0] >= 0xed;
+}
+
+/** An Ed25519 point encoding: canonical, and not a small-order point (the identity among them). */
+export function isUsableEd25519Key(hex: string): boolean {
+  if (typeof hex !== 'string' || !DIGEST.test(hex)) return false;
+  const y = hexToBytes(hex);
+  y[31] &= 0x7f;
+  return !atLeastP(y) && !ED25519_SMALL_ORDER.includes(bytesToHex(y));
+}
+
+function scalarBelowOrder(s: Uint8Array): boolean {
+  let n = 0n;
+  for (let i = 31; i >= 0; i--) n = (n << 8n) | BigInt(s[i]);
+  return n < GROUP_ORDER;
+}
+
+/**
+ * Strict Ed25519 verification of `signature` over `message` by `publicKey` (raw bytes): the key and
+ * `R` must be canonical points of large order and `S` below the group order. False on any error.
+ */
 export async function verifyEd25519(publicKey: Uint8Array, signature: Uint8Array, message: Uint8Array): Promise<boolean> {
   try {
+    if (publicKey?.length !== 32 || signature?.length !== 64 || !(message instanceof Uint8Array)) return false;
+    if (!isUsableEd25519Key(bytesToHex(publicKey)) || !isUsableEd25519Key(bytesToHex(signature.subarray(0, 32)))) return false;
+    if (!scalarBelowOrder(signature.subarray(32))) return false;
     await ready();
     return Ed25519PublicKey.fromHex(Ed25519PublicKeyHex(bytesToHex(publicKey))).verify(Ed25519Signature.fromBytes(signature), HexBlob(bytesToHex(message)));
   } catch {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Reading parsed CBOR
 
 function bytesOf(v: Value, length?: number): Uint8Array {
   if (v?.type !== 'bytes' || (length !== undefined && v.value.length !== length)) return refuse('MALFORMED_PROOF');
@@ -136,10 +192,38 @@ function isInt(v: Value, n: bigint): boolean {
   return v?.type === 'int' && v.value === n;
 }
 
+/** A value read by `cborg` at ingest, as the canonical writer writes it. */
+function writable(v: unknown, depth = 0): CborWritable {
+  if (depth > LIMITS.maxDepth) return refuse('MALFORMED_PROOF');
+  if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'string' || typeof v === 'boolean' || v instanceof Uint8Array) return v;
+  if (Array.isArray(v)) return v.map(x => writable(x, depth + 1));
+  if (v instanceof Map) {
+    const out = new Map<number | bigint | string, CborWritable>();
+    for (const [k, x] of v) {
+      if (typeof k !== 'number' && typeof k !== 'bigint' && typeof k !== 'string') refuse('MALFORMED_PROOF');
+      out.set(k as number | bigint | string, writable(x, depth + 1));
+    }
+    return out;
+  }
+  return refuse('MALFORMED_PROOF');
+}
+
+/** Lenient decoding of what a wallet returned: indefinite lengths, set tags and a COSE_Sign1 tag allowed. */
+function lenient(bytes: Uint8Array): unknown {
+  const tags: ((inner: unknown) => unknown)[] = [];
+  tags[18] = inner => inner;
+  tags[258] = inner => inner;
+  try {
+    return lenientDecode(bytes, { useMaps: true, allowIndefinite: true, allowUndefined: false, rejectDuplicateMapKeys: true, tags });
+  } catch {
+    return refuse('MALFORMED_PROOF');
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Method 0: CIP-8
 
-/** The CIP-8 proof of an attestation: `[ bstr COSE_Sign1, bstr COSE_Key ]`, hex. */
+/** The CIP-8 proof of an attestation as given: `[ bstr COSE_Sign1, bstr COSE_Key ]`, hex. */
 export function cip8Proof(coseSign1: string, coseKey: string): string {
   const a = hexToBytes(coseSign1);
   const b = hexToBytes(coseKey);
@@ -147,47 +231,70 @@ export function cip8Proof(coseSign1: string, coseKey: string): string {
   return bytesToHex(encodeCanonicalCbor([a, b]));
 }
 
-/**
- * COSE_Key of an Ed25519 key, as CIP-30 returns it: kty OKP, alg EdDSA, crv Ed25519, x, and an
- * optional kid. The COSE_Key is not signed, so its kid is returned for the caller to bind.
- */
-function coseKey(bytes: Uint8Array): { readonly x: Uint8Array; readonly kid?: Uint8Array } {
-  const key = entries(parse(bytes).value, 'UNSUPPORTED_KEY');
+const canonicalCoseKey = (x: Uint8Array) => encodeCanonicalCbor(new Map<number, CborWritable>([[1, 1], [3, -8], [-1, 6], [-2, x]]));
+const canonicalSign1 = (protectedBytes: Uint8Array, payload: Uint8Array, signature: Uint8Array) =>
+  encodeCanonicalCbor([protectedBytes, new Map<number, CborWritable>(), payload, signature]);
+
+/** The signed protected header: alg EdDSA, and optionally a kid and the CIP-30 address. */
+function protectedHeader(protectedBytes: Uint8Array): { readonly signedId?: Uint8Array } {
+  const headers = entries(parse(protectedBytes).value, 'UNSUPPORTED_HEADER');
+  for (const label of headers.keys()) if (label !== 1 && label !== 4 && label !== 'address') refuse('UNSUPPORTED_HEADER');
+  if (!isInt(headers.get(1), -8n)) refuse('UNSUPPORTED_HEADER');
+  for (const label of [4, 'address']) if (headers.has(label) && headers.get(label).type !== 'bytes') refuse('UNSUPPORTED_HEADER');
+  const kid = headers.has(4) ? bytesOf(headers.get(4)) : undefined;
+  const address = headers.has('address') ? bytesOf(headers.get('address')) : undefined;
+  if (kid && address && !sameBytes(kid, address)) refuse('UNSUPPORTED_HEADER');
+  return { signedId: address ?? kid };
+}
+
+/** The canonical stored form of a CIP-8 proof a wallet returned, without checking the signature. */
+function canonicalCip8(proof: Uint8Array): Uint8Array {
+  const root = lenient(proof);
+  if (!Array.isArray(root) || root.length !== 2 || !(root[0] instanceof Uint8Array) || !(root[1] instanceof Uint8Array)) refuse('MALFORMED_PROOF');
+  const [sign1Bytes, keyBytes] = root as Uint8Array[];
+  const sign1 = lenient(sign1Bytes);
+  if (!Array.isArray(sign1) || sign1.length !== 4) return refuse('MALFORMED_PROOF');
+  const [protectedBytes, unprotected, payload, signature] = sign1;
+  if (!(protectedBytes instanceof Uint8Array) || !(payload instanceof Uint8Array) || !(signature instanceof Uint8Array) || signature.length !== 64) {
+    refuse('MALFORMED_PROOF');
+  }
+  if (!(unprotected instanceof Map)) return refuse('MALFORMED_PROOF');
+  for (const [label, value] of unprotected) if (label !== 'hashed' || value !== false) refuse('UNSUPPORTED_HEADER');
+  const { signedId } = protectedHeader(protectedBytes as Uint8Array);
+  const key = lenient(keyBytes);
+  if (!(key instanceof Map)) return refuse('UNSUPPORTED_KEY');
   for (const label of key.keys()) if (![1, 2, 3, -1, -2].includes(label as number)) refuse('UNSUPPORTED_KEY');
-  if (!isInt(key.get(1), 1n) || !isInt(key.get(-1), 6n) || (key.has(3) && !isInt(key.get(3), -8n))) refuse('UNSUPPORTED_KEY');
-  if (key.has(2) && key.get(2).type !== 'bytes') refuse('UNSUPPORTED_KEY');
-  const x = bytesOf(key.get(-2), 32);
-  return key.has(2) ? { x, kid: bytesOf(key.get(2)) } : { x };
+  if (key.get(1) !== 1 || key.get(-1) !== 6 || (key.has(3) && key.get(3) !== -8)) refuse('UNSUPPORTED_KEY');
+  const x = key.get(-2);
+  if (!(x instanceof Uint8Array) || x.length !== 32) return refuse('UNSUPPORTED_KEY');
+  // The COSE_Key is not signed: a kid must repeat the signed address, then it is dropped.
+  if (key.has(2)) {
+    const kid = key.get(2);
+    if (!(kid instanceof Uint8Array) || !signedId || !sameBytes(kid, signedId)) refuse('UNSUPPORTED_KEY');
+  }
+  return encodeCanonicalCbor([canonicalSign1(protectedBytes as Uint8Array, payload as Uint8Array, signature as Uint8Array), canonicalCoseKey(x)]);
 }
 
 async function verifyCip8(proof: Uint8Array, credential: string, digest: Uint8Array): Promise<void> {
   const root = parse(proof);
   if (root.value.type !== 'array' || root.value.value.length !== 2) refuse('MALFORMED_PROOF');
   const [sign1Bytes, keyBytes] = (root.value as { value: readonly Item[] }).value.map(i => bytesOf(i.value));
-  if (!sameBytes(encodeCanonicalCbor([sign1Bytes, keyBytes]), proof)) refuse('NOT_CANONICAL');
-
-  const { x, kid } = coseKey(keyBytes);
-  if (keyHashOf(x) !== credential) refuse('WRONG_KEY');
-
   const sign1 = parse(sign1Bytes).value;
   if (sign1.type !== 'array' || sign1.value.length !== 4) return refuse('MALFORMED_PROOF');
-  const [protectedItem, unprotectedItem, payloadItem, signatureItem] = sign1.value;
+  const [protectedItem, , payloadItem, signatureItem] = sign1.value;
   const protectedBytes = bytesOf(protectedItem.value);
-  const headers = entries(parse(protectedBytes).value, 'UNSUPPORTED_HEADER');
-  for (const label of headers.keys()) if (label !== 1 && label !== 4 && label !== 'address') refuse('UNSUPPORTED_HEADER');
-  if (!isInt(headers.get(1), -8n)) refuse('UNSUPPORTED_HEADER');
-  for (const label of [4, 'address']) if (headers.has(label) && headers.get(label).type !== 'bytes') refuse('UNSUPPORTED_HEADER');
-  // Unsigned identifiers must repeat a signed one, so the proof has no free bytes.
-  const signedId = headers.has('address') ? bytesOf(headers.get('address')) : headers.has(4) ? bytesOf(headers.get(4)) : undefined;
-  if (headers.has(4) && headers.has('address') && !sameBytes(bytesOf(headers.get(4)), signedId)) refuse('UNSUPPORTED_HEADER');
-  if (kid && (!signedId || !sameBytes(kid, signedId))) refuse('UNSUPPORTED_KEY');
-  const unprotected = entries(unprotectedItem.value, 'UNSUPPORTED_HEADER');
-  for (const [label, value] of unprotected) {
-    if (label !== 'hashed' || value.type !== 'bool' || value.value !== false) refuse('UNSUPPORTED_HEADER');
-  }
   const payload = bytesOf(payloadItem.value);
-  if (!sameBytes(payload, digest)) refuse('WRONG_PAYLOAD');
   const signature = bytesOf(signatureItem.value, 64);
+  const key = entries(parse(keyBytes).value, 'UNSUPPORTED_KEY');
+  const x = key.get(-2)?.type === 'bytes' ? bytesOf(key.get(-2), 32) : refuse('UNSUPPORTED_KEY');
+  // The one stored form: anything a wallet may vary is fixed by `ingestAttestation`.
+  if (!sameBytes(keyBytes, canonicalCoseKey(x)) || !sameBytes(sign1Bytes, canonicalSign1(protectedBytes, payload, signature))
+    || !sameBytes(proof, encodeCanonicalCbor([sign1Bytes, keyBytes]))) {
+    refuse('NOT_CANONICAL');
+  }
+  if (keyHashOf(x) !== credential) refuse('WRONG_KEY');
+  protectedHeader(protectedBytes);
+  if (!sameBytes(payload, digest)) refuse('WRONG_PAYLOAD');
   const sigStructure = encodeCanonicalCbor(['Signature1', protectedBytes, new Uint8Array(0), payload]);
   if (!(await verifyEd25519(x, signature, sigStructure))) refuse('BAD_SIGNATURE');
 }
@@ -290,9 +397,37 @@ async function verifyExpiredTx(proof: Uint8Array, credential: string, subject: A
 
 // ---------------------------------------------------------------------------------------------
 
+function proofBytes(attestation: OwnerAttestation): Uint8Array {
+  const hex = attestation?.proof;
+  if (typeof hex !== 'string' || !HEX.test(hex) || hex.length > MAX_ATTESTATION_BYTES * 2) return refuse('MALFORMED_PROOF');
+  return hexToBytes(hex);
+}
+
 /**
- * Verifies an attestation by the vault payment key whose hash is `credential` over `subject`.
- * CIP-8 is accepted for binding digests only. Never throws.
+ * The canonical stored form of an attestation a wallet returned, after the layout checks (a CIP-8
+ * `kid` must repeat the signed address) but before any signature check: `ingestAttestation` does
+ * both. Never throws.
+ */
+export function canonicalAttestation(attestation: OwnerAttestation):
+  | { readonly ok: true; readonly attestation: OwnerAttestation }
+  | { readonly ok: false; readonly code: AttestationRefusalCode } {
+  try {
+    const proof = proofBytes(attestation);
+    let canonical: Uint8Array;
+    if (attestation.method === ATTESTATION_METHOD.CIP8) canonical = canonicalCip8(proof);
+    else if (attestation.method === ATTESTATION_METHOD.EXPIRED_TX) canonical = encodeCanonicalCbor(writable(lenient(proof)));
+    else return { ok: false, code: 'UNKNOWN_METHOD' };
+    if (canonical.length > MAX_ATTESTATION_BYTES) return { ok: false, code: 'MALFORMED_PROOF' };
+    return { ok: true, attestation: Object.freeze({ method: attestation.method, proof: bytesToHex(canonical) }) };
+  } catch (e) {
+    return { ok: false, code: e instanceof Refusal ? e.code : 'MALFORMED_PROOF' };
+  }
+}
+
+/**
+ * Verifies a stored attestation by the vault payment key whose hash is `credential` over
+ * `subject`. Only the canonical stored form verifies. CIP-8 is accepted for binding digests only.
+ * Never throws.
  */
 export async function verifyAttestation(attestation: OwnerAttestation, credential: string, subject: AttestedDigest): Promise<AttestationCheck> {
   try {
@@ -301,11 +436,7 @@ export async function verifyAttestation(attestation: OwnerAttestation, credentia
     } catch {
       return { ok: false, code: 'INVALID_INPUT' };
     }
-    const proofHex = attestation?.proof;
-    if (typeof proofHex !== 'string' || !HEX.test(proofHex) || proofHex.length > MAX_ATTESTATION_BYTES * 2) {
-      return { ok: false, code: 'MALFORMED_PROOF' };
-    }
-    const proof = hexToBytes(proofHex);
+    const proof = proofBytes(attestation);
     if (attestation.method === ATTESTATION_METHOD.CIP8) {
       if (subject.kind !== 'binding') return { ok: false, code: 'METHOD_NOT_ALLOWED' };
       await verifyCip8(proof, credential, hexToBytes(subject.digest));
@@ -318,4 +449,25 @@ export async function verifyAttestation(attestation: OwnerAttestation, credentia
   } catch (e) {
     return { ok: false, code: e instanceof Refusal ? e.code : 'MALFORMED_PROOF' };
   }
+}
+
+/**
+ * Ingest: takes an attestation as a wallet returned it, brings it to the canonical stored form
+ * and verifies that. The result is what a manifest or a record stores. Never throws.
+ */
+export async function ingestAttestation(
+  attestation: OwnerAttestation,
+  credential: string,
+  subject: AttestedDigest,
+): Promise<{ readonly ok: true; readonly attestation: OwnerAttestation } | { readonly ok: false; readonly code: AttestationRefusalCode }> {
+  const canonical = canonicalAttestation(attestation);
+  if (canonical.ok === false) return canonical;
+  const check = await verifyAttestation(canonical.attestation, credential, subject);
+  return check.ok === true ? canonical : check;
+}
+
+/** Whether an attestation is in the canonical stored form (layout only, no signature check). */
+export function isCanonicalAttestation(attestation: OwnerAttestation): boolean {
+  const canonical = canonicalAttestation(attestation);
+  return canonical.ok === true && canonical.attestation.proof === attestation.proof && canonical.attestation.method === attestation.method;
 }

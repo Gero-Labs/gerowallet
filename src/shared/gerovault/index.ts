@@ -52,13 +52,20 @@ export {
   ATTESTATION_METHOD,
   MAX_ATTESTATION_BYTES,
   assembleExpiredTx,
+  canonicalAttestation,
   cip8Proof,
   expiredTxAuxiliaryData,
   expiredTxBody,
   expiredTxBodyHash,
+  ingestAttestation,
+  isCanonicalAttestation,
+  isUsableEd25519Key,
   verifyAttestation,
+  verifyEd25519,
 } from './attestation';
 export type { AttestationCheck, AttestationRefusalCode, AttestedDigest, OwnerAttestation } from './attestation';
+export { readLabel, writeLabel, displayLabel } from './labels';
+export { isManifestAck } from './ackBrand';
 export * from './manifest';
 export * from './manifestCheck';
 export * from './verificationNumber';
