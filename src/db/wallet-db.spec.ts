@@ -42,12 +42,12 @@ afterEach(async () => {
 });
 
 describe('wallet database upgrades', () => {
-  for (const version of [3, 4, 5, 6, 7, 8, 9, 10, 10.1]) {
+  for (const version of [3, 4, 5, 6, 7, 8, 9, 10, 10.1, 11]) {
     it(`preserves records upgrading version ${version} through concurrent openers`, async () => {
       const id = walletId();
       const legacy = connection(id);
       // 10.1 models Dexie's native-version bump after the conflicting v10 opener.
-      const hasMultisig = (version >= 6 && version <= 8) || version === 10.1;
+      const hasMultisig = (version >= 6 && version <= 8) || version >= 10.1;
       legacy.version(version).stores({
         ...original,
         ...(hasMultisig ? { multisig } : {}),
@@ -75,13 +75,15 @@ describe('wallet database upgrades', () => {
       const ui = connection(id);
       databaseSetup.setWalletDBVersionSchema(ui);
       const [background] = await Promise.all([openWallet(id), ui.open()]);
-      expect(background.backendDB().version).toBe(110);
-      expect(ui.backendDB().version).toBe(110);
+      expect(background.backendDB().version).toBe(120);
+      expect(ui.backendDB().version).toBe(120);
       expect(ui.tables.map(t => t.name).sort()).toEqual(background.tables.map(t => t.name).sort());
       expect(background.tables.map(t => t.name)).toContain('multisig');
       for (const [table, record] of Object.entries(records)) {
         expect(await background.table(table).toArray()).toEqual([record]);
       }
+      // Version 12 adds the GeroVault table, empty, beside the legacy multisig one.
+      expect(await background.table('vaults').count()).toBe(0);
       expect(warn.mock.calls.flat().join(' ')).not.toMatch(/SchemaDiff|without increasing|blocked by other connection/);
     });
   }
@@ -95,7 +97,7 @@ describe('wallet database upgrades', () => {
     databases[0].close();
     const reopened = await openWallet(id);
     expect(reopened).not.toBe(databases[0]);
-    expect(reopened.backendDB().version).toBe(110);
+    expect(reopened.backendDB().version).toBe(120);
   });
 
   it('allows retry after a failed open instead of caching failure', async () => {
@@ -106,6 +108,13 @@ describe('wallet database upgrades', () => {
     expect(failed).toEqual([null, null]);
     expect(open).toHaveBeenCalledTimes(1);
     open.mockRestore();
-    expect((await openWallet(id)).backendDB().version).toBe(110);
+    expect((await openWallet(id)).backendDB().version).toBe(120);
+  });
+
+  it('declares the vaults table with the vault id as its key', async () => {
+    const db = await openWallet(walletId());
+    const vaults = db.table('vaults');
+    expect(vaults.schema.primKey.keyPath).toBe('vaultId');
+    expect(vaults.schema.indexes.map(index => index.name).sort()).toEqual(['network', 'status', 'updatedAt']);
   });
 });
