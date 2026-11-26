@@ -240,6 +240,13 @@ export type RestoreRefusalCode =
   /** A Plutus vault, whose derivation needs the audited template (GV-64). */
   | 'PLUTUS_TEMPLATE_UNAVAILABLE';
 
+/**
+ * A vault rebuilt from a package and confirmed on chain. It proves that the scripts are on chain,
+ * rebuild from the package's keys and contain the restoring seed's keys; it does not prove that
+ * this participant accepted the vault, since anyone who hands over a package and its passphrase
+ * can seal one. A screen must not present it as accepted on that basis alone: like a discovered
+ * candidate (spec 4.0), it shows the exact scripts, threshold and participants for review.
+ */
 export interface RestoredVault {
   readonly kind: 'native';
   readonly network: VaultNetwork;

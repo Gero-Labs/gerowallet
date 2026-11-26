@@ -325,6 +325,9 @@ describe('restore of a native vault', () => {
       [{ ...pkg, self: { position: 9, index: 1 } }, { roleKeys: people[0], chain }],
       [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: 'none' } }],
       [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: [], revealedScripts: ['zz'] } }],
+      [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: [], revealedScripts: ['abc'] } }],
+      [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: [], revealedScripts: [''] } }],
+      [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: [], revealedScripts: [42] } }],
     ];
     for (const [p, options] of cases) {
       const r = await restoreVaultFromPackage(p as RecoveryPackage, options as never);

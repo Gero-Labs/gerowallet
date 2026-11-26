@@ -208,7 +208,7 @@ export async function sealRecoveryFile(payload: Uint8Array, passphrase: string, 
   }
   const salt = randomOrGiven(options.salt, RECOVERY_SALT_BYTES, 'salt');
   const nonce = randomOrGiven(options.nonce, RECOVERY_NONCE_BYTES, 'nonce');
-  const { key, check } = await deriveKeys(secret, salt, RECOVERY_KDF);
+  const { key, check } = await deriveKeys(secret, salt, RECOVERY_KDF).finally(() => secret.fill(0));
   try {
     const header = encodeHeader({ version: RECOVERY_FORMAT_VERSION, kdf: RECOVERY_KDF, salt, nonce, check, ciphertextLength });
     const ciphertext = xchacha20poly1305(key, nonce, header).encrypt(payload);
@@ -292,6 +292,8 @@ export async function openRecoveryFile(file: unknown, passphrase: unknown): Prom
     derived = await deriveKeys(secret, read.header.salt, read.header.kdf);
   } catch {
     return refuse('KDF_OUT_OF_RANGE', 'derivation failed');
+  } finally {
+    secret.fill(0);
   }
   try {
     if (!equalBytes(derived.check, read.header.check)) return refuse('WRONG_PASSPHRASE');
