@@ -13,6 +13,7 @@ import { Bip32PrivateKey, ready } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { CARDANO_COIN_TYPE, CIP146_ACCOUNT, CIP1854_PURPOSE, ROLE } from '@/shared/gerovault';
 import type { VaultVkeyWitness } from '@/modules/gerovault/contracts';
+import { withDerivedKey } from '@/modules/gerovault/keyWipe';
 import { WalletType, type Wallet } from '@/models/types';
 import { spendError } from './errors';
 
@@ -40,8 +41,9 @@ export function signerSupport(wallet: SignerWallet | null | undefined): VaultSig
 
 /**
  * Signs `txId` with the payment key at `m/1854'/1815'/0'/0/ownIndex` of `rootKeyBytes`, after
- * checking that key hashes to `expectedCredential`. Throws `KEY_MISMATCH` otherwise. The caller
- * owns `rootKeyBytes` and overwrites them.
+ * checking that key hashes to `expectedCredential`. Throws `KEY_MISMATCH` otherwise. Every private
+ * key derived on the way, and the signing key, are overwritten before this returns; the caller owns
+ * `rootKeyBytes` and overwrites them.
  */
 export async function signWithRootKey(
   rootKeyBytes: Uint8Array,
@@ -53,10 +55,15 @@ export async function signWithRootKey(
   if (!Number.isInteger(ownIndex) || ownIndex < 0 || ownIndex >= HARDENED) spendError('KEY_MISMATCH', 'Not a vault index');
   await ready();
   const root = Bip32PrivateKey.fromBytes(rootKeyBytes);
-  const key = root
-    .derive([HARDENED + CIP1854_PURPOSE, HARDENED + CARDANO_COIN_TYPE, HARDENED + CIP146_ACCOUNT, ROLE.PAYMENT, ownIndex])
-    .toRawKey();
-  const publicKey = key.toPublic();
-  if (publicKey.hash().hex() !== expectedCredential) spendError('KEY_MISMATCH', 'This wallet\'s key at its vault index is not the vault\'s');
-  return Object.freeze({ vkey: publicKey.hex(), signature: key.sign(HexBlob(txId)).hex() });
+  const path = [HARDENED + CIP1854_PURPOSE, HARDENED + CARDANO_COIN_TYPE, HARDENED + CIP146_ACCOUNT, ROLE.PAYMENT, ownIndex];
+  return withDerivedKey(root, path, bip32 => {
+    const key = bip32.toRawKey();
+    try {
+      const publicKey = key.toPublic();
+      if (publicKey.hash().hex() !== expectedCredential) spendError('KEY_MISMATCH', 'This wallet\'s key at its vault index is not the vault\'s');
+      return Object.freeze({ vkey: publicKey.hex(), signature: key.sign(HexBlob(txId)).hex() });
+    } finally {
+      key.bytes().fill(0);
+    }
+  });
 }

@@ -16,14 +16,16 @@
  * - an output to the vault's payment script under another stake key is shown as leaving the vault;
  * - the fee is at most the native bound (the decoder refuses above it), with a warning above
  *   the warning level;
- * - the transaction expires, not after seven days from now, and has not expired yet.
+ * - the transaction expires, not after seven days from now, and has not expired yet;
+ * - a validity start, when there is one, is not ahead of the tip by more than a small tolerance and
+ *   not further back than the expiry window: the sheet shows it.
  *
  * The result is either a complete review or every refusal found: never a partial sheet.
  */
 import { decodeVaultTransaction } from '@/shared/gerovault/decode';
 import type { OutputView, Refusal, RefusalCode, TokenAmount, ValueView, VaultTxSummary } from '@/shared/gerovault/decode';
 import type { UnsignedTxBundle, VaultRecord } from '@/modules/gerovault/contracts';
-import { MAX_VALIDITY_SLOTS, NATIVE_FEE_MAX_LOVELACE, NATIVE_FEE_WARN_LOVELACE } from './constants';
+import { MAX_VALIDITY_SLOTS, NATIVE_FEE_MAX_LOVELACE, NATIVE_FEE_WARN_LOVELACE, VALIDITY_START_TOLERANCE_SLOTS } from './constants';
 import { bundleTxSource, unsignedTransaction } from './bundle';
 import { vaultBaseAddress, type VaultSpendContext } from './vaultSpendContext';
 
@@ -44,7 +46,11 @@ export type VaultSpendRefusalCode =
   /** Its expiry slot is already past. */
   | 'expired'
   /** Its expiry slot is more than seven days ahead. */
-  | 'expiry_too_far';
+  | 'expiry_too_far'
+  /** Its validity start is ahead of the tip by more than the tolerance. */
+  | 'validity_start_future'
+  /** Its validity start is further back than the expiry window. */
+  | 'validity_start_too_old';
 
 export type SpendRefusalCode = RefusalCode | VaultSpendRefusalCode;
 
@@ -189,6 +195,12 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
   else if (options.currentSlot === null || !Number.isSafeInteger(options.currentSlot)) refuse('expired', 'body.3', 'tip_unknown');
   else if (Number(expiry) <= options.currentSlot) refuse('expired', 'body.3');
   else if (Number(expiry) - options.currentSlot > MAX_VALIDITY_SLOTS) refuse('expiry_too_far', 'body.3');
+
+  const start = summary.validity.invalidBefore;
+  if (start !== null && options.currentSlot !== null && Number.isSafeInteger(options.currentSlot)) {
+    if (Number(start) > options.currentSlot + VALIDITY_START_TOLERANCE_SLOTS) refuse('validity_start_future', 'body.8');
+    else if (options.currentSlot - Number(start) > MAX_VALIDITY_SLOTS) refuse('validity_start_too_old', 'body.8');
+  }
 
   const known = options.knownVaults ?? [];
   const outputs: ReviewOutput[] = summary.outputs.map((output, index) => {

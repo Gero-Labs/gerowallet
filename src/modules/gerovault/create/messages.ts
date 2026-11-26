@@ -84,6 +84,7 @@ export const VERIFIED_BY_KEYS: Readonly<Record<'number' | 'qr' | 'external' | 'e
 const SAVE_PROBLEM_KEYS: Readonly<Record<string, string>> = {
   VAULT_EXISTS: 'gerovault.create.saveProblem.exists',
   STORE_UNAVAILABLE: 'gerovault.create.saveProblem.store',
+  INDEX_TAKEN: 'gerovault.create.saveProblem.indexTaken',
 };
 
 /** A store or library code from Save. Unknown codes show with the code itself. */

@@ -56,6 +56,14 @@
           </dd>
         </div>
 
+        <div v-if="review.invalidBefore !== null" class="approval-sheet__row" data-test="sheet-valid-from">
+          <dt class="t-body">{{ $t('gerovault.spend.sheet.validFrom') }}</dt>
+          <dd class="t-body approval-sheet__value">
+            {{ slotText(review.invalidBefore) }}
+            <span v-if="details" class="g-mono t-caption approval-sheet__detail">{{ $t('gerovault.spend.sheet.slot', { slot: review.invalidBefore }) }}</span>
+          </dd>
+        </div>
+
         <div class="approval-sheet__row">
           <dt class="t-body">{{ $t('gerovault.spend.sheet.expires') }}</dt>
           <dd class="t-body approval-sheet__value">
@@ -113,11 +121,11 @@ const generalWarnings = computed(() => warnings.value.filter(w => w.output === u
 const warningsFor = (index: number) => warnings.value.filter(w => w.output === index);
 const vaultName = (output: ReviewOutput) => (output.vault?.name !== undefined ? displayLabel(output.vault.name) : output.vault?.vaultId.slice(0, 8) ?? '');
 
-const expiresText = computed(() => {
-  if (props.review.status !== 'ready') return '';
-  const ms = slotTimeMs(props.network, props.review.invalidHereafter);
-  return ms === undefined ? String(props.review.invalidHereafter) : new Date(ms).toLocaleString();
-});
+const slotText = (slot: number): string => {
+  const ms = slotTimeMs(props.network, slot);
+  return ms === undefined ? String(slot) : new Date(ms).toLocaleString();
+};
+const expiresText = computed(() => (props.review.status === 'ready' ? slotText(props.review.invalidHereafter) : ''));
 </script>
 
 <style scoped>

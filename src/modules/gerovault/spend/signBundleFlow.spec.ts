@@ -3,17 +3,20 @@
 // at the record's own index, checked against the record's credential, used once and wiped. Only a
 // witness file comes back. Keys are generated here.
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import type { UnsignedTxBundle, VaultRecord } from '@/modules/gerovault/contracts';
 import { WalletType } from '@/models/types';
 import { buildVaultSpend } from './buildSpend';
 import { createUnsignedBundle } from './bundle';
-import { signVaultBundleFlow, type SignVaultBundleDeps } from './signBundleFlow';
-import { spendContextOf } from './vaultSpendContext';
+import { TIP_CLOCK_TOLERANCE_MS, signVaultBundleFlow, slotOnNetwork, type SignVaultBundleDeps } from './signBundleFlow';
+import { VALIDITY_START_TOLERANCE_SLOTS } from './constants';
+import { spendContextOf, type VaultSpendContext } from './vaultSpendContext';
 import { verifyWitnessFile } from './witnesses';
 import { TEST_PARAMS, fundingTransaction, lovelaceOutput, payeeAddress, seededRandom, testOwner, testReader, testVaultRecord, type TestOwner } from './__fixtures__/testVault';
 
 const TIP = 80_000_000;
-const WALLET = { id: 21, type: WalletType.Normal, encryptionMethod: 'password' as const, encryptedPrivateKey: 'sealed' };
+const WALLET = { id: 21, network: 'Preprod', type: WalletType.Normal, encryptionMethod: 'password' as const, encryptedPrivateKey: 'sealed' };
 
 let owners: TestOwner[];
 let records: VaultRecord[];
@@ -139,5 +142,90 @@ describe('signing a vault bundle in the background', () => {
     expect(await code(signVaultBundleFlow(request(1), candidate.deps))).toBe('not-accepted');
     const broken = background(1, { getVault: vi.fn(async () => ({ ...records[1], paymentScriptHash: 'ef'.repeat(28) })) });
     expect(await code(signVaultBundleFlow(request(1), broken.deps))).toBe('vault-invalid');
+  });
+
+  it('signs only on a network the slice opens, and only for a vault on the wallet\'s own network', async () => {
+    const mainnet = await testVaultRecord(owners, 2, 1, { network: 'mainnet' });
+    const onMainnet = background(1, { wallet: () => ({ ...WALLET, network: 'Mainnet' }), getVault: vi.fn(async () => mainnet) });
+    expect(await code(signVaultBundleFlow(request(1, { vaultId: mainnet.vaultId }), onMainnet.deps))).toBe('network-closed');
+    const previewWallet = background(1, { wallet: () => ({ ...WALLET, network: 'Preview' }) });
+    expect(await code(signVaultBundleFlow(request(1), previewWallet.deps))).toBe('network-closed');
+    const noNetwork = background(1, { wallet: () => ({ ...WALLET, network: undefined }) });
+    expect(await code(signVaultBundleFlow(request(1), noNetwork.deps))).toBe('network-closed');
+    for (const deps of [onMainnet.deps, previewWallet.deps, noNetwork.deps]) expect(deps.decryptRootKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('the bundle the background re-checks, built by hand', () => {
+  /** A spend of 10 ADA from the vault, with `change` merged into the change output and `validity` into the interval. */
+  async function handBuilt(context: VaultSpendContext, change: Partial<Cardano.TxOut> = {}, validity: Partial<Cardano.ValidityInterval> = {}) {
+    const funding = fundingTransaction([lovelaceOutput(context.baseAddress, 40_000_000n)], 7);
+    const { reader } = testReader([funding]);
+    const body: Cardano.TxBody = {
+      inputs: [{ txId: Cardano.TransactionId(funding.id), index: 0 }],
+      outputs: [lovelaceOutput(payeeAddress(), 10_000_000n), { ...lovelaceOutput(context.baseAddress, 29_800_000n), ...change }],
+      fee: 200_000n,
+      validityInterval: { invalidHereafter: Cardano.Slot(TIP + 3600), ...validity },
+    };
+    const bodyCbor = Serialization.TransactionBody.fromCore(body).toCbor();
+    return createUnsignedBundle(context, { bodyCbor, txId: Serialization.TransactionBody.fromCbor(HexBlob(bodyCbor)).hash() }, reader.txCbor, 1);
+  }
+
+  it('signs a clean spend, and refuses change to the vault that carries a datum before opening the key', async () => {
+    const context = await spendContextOf(records[1]);
+    const clean = await handBuilt(context);
+    expect((await signVaultBundleFlow(request(1, { bundle: clean }), background(1).deps)).txId).toBe(clean.txId);
+
+    const withDatum = await handBuilt(context, { datum: Serialization.PlutusData.fromCbor(HexBlob('d87980')).toCore() });
+    const { deps } = background(1);
+    await expect(signVaultBundleFlow(request(1, { bundle: withDatum }), deps)).rejects.toMatchObject({ code: 'bundle-refused', detail: 'vault_output_datum' });
+    expect(deps.decryptRootKey).not.toHaveBeenCalled();
+  });
+
+  it('bounds a validity start: not ahead of the tip beyond the tolerance, not older than the expiry window', async () => {
+    const context = await spendContextOf(records[1]);
+    const tip = TIP + 30;
+    const soon = await handBuilt(context, {}, { invalidBefore: Cardano.Slot(tip + VALIDITY_START_TOLERANCE_SLOTS) });
+    expect((await signVaultBundleFlow(request(1, { bundle: soon }), background(1).deps)).txId).toBe(soon.txId);
+    const later = await handBuilt(context, {}, { invalidBefore: Cardano.Slot(tip + VALIDITY_START_TOLERANCE_SLOTS + 1) });
+    await expect(signVaultBundleFlow(request(1, { bundle: later }), background(1).deps)).rejects.toMatchObject({ code: 'bundle-refused', detail: 'validity_start_future' });
+    const old = await handBuilt(context, {}, { invalidBefore: Cardano.Slot(tip - 7 * 24 * 3600 - 1) });
+    await expect(signVaultBundleFlow(request(1, { bundle: old }), background(1).deps)).rejects.toMatchObject({ code: 'bundle-refused', detail: 'validity_start_too_old' });
+  });
+});
+
+describe('the worker\'s tip, read on the vault\'s network', () => {
+  const NOW = Date.UTC(2026, 10, 26, 12);
+  const preprodNow = 86_400 + (NOW / 1000 - 1_655_769_600);
+  const mainnetNow = 4_492_800 + (NOW / 1000 - 1_596_059_091);
+
+  it('takes a slot only when it is that network\'s now, within a day', () => {
+    expect(slotOnNetwork('preprod', preprodNow, NOW)).toBe(preprodNow);
+    expect(slotOnNetwork('preprod', preprodNow - 3600, NOW)).toBe(preprodNow - 3600);
+    expect(slotOnNetwork('preprod', preprodNow - TIP_CLOCK_TOLERANCE_MS / 1000 - 1, NOW)).toBeNull();
+    expect(slotOnNetwork('preprod', mainnetNow, NOW)).toBeNull();
+    expect(slotOnNetwork('mainnet', preprodNow, NOW)).toBeNull();
+    expect(slotOnNetwork('preprod', Number.NaN, NOW)).toBeNull();
+    expect(slotOnNetwork('preprod', -1, NOW)).toBeNull();
+  });
+
+  it('refuses a far expiry that another network\'s tip would have let through', async () => {
+    // Built against a mainnet tip: on preprod its expiry lies years ahead.
+    const context = await spendContextOf(records[1]);
+    const { reader } = testReader([fundingTransaction([lovelaceOutput(context.baseAddress, 40_000_000n)])]);
+    const built = await buildVaultSpend({
+      context,
+      utxos: await reader.utxos(context.baseAddress),
+      recipients: [{ address: payeeAddress(), lovelace: 5_000_000n }],
+      protocolParameters: TEST_PARAMS,
+      currentSlot: mainnetNow,
+      random: seededRandom(3),
+    });
+    const farBundle = await createUnsignedBundle(context, built, reader.txCbor, 1);
+    const worker = (tipSlot: number) => background(1, { currentSlot: network => slotOnNetwork(network, tipSlot, NOW) });
+    // The stored tip is mainnet's: it is no tip for a preprod vault, so the sheet refuses.
+    await expect(signVaultBundleFlow(request(1, { bundle: farBundle }), worker(mainnetNow).deps)).rejects.toMatchObject({ code: 'bundle-refused', detail: 'expired' });
+    // With preprod's own tip the expiry is seen for what it is.
+    await expect(signVaultBundleFlow(request(1, { bundle: farBundle }), worker(preprodNow).deps)).rejects.toMatchObject({ code: 'bundle-refused', detail: 'expiry_too_far' });
   });
 });

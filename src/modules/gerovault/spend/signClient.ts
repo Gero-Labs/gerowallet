@@ -25,6 +25,7 @@ const CODES: Readonly<Record<string, VaultSpendErrorCode>> = {
   'not-found': 'UNSUPPORTED_WALLET',
   'not-supported': 'UNSUPPORTED_WALLET',
   'not-accepted': 'VAULT_NOT_ACCEPTED',
+  'network-closed': 'NETWORK_CLOSED',
   'vault-invalid': 'VAULT_INVALID',
   'not-owner': 'NOT_AN_OWNER',
   'bundle-invalid': 'BUNDLE_INVALID',

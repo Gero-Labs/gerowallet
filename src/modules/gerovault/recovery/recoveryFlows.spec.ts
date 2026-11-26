@@ -308,6 +308,23 @@ describe('recovery import', () => {
     expect(again.error.value).toBe('ALREADY_HELD');
   });
 
+  it('refuses a package for a network this version keeps closed, on a wallet of that network too', async () => {
+    const people = await vectorPeople();
+    const closed = (await exportRecoveryPackage(await plutusContents(people), PASS, people[0])).file;
+    const id = walletId();
+    const flow = useRecoveryImport({
+      wallet: () => ({ walletId: id, network: 'preview' }),
+      store: vaultStore,
+      chainReader: () => mockReader(),
+      roleKeys: source(people[0]),
+    });
+    await flow.pickFile(fileOf(closed));
+    flow.passphrase.value = PASS;
+    await flow.unlock();
+    expect(flow.error.value).toBe('NETWORK_CLOSED');
+    expect(flow.step.value).toBe('failed');
+  });
+
   it('refuses a package for another network or another seed', async () => {
     const preview = importFlow({ network: 'preview' }).flow;
     await preview.pickFile(fileOf(packageFile));
@@ -370,13 +387,14 @@ describe('recovery import of a Plutus vault', () => {
 
   beforeAll(async () => {
     people = await vectorPeople();
-    file = (await exportRecoveryPackage(await plutusContents(people), PASS, people[0])).file;
+    // The vector is a preview vault; the slice restores preprod packages only.
+    file = (await exportRecoveryPackage({ ...(await plutusContents(people)), network: 'preprod' }, PASS, people[0])).file;
   });
 
   async function run(reader: VaultChainReader, plutusState?: RecoveryImportDeps['plutusState']) {
     const id = walletId();
     const flow = useRecoveryImport({
-      wallet: () => ({ walletId: id, network: 'preview' }),
+      wallet: () => ({ walletId: id, network: 'preprod' }),
       store: vaultStore,
       chainReader: () => reader,
       roleKeys: source(people[0]),

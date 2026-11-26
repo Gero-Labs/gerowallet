@@ -1,8 +1,8 @@
 // Signing with this wallet's vault key in software: the key is the one at this wallet's own vault
 // index and must be the vault's. Hardware, PassKey and Google wallets do not sign here yet. The
 // background flow around it (password, sheet, wipe) is in signBundleFlow.spec.ts.
-import { beforeAll, describe, expect, it } from 'vitest';
-import { Ed25519PublicKey, Ed25519PublicKeyHex, Ed25519Signature, Ed25519SignatureHex, ready } from '@cardano-sdk/crypto';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { Bip32PrivateKey, Ed25519PrivateKey, Ed25519PublicKey, Ed25519PublicKeyHex, Ed25519Signature, Ed25519SignatureHex, ready } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { WalletType } from '@/models/types';
 import { signWithRootKey, signerSupport } from './signer';
@@ -29,6 +29,32 @@ describe('vault signer', () => {
     await expect(signWithRootKey(owner.rootKey, 5, owner.credential, TX_ID)).rejects.toMatchObject({ code: 'KEY_MISMATCH' });
     await expect(signWithRootKey(owner.rootKey, 4, owner.stakeKeyHash, TX_ID)).rejects.toMatchObject({ code: 'KEY_MISMATCH' });
     await expect(signWithRootKey(owner.rootKey, 4, owner.credential, 'not-an-id')).rejects.toMatchObject({ code: 'KEY_MISMATCH' });
+  });
+
+  it('overwrites every derived key and the signing key, signed or refused', async () => {
+    const realDerive = Bip32PrivateKey.prototype.derive;
+    const realRaw = Bip32PrivateKey.prototype.toRawKey;
+    const derived: Bip32PrivateKey[] = [];
+    const raw: Ed25519PrivateKey[] = [];
+    vi.spyOn(Bip32PrivateKey.prototype, 'derive').mockImplementation(function (this: Bip32PrivateKey, path: number[]) {
+      const key = realDerive.call(this, path);
+      derived.push(key);
+      return key;
+    });
+    vi.spyOn(Bip32PrivateKey.prototype, 'toRawKey').mockImplementation(function (this: Bip32PrivateKey) {
+      const key = realRaw.call(this);
+      raw.push(key);
+      return key;
+    });
+    try {
+      await signWithRootKey(Uint8Array.from(owner.rootKey), 4, owner.credential, TX_ID);
+      await expect(signWithRootKey(Uint8Array.from(owner.rootKey), 5, owner.credential, TX_ID)).rejects.toMatchObject({ code: 'KEY_MISMATCH' });
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(derived).toHaveLength(10);
+    expect(raw).toHaveLength(2);
+    for (const key of [...derived, ...raw]) expect(key.bytes().every(byte => byte === 0)).toBe(true);
   });
 
   it('says which wallets sign here', () => {

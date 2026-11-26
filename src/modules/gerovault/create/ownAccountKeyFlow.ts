@@ -17,6 +17,7 @@ import { Bip32PrivateKey, ready } from '@cardano-sdk/crypto';
 import { Blockchain, CoinTypes, HARDENED, WalletType, WalletTypePurpose, type Wallet } from '@/models/types';
 import { CIP1854_ACCOUNT_PATH } from '@/shared/gerovault/paths';
 import { accountXpub, cardanoAccountPath, isHardwareWallet, resolveAccountIndex, secretsWallet } from '@/shared/utils/walletAccount';
+import { withDerivedKey } from '@/modules/gerovault/keyWipe';
 
 /**
  * - `not-found`: no such wallet.
@@ -63,15 +64,16 @@ export function canHoldVaultKeys(wallet: Pick<Wallet, 'chain' | 'type' | 'encryp
 /**
  * The multisig account key of a root key, as 128 hex characters (key and chain code), after
  * checking that the root key derives this wallet's own CIP-1852 account #0 key: a root key of any
- * other wallet is refused. The caller wipes the bytes.
+ * other wallet is refused. Every private key derived on the way is overwritten (`withDerivedKey`);
+ * the caller wipes the root key's bytes.
  */
 export async function multisigAccountKeyOfRoot(rootKeyBytes: Uint8Array, accountZeroXpub: string | undefined): Promise<string> {
   await ready();
   const root = Bip32PrivateKey.fromBytes(rootKeyBytes);
-  const zero = root.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED]).toPublic().hex();
+  const zero = withDerivedKey(root, [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED], key => key.toPublic().hex());
   const own = accountXpub(zero.slice(0, 64), zero.slice(64), cardanoAccountPath(0)).publicKey;
   if (!accountZeroXpub || own.toLowerCase() !== accountZeroXpub.toLowerCase()) throw new OwnAccountKeyError('not-supported');
-  return root.derive([...CIP1854_ACCOUNT_PATH]).toPublic().hex();
+  return withDerivedKey(root, CIP1854_ACCOUNT_PATH, key => key.toPublic().hex());
 }
 
 export interface DeriveMultisigAccountKeyDeps {

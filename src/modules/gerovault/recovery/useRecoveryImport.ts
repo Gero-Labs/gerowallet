@@ -27,7 +27,7 @@ import {
   type RoleKeys,
   type VaultNetwork,
 } from '@/shared/gerovault';
-import type { VaultChainReader, VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
+import { SLICE_NETWORKS, type VaultChainReader, type VaultRecord, type VaultStore } from '@/modules/gerovault/contracts';
 import { RoleKeysError, type VaultRoleKeysSource } from '@/modules/gerovault/detail/roleKeys';
 import { nativeChainFacts, plutusChainUtxos } from './chainFacts';
 import { candidateInputFromRestore } from './packageContents';
@@ -51,7 +51,8 @@ export type RecoveryImportStep =
  * - the file: `NOT_A_PACKAGE`, `UNKNOWN_VERSION`, `TOO_LARGE`, `UNREADABLE_FILE`, and `DAMAGED`
  *   (truncated, tampered or an invalid payload: use another copy);
  * - `WRONG_PASSPHRASE`;
- * - the vault: `OTHER_NETWORK` (not this wallet's network), `SEED_MISMATCH` (this wallet's seed is not
+ * - the vault: `NETWORK_CLOSED` (a network this version keeps closed), `OTHER_NETWORK` (not this
+ *   wallet's network), `SEED_MISMATCH` (this wallet's seed is not
  *   the exporter's), `INCONSISTENT` (the keys do not build the scripts);
  * - role keys: `KEYS_UNAVAILABLE`, `WRONG_PASSWORD`, `LOCKED`, `NOT_SUPPORTED`;
  * - the store: `ALREADY_HELD`, `STORE_UNAVAILABLE`, `SAVE_FAILED`;
@@ -64,6 +65,7 @@ export const RECOVERY_IMPORT_ERRORS = [
   'UNREADABLE_FILE',
   'DAMAGED',
   'WRONG_PASSPHRASE',
+  'NETWORK_CLOSED',
   'OTHER_NETWORK',
   'SEED_MISMATCH',
   'INCONSISTENT',
@@ -299,6 +301,7 @@ export function useRecoveryImport(deps: RecoveryImportDeps) {
     }
     const pkg = result.package;
     opened.value = pkg;
+    if (!SLICE_NETWORKS.includes(pkg.network)) return fail('NETWORK_CLOSED');
     if (wallet.network !== pkg.network) return fail('OTHER_NETWORK');
     let roleKeys: RoleKeys;
     try {

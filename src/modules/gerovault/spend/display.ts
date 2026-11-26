@@ -71,6 +71,8 @@ const REFUSAL_KEYS: Partial<Record<SpendRefusalCode, string>> = {
   no_expiry: 'gerovault.spend.refusal.noExpiry',
   expired: 'gerovault.spend.refusal.expired',
   expiry_too_far: 'gerovault.spend.refusal.expiryTooFar',
+  validity_start_future: 'gerovault.spend.refusal.validityStartFuture',
+  validity_start_too_old: 'gerovault.spend.refusal.validityStartTooOld',
   fee_above_limit: 'gerovault.spend.refusal.feeAboveLimit',
   network_mismatch: 'gerovault.spend.refusal.networkMismatch',
   bundle_other_vault: 'gerovault.spend.refusal.otherVault',

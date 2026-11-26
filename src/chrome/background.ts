@@ -110,6 +110,7 @@ import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { deriveAccountXpubFlow } from '@/chrome/addAccountKeys';
 import { gerovaultDeriveAccountKeyHandler, gerovaultSignVaultBundleHandler } from '@/chrome/gerovaultHandlers';
+import { slotOnNetwork } from '@/modules/gerovault/spend/signBundleFlow';
 import { vaultStore } from '@/db/vaultStore';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // Static, deliberately. The background is bundled as ONE iife
@@ -3082,10 +3083,11 @@ app.addToOptions(MessageTypes.GEROVAULT_SIGN_VAULT_BUNDLE, gerovaultSignVaultBun
     decryptRootKey: decryptPrivateKey,
     getVault: (walletId, vaultId) => vaultStore.get(walletId, vaultId),
     acceptedVaults: (walletId, network) => vaultStore.list(walletId, { status: 'accepted', network }),
-    currentSlot: () => {
+    // The stored tip carries no network: a slot that is not this network's now (another
+    // network's tip, or a long stale one) reads as no tip, and the sheet then refuses.
+    currentSlot: (network) => {
       const tip = NetworkStore.state.tip;
-      const slot = tip && !isBitcoinTip(tip) ? Number(tip.slot) : Number.NaN;
-      return Number.isSafeInteger(slot) && slot >= 0 ? slot : null;
+      return tip && !isBitcoinTip(tip) ? slotOnNetwork(network, Number(tip.slot), Date.now()) : null;
     },
   };
 }));

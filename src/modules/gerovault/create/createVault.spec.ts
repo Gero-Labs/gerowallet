@@ -355,6 +355,25 @@ describe('save', () => {
     await expect(saveCreatedVault(vaultStore, wallet, input, records)).rejects.toMatchObject({ code: 'VAULT_EXISTS' });
   });
 
+  it('refuses to save a vault at an index another vault of this wallet took meanwhile', async () => {
+    // Two setups in two tabs both took index 1; the first to save keeps it.
+    const [first] = await eachDeviceBuilds(false);
+    const [second] = await eachDeviceBuilds(true);
+    expect(first.own.index).toBe(second.own.index);
+    const wallet = walletId();
+    await saveCreatedVault(vaultStore, wallet, candidateInput(first, ''), []);
+    await expect(saveCreatedVault(vaultStore, wallet, candidateInput(second, ''), [])).rejects.toMatchObject({ code: 'INDEX_TAKEN' });
+    expect((await vaultStore.list(wallet)).map(v => v.vaultId)).toEqual([first.vaultId]);
+  });
+
+  it('never takes over a restored or imported candidate of the same vault', async () => {
+    const [vault] = await eachDeviceBuilds(true);
+    const wallet = walletId();
+    await vaultStore.addCandidate(wallet, { ...candidateInput(vault, ''), origin: 'restored' });
+    await expect(saveCreatedVault(vaultStore, wallet, candidateInput(vault, ''), [])).rejects.toMatchObject({ code: 'VAULT_EXISTS' });
+    expect((await vaultStore.get(wallet, vault.vaultId))?.status).toBe('candidate');
+  });
+
   it('accepts a candidate an earlier attempt left behind', async () => {
     const [vault] = await eachDeviceBuilds(true);
     const wallet = walletId();

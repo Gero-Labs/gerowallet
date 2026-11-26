@@ -4,7 +4,8 @@
  *
  * In order:
  * 1. the spending password, checked under the wallet's back-off (`verifySpendingPassword`);
- * 2. the vault, read again from this wallet's own store, accepted, and this wallet one of its owners;
+ * 2. the vault, read again from this wallet's own store, accepted, on a network the slice opens and
+ *    the wallet's own, and this wallet one of its owners;
  * 3. the bundle, parsed again as a file would be, and held to the same sheet the screen showed
  *    (`reviewBundle`), against the worker's own chain tip and the wallet's other accepted vaults;
  * 4. the key at the record's own index, `m/1854'/1815'/0'/0/i`, which must hash to the credential
@@ -15,8 +16,15 @@
  * Only the `VaultWitnessFile` goes back. Never log `input`: it holds the spending password.
  * Kept free of page-only imports: the background imports this file.
  */
-import { SIGNING_FILE_VERSION, UNSIGNED_BUNDLE_TYPE, type VaultRecord, type VaultWitnessFile } from '@/modules/gerovault/contracts';
-import type { VaultNetwork } from '@/shared/gerovault';
+import {
+  SIGNING_FILE_VERSION,
+  SLICE_NETWORKS,
+  UNSIGNED_BUNDLE_TYPE,
+  vaultNetworkOf,
+  type VaultRecord,
+  type VaultWitnessFile,
+} from '@/modules/gerovault/contracts';
+import { backupPathOpensAtMs, type VaultNetwork } from '@/shared/gerovault';
 import { parseUnsignedBundle, checkBundleForVault, signingFileText } from './bundle';
 import { VaultSpendError } from './errors';
 import { knownVaultsOf, reviewBundle } from './review';
@@ -29,6 +37,7 @@ import { createWitnessFile, verifyOwnWitness } from './witnesses';
  * - `not-supported`: a wallet that cannot sign a vault spend here (hardware, PassKey, Google, watch).
  * - `wrong-password`: the spending password was refused, or did not open the stored key.
  * - `not-accepted`: a candidate vault is never signed for.
+ * - `network-closed`: the vault is on a network the slice keeps closed, or not on the wallet's own.
  * - `vault-invalid`: the stored record does not give the scripts and keys it claims.
  * - `not-owner`: this wallet holds no owner key of the vault.
  * - `bundle-invalid`: the bundle is malformed, or for another vault or network.
@@ -41,6 +50,7 @@ export type SignVaultBundleErrorCode =
   | 'not-supported'
   | 'wrong-password'
   | 'not-accepted'
+  | 'network-closed'
   | 'vault-invalid'
   | 'not-owner'
   | 'bundle-invalid'
@@ -65,7 +75,21 @@ const fail = (code: SignVaultBundleErrorCode, detail?: string): never => {
 
 const HEX32 = /^[0-9a-f]{64}$/;
 
-export type SignBundleWallet = SignerWallet & { readonly id: number };
+export type SignBundleWallet = SignerWallet & { readonly id: number; readonly network?: unknown };
+
+/** How far a stored tip may sit from the network's clock and still count as this network's. */
+export const TIP_CLOCK_TOLERANCE_MS = 24 * 3600 * 1000;
+
+/**
+ * `slot` as the current slot of `network`, or null when it cannot be: a tip whose slot, read on this
+ * network's clock, lies more than a day away from `nowMs` belongs to another network (or is long
+ * stale). Shelley slots last one second on every vault network.
+ */
+export function slotOnNetwork(network: VaultNetwork, slot: unknown, nowMs: number): number | null {
+  if (typeof slot !== 'number' || !Number.isSafeInteger(slot) || slot < 0) return null;
+  const at = backupPathOpensAtMs(network, slot);
+  return at !== undefined && Math.abs(at - nowMs) <= TIP_CLOCK_TOLERANCE_MS ? slot : null;
+}
 
 export interface SignVaultBundleDeps {
   /** The wallet the background has logged in, or null. */
@@ -77,8 +101,8 @@ export interface SignVaultBundleDeps {
   getVault(walletId: number, vaultId: string): Promise<VaultRecord | undefined>;
   /** The wallet's accepted vaults on `network`, for the sheet's "moves to vault X". */
   acceptedVaults(walletId: number, network: VaultNetwork): Promise<readonly VaultRecord[]>;
-  /** The worker's Cardano chain tip slot, or null when it has none. */
-  currentSlot(): number | null;
+  /** The worker's chain tip slot on `network`, or null when it has none for that network (`slotOnNetwork`). */
+  currentSlot(network: VaultNetwork): number | null;
   now?(): number;
 }
 
@@ -108,6 +132,7 @@ export async function signVaultBundleFlow(
   const record = await deps.getVault(wallet.id, vaultId);
   if (!record) return fail('not-found');
   if (record.status !== 'accepted') return fail('not-accepted');
+  if (!SLICE_NETWORKS.includes(record.network) || vaultNetworkOf(wallet.network) !== record.network) return fail('network-closed');
   const context = await spendContextOf(record).catch(asSpendFailure);
 
   // The bundle as a file would be read, never as the page shaped it.
@@ -121,7 +146,7 @@ export async function signVaultBundleFlow(
     return asSpendFailure(error);
   }
   const review = await reviewBundle(bundle, context, {
-    currentSlot: deps.currentSlot(),
+    currentSlot: deps.currentSlot(record.network),
     knownVaults: knownVaultsOf(await deps.acceptedVaults(wallet.id, record.network), record.vaultId),
   });
   if (review.status !== 'ready') return fail('bundle-refused', review.refusals.map(refusal => refusal.code).join(','));

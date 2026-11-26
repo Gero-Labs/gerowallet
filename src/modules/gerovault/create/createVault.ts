@@ -527,10 +527,24 @@ export function candidateInput(vault: CreatedVault, name: string, manifest?: Vau
   };
 }
 
+/** Save refused because another vault of this wallet took its index since the setup began. */
+export class IndexTakenError extends Error {
+  readonly code = 'INDEX_TAKEN';
+
+  constructor() {
+    super('Another vault of this wallet holds this index');
+    this.name = 'IndexTakenError';
+  }
+}
+
 /**
- * Stores the vault as a candidate and accepts it with this device's verification records. A
- * candidate left by an earlier attempt that failed between the two writes is accepted now; a vault
- * already accepted is not written again.
+ * Stores the vault as a candidate and accepts it with this device's verification records.
+ *
+ * The index is checked again against what the store holds now: another tab of this wallet may
+ * have saved a vault at the same index since this setup allocated it, and two vaults must never
+ * share this wallet's keys. A candidate left by an earlier attempt of this flow (origin `created`)
+ * that failed between the two writes is accepted now; a restored or imported candidate of the
+ * same vault is not taken over, and a vault already accepted is not written again.
  */
 export async function saveCreatedVault(
   store: VaultStore,
@@ -538,12 +552,14 @@ export async function saveCreatedVault(
   input: VaultCandidateInput,
   verifications: readonly CosignerVerification[],
 ): Promise<VaultRecord> {
+  const held = await store.list(walletId);
+  if (held.some(record => record.vaultId !== input.vaultId && record.ownIndex === input.ownIndex)) throw new IndexTakenError();
   try {
     await store.addCandidate(walletId, input);
   } catch (error) {
     if ((error as { code?: string })?.code !== 'VAULT_EXISTS') throw error;
     const existing = await store.get(walletId, input.vaultId);
-    if (existing?.status !== 'candidate') throw error;
+    if (existing?.status !== 'candidate' || existing.origin !== 'created') throw error;
   }
   return store.accept(walletId, input.vaultId, { verifications });
 }

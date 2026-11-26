@@ -14,6 +14,8 @@ const SLOTS_PER_HOUR = 3600;
 export const DEFAULT_VALIDITY_SLOTS = 48 * SLOTS_PER_HOUR;
 /** And for 7 days at most: the signing device refuses a later expiry. */
 export const MAX_VALIDITY_SLOTS = 7 * 24 * SLOTS_PER_HOUR;
+/** A validity start may lie this far ahead of the tip (clock and sync drift), no further. */
+export const VALIDITY_START_TOLERANCE_SLOTS = 10 * 60;
 
 /** Every signing file is small JSON; anything larger is refused before it is parsed. */
 export const MAX_BUNDLE_FILE_BYTES = 4 * 1024 * 1024;

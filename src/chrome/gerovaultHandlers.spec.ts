@@ -89,7 +89,7 @@ describe('GEROVAULT_DERIVE_ACCOUNT_KEY', () => {
 });
 
 describe('GEROVAULT_SIGN_VAULT_BUNDLE', () => {
-  const WALLET = { id: 31, type: WalletType.Normal, encryptionMethod: 'password' as const, encryptedPrivateKey: 'sealed' };
+  const WALLET = { id: 31, network: 'Preprod', type: WalletType.Normal, encryptionMethod: 'password' as const, encryptedPrivateKey: 'sealed' };
   let owners: TestOwner[];
   let records: VaultRecord[];
   let bundle: UnsignedTxBundle;
@@ -152,6 +152,8 @@ describe('background registration', () => {
     expect(source).toContain(`app.addToOptions(MessageTypes.${MessageTypes.GEROVAULT_DERIVE_ACCOUNT_KEY}, gerovaultDeriveAccountKeyHandler(`);
     expect(source).toContain(`app.addToOptions(MessageTypes.${MessageTypes.GEROVAULT_SIGN_VAULT_BUNDLE}, gerovaultSignVaultBundleHandler(`);
     expect(source).toContain('verifyPassword: (password) => walletBg.verifySpendingPassword(password)');
+    // The stored tip carries no network: it is read on the vault's network clock.
+    expect(source).toMatch(/currentSlot: \(network\) => \{[^}]*slotOnNetwork\(network, /);
     expect(source).not.toMatch(/addToWebpage\(MessageTypes\.GEROVAULT_/);
   });
 });
