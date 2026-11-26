@@ -292,6 +292,13 @@ function intMap(entries: Readonly<Record<number, CborWritable | undefined>>): Cb
 
 const sizeOf = (value: CborWritable): number => encodeCanonicalCbor(value).length;
 
+/** Whether two byte strings are equal; a plain loop, as this runs over whole payloads. */
+export function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** The manifest code's hash of a manifest revision's bytes; `undefined` for anything but lowercase hex. */
 export function manifestRevisionHashOf(cborHex: unknown): string | undefined {
   if (typeof cborHex !== 'string' || !ANY_LOWER_HEX.test(cborHex)) return undefined;
@@ -914,16 +921,17 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   const network = MAGIC_TO_NETWORK.get(uintOf(f.get(1), 'network magic', 0xffffffff)) ?? bad('unknown network');
   const self = fields(f.get(4) as CborItem, 'self', [0, 1]);
+  const manifestItems = arrayOf(f.get(6), 'manifests', MAX_MANIFEST_REVISIONS).map(m => {
+    const [v, b] = tuple(m, 'manifest revision', 2);
+    return { version: uintOf(v, 'manifest version'), bytes: bytesOf(b, 'manifest', 1, MAX_MANIFEST_BYTES) };
+  });
   const contents: RecoveryPackageContents = {
     network,
     exportedAtMs: uintOf(f.get(2), 'export time'),
     vault: decodeVault(f.get(3) as CborItem),
     self: Object.freeze({ position: uintOf(self.get(0), 'self position'), index: uintOf(self.get(1), 'self index', MAX_VAULT_INDEX) }),
     participants: Object.freeze(arrayOf(f.get(5), 'participants', MAX_PACKAGE_PARTICIPANTS).map(decodeParticipant)),
-    manifests: Object.freeze(arrayOf(f.get(6), 'manifests', MAX_MANIFEST_REVISIONS).map(m => {
-      const [v, b] = tuple(m, 'manifest revision', 2);
-      return Object.freeze({ version: uintOf(v, 'manifest version'), cbor: hexOf(bytesOf(b, 'manifest', 1, MAX_MANIFEST_BYTES)) });
-    })),
+    manifests: Object.freeze(manifestItems.map(m => Object.freeze({ version: m.version, cbor: hexOf(m.bytes) }))),
     proposals: Object.freeze(arrayOf(f.get(7), 'proposals', MAX_PROPOSALS).map(p => {
       const [id, b] = tuple(p, 'proposal', 2);
       return Object.freeze({ id: hexOf(bytesOf(id, 'proposal id', 1, MAX_PROPOSAL_ID_BYTES)), cbor: hexOf(bytesOf(b, 'proposal', 1, MAX_PROPOSAL_BYTES)) });
@@ -940,13 +948,14 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
-  if (canonical.length !== bytes.length || !canonical.every((b, i) => b === bytes[i])) bad('not the canonical encoding');
+  if (!sameBytes(canonical, bytes)) bad('not the canonical encoding');
   const dropped = contents.proposalsDropped ?? 0;
   const bookDropped = contents.addressBookDropped ?? 0;
   return Object.freeze({
     version: RECOVERY_PAYLOAD_VERSION,
     ...contents,
-    manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestRevisionHashOf(m.cbor) as string }))),
+    // Hashed from the bytes in hand: the same value as `manifestRevisionHashOf` of the hex.
+    manifests: Object.freeze(contents.manifests.map((m, i) => Object.freeze({ ...m, hash: taggedHash(MANIFEST_HASH_TAG, manifestItems[i].bytes) }))),
     proposalsDropped: dropped,
     proposalHistoryTruncated: dropped > 0,
     addressBookDropped: bookDropped,

@@ -60,6 +60,7 @@ import {
   encodeRecoveryPayload,
   fitRecoveryHistory,
   manifestRevisionHashOf,
+  sameBytes,
 } from './recoveryPayload';
 import { ParticipantEntry, VaultManifest, bindingDigest, decodeManifest } from './manifest';
 import { DecodedRegistration, EXTERNAL_SCAN_MAX, RebuildParticipant, RegistrationInput, decodeRegistration, rebuildFromRegistration } from './registration';
@@ -364,7 +365,7 @@ export async function exportRecoveryPackage(
   }
   const file = await sealRecoveryFile(payload, passphrase);
   const reopened = await openRecoveryFile(file, passphrase);
-  if (reopened.ok !== true || reopened.payload.length !== payload.length || !reopened.payload.every((b, i) => b === payload[i])) {
+  if (reopened.ok !== true || !sameBytes(reopened.payload, payload)) {
     throw new GeroVaultError('PACKAGE_CHECK_FAILED', 'The package does not open again with its passphrase');
   }
   return Object.freeze({
