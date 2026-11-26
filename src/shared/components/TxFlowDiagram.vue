@@ -1,5 +1,5 @@
 <template>
-  <section :class="['tx-flow', `tx-flow--${orientation}`, { 'tx-flow--compact': compact }]" :aria-label="ariaLabel">
+  <section :class="['tx-flow', { 'tx-flow--compact': compact }]" :aria-label="ariaLabel">
     <div ref="canvas" class="tx-flow__canvas" :class="{ 'tx-flow__canvas--dim': highlighted.size > 0 }" :style="{ height: `${layout.height}px` }">
       <svg
         v-if="width > 0"
@@ -37,7 +37,10 @@
         />
         <rect
           class="tx-flow__bar-core"
-          v-bind="barCore"
+          :x="layout.bar.x + layout.bar.width / 2 - 1"
+          :y="layout.bar.y + 8"
+          width="2"
+          :height="Math.max(0, layout.bar.height - 16)"
           rx="1"
         />
       </svg>
@@ -143,7 +146,6 @@ import assts from '@/utils/assets';
 import {
   collapseFlowNodes,
   layoutTxFlow,
-  layoutTxFlowVertical,
   type FlowKind,
   type FlowNode,
   type FlowToken,
@@ -161,11 +163,9 @@ interface Props {
   /** Display name, image and decimals of a token unit */
   tokenInfo: (unit: string) => FlowTokenInfo;
   currencySymbol: string;
-  /** `vertical`: inputs above a horizontal bar, outputs below (narrow surfaces such as the side panel) */
-  orientation?: 'horizontal' | 'vertical';
 }
 
-const props = withDefaults(defineProps<Props>(), { orientation: 'horizontal' });
+const props = defineProps<Props>();
 const { t, tc } = useTranslation();
 
 const KIND_COLOR: Record<FlowKind, string> = {
@@ -200,8 +200,6 @@ const MORE_CHIP_WIDTH = 40;
 const COLUMN_LIMIT = 5;
 /** Below this canvas width boxes drop the icon and show the amount under the label. */
 const COMPACT_WIDTH = 520;
-/** Vertical boxes take the width right of the band gutter: compact only on very narrow canvases. */
-const COMPACT_WIDTH_VERTICAL = 280;
 
 // ---------------------------------------------------------------------------
 // Size: the diagram fills its container and re-lays out when it changes
@@ -224,9 +222,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
-const compact = computed(() =>
-  width.value > 0 && width.value < (props.orientation === 'vertical' ? COMPACT_WIDTH_VERTICAL : COMPACT_WIDTH)
-);
+const compact = computed(() => width.value > 0 && width.value < COMPACT_WIDTH);
 
 // ---------------------------------------------------------------------------
 // Layout
@@ -241,30 +237,14 @@ watch(() => props.model, () => {
 const inputs = computed(() => collapseFlowNodes(props.model.inputs, COLUMN_LIMIT, open.value.in));
 const outputs = computed(() => collapseFlowNodes(props.model.outputs, COLUMN_LIMIT, open.value.out));
 
-const boxHeight = (node: FlowNode) => (node.tokens.length ? BOX_HEIGHT_TOKENS : BOX_HEIGHT);
-
 const layout = computed(() =>
-  props.orientation === 'vertical'
-    ? layoutTxFlowVertical(inputs.value, outputs.value, {
-      width: Math.max(width.value, 1),
-      boxHeight,
-      anchorY: BOX_HEIGHT / 2,
-    })
-    : layoutTxFlow(inputs.value, outputs.value, {
-      width: Math.max(width.value, 1),
-      boxHeight,
-      anchorY: BOX_HEIGHT / 2,
-      minGutter: compact.value ? 36 : 56,
-    })
+  layoutTxFlow(inputs.value, outputs.value, {
+    width: Math.max(width.value, 1),
+    boxHeight: (node) => (node.tokens.length ? BOX_HEIGHT_TOKENS : BOX_HEIGHT),
+    anchorY: BOX_HEIGHT / 2,
+    minGutter: compact.value ? 36 : 56,
+  })
 );
-
-/** The accent line along the bar's length, inset from its rounded ends. */
-const barCore = computed(() => {
-  const { x, y, width: barWidth, height } = layout.value.bar;
-  return props.orientation === 'vertical'
-    ? { x: x + 8, y: y + height / 2 - 1, width: Math.max(0, barWidth - 16), height: 2 }
-    : { x: x + barWidth / 2 - 1, y: y + 8, width: 2, height: Math.max(0, height - 16) };
-});
 
 function expand(side: 'in' | 'out') {
   open.value = { ...open.value, [side]: true };
@@ -451,8 +431,7 @@ const info = computed(() => {
   }
   const key = hovered.value ?? pinnedNode.value;
   const node = key ? allBoxes.value.find((item) => item.key === key) : undefined;
-  if (node) return nodeLine(node);
-  return t(props.orientation === 'vertical' ? 'transactions.flow.hintTap' : 'transactions.flow.hint');
+  return node ? nodeLine(node) : t('transactions.flow.hint');
 });
 </script>
 

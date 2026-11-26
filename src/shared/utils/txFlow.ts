@@ -4,9 +4,8 @@
  *
  * Pure: no Vue, no stores. `buildTxFlow` turns a stored transaction record into
  * grouped nodes (one per address and kind), `collapseFlowNodes` folds long
- * columns into a "+N more" node, and `layoutTxFlow` (left to right) or
- * `layoutTxFlowVertical` (top to bottom, for the side panel) places boxes and the
- * bands between them in pixel coordinates.
+ * columns into a "+N more" node, and `layoutTxFlow` places boxes and the bands
+ * between them in pixel coordinates.
  *
  * Value accounting (lovelace): inputs + withdrawals + refund = outputs + fee +
  * donation + deposit. Cardano does not record which input pays which output, so
@@ -266,30 +265,6 @@ export function bandPath(x1: number, y1: number, x2: number, y2: number, thickne
     + `L${r(x2)},${r(y2 + thickness)}C${r(mid)},${r(y2 + thickness)} ${r(mid)},${r(y1 + thickness)} ${r(x1)},${r(y1 + thickness)}Z`;
 }
 
-const isExtraNode = (node: FlowNode) => FLOW_SOURCE_KINDS.has(node.kind) || FLOW_SINK_KINDS.has(node.kind);
-
-/** Index of the first source or sink after the addresses (where a divider goes), or -1. */
-const firstExtraIndex = (nodes: FlowNode[]) => nodes.findIndex((node, index) => index > 0 && isExtraNode(node));
-
-/** Box tops down one column, with extra room above the first source or sink. */
-function stackColumn(nodes: FlowNode[], boxHeight: (node: FlowNode) => number, gap: number, dividerGap: number) {
-  let y = 0;
-  const tops = nodes.map((node, index) => {
-    if (index > 0 && isExtraNode(node) && !isExtraNode(nodes[index - 1])) y += dividerGap;
-    const top = y;
-    y += boxHeight(node) + gap;
-    return top;
-  });
-  return { tops, height: Math.max(0, y - gap) };
-}
-
-/** Log scale: a pool of millions and a 0.17 fee both stay visible. */
-function bandScale(nodes: FlowNode[], minBand: number, maxBand: number) {
-  const largest = Math.max(1, ...nodes.map((node) => node.lovelace));
-  return (lovelace: number) =>
-    minBand + (maxBand - minBand) * Math.log10(1 + Math.max(0, lovelace)) / Math.log10(1 + largest);
-}
-
 export function layoutTxFlow(inputs: FlowNode[], outputs: FlowNode[], options: FlowLayoutOptions): FlowLayout {
   const {
     width,
@@ -309,14 +284,30 @@ export function layoutTxFlow(inputs: FlowNode[], outputs: FlowNode[], options: F
   const boxWidth = clamp((width - 2 * minGutter) / 2, minBoxWidth, maxBoxWidth);
   const center = width / 2;
 
-  const left = stackColumn(inputs, boxHeight, gap, dividerGap);
-  const right = stackColumn(outputs, boxHeight, gap, dividerGap);
+  const column = (nodes: FlowNode[]) => {
+    let y = 0;
+    const tops = nodes.map((node, index) => {
+      const extra = index > 0 && (FLOW_SOURCE_KINDS.has(node.kind) || FLOW_SINK_KINDS.has(node.kind))
+        && !(FLOW_SOURCE_KINDS.has(nodes[index - 1].kind) || FLOW_SINK_KINDS.has(nodes[index - 1].kind));
+      if (extra) y += dividerGap;
+      const top = y;
+      y += boxHeight(node) + gap;
+      return top;
+    });
+    return { tops, height: Math.max(0, y - gap) };
+  };
+
+  const left = column(inputs);
+  const right = column(outputs);
   const height = Math.max(left.height, right.height);
   const middle = height / 2;
   const leftTops = left.tops.map((top) => top + (height - left.height) / 2);
   const rightTops = right.tops.map((top) => top + (height - right.height) / 2);
 
-  const thickness = bandScale([...inputs, ...outputs], minBand, maxBand);
+  // Log scale: a pool of millions and a 0.17 fee both stay visible
+  const largest = Math.max(1, ...[...inputs, ...outputs].map((node) => node.lovelace));
+  const thickness = (lovelace: number) =>
+    minBand + (maxBand - minBand) * Math.log10(1 + Math.max(0, lovelace)) / Math.log10(1 + largest);
 
   const stack = (nodes: FlowNode[]) => {
     const sizes = nodes.map((node) => thickness(node.lovelace));
@@ -364,7 +355,7 @@ export function layoutTxFlow(inputs: FlowNode[], outputs: FlowNode[], options: F
 
   const dividers: FlowLayout['dividers'] = [];
   const divider = (nodes: FlowNode[], tops: number[], side: 'in' | 'out') => {
-    const index = firstExtraIndex(nodes);
+    const index = nodes.findIndex((node, i) => i > 0 && (FLOW_SOURCE_KINDS.has(node.kind) || FLOW_SINK_KINDS.has(node.kind)));
     if (index > 0) {
       const x = side === 'in' ? 0 : width - boxWidth;
       dividers.push({ side, x1: x + 8, x2: x + boxWidth - 8, y: tops[index] - (gap + dividerGap) / 2 });
@@ -379,178 +370,6 @@ export function layoutTxFlow(inputs: FlowNode[], outputs: FlowNode[], options: F
     boxes,
     bands,
     bar: { x: center - barWidth / 2, y: middle - barHeight / 2, width: barWidth, height: barHeight },
-    dividers,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Vertical layout: inputs on top, a horizontal bar, outputs below
-// ---------------------------------------------------------------------------
-export interface FlowVerticalLayoutOptions {
-  width: number;
-  /** Box height for a node (taller when it shows token chips) */
-  boxHeight: (node: FlowNode) => number;
-  /** Distance from a box's top to where its band attaches */
-  anchorY?: number;
-  gap?: number;
-  /** Extra space above the first source or sink */
-  dividerGap?: number;
-  /** Thickness of the horizontal transaction bar */
-  barHeight?: number;
-  /** Space between a column and the bar */
-  barGap?: number;
-  maxBand?: number;
-  minBand?: number;
-  bandGap?: number;
-  /** Room between the innermost band and the boxes, where bands turn */
-  turn?: number;
-  minGutter?: number;
-  /** The band gutter never takes more than this share of the width; bands thin to fit */
-  maxGutterShare?: number;
-}
-
-/** Circle approximation for a quarter turn drawn as one cubic. */
-const KAPPA = 0.5523;
-const round2 = (value: number) => Math.round(value * 100) / 100;
-
-/**
- * An input's band: leaves the box's left edge at [y, y + thickness], turns down in its
- * lane [x, x + thickness] and ends on the bar's top at `bottom`.
- */
-export function elbowDownPath(boxX: number, y: number, x: number, thickness: number, bottom: number): string {
-  const r = round2;
-  const h = boxX - x;
-  const v = Math.max(0, Math.min(h, bottom - y));
-  const hi = Math.max(0, boxX - x - thickness);
-  const vi = Math.max(0, Math.min(hi, bottom - y - thickness));
-  const inner = x + thickness;
-  const low = y + thickness;
-  return `M${r(boxX)},${r(y)}C${r(boxX - KAPPA * h)},${r(y)} ${r(x)},${r(y + v - KAPPA * v)} ${r(x)},${r(y + v)}`
-    + `L${r(x)},${r(bottom)}L${r(inner)},${r(bottom)}L${r(inner)},${r(low + vi)}`
-    + `C${r(inner)},${r(low + vi - KAPPA * vi)} ${r(boxX - KAPPA * hi)},${r(low)} ${r(boxX)},${r(low)}Z`;
-}
-
-/**
- * An output's band: leaves the bar's bottom at `top` in its lane [x, x + thickness],
- * turns right and enters the box's left edge at [y, y + thickness].
- */
-export function elbowUpPath(boxX: number, y: number, x: number, thickness: number, top: number): string {
-  const r = round2;
-  const low = y + thickness;
-  const h = boxX - x;
-  const v = Math.max(0, Math.min(h, low - top));
-  const hi = Math.max(0, boxX - x - thickness);
-  const vi = Math.max(0, Math.min(hi, y - top));
-  const inner = x + thickness;
-  return `M${r(x)},${r(top)}L${r(x)},${r(low - v)}C${r(x)},${r(low - v + KAPPA * v)} ${r(boxX - KAPPA * h)},${r(low)} ${r(boxX)},${r(low)}`
-    + `L${r(boxX)},${r(y)}C${r(boxX - KAPPA * hi)},${r(y)} ${r(inner)},${r(y - vi + KAPPA * vi)} ${r(inner)},${r(y - vi)}`
-    + `L${r(inner)},${r(top)}Z`;
-}
-
-/**
- * For narrow surfaces (the side panel): boxes fill the width right of a band gutter,
- * inputs stacked above a horizontal bar and outputs below it. Each band runs down the
- * gutter in its own lane: the top input takes the outermost lane and the top output the
- * innermost, so no band crosses another or a box.
- */
-export function layoutTxFlowVertical(inputs: FlowNode[], outputs: FlowNode[], options: FlowVerticalLayoutOptions): FlowLayout {
-  const {
-    width,
-    boxHeight,
-    anchorY = 25,
-    gap = 8,
-    dividerGap = 10,
-    barHeight = 12,
-    barGap = 20,
-    maxBand = 16,
-    minBand = 2,
-    bandGap = 2,
-    turn = 14,
-    minGutter = 32,
-    maxGutterShare = 0.3,
-  } = options;
-
-  const thickness = bandScale([...inputs, ...outputs], minBand, maxBand);
-  const span = (sizes: number[]) => sizes.reduce((sum, size) => sum + size, 0) + bandGap * Math.max(0, sizes.length - 1);
-  const room = Math.max(0, width * maxGutterShare - turn);
-  const fit = (nodes: FlowNode[]) => {
-    const sizes = nodes.map((node) => thickness(node.lovelace));
-    const total = span(sizes);
-    if (total <= room || !sizes.length) return sizes;
-    const factor = Math.max(0, room - bandGap * (sizes.length - 1)) / (total - bandGap * (sizes.length - 1));
-    return sizes.map((size) => Math.max(minBand, size * factor));
-  };
-  const inSizes = fit(inputs);
-  const outSizes = fit(outputs);
-
-  const lanes = Math.max(span(inSizes), span(outSizes));
-  const gutter = Math.max(minGutter, Math.ceil(lanes + turn));
-  const laneEnd = gutter - turn;
-  const boxX = gutter;
-  const boxWidth = Math.max(0, width - gutter);
-
-  /** Lane starts, left to right in `order`, the block right-aligned at `laneEnd`. */
-  const laneStarts = (sizes: number[], order: number[]) => {
-    const starts: number[] = new Array(sizes.length);
-    let x = laneEnd - span(sizes);
-    for (const index of order) {
-      starts[index] = x;
-      x += sizes[index] + bandGap;
-    }
-    return starts;
-  };
-  const inLanes = laneStarts(inSizes, inputs.map((_, index) => index));
-  const outLanes = laneStarts(outSizes, outputs.map((_, index) => outputs.length - 1 - index));
-
-  const top = stackColumn(inputs, boxHeight, gap, dividerGap);
-  const bottom = stackColumn(outputs, boxHeight, gap, dividerGap);
-  const barY = top.height + barGap;
-  const outY = barY + barHeight + barGap;
-  const height = outY + bottom.height;
-  const outTops = bottom.tops.map((y) => y + outY);
-
-  const boxes: FlowBox[] = [
-    ...inputs.map((node, index) => ({ node, side: 'in' as const, x: boxX, y: top.tops[index], width: boxWidth, height: boxHeight(node) })),
-    ...outputs.map((node, index) => ({ node, side: 'out' as const, x: boxX, y: outTops[index], width: boxWidth, height: boxHeight(node) })),
-  ];
-
-  const bands: FlowBand[] = [
-    ...inputs.map((node, index) => {
-      const size = inSizes[index];
-      return {
-        key: node.key,
-        kind: node.kind,
-        side: 'in' as const,
-        thickness: size,
-        path: elbowDownPath(boxX, top.tops[index] + anchorY - size / 2, inLanes[index], size, barY),
-      };
-    }),
-    ...outputs.map((node, index) => {
-      const size = outSizes[index];
-      return {
-        key: node.key,
-        kind: node.kind,
-        side: 'out' as const,
-        thickness: size,
-        path: elbowUpPath(boxX, outTops[index] + anchorY - size / 2, outLanes[index], size, barY + barHeight),
-      };
-    }),
-  ];
-
-  const dividers: FlowLayout['dividers'] = [];
-  const divider = (nodes: FlowNode[], tops: number[], side: 'in' | 'out') => {
-    const index = firstExtraIndex(nodes);
-    if (index > 0) dividers.push({ side, x1: boxX + 8, x2: width - 8, y: tops[index] - (gap + dividerGap) / 2 });
-  };
-  divider(inputs, top.tops, 'in');
-  divider(outputs, outTops, 'out');
-
-  return {
-    width,
-    height,
-    boxes,
-    bands,
-    bar: { x: 0, y: barY, width, height: barHeight },
     dividers,
   };
 }

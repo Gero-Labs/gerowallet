@@ -39,6 +39,7 @@ const BlogPost = lazyPage(() => import('@/modules/blog/BlogPost.vue'));
 const Card = lazyPage(() => import('@/modules/wallet/GeroCard.vue'));
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
 const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
+const TxFlowWindow = () => import('@/modules/transactions/views/TxFlowWindow.vue');
 const GoMining = lazyPage(() => import('@/modules/gomining/GoMining.vue'));
 const BabylonStaking = lazyPage(() => import('@/modules/babylon/BabylonStaking.vue'));
 const Ordinals = lazyPage(() => import('@/modules/ordinals/Ordinals.vue'));
@@ -387,6 +388,17 @@ const routes: RouteRecordRaw[] = [
     path: '/ledger-ble-sign',
     name: 'ledger-ble-sign',
     component: LedgerBleSign,
+    meta: {
+      layout: BlankLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    // Popup window with a transaction's flow diagram, opened from the side
+    // panel's transaction sheet (too narrow for the diagram).
+    path: '/tx-flow/:id',
+    name: 'tx-flow',
+    component: TxFlowWindow,
     meta: {
       layout: BlankLayout,
       requiresAuth: true,

@@ -26,6 +26,8 @@ vi.mock('../../composables/useChainContext', async () => {
     }),
   };
 });
+const openTxFlowWindow = vi.hoisted(() => vi.fn());
+vi.mock('@/shared/utils/openTxFlowWindow', () => ({ openTxFlowWindow }));
 vi.mock('../BottomSheet.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 
 import TxDetailSheet from './TxDetailSheet.vue';
@@ -68,45 +70,39 @@ const mountSheet = async (record: Record<string, unknown> | null) => {
 
 enableAutoUnmount(afterEach);
 beforeEach(() => {
+  openTxFlowWindow.mockReset();
   Object.assign(walletStore, {
     loggedWallet: { chain: Blockchain.CARDANO, network: Network.MAINNET },
     keys: { payment: [{ address: OWN }], change: [] },
   });
 });
 
-describe('TxDetailSheet flow diagram', () => {
-  it('draws the vertical flow of a Cardano transaction, own addresses marked', async () => {
-    const wrapper = await mountSheet(tx());
-    const flow = wrapper.findComponent(TxFlowDiagram);
-    expect(flow.exists()).toBe(true);
-    expect(flow.props('orientation')).toBe('vertical');
-    const model = flow.props('model');
-    expect(model.inputs.map((node) => node.kind)).toEqual(['own']);
-    expect(model.outputs.map((node) => node.kind)).toEqual(['other', 'own', 'fee']);
-    expect(flow.props('currencySymbol')).toBeTruthy();
-  });
+const flowButton = (wrapper: Awaited<ReturnType<typeof mountSheet>>) => wrapper.find('.tx-flow-button');
 
-  it('names tokens from the row first, then the asset store', async () => {
+describe('TxDetailSheet flow diagram button', () => {
+  it('opens the flow diagram of a Cardano transaction in a popup window', async () => {
     const wrapper = await mountSheet(tx());
-    const tokenInfo = wrapper.findComponent(TxFlowDiagram).props('tokenInfo');
-    expect(tokenInfo('tok')).toMatchObject({ name: 'Held', decimals: 0 });
-    expect(tokenInfo('other')).toMatchObject({ name: 'Resolved', decimals: 2 });
-  });
-
-  it('draws none for a pending transaction without inputs', async () => {
-    const wrapper = await mountSheet(tx({ pending: true, utxo: null }));
     expect(wrapper.findComponent(TxFlowDiagram).exists()).toBe(false);
+    expect(flowButton(wrapper).exists()).toBe(true);
+    expect(flowButton(wrapper).text()).toContain('transactions.flow.open');
+    await flowButton(wrapper).trigger('click');
+    expect(openTxFlowWindow).toHaveBeenCalledWith('ab'.repeat(32));
+  });
+
+  it('is not offered for a pending transaction without inputs', async () => {
+    const wrapper = await mountSheet(tx({ pending: true, utxo: null }));
+    expect(flowButton(wrapper).exists()).toBe(false);
     expect(wrapper.find('.tx-detail').exists()).toBe(true);
   });
 
-  it('draws none for a transaction whose scripts failed', async () => {
+  it('is not offered for a transaction whose scripts failed', async () => {
     const wrapper = await mountSheet(tx({ isValid: false }));
-    expect(wrapper.findComponent(TxFlowDiagram).exists()).toBe(false);
+    expect(flowButton(wrapper).exists()).toBe(false);
   });
 
-  it('draws none on other chains', async () => {
+  it('is not offered on other chains', async () => {
     walletStore.loggedWallet = { chain: Blockchain.MIDNIGHT, network: Network.PREPROD } as never;
     const wrapper = await mountSheet(tx());
-    expect(wrapper.findComponent(TxFlowDiagram).exists()).toBe(false);
+    expect(flowButton(wrapper).exists()).toBe(false);
   });
 });

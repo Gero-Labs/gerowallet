@@ -448,8 +448,8 @@ import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
 import TxTag from '@/modules/transactions/components/TxTag.vue';
-import TxFlowDiagram, { type FlowTokenInfo } from '@/shared/components/TxFlowDiagram.vue';
-import { buildTxFlow } from '@/shared/utils/txFlow';
+import TxFlowDiagram from '@/shared/components/TxFlowDiagram.vue';
+import { useTxFlow } from '@/shared/composables/useTxFlow';
 import filters from '@/shared/utils/filters';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
@@ -819,20 +819,7 @@ const outputViews = computed<UtxoView[]>(() => {
 });
 
 // The flow diagram: Cardano records only (Bitcoin, Midnight and Solana have their own views)
-const flowModel = computed(() =>
-  loggedWallet.value?.chain === Blockchain.CARDANO
-    ? buildTxFlow(liveTx.value, classifyCtx.value.walletAddresses)
-    : null
-);
-
-const flowTokenInfo = (unit: string): FlowTokenInfo => {
-  const info = assetInfo({ unit, quantity: 0 });
-  return {
-    name: info?.name || filters.truncate(unit),
-    img: info?.img,
-    decimals: assetDecimals(info),
-  };
-};
+const { flowModel, tokenInfo: flowTokenInfo } = useTxFlow(liveTx);
 
 function toggleTokens(key: string) {
   expandedTokens.value = { ...expandedTokens.value, [key]: !expandedTokens.value[key] };

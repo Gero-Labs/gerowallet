@@ -55,7 +55,7 @@ const model = (overrides: Partial<TxFlowModel> = {}): TxFlowModel => ({
   ...overrides,
 });
 
-const mountDiagram = async (props: Partial<{ model: TxFlowModel; orientation: 'horizontal' | 'vertical' }> = {}) => {
+const mountDiagram = async (props: Partial<{ model: TxFlowModel }> = {}) => {
   const wrapper = mount(TxFlowDiagram, {
     props: {
       model: model(),
@@ -204,31 +204,5 @@ describe('TxFlowDiagram', () => {
     } finally {
       wrapper.unmount();
     }
-  });
-
-  describe('vertical', () => {
-    it('stacks every box right of the band gutter, with a horizontal bar', async () => {
-      canvasWidth = 340;
-      const wrapper = await mountDiagram({ orientation: 'vertical' });
-      canvasWidth = 600;
-      try {
-        expect(wrapper.find('.tx-flow').classes()).toEqual(expect.arrayContaining(['tx-flow--vertical']));
-        expect(wrapper.find('.tx-flow').classes()).not.toContain('tx-flow--compact');
-        const boxes = wrapper.findAll('.tx-flow__box');
-        const lefts = new Set(boxes.map((box) => /left: ([\d.]+)px/.exec(box.attributes('style') ?? '')?.[1]));
-        expect(lefts.size).toBe(1);
-        expect(wrapper.findAll('.tx-flow__band')).toHaveLength(boxes.length);
-        const bar = wrapper.find('.tx-flow__bar');
-        expect(Number(bar.attributes('width'))).toBe(340);
-        const core = wrapper.find('.tx-flow__bar-core');
-        expect(Number(core.attributes('width'))).toBeGreaterThan(Number(core.attributes('height')));
-        expect(wrapper.find('.tx-flow__info').text()).toBe('transactions.flow.hintTap');
-
-        await wrapper.find('button.tx-flow__box--more').trigger('click');
-        expect(wrapper.findAll('.tx-flow__box')).toHaveLength(model().inputs.length + model().outputs.length);
-      } finally {
-        wrapper.unmount();
-      }
-    });
   });
 });
