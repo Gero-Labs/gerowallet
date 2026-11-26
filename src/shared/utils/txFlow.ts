@@ -65,6 +65,8 @@ interface RawIO {
 
 /** Stored transaction record: Koios-shaped `utxo` plus an SDK-shaped `body`. */
 export interface FlowTxRecord {
+  /** false: phase-2 validation failed; only the collateral moved */
+  isValid?: boolean;
   utxo?: { inputs?: RawIO[]; outputs?: RawIO[] } | null;
   body?: {
     fee?: number | string | bigint;
@@ -75,12 +77,22 @@ export interface FlowTxRecord {
   } | null;
 }
 
+/** Parsed answers per address: a 100-UTxO transaction re-renders without re-parsing bech32. */
+const scriptAddressCache = new Map<string, boolean>();
+const SCRIPT_ADDRESS_CACHE_LIMIT = 2_000;
+
 export function isScriptAddress(address: string): boolean {
+  const cached = scriptAddressCache.get(address);
+  if (cached !== undefined) return cached;
+  let script = false;
   try {
-    return Cardano.Address.fromBech32(address.trim()).getProps().paymentPart?.type === Cardano.CredentialType.ScriptHash;
+    script = Cardano.Address.fromBech32(address.trim()).getProps().paymentPart?.type === Cardano.CredentialType.ScriptHash;
   } catch {
-    return false;
+    script = false;
   }
+  if (scriptAddressCache.size >= SCRIPT_ADDRESS_CACHE_LIMIT) scriptAddressCache.clear();
+  scriptAddressCache.set(address, script);
+  return script;
 }
 
 const toNumber = (value: unknown): number => {
@@ -130,6 +142,9 @@ const sumLovelace = (ios: RawIO[]): number =>
 const MIN_DEPOSIT_LOVELACE = 1_000_000;
 
 export function buildTxFlow(tx: FlowTxRecord | null | undefined, ownAddresses: ReadonlySet<string>): TxFlowModel | null {
+  // A transaction whose scripts failed created none of its outputs and only forfeited its
+  // collateral: drawing its body would show value moving that never moved.
+  if (tx?.isValid === false) return null;
   const inputs = tx?.utxo?.inputs ?? [];
   const outputs = tx?.utxo?.outputs ?? [];
   if (!inputs.length || !outputs.length) return null;

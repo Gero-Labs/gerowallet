@@ -31,6 +31,12 @@ describe('isScriptAddress', () => {
 });
 
 describe('buildTxFlow', () => {
+  it('draws nothing for a transaction whose scripts failed (only collateral moved)', () => {
+    const failed = { isValid: false, utxo: { inputs: [io(OWN_A, 50_000_000)], outputs: [io(SCRIPT, 45_000_000)] }, body: { fee: 300_000 } };
+    expect(buildTxFlow(failed, own)).toBeNull();
+    expect(buildTxFlow({ ...failed, isValid: true }, own)).not.toBeNull();
+  });
+
   it('returns null without both sides', () => {
     expect(buildTxFlow({ utxo: { inputs: [io(OWN_A, 1)], outputs: [] } }, own)).toBeNull();
     expect(buildTxFlow(null, own)).toBeNull();
