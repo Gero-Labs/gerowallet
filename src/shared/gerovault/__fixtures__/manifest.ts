@@ -1,104 +1,157 @@
 /**
- * Test-only participants and devices for the manifest specs. Nothing here is a real wallet or a
- * real device: the account keys are the published cardano-addresses key and keys generated from
- * fixed test entropy (`vectors.ts`), device keys come from fixed labels, and an attestation is
- * placeholder bytes (attestations are verified by GV-22, not by the manifest codec).
+ * Test-only participants, devices and signatures for the manifest specs. Nothing here is a real
+ * wallet or a real device: the account keys are the published cardano-addresses key and keys
+ * generated from fixed test entropy (`vectors.ts`), and device keys come from fixed labels.
+ * CIP-8 attestations go through the wallet's own CIP-30 `signData` builder (`converter.ts`).
  */
-import { Ed25519KeyHashHex, Ed25519PrivateKey, ready } from '@cardano-sdk/crypto';
+import { Cardano } from '@cardano-sdk/core';
+import { Bip32PrivateKey, Ed25519KeyHashHex, Ed25519PrivateKey, Hash28ByteBase16, ready } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
-import { deriveRoleKeys, deriveVaultPublicKeys, vaultKeyHashes } from '../keys';
+import { buildSignatureAndCoseKey } from '../../utils/converter';
+import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, cip8Proof, expiredTxBodyHash } from '../attestation';
+import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes } from '../keys';
 import {
-  DeviceBindingBody,
   ManifestRole,
-  OwnerAttestation,
   OwnerDeviceBinding,
   VaultManifest,
+  bindingDeviceDigest,
+  bindingDigest,
   deviceBinding,
   newManifest,
 } from '../manifest';
 import { buildVaultFromParticipants } from '../scripts';
 import { RoleKeys, VaultPublicKeys, VaultScripts } from '../types';
 import { vaultId } from '../vaultId';
-import { publishedAccountKey, testCosignerAccount } from './vectors';
+import { CARDANO_ADDRESSES, bech32Bytes } from './vectors';
 
+const HARDENED = 0x80000000;
 const utf8 = (text: string) => new TextEncoder().encode(text);
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
 
-/** Role keys of four test participants: the published key and test cosigners 1, 2 and 3. */
+/** The private multisig account keys (`m/1854'/1815'/0'`) of four test participants. */
+export async function testAccounts(): Promise<Bip32PrivateKey[]> {
+  await ready();
+  const cosigner = (seed: number) => Bip32PrivateKey.fromBip39Entropy(Buffer.alloc(16, seed), '').derive([HARDENED + 1854, HARDENED + 1815, HARDENED]);
+  return [Bip32PrivateKey.fromBytes(bech32Bytes(CARDANO_ADDRESSES.acctXsk)), cosigner(1), cosigner(2), cosigner(3)];
+}
+
+/** Role keys of the four test participants: the published key and test cosigners 1, 2 and 3. */
 export async function testPeople(): Promise<RoleKeys[]> {
-  const accounts = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2), testCosignerAccount(3)]);
-  return Promise.all(accounts.map(deriveRoleKeys));
+  const accounts = await testAccounts();
+  return Promise.all(accounts.map(a => deriveRoleKeys(multisigAccountPublicKey(a.toPublic().hex()))));
 }
 
 export async function vaultKeysAt(people: readonly RoleKeys[], indexes: readonly number[]): Promise<VaultPublicKeys[]> {
   return Promise.all(people.map((p, i) => deriveVaultPublicKeys(p, indexes[i])));
 }
 
+/** A participant with the private vault payment key that signs their attestations. */
+export interface TestParticipant {
+  readonly roleKeys: RoleKeys;
+  readonly index: number;
+  readonly vaultKeys: VaultPublicKeys;
+  readonly credential: Ed25519KeyHashHex;
+  readonly signer: Ed25519PrivateKey;
+}
+
+export async function testParticipants(indexes: readonly number[] = [1, 1, 1, 1]): Promise<TestParticipant[]> {
+  const accounts = await testAccounts();
+  return Promise.all(accounts.map(async (account, i) => {
+    const roleKeys = await deriveRoleKeys(multisigAccountPublicKey(account.toPublic().hex()));
+    const vaultKeys = await deriveVaultPublicKeys(roleKeys, indexes[i]);
+    const signer = account.derive([0, indexes[i]]).toRawKey();
+    if (signer.toPublic().hex() !== vaultKeys.payment) throw new Error('fixture: the signer is not the vault payment key');
+    return { roleKeys, index: indexes[i], vaultKeys, credential: (await vaultKeyHashes(vaultKeys)).payment, signer };
+  }));
+}
+
 /** A test device: an Ed25519 key from a fixed seed, and an unrelated fixed X25519 value. */
-export async function testDevice(n: number): Promise<{ ed25519Pub: string; x25519Pub: string }> {
+export async function testDevice(n: number): Promise<{ ed25519Pub: string; x25519Pub: string; key: Ed25519PrivateKey }> {
   await ready();
-  const seed = blake2b(utf8(`gerovault test device ${n} ed25519`), { dkLen: 32 });
-  return {
-    ed25519Pub: Ed25519PrivateKey.fromNormalBytes(seed).toPublic().hex(),
-    x25519Pub: hex(blake2b(utf8(`gerovault test device ${n} x25519`), { dkLen: 32 })),
-  };
+  const key = Ed25519PrivateKey.fromNormalBytes(blake2b(utf8(`gerovault test device ${n} ed25519`), { dkLen: 32 }));
+  const x = blake2b(utf8(`gerovault test device ${n} x25519`), { dkLen: 32 });
+  x[31] &= 0x7f;
+  return { ed25519Pub: key.toPublic().hex(), x25519Pub: hex(x), key };
 }
 
-/** Placeholder attestation bytes: not a signature. */
-export function placeholderAttestation(n: number): OwnerAttestation {
-  return { method: 'cip8', proof: hex(utf8(`placeholder attestation ${n}`)) };
+/** A CIP-8 attestation of `digest` by `signer`, through the wallet's own `signData` builder. */
+export function cip8Attestation(signer: Ed25519PrivateKey, credential: string, digest: string): OwnerAttestation {
+  const address = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+    type: Cardano.CredentialType.KeyHash,
+    hash: Hash28ByteBase16(credential),
+  }).toAddress().toBytes();
+  const { signature, key } = buildSignatureAndCoseKey(Uint8Array.from(Buffer.from(address, 'hex')), digest, signer);
+  return { method: ATTESTATION_METHOD.CIP8, proof: cip8Proof(signature, key) };
 }
 
-export const VECTOR_CREATED_AT = 1795651200;
+/** An expired-transaction attestation of `subject` by `signer`. */
+export function expiredTxAttestation(signer: Ed25519PrivateKey, credential: string, subject: AttestedDigest): OwnerAttestation {
+  const signature = signer.sign(HexBlob(expiredTxBodyHash(credential, subject))).hex();
+  return { method: ATTESTATION_METHOD.EXPIRED_TX, proof: assembleExpiredTx(credential, subject, signer.toPublic().hex(), signature) };
+}
+
+/** A bound device, signed by the device and attested by the participant (none for a viewer). */
+export async function signedBinding(input: {
+  readonly vaultId: string;
+  readonly role: ManifestRole;
+  readonly participant?: TestParticipant;
+  readonly device: number;
+  readonly label?: string;
+  readonly method?: 'cip8' | 'expiredTx';
+}): Promise<OwnerDeviceBinding> {
+  const device = await testDevice(input.device);
+  const body = deviceBinding({
+    vaultId: input.vaultId,
+    role: input.role,
+    ...(input.participant ? { vaultKeys: input.participant.vaultKeys } : {}),
+    ed25519Pub: device.ed25519Pub,
+    x25519Pub: device.x25519Pub,
+    label: input.label ?? `Device ${input.device}`,
+  });
+  const deviceSig = device.key.sign(HexBlob(bindingDeviceDigest(body))).hex();
+  if (input.role === 'viewer') return { ...body, deviceSig };
+  const { signer, credential } = input.participant;
+  const digest = bindingDigest(body);
+  const attestation = input.method === 'expiredTx'
+    ? expiredTxAttestation(signer, credential, { kind: 'binding', digest })
+    : cip8Attestation(signer, credential, digest);
+  return { ...body, deviceSig, attestation };
+}
+
+export const VECTOR_REVISED_AT = 1795651200;
 
 /**
- * The vector manifest of the manifest and safety code specs: owners the published key and test
- * cosigners 1 and 2, all at vault index 1, 2 of 3, preprod. Owner 1 has test device 1 ("Laptop"),
- * owner 2 test device 2 ("Phone"), owner 3 no device yet; one viewer with test device 9
- * ("Accountant").
+ * The vector manifest of the specs: owners the published key and test cosigners 1 and 2, all at
+ * vault index 1, 2 of 3, preprod. Owner 1 has test device 1 ("Laptop", CIP-8 attestation), owner 2
+ * test device 2 ("Phone", expired-transaction attestation), owner 3 no device yet; one viewer with
+ * test device 9 ("Accountant").
  */
 export async function vectorFixture(): Promise<{
-  people: RoleKeys[];
-  keys: VaultPublicKeys[];
-  credentials: Ed25519KeyHashHex[];
+  people: TestParticipant[];
   vault: VaultScripts;
   id: string;
   manifest: VaultManifest;
 }> {
-  const people = await testPeople();
-  const keys = await vaultKeysAt(people.slice(0, 3), [1, 1, 1]);
-  const credentials = await Promise.all(keys.map(async k => (await vaultKeyHashes(k)).payment));
-  const vault = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: keys.map(vaultKeys => ({ vaultKeys })) });
+  const people = await testParticipants();
+  const vault = await buildVaultFromParticipants({
+    template: { kind: 'standard', threshold: 2 },
+    owners: people.slice(0, 3).map(p => ({ vaultKeys: p.vaultKeys })),
+  });
   const id = vaultId(vault, 'preprod');
   const manifest = newManifest({
     vault,
     network: 'preprod',
     owners: [
-      { vaultKeys: keys[0], devices: [await boundDevice(id, 'owner', credentials[0], 1, 'Laptop')] },
-      { vaultKeys: keys[1], devices: [await boundDevice(id, 'owner', credentials[1], 2, 'Phone')] },
-      { vaultKeys: keys[2] },
+      { vaultKeys: people[0].vaultKeys, devices: [await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop' })] },
+      {
+        vaultKeys: people[1].vaultKeys,
+        devices: [await signedBinding({ vaultId: id, role: 'owner', participant: people[1], device: 2, label: 'Phone', method: 'expiredTx' })],
+      },
+      { vaultKeys: people[2].vaultKeys },
     ],
-    viewers: [{ devices: [await boundDevice(id, 'viewer', undefined, 9, 'Accountant')] }],
-    createdAt: VECTOR_CREATED_AT,
+    viewers: [{ devices: [await signedBinding({ vaultId: id, role: 'viewer', device: 9, label: 'Accountant' })] }],
+    revisedAt: VECTOR_REVISED_AT,
   });
-  return { people, keys, credentials, vault, id, manifest };
-}
-
-/** A bound device of a participant, attested with placeholder bytes (none for a viewer). */
-export async function boundDevice(
-  vaultId: string,
-  role: ManifestRole,
-  credential: string | undefined,
-  n: number,
-  label = `Device ${n}`,
-): Promise<OwnerDeviceBinding> {
-  const keys = await testDevice(n);
-  const body: DeviceBindingBody = deviceBinding({
-    vaultId,
-    role,
-    ...(credential ? { credential: credential as DeviceBindingBody['credential'] } : {}),
-    ...keys,
-    label,
-  });
-  return role === 'viewer' ? body : { ...body, attestation: placeholderAttestation(n) };
+  return { people, vault, id, manifest };
 }

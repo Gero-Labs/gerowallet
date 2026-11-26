@@ -1,72 +1,90 @@
 /**
- * The vault manifest of `gero-vault/v1` (spec 5.2, 5.3; GV-60 #1728).
+ * The vault manifest of `gero-vault/v1`, schema 1 (spec 5.2, 5.3; GV-60 #1728).
  *
- * The chain is the source of truth for who controls a vault (its scripts, registered under
- * CIP-0146). The manifest is the device and notification layer that must agree with it: every
- * role slot, the vault keys each participant contributed, and the devices bound to them. It is
- * hashed over its canonical CBOR encoding, which is also its wire format (spec 5.2).
+ * Who controls a vault is settled on chain, by its two scripts. The manifest adds what the chain
+ * does not hold (roles, devices, labels) and must never contradict the scripts, which it carries
+ * so that a stored manifest can be checked with nothing else at hand. Its canonical CBOR is both
+ * what is hashed and what is sent (spec 5.2).
  *
- *   VaultManifest {
- *     protocol         "gero-vault/v1"
- *     network          "cardano-mainnet" | "cardano-preprod" | "cardano-preview"
- *     vaultId          bytes 32, the script-derived identifier of `vaultId.ts`
- *     scriptHash       bytes 28, payment script
- *     stakeScriptHash  bytes 28, stake script
- *     threshold        uint, the owner threshold of the scripts
- *     roles {          every slot present, empty where unused
+ *   VaultManifest schema 1 {
+ *     protocol          "gero-vault/v1"
+ *     schema            1
+ *     network           "cardano-mainnet" | "cardano-preprod" | "cardano-preview"
+ *     vaultId           bytes 32, derived from the scripts and the network (`vaultId.ts`)
+ *     paymentScript     bytes, the payment script's canonical CBOR
+ *     stakeScript       bytes, the stake script's canonical CBOR
+ *     roles {           every slot present, empty where unused
  *       owners, backupHolders, guardians, delegates, viewers: [RoleEntry]
- *       external: [{ credential: bytes 28, label: text }]   cosigners with no Gero device
+ *       external: [ExternalEntry]
  *     }
- *     viewersSeeProposalContents  uint 0 or 1
- *     policiesDisplay  map
- *     version          uint, 1 for the first manifest of a vault
- *     prevManifestHash bytes 0 for version 1, else bytes 32: the hash of the previous revision
- *     createdAt        uint, unix seconds when this revision was made
+ *     viewersSeeProposalContents  bool
+ *     policiesDisplay   map
+ *     version           uint, 1 for the first manifest of a vault
+ *     prevManifestHash  bytes 0 for version 1, else bytes 32: the hash of the previous revision
+ *     revisedAt         uint, unix seconds, for display (version and prevManifestHash order revisions)
  *   }
- *   RoleEntry {
- *     credential       bytes 28, the payment key hash the participant contributed; bytes 0 for a viewer
- *     vaultKeys        { payment: bytes 32, stake: bytes 32 }, raw Ed25519; {} for a viewer
- *     devices          [OwnerDeviceBinding]
- *   }
+ *   RoleEntry     { credential: bytes 28, vaultKeys: { payment: bytes 32, stake: bytes 32 }, devices: [OwnerDeviceBinding] }
+ *                 (a viewer: credential bytes 0, vaultKeys {})
+ *   ExternalEntry { credential, vaultKeys, label: text, importedBy: bytes 28, role: "owner" | "backupHolder" }
  *   OwnerDeviceBinding {
- *     vaultId, role ("owner" | "backupHolder" | "guardian" | "delegate" | "viewer"), credential,
- *     deviceId         bytes 16, sha256(ed25519Pub)[0:16]
- *     ed25519Pub       bytes 32, the device's signing key
- *     x25519Pub        bytes 32, the device's separate, random, static key agreement key
- *     label            text
- *     bindingVersion   uint >= 1
- *     attestation      { method: "cip8" | "expiredTx", proof: bytes }; {} for a viewer
+ *     vaultId, role, credential, vaultKeys   the participant's, as in their entry ({} and bytes 0 for a viewer)
+ *     deviceId          bytes 16, sha256(ed25519Pub)[0:16]
+ *     ed25519Pub        bytes 32, the device's signing key
+ *     x25519Pub         bytes 32, the device's separate, random, static key agreement key
+ *     label             text
+ *     bindingVersion    uint >= 1
+ *     deviceSig         bytes 64, Ed25519 by ed25519Pub over the device digest of the body
+ *     attestation       { method: uint, proof: bytes } by the participant's vault payment key over the
+ *                       binding digest (`attestation.ts`); {} for a viewer
  *   }
  *
- * No field carries a vault index: indexes are local to each participant (spec 4.0). Lists are
- * sorted (participants and external entries by credential, devices by device id, viewers by their
- * first device id), so one manifest has exactly one encoding.
+ * The binding body is the binding without `deviceSig` and `attestation`. Three tagged hashes:
+ * - manifest hash  blake2b-256( "gero-vault/v1|manifest|" || CBOR of the manifest )
+ * - binding digest blake2b-256( "gero-vault/v1|binding|" || CBOR of the binding body ): attested
+ * - device digest  blake2b-256( "gero-vault/v1|binding-device|" || CBOR of the binding body ): `deviceSig`
  *
- * Phase 1 (native vaults) fixes some fields: `guardians` and `delegates` are empty (guardian
- * recovery and delegates arrive with Plutus vaults), `viewersSeeProposalContents` is 0 and
- * `policiesDisplay` is empty (spec 5.3, 6.5).
+ * Threshold, template and backup terms are read from the scripts (`parseVaultScript`) and never
+ * stored twice. The participants are exactly the scripts' keys: each owner, backup holder and
+ * external cosigner's payment key in the payment script and stake key in the stake script, in the
+ * branch of their role. No field carries a vault index: each participant keeps their own index
+ * to themselves (spec 4.0). Lists are sorted, so one manifest has exactly one encoding, and every hex string in
+ * or out of this module is lowercase.
  *
- * What this module does not do: verify attestations, count attestations for a revision, or decide
- * which revision wins. Those are GV-22 (#1690). The pre-acknowledge check is `manifestCheck.ts`.
+ * Phase 1 (native vaults) fixes some fields: no guardians or delegates (they arrive with Plutus
+ * vaults), `viewersSeeProposalContents` false, `policiesDisplay` empty.
  *
- * PROVISIONAL: field encodings, the hash tag and the test vectors are not frozen until they are
- * checked against the other clients' vectors (GV-07 #1675).
+ * This module checks structure, keys and scripts. Signatures (`deviceSig`, attestations) are
+ * verified by `checkManifestBeforeAck`, which is asynchronous.
+ *
+ * PROVISIONAL: field encodings, tags and vectors are not frozen until they are checked against the
+ * other clients' vectors (GV-07 #1675).
  */
-import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bech32 } from 'bech32';
-import { CborError, CborItem, CborValue, bytesToHex, hexToBytes, readCbor } from './cbor';
+import { ATTESTATION_METHOD, MAX_ATTESTATION_BYTES, OwnerAttestation, verifyEd25519 } from './attestation';
+import { CborBoolean, CborError, CborItemOf, CborValueOf, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { CborWritableMap, encodeCanonicalCbor } from './canonicalCbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX, parseVaultPublicKeys } from './keys';
-import { MAX_BACKUP_KEYS, MAX_OWNERS, MIN_THRESHOLD, parseVaultScript } from './scripts';
-import { VaultNetwork, VaultPublicKeys, VaultScripts } from './types';
+import { decodeRegistration } from './registration';
+import {
+  MAX_BACKUP_KEYS,
+  MAX_OWNERS,
+  ParsedVaultScript,
+  instantiateVaultScripts,
+  parseVaultScript,
+  vaultSpecWarnings,
+} from './scripts';
+import { ROLE, VaultNetwork, VaultPublicKeys, VaultScript, VaultScripts, VaultTemplate } from './types';
 import { vaultId as scriptVaultId } from './vaultId';
 
 export const MANIFEST_PROTOCOL = 'gero-vault/v1';
-/** Domain tag of the manifest hash, as UTF-8 before the canonical CBOR. */
+export const MANIFEST_SCHEMA = 1;
 export const MANIFEST_HASH_TAG = 'gero-vault/v1|manifest|';
+export const BINDING_DIGEST_TAG = 'gero-vault/v1|binding|';
+export const BINDING_DEVICE_TAG = 'gero-vault/v1|binding-device|';
 
 /** Network ids as `gero-xdev/v1` writes them. */
 export const WIRE_NETWORK: Readonly<Record<VaultNetwork, string>> = Object.freeze({
@@ -80,37 +98,28 @@ export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_DEVICES_PER_ENTRY = 5;
 export const MAX_VIEWERS = 20;
 export const MAX_BINDINGS = 64;
-export const MAX_ATTESTATION_BYTES = 2048;
 export const MAX_LABEL_BYTES = 64;
+const MAX_SCRIPT_BYTES = 8192;
 /** Owners, backup holders and external cosigners together: every key of the two scripts. */
 const MAX_SCRIPT_PARTICIPANTS = MAX_OWNERS + MAX_BACKUP_KEYS;
 const MAX_VERSION = 0xffffffff;
 /** Unix seconds; a value in milliseconds is out of range. */
-const MAX_CREATED_AT = 99_999_999_999;
-const CBOR_LIMITS = { maxDepth: 10, maxItems: 16384 };
+const MAX_REVISED_AT = 99_999_999_999;
+const CBOR_LIMITS = { maxDepth: 10, maxItems: 16384, booleans: true } as const;
 
 export type ManifestRole = 'owner' | 'backupHolder' | 'guardian' | 'delegate' | 'viewer';
 const ROLES: readonly ManifestRole[] = ['owner', 'backupHolder', 'guardian', 'delegate', 'viewer'];
+/** The script branch of an external cosigner (phase 1). */
+export type ExternalRole = 'owner' | 'backupHolder';
 
-/**
- * How a participant attests a device binding (spec 5.3): a CIP-8 `signData` with the payment key
- * they contributed (`cip8`), or a transaction that can never be submitted, signed at that key,
- * carrying the binding digest (`expiredTx`). `proof` holds the method's bytes as hex. This module
- * carries the proof and never verifies it (GV-22).
- */
-export type AttestationMethod = 'cip8' | 'expiredTx';
-
-export interface OwnerAttestation {
-  readonly method: AttestationMethod;
-  readonly proof: string;
-}
-
-/** A device binding without its attestation: what the attestation signs (`bindingDigest`). */
+/** A device binding without `deviceSig` and `attestation`: what both of them sign. */
 export interface DeviceBindingBody {
   readonly vaultId: string;
   readonly role: ManifestRole;
   /** The participant's payment key hash; absent for a viewer. */
   readonly credential?: Ed25519KeyHashHex;
+  /** The participant's vault keys, as in their entry; absent for a viewer. */
+  readonly vaultKeys?: VaultPublicKeys;
   readonly deviceId: string;
   readonly ed25519Pub: string;
   readonly x25519Pub: string;
@@ -119,11 +128,13 @@ export interface DeviceBindingBody {
 }
 
 export interface OwnerDeviceBinding extends DeviceBindingBody {
+  /** 64 bytes, lowercase hex: Ed25519 by `ed25519Pub` over `bindingDeviceDigest`. */
+  readonly deviceSig: string;
   /** Required for every role with a script key; absent for a viewer. */
   readonly attestation?: OwnerAttestation;
 }
 
-/** An owner, backup holder, guardian or delegate. */
+/** An owner, backup holder, guardian or delegate with a Gero device. */
 export interface ParticipantEntry {
   readonly credential: Ed25519KeyHashHex;
   readonly vaultKeys: VaultPublicKeys;
@@ -135,10 +146,17 @@ export interface ViewerEntry {
   readonly devices: readonly OwnerDeviceBinding[];
 }
 
-/** A cosigner with no Gero device: a credential and a label, nothing else (spec 5.3). */
+/**
+ * A cosigner with no Gero device. `vaultKeys` are the raw keys the importing owner (`importedBy`)
+ * derived from the external wallet's role or account key; the manifest never carries an extended
+ * key. `role` is the script branch the keys sit in.
+ */
 export interface ExternalEntry {
   readonly credential: Ed25519KeyHashHex;
+  readonly vaultKeys: VaultPublicKeys;
   readonly label: string;
+  readonly importedBy: Ed25519KeyHashHex;
+  readonly role: ExternalRole;
 }
 
 export interface ManifestRoles {
@@ -154,11 +172,13 @@ export interface ManifestRoles {
 
 export interface VaultManifest {
   readonly protocol: typeof MANIFEST_PROTOCOL;
+  readonly schema: typeof MANIFEST_SCHEMA;
   readonly network: VaultNetwork;
   readonly vaultId: string;
-  readonly scriptHash: Hash28ByteBase16;
-  readonly stakeScriptHash: Hash28ByteBase16;
-  readonly threshold: number;
+  /** The payment script's canonical CBOR, hex. */
+  readonly paymentScript: string;
+  /** The stake script's canonical CBOR, hex. */
+  readonly stakeScript: string;
   readonly roles: ManifestRoles;
   /** Always false in phase 1. */
   readonly viewersSeeProposalContents: boolean;
@@ -167,8 +187,8 @@ export interface VaultManifest {
   readonly version: number;
   /** Absent for version 1. */
   readonly prevManifestHash?: string;
-  /** Unix seconds. */
-  readonly createdAt: number;
+  /** Unix seconds, for display. */
+  readonly revisedAt: number;
 }
 
 export type ManifestRefusalCode =
@@ -178,19 +198,29 @@ export type ManifestRefusalCode =
   | 'NOT_CANONICAL'
   | 'SCHEMA_INVALID'
   | 'UNSUPPORTED_PROTOCOL'
+  | 'UNSUPPORTED_SCHEMA'
   | 'UNKNOWN_NETWORK'
   | 'FIELD_INVALID'
   | 'LABEL_INVALID'
-  | 'THRESHOLD_INVALID'
+  | 'DEVICE_KEY_INVALID'
   | 'VERSION_INVALID'
   | 'NOT_IN_PHASE_1'
   | 'TOO_MANY_ENTRIES'
   | 'CREDENTIAL_MISMATCH'
+  | 'IMPORTER_INVALID'
   | 'DUPLICATE_PARTICIPANT'
   | 'DUPLICATE_DEVICE'
   | 'BINDING_MISMATCH'
   | 'DEVICE_ID_MISMATCH'
-  | 'ATTESTATION_INVALID';
+  | 'ATTESTATION_INVALID'
+  | 'SCRIPT_INVALID'
+  | 'VAULT_ID_MISMATCH'
+  | 'UNKNOWN_TEMPLATE'
+  | 'TEMPLATE_MISMATCH'
+  | 'KEY_NOT_IN_SCRIPT'
+  | 'ROLE_MISMATCH'
+  | 'SCRIPT_KEY_UNACCOUNTED'
+  | 'OUTSIDE_POLICY';
 
 export type DecodeManifestResult =
   | { readonly ok: true; readonly manifest: VaultManifest; /** The canonical CBOR, hex. */ readonly cbor: string; readonly hash: string }
@@ -209,13 +239,22 @@ const fault = (code: ManifestRefusalCode, detail?: string): never => {
 // ---------------------------------------------------------------------------------------------
 // Field rules, shared by the encoder and the decoder
 
-const HEX_LENGTH: Readonly<Record<number, RegExp>> = { 16: /^[0-9a-f]{32}$/, 28: /^[0-9a-f]{56}$/, 32: /^[0-9a-f]{64}$/ };
+const HEX_LENGTH: Readonly<Record<number, RegExp>> = {
+  16: /^[0-9a-f]{32}$/,
+  28: /^[0-9a-f]{56}$/,
+  32: /^[0-9a-f]{64}$/,
+  64: /^[0-9a-f]{128}$/,
+};
 const HEX_BYTES = /^(?:[0-9a-f]{2})+$/;
-/** Separators, control characters, bidirectional controls and lone surrogates. */
-const FORBIDDEN_IN_LABEL = /[|\p{Cc}؜‎‏‪-‮⁦-⁩\ud800-\udfff]/u;
+/**
+ * Refused in labels: the field separator, control and format characters (bidirectional controls
+ * and zero-width characters among them), surrogates, private use and unassigned code points, line
+ * and paragraph separators, and the Hangul fillers that render as blank.
+ */
+const FORBIDDEN_IN_LABEL = /[|\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0]/u;
 const EMPTY = new Uint8Array(0);
 
-function isHex(value: unknown, bytes: 16 | 28 | 32): value is string {
+function isHex(value: unknown, bytes: 16 | 28 | 32 | 64): value is string {
   return typeof value === 'string' && HEX_LENGTH[bytes].test(value);
 }
 
@@ -230,6 +269,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function checkLabel(label: unknown, what: string): string {
   if (typeof label !== 'string' || label.length === 0) return fault('LABEL_INVALID', `${what} is a non-empty string`);
   if (FORBIDDEN_IN_LABEL.test(label)) fault('LABEL_INVALID', `${what} has a forbidden character`);
+  if (label.normalize('NFC') !== label) fault('LABEL_INVALID', `${what} is not in NFC`);
   if (new TextEncoder().encode(label).length > MAX_LABEL_BYTES) fault('LABEL_INVALID', `${what} is at most ${MAX_LABEL_BYTES} bytes`);
   return label;
 }
@@ -247,6 +287,52 @@ function vaultKeysOf(payment: string, stake: string): VaultPublicKeys {
   return parseVaultPublicKeys({ payment: encode(BECH32_PREFIX.PAYMENT_VK, payment), stake: encode(BECH32_PREFIX.STAKE_VK, stake) });
 }
 
+function checkVaultKeys(k: VaultPublicKeys, what: string): VaultPublicKeys {
+  if (k?.level !== 'vault' || !isHex(k.payment, 32) || !isHex(k.stake, 32) || k.payment === k.stake) {
+    return fault('FIELD_INVALID', what);
+  }
+  return vaultKeysOf(k.payment, k.stake);
+}
+
+// Device keys (spec 5.3): small-order and non-canonical points are refused. The lists are the
+// curve's 8-torsion points; the specs check them against an independent implementation.
+const ED25519_SMALL_ORDER = [
+  '0000000000000000000000000000000000000000000000000000000000000000',
+  '0100000000000000000000000000000000000000000000000000000000000000',
+  '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+  'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+];
+const X25519_SMALL_ORDER = [
+  '0000000000000000000000000000000000000000000000000000000000000000',
+  '0100000000000000000000000000000000000000000000000000000000000000',
+  'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800',
+  '5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157',
+  'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+];
+
+/** Whether 255 bits, little-endian, are at least p = 2^255 - 19 (a non-canonical field element). */
+function atLeastP(bytes: Uint8Array): boolean {
+  if ((bytes[31] & 0x7f) !== 0x7f) return false;
+  for (let i = 30; i >= 1; i--) if (bytes[i] !== 0xff) return false;
+  return bytes[0] >= 0xed;
+}
+
+/** An Ed25519 device key: canonical, and not a small-order point (the identity among them). */
+export function isUsableEd25519Key(hex: string): boolean {
+  if (!isHex(hex, 32)) return false;
+  const y = hexToBytes(hex);
+  y[31] &= 0x7f;
+  return !atLeastP(y) && !ED25519_SMALL_ORDER.includes(bytesToHex(y));
+}
+
+/** An X25519 device key: canonical (top bit clear, below p), not zero and not of small order. */
+export function isUsableX25519Key(hex: string): boolean {
+  if (!isHex(hex, 32)) return false;
+  const u = hexToBytes(hex);
+  return (u[31] & 0x80) === 0 && !atLeastP(u) && !X25519_SMALL_ORDER.includes(hex);
+}
+
 function deviceIdHex(ed25519Pub: string): string {
   return bytesToHex(sha256(hexToBytes(ed25519Pub)).subarray(0, 16));
 }
@@ -262,16 +348,23 @@ function checkBindingBody(b: DeviceBindingBody): DeviceBindingBody {
   if (!isHex(b.vaultId, 32)) fault('FIELD_INVALID', 'binding vaultId');
   if (!ROLES.includes(b.role)) fault('FIELD_INVALID', 'binding role');
   const viewer = b.role === 'viewer';
-  if (viewer ? Boolean(b.credential) : !isHex(b.credential, 28)) fault('FIELD_INVALID', 'binding credential');
+  let vaultKeys: VaultPublicKeys | undefined;
+  if (viewer) {
+    if (b.credential || b.vaultKeys) fault('FIELD_INVALID', 'a viewer binding has no script key');
+  } else {
+    vaultKeys = checkVaultKeys(b.vaultKeys, 'binding vaultKeys');
+    if (b.credential !== keyHashOf(vaultKeys.payment)) fault('CREDENTIAL_MISMATCH', 'binding credential');
+  }
   if (!isHex(b.ed25519Pub, 32) || !isHex(b.x25519Pub, 32)) fault('FIELD_INVALID', 'device keys');
   if (b.ed25519Pub === b.x25519Pub) fault('FIELD_INVALID', 'the X25519 key is the Ed25519 key');
+  if (!isUsableEd25519Key(b.ed25519Pub) || !isUsableX25519Key(b.x25519Pub)) fault('DEVICE_KEY_INVALID');
   if (b.deviceId !== deviceIdHex(b.ed25519Pub)) fault('DEVICE_ID_MISMATCH');
   checkLabel(b.label, 'A device label');
   if (!isInt(b.bindingVersion, 1, MAX_VERSION)) fault('FIELD_INVALID', 'bindingVersion');
   return Object.freeze({
     vaultId: b.vaultId,
     role: b.role,
-    ...(viewer ? {} : { credential: b.credential }),
+    ...(viewer ? {} : { credential: b.credential, vaultKeys }),
     deviceId: b.deviceId,
     ed25519Pub: b.ed25519Pub,
     x25519Pub: b.x25519Pub,
@@ -285,7 +378,9 @@ function checkAttestation(role: ManifestRole, a: OwnerAttestation | undefined): 
     if (a !== undefined && a !== null) fault('ATTESTATION_INVALID', 'a viewer binding carries no attestation');
     return undefined;
   }
-  if (!a || (a.method !== 'cip8' && a.method !== 'expiredTx')) return fault('ATTESTATION_INVALID', 'attestation method');
+  if (!a || (a.method !== ATTESTATION_METHOD.CIP8 && a.method !== ATTESTATION_METHOD.EXPIRED_TX)) {
+    return fault('ATTESTATION_INVALID', 'attestation method');
+  }
   if (typeof a.proof !== 'string' || !HEX_BYTES.test(a.proof) || a.proof.length > MAX_ATTESTATION_BYTES * 2) {
     fault('ATTESTATION_INVALID', 'attestation proof');
   }
@@ -296,6 +391,7 @@ interface BindingContext {
   readonly vaultId: string;
   readonly role: ManifestRole;
   readonly credential?: string;
+  readonly vaultKeys?: VaultPublicKeys;
 }
 
 function checkDevices(list: readonly OwnerDeviceBinding[], ctx: BindingContext, min: number): readonly OwnerDeviceBinding[] {
@@ -304,26 +400,23 @@ function checkDevices(list: readonly OwnerDeviceBinding[], ctx: BindingContext, 
   if (list.length < min) fault('FIELD_INVALID', 'a viewer has at least one device');
   const out = list.map(b => {
     const body = checkBindingBody(b);
-    if (body.vaultId !== ctx.vaultId || body.role !== ctx.role || body.credential !== ctx.credential) fault('BINDING_MISMATCH');
+    const sameKeys = body.vaultKeys?.payment === ctx.vaultKeys?.payment && body.vaultKeys?.stake === ctx.vaultKeys?.stake;
+    if (body.vaultId !== ctx.vaultId || body.role !== ctx.role || body.credential !== ctx.credential || !sameKeys) {
+      fault('BINDING_MISMATCH');
+    }
+    if (!isHex(b.deviceSig, 64)) fault('FIELD_INVALID', 'deviceSig');
     const attestation = checkAttestation(body.role, b.attestation);
-    return Object.freeze(attestation ? { ...body, attestation } : { ...body });
+    return Object.freeze({ ...body, deviceSig: b.deviceSig, ...(attestation ? { attestation } : {}) });
   });
   return Object.freeze(out.sort((a, b) => byText(a.deviceId, b.deviceId)));
 }
 
 function checkParticipant(e: ParticipantEntry, role: ManifestRole, vaultId: string): ParticipantEntry {
   if (!e || typeof e !== 'object') return fault('SCHEMA_INVALID', 'participant');
-  const k = e.vaultKeys;
-  if (k?.level !== 'vault' || !isHex(k.payment, 32) || !isHex(k.stake, 32) || k.payment === k.stake) {
-    fault('FIELD_INVALID', 'vaultKeys');
-  }
-  const credential = keyHashOf(k.payment);
+  const vaultKeys = checkVaultKeys(e.vaultKeys, 'vaultKeys');
+  const credential = keyHashOf(vaultKeys.payment);
   if (e.credential !== credential) fault('CREDENTIAL_MISMATCH');
-  return Object.freeze({
-    credential,
-    vaultKeys: vaultKeysOf(k.payment, k.stake),
-    devices: checkDevices(e.devices, { vaultId, role, credential }, 0),
-  });
+  return Object.freeze({ credential, vaultKeys, devices: checkDevices(e.devices, { vaultId, role, credential, vaultKeys }, 0) });
 }
 
 function checkViewer(e: ViewerEntry, vaultId: string): ViewerEntry {
@@ -333,9 +426,14 @@ function checkViewer(e: ViewerEntry, vaultId: string): ViewerEntry {
   return Object.freeze({ devices: checkDevices(e.devices, { vaultId, role: 'viewer' }, 1) });
 }
 
-function checkExternal(e: ExternalEntry): ExternalEntry {
-  if (!e || typeof e !== 'object' || !isHex(e.credential, 28)) return fault('FIELD_INVALID', 'external credential');
-  return Object.freeze({ credential: e.credential, label: checkLabel(e.label, 'An external label') });
+function checkExternal(e: ExternalEntry, importers: ReadonlySet<string>): ExternalEntry {
+  if (!e || typeof e !== 'object') return fault('SCHEMA_INVALID', 'external');
+  const vaultKeys = checkVaultKeys(e.vaultKeys, 'external vaultKeys');
+  const credential = keyHashOf(vaultKeys.payment);
+  if (e.credential !== credential) fault('CREDENTIAL_MISMATCH', 'external');
+  if (e.role !== 'owner' && e.role !== 'backupHolder') fault('FIELD_INVALID', 'external role');
+  if (!isHex(e.importedBy, 28) || !importers.has(e.importedBy)) fault('IMPORTER_INVALID', 'importedBy names an owner of the manifest');
+  return Object.freeze({ credential, vaultKeys, label: checkLabel(e.label, 'An external label'), importedBy: e.importedBy, role: e.role });
 }
 
 const SLOTS = ['owners', 'backupHolders', 'guardians', 'delegates', 'viewers', 'external'] as const;
@@ -344,19 +442,86 @@ function unique(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
 }
 
+/** Decodes the two scripts strictly (canonical CBOR, bounded), through the registration decoder. */
+function decodeScripts(paymentScript: string, stakeScript: string): { payment: VaultScript; stake: VaultScript } {
+  const decoded = decodeRegistration({ metadata: { json: { types: [ROLE.PAYMENT, ROLE.STAKE] } }, nativeScripts: { cbors: [paymentScript, stakeScript] } });
+  if (decoded.ok === false) return fault('SCRIPT_INVALID', decoded.code);
+  return { payment: decoded.registration.payment, stake: decoded.registration.stake };
+}
+
+const backupsOf = (p: ParsedVaultScript): readonly Ed25519KeyHashHex[] => (p.kind === 'backup' ? p.backups : []);
+
+function templateOf(p: ParsedVaultScript, s: ParsedVaultScript): VaultTemplate | undefined {
+  if (p.kind !== s.kind || p.threshold !== s.threshold || p.owners.length !== s.owners.length) return undefined;
+  if (p.kind === 'standard') return Object.freeze({ kind: 'standard', threshold: p.threshold });
+  if (s.kind !== 'backup' || p.backupThreshold !== s.backupThreshold || p.backupAfterSlot !== s.backupAfterSlot
+    || p.backups.length !== s.backups.length) {
+    return undefined;
+  }
+  return Object.freeze({ kind: 'backup', threshold: p.threshold, backupThreshold: p.backupThreshold, backupAfterSlot: p.backupAfterSlot });
+}
+
+const POLICY_CODES: ReadonlySet<string> = new Set(['THRESHOLD_TOO_LOW', 'TOO_FEW_OWNERS', 'TOO_MANY_OWNERS']);
+
+interface Placed {
+  readonly role: ExternalRole;
+  readonly payment: Ed25519KeyHashHex;
+  readonly stake: Ed25519KeyHashHex;
+}
+
+/** Checks the scripts are exactly the participants' keys, each in the branch of their role. */
+function checkScripts(m: VaultManifest, placed: readonly Placed[]): void {
+  if (!HEX_BYTES.test(m.paymentScript ?? '') || !HEX_BYTES.test(m.stakeScript ?? '')
+    || m.paymentScript.length > MAX_SCRIPT_BYTES * 2 || m.stakeScript.length > MAX_SCRIPT_BYTES * 2) {
+    fault('SCRIPT_INVALID', 'scripts are CBOR hex');
+  }
+  const scripts = decodeScripts(m.paymentScript, m.stakeScript);
+  if (scripts.payment.cbor !== m.paymentScript || scripts.stake.cbor !== m.stakeScript) fault('SCRIPT_INVALID', 'not canonical');
+  if (scriptVaultId(scripts, m.network) !== m.vaultId) fault('VAULT_ID_MISMATCH');
+  const p = parseVaultScript(scripts.payment.script);
+  const s = parseVaultScript(scripts.stake.script);
+  if (!p || !s) fault('UNKNOWN_TEMPLATE');
+  const template = templateOf(p, s) ?? fault('TEMPLATE_MISMATCH');
+  const branch = {
+    owner: { payment: new Set<string>(p.owners), stake: new Set<string>(s.owners) },
+    backupHolder: { payment: new Set<string>(backupsOf(p)), stake: new Set<string>(backupsOf(s)) },
+  };
+  for (const x of placed) {
+    const other = x.role === 'owner' ? 'backupHolder' : 'owner';
+    for (const part of ['payment', 'stake'] as const) {
+      if (branch[x.role][part].has(x[part])) continue;
+      fault(branch[other][part].has(x[part]) ? 'ROLE_MISMATCH' : 'KEY_NOT_IN_SCRIPT', x.payment);
+    }
+  }
+  if (placed.length !== p.owners.length + backupsOf(p).length) fault('SCRIPT_KEY_UNACCOUNTED');
+  // Rebuilt in the scripts' own key order: the bounds of `scripts.ts` apply and the bytes must agree.
+  const byPayment = new Map(placed.map(x => [x.payment as string, { payment: x.payment, stake: x.stake }]));
+  const spec = { template, owners: p.owners.map(h => byPayment.get(h)), backups: backupsOf(p).map(h => byPayment.get(h)) };
+  let rebuilt: VaultScripts;
+  try {
+    rebuilt = instantiateVaultScripts(spec, {
+      payment: { owners: p.owners, backups: backupsOf(p) },
+      stake: { owners: s.owners, backups: backupsOf(s) },
+    }, { acknowledged: vaultSpecWarnings(spec) });
+  } catch (e) {
+    if (e instanceof GeroVaultError) fault(POLICY_CODES.has(e.code) ? 'OUTSIDE_POLICY' : 'SCRIPT_INVALID', e.code);
+    throw e;
+  }
+  if (rebuilt.payment.hash !== scripts.payment.hash || rebuilt.stake.hash !== scripts.stake.hash) fault('SCRIPT_INVALID', 'rebuild');
+}
+
 /** Validates a manifest and returns it normalized: sorted lists, frozen. Throws `Fault`. */
 function normalize(m: VaultManifest): VaultManifest {
   if (!m || typeof m !== 'object') return fault('SCHEMA_INVALID', 'not a manifest');
   if (m.protocol !== MANIFEST_PROTOCOL) fault('UNSUPPORTED_PROTOCOL');
+  if (m.schema !== MANIFEST_SCHEMA) fault('UNSUPPORTED_SCHEMA');
   if (!Object.prototype.hasOwnProperty.call(WIRE_NETWORK, m.network)) fault('UNKNOWN_NETWORK');
   if (!isHex(m.vaultId, 32)) fault('FIELD_INVALID', 'vaultId');
-  if (!isHex(m.scriptHash, 28) || !isHex(m.stakeScriptHash, 28)) fault('FIELD_INVALID', 'script hash');
-  if (m.scriptHash === m.stakeScriptHash) fault('FIELD_INVALID', 'the payment and stake scripts are one script');
   if (!isInt(m.version, 1, MAX_VERSION)) fault('VERSION_INVALID', 'version');
   if (m.version === 1 ? Boolean(m.prevManifestHash) : !isHex(m.prevManifestHash, 32)) {
     fault('VERSION_INVALID', 'only version 1 has no previous manifest');
   }
-  if (!isInt(m.createdAt, 0, MAX_CREATED_AT)) fault('FIELD_INVALID', 'createdAt is unix seconds');
+  if (!isInt(m.revisedAt, 0, MAX_REVISED_AT)) fault('FIELD_INVALID', 'revisedAt is unix seconds');
   if (typeof m.viewersSeeProposalContents !== 'boolean') fault('SCHEMA_INVALID', 'viewersSeeProposalContents');
   if (m.viewersSeeProposalContents) fault('NOT_IN_PHASE_1', 'viewers see no proposal contents in phase 1');
   if (!isPlainObject(m.policiesDisplay)) fault('SCHEMA_INVALID', 'policiesDisplay');
@@ -369,16 +534,15 @@ function normalize(m: VaultManifest): VaultManifest {
     || r.owners.length + r.backupHolders.length + r.external.length > MAX_SCRIPT_PARTICIPANTS) {
     fault('TOO_MANY_ENTRIES', 'role slots');
   }
-  const owners = r.owners.map(e => checkParticipant(e, 'owner', m.vaultId)).sort((a, b) => byText(a.credential, b.credential));
-  const backupHolders = r.backupHolders.map(e => checkParticipant(e, 'backupHolder', m.vaultId))
-    .sort((a, b) => byText(a.credential, b.credential));
+  const byCredential = <T extends { credential: string }>(a: T, b: T) => byText(a.credential, b.credential);
+  const owners = r.owners.map(e => checkParticipant(e, 'owner', m.vaultId)).sort(byCredential);
+  const backupHolders = r.backupHolders.map(e => checkParticipant(e, 'backupHolder', m.vaultId)).sort(byCredential);
   const viewers = r.viewers.map(e => checkViewer(e, m.vaultId)).sort((a, b) => byText(a.devices[0].deviceId, b.devices[0].deviceId));
-  const external = r.external.map(checkExternal).sort((a, b) => byText(a.credential, b.credential));
+  const importers = new Set<string>(owners.map(e => e.credential));
+  const external = r.external.map(e => checkExternal(e, importers)).sort(byCredential);
 
-  // The owner threshold counts owners in the scripts: the owners slot plus any external owner.
-  if (!isInt(m.threshold, MIN_THRESHOLD, Math.min(MAX_OWNERS, owners.length + external.length))) fault('THRESHOLD_INVALID');
   if (!unique([...owners, ...backupHolders, ...external].map(e => e.credential))) fault('DUPLICATE_PARTICIPANT', 'credential');
-  if (!unique([...owners, ...backupHolders].flatMap(e => [e.vaultKeys.payment, e.vaultKeys.stake]))) {
+  if (!unique([...owners, ...backupHolders, ...external].flatMap(e => [e.vaultKeys.payment, e.vaultKeys.stake]))) {
     fault('DUPLICATE_PARTICIPANT', 'vault key');
   }
   const bindings = [...owners, ...backupHolders, ...viewers].flatMap(e => e.devices);
@@ -387,13 +551,20 @@ function normalize(m: VaultManifest): VaultManifest {
     fault('DUPLICATE_DEVICE');
   }
 
+  const placed: Placed[] = [
+    ...owners.map(e => ({ role: 'owner' as const, payment: e.credential, stake: keyHashOf(e.vaultKeys.stake) })),
+    ...backupHolders.map(e => ({ role: 'backupHolder' as const, payment: e.credential, stake: keyHashOf(e.vaultKeys.stake) })),
+    ...external.map(e => ({ role: e.role, payment: e.credential, stake: keyHashOf(e.vaultKeys.stake) })),
+  ];
+  checkScripts(m, placed);
+
   return Object.freeze({
     protocol: MANIFEST_PROTOCOL,
+    schema: MANIFEST_SCHEMA,
     network: m.network,
     vaultId: m.vaultId,
-    scriptHash: m.scriptHash,
-    stakeScriptHash: m.stakeScriptHash,
-    threshold: m.threshold,
+    paymentScript: m.paymentScript,
+    stakeScript: m.stakeScript,
     roles: Object.freeze({
       owners: Object.freeze(owners),
       backupHolders: Object.freeze(backupHolders),
@@ -406,7 +577,7 @@ function normalize(m: VaultManifest): VaultManifest {
     policiesDisplay: Object.freeze({}),
     version: m.version,
     ...(m.version === 1 ? {} : { prevManifestHash: m.prevManifestHash }),
-    createdAt: m.createdAt,
+    revisedAt: m.revisedAt,
   });
 }
 
@@ -425,15 +596,20 @@ function normalizeOrThrow(m: VaultManifest): VaultManifest {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Encoding
+// Encoding and hashes
 
 const bytes = (hex: string | undefined): Uint8Array => (hex ? hexToBytes(hex) : EMPTY);
+
+function keysWritable(k: VaultPublicKeys | undefined): CborWritableMap {
+  return k ? { payment: bytes(k.payment), stake: bytes(k.stake) } : {};
+}
 
 function bindingBodyWritable(d: DeviceBindingBody): CborWritableMap {
   return {
     vaultId: bytes(d.vaultId),
     role: d.role,
     credential: bytes(d.credential),
+    vaultKeys: keysWritable(d.vaultKeys),
     deviceId: bytes(d.deviceId),
     ed25519Pub: bytes(d.ed25519Pub),
     x25519Pub: bytes(d.x25519Pub),
@@ -445,6 +621,7 @@ function bindingBodyWritable(d: DeviceBindingBody): CborWritableMap {
 function bindingWritable(d: OwnerDeviceBinding): CborWritableMap {
   return {
     ...bindingBodyWritable(d),
+    deviceSig: bytes(d.deviceSig),
     attestation: d.attestation ? { method: d.attestation.method, proof: bytes(d.attestation.proof) } : {},
   };
 }
@@ -452,37 +629,44 @@ function bindingWritable(d: OwnerDeviceBinding): CborWritableMap {
 function manifestWritable(m: VaultManifest): CborWritableMap {
   const participant = (e: ParticipantEntry): CborWritableMap => ({
     credential: bytes(e.credential),
-    vaultKeys: { payment: bytes(e.vaultKeys.payment), stake: bytes(e.vaultKeys.stake) },
+    vaultKeys: keysWritable(e.vaultKeys),
     devices: e.devices.map(bindingWritable),
   });
   return {
     protocol: m.protocol,
+    schema: m.schema,
     network: WIRE_NETWORK[m.network],
     vaultId: bytes(m.vaultId),
-    scriptHash: bytes(m.scriptHash),
-    stakeScriptHash: bytes(m.stakeScriptHash),
-    threshold: m.threshold,
+    paymentScript: bytes(m.paymentScript),
+    stakeScript: bytes(m.stakeScript),
     roles: {
       owners: m.roles.owners.map(participant),
       backupHolders: m.roles.backupHolders.map(participant),
       guardians: m.roles.guardians.map(participant),
       delegates: m.roles.delegates.map(participant),
       viewers: m.roles.viewers.map(e => ({ credential: EMPTY, vaultKeys: {}, devices: e.devices.map(bindingWritable) })),
-      external: m.roles.external.map(e => ({ credential: bytes(e.credential), label: e.label })),
+      external: m.roles.external.map(e => ({
+        credential: bytes(e.credential),
+        vaultKeys: keysWritable(e.vaultKeys),
+        label: e.label,
+        importedBy: bytes(e.importedBy),
+        role: e.role,
+      })),
     },
-    viewersSeeProposalContents: m.viewersSeeProposalContents ? 1 : 0,
+    viewersSeeProposalContents: m.viewersSeeProposalContents,
     policiesDisplay: {},
     version: m.version,
     prevManifestHash: bytes(m.prevManifestHash),
-    createdAt: m.createdAt,
+    revisedAt: m.revisedAt,
   };
 }
 
-function hashCbor(cbor: Uint8Array): string {
-  const tag = new TextEncoder().encode(MANIFEST_HASH_TAG);
-  const preimage = new Uint8Array(tag.length + cbor.length);
-  preimage.set(tag, 0);
-  preimage.set(cbor, tag.length);
+/** blake2b-256( UTF-8 tag || bytes ), hex. */
+export function taggedHash(tag: string, data: Uint8Array): string {
+  const t = new TextEncoder().encode(tag);
+  const preimage = new Uint8Array(t.length + data.length);
+  preimage.set(t, 0);
+  preimage.set(data, t.length);
   return bytesToHex(blake2b(preimage, { dkLen: 32 }));
 }
 
@@ -497,13 +681,37 @@ export function encodeManifest(manifest: VaultManifest): string {
 }
 
 /**
- * The manifest hash, 32 bytes as lowercase hex:
- * `blake2b-256( "gero-vault/v1|manifest|" || canonical CBOR )`. It is the `<manifestHash>` of the
- * signing subjects (spec 5.5), the `prevManifestHash` of the next revision and the value the
- * in-person QR carries (`safetyCode.ts`).
+ * The manifest hash: `blake2b-256( "gero-vault/v1|manifest|" || canonical CBOR )`, hex. It is the
+ * `<manifestHash>` of the signing subjects (spec 5.5) and the `prevManifestHash` of the next
+ * revision.
  */
 export function manifestHash(manifest: VaultManifest): string {
-  return hashCbor(hexToBytes(encodeManifest(manifest)));
+  return taggedHash(MANIFEST_HASH_TAG, hexToBytes(encodeManifest(manifest)));
+}
+
+/** The manifest's scripts, decoded. Throws `GeroVaultError('INVALID_MANIFEST')`. */
+export function manifestScripts(manifest: VaultManifest): { readonly payment: VaultScript; readonly stake: VaultScript } {
+  const m = normalizeOrThrow(manifest);
+  return Object.freeze(decodeScripts(m.paymentScript, m.stakeScript));
+}
+
+/** The template, threshold and backup terms, read from the scripts. */
+export function manifestTemplate(manifest: VaultManifest): VaultTemplate {
+  const { payment, stake } = manifestScripts(manifest);
+  return templateOf(parseVaultScript(payment.script), parseVaultScript(stake.script));
+}
+
+/**
+ * Whether each script lists its owner keys and its backup keys sorted by bytes, as `scripts.ts`
+ * writes a new vault. Another wallet may order keys differently; the same keys in another order
+ * are another address and another vault id.
+ */
+export function scriptsHaveCanonicalKeyOrder(scripts: Pick<VaultScripts, 'payment' | 'stake'>): boolean {
+  const sorted = (list: readonly string[]) => list.every((h, i) => i === 0 || list[i - 1] < h);
+  return [scripts?.payment, scripts?.stake].every(s => {
+    const parsed = s?.script ? parseVaultScript(s.script) : undefined;
+    return Boolean(parsed) && sorted(parsed.owners) && sorted(backupsOf(parsed));
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -512,8 +720,8 @@ export function manifestHash(manifest: VaultManifest): string {
 export interface DeviceBindingInput {
   readonly vaultId: string;
   readonly role: ManifestRole;
-  /** The payment key hash the participant contributed; omitted for a viewer. */
-  readonly credential?: Ed25519KeyHashHex;
+  /** The participant's vault keys; omitted for a viewer. The credential is their payment key hash. */
+  readonly vaultKeys?: VaultPublicKeys;
   readonly ed25519Pub: string;
   readonly x25519Pub: string;
   readonly label: string;
@@ -521,13 +729,14 @@ export interface DeviceBindingInput {
   readonly bindingVersion?: number;
 }
 
-/** Builds a binding body (device id computed). Throws `GeroVaultError('INVALID_DEVICE_BINDING')`. */
+/** Builds a binding body (credential and device id computed). Throws `GeroVaultError('INVALID_DEVICE_BINDING')`. */
 export function deviceBinding(input: DeviceBindingInput): DeviceBindingBody {
   try {
+    const keys = input?.vaultKeys;
     return checkBindingBody({
       vaultId: input?.vaultId,
       role: input?.role,
-      credential: input?.credential,
+      ...(keys ? { vaultKeys: keys, credential: isHex(keys.payment, 32) ? keyHashOf(keys.payment) : undefined } : {}),
       deviceId: isHex(input?.ed25519Pub, 32) ? deviceIdHex(input.ed25519Pub) : '',
       ed25519Pub: input?.ed25519Pub,
       x25519Pub: input?.x25519Pub,
@@ -539,25 +748,42 @@ export function deviceBinding(input: DeviceBindingInput): DeviceBindingBody {
   }
 }
 
-/** The canonical CBOR of a binding without its attestation, hex. Any attestation is ignored. */
-export function deviceBindingCbor(binding: DeviceBindingBody): string {
+function bodyBytes(binding: DeviceBindingBody): Uint8Array {
   let body: DeviceBindingBody;
   try {
     body = checkBindingBody(binding);
   } catch (e) {
     throw asGeroVaultError(e, 'INVALID_DEVICE_BINDING');
   }
-  return bytesToHex(encodeCanonicalCbor(bindingBodyWritable(body)));
+  return encodeCanonicalCbor(bindingBodyWritable(body));
+}
+
+/** The canonical CBOR of a binding body, hex. Any `deviceSig` or attestation is ignored. */
+export function deviceBindingCbor(binding: DeviceBindingBody): string {
+  return bytesToHex(bodyBytes(binding));
 }
 
 /**
- * The digest an owner attestation signs (spec 5.3): `blake2b-256( canonical CBOR of the binding
- * without attestation )`, 32 bytes as hex. Spec 5.3 gives this construction without a domain
- * tag; the binding is a map with text keys, so its bytes are never a transaction body. Carrying it
- * in a CIP-8 payload or in the auxiliary data of an expired transaction is GV-22 (#1690).
+ * The binding digest an owner attestation signs (spec 5.3):
+ * `blake2b-256( "gero-vault/v1|binding|" || canonical CBOR of the binding body )`, hex.
  */
 export function bindingDigest(binding: DeviceBindingBody): string {
-  return bytesToHex(blake2b(hexToBytes(deviceBindingCbor(binding)), { dkLen: 32 }));
+  return taggedHash(BINDING_DIGEST_TAG, bodyBytes(binding));
+}
+
+/** What `deviceSig` signs: `blake2b-256( "gero-vault/v1|binding-device|" || binding body CBOR )`, hex. */
+export function bindingDeviceDigest(binding: DeviceBindingBody): string {
+  return taggedHash(BINDING_DEVICE_TAG, bodyBytes(binding));
+}
+
+/** Whether `deviceSig` is the device key's signature over the device digest. Never throws. */
+export async function verifyDeviceSignature(binding: OwnerDeviceBinding): Promise<boolean> {
+  try {
+    if (!isHex(binding?.deviceSig, 64)) return false;
+    return await verifyEd25519(hexToBytes(binding.ed25519Pub), hexToBytes(binding.deviceSig), hexToBytes(bindingDeviceDigest(binding)));
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -569,68 +795,87 @@ export interface ManifestParticipantInput {
   readonly devices?: readonly OwnerDeviceBinding[];
 }
 
+/** An external cosigner of a new manifest; the credential is computed. */
+export interface ExternalInput {
+  readonly vaultKeys: VaultPublicKeys;
+  readonly label: string;
+  readonly importedBy: Ed25519KeyHashHex;
+  readonly role: ExternalRole;
+}
+
 export interface NewManifestInput {
-  /** The vault's scripts: they give the vault id, the script hashes and the threshold. */
+  /** The vault's scripts, carried in the manifest; they give the vault id and the template. */
   readonly vault: Pick<VaultScripts, 'payment' | 'stake'>;
   readonly network: VaultNetwork;
   readonly owners: readonly ManifestParticipantInput[];
   readonly backupHolders?: readonly ManifestParticipantInput[];
   readonly viewers?: readonly ViewerEntry[];
-  readonly external?: readonly ExternalEntry[];
+  readonly external?: readonly ExternalInput[];
   /** Unix seconds. */
-  readonly createdAt: number;
+  readonly revisedAt: number;
+  /**
+   * A vault whose scripts list keys in another order than `scripts.ts` writes (one rebuilt from
+   * another wallet's registration) is refused unless this is set: the same keys in another order
+   * are another address and another vault id.
+   */
+  readonly allowNonCanonicalKeyOrder?: boolean;
 }
 
-/**
- * The first manifest (version 1) of a vault. It checks the manifest's own rules only; that the
- * participants are the scripts' keys is `checkManifestBeforeAck`, which the creator can run too.
- * Throws `GeroVaultError`.
- */
+/** The first manifest (version 1) of a vault. Throws `GeroVaultError`. */
 export function newManifest(input: NewManifestInput): VaultManifest {
-  const parsed = input?.vault?.payment?.script ? parseVaultScript(input.vault.payment.script) : undefined;
-  if (!parsed) throw new GeroVaultError('UNKNOWN_TEMPLATE', 'A manifest is made from a vault template\'s scripts');
+  if (!input?.vault?.payment?.script || !input.vault.stake?.script) {
+    throw new GeroVaultError('UNKNOWN_TEMPLATE', 'A manifest is made from a vault\'s scripts');
+  }
   const id = scriptVaultId(input.vault, input.network);
-  const entry = (p: ManifestParticipantInput) => ({
-    credential: isHex(p?.vaultKeys?.payment, 32) ? keyHashOf(p.vaultKeys.payment) : undefined,
-    vaultKeys: p?.vaultKeys,
-    devices: p?.devices ?? [],
-  });
+  if (!input.allowNonCanonicalKeyOrder && !scriptsHaveCanonicalKeyOrder(input.vault)) {
+    throw new GeroVaultError('INVALID_MANIFEST', 'NON_CANONICAL_KEY_ORDER: the scripts list keys in another order than this wallet writes');
+  }
+  const credentialOf = (k: VaultPublicKeys) => (isHex(k?.payment, 32) ? keyHashOf(k.payment) : undefined);
+  const entry = (p: ManifestParticipantInput) => ({ credential: credentialOf(p?.vaultKeys), vaultKeys: p?.vaultKeys, devices: p?.devices ?? [] });
   return normalizeOrThrow({
     protocol: MANIFEST_PROTOCOL,
+    schema: MANIFEST_SCHEMA,
     network: input.network,
     vaultId: id,
-    scriptHash: input.vault.payment.hash,
-    stakeScriptHash: input.vault.stake?.hash,
-    threshold: parsed.threshold,
+    paymentScript: input.vault.payment.cbor,
+    stakeScript: input.vault.stake.cbor,
     roles: {
       owners: (input.owners ?? []).map(entry),
       backupHolders: (input.backupHolders ?? []).map(entry),
       guardians: [],
       delegates: [],
       viewers: input.viewers ?? [],
-      external: input.external ?? [],
+      external: (input.external ?? []).map(e => ({ ...e, credential: credentialOf(e?.vaultKeys) })),
     },
     viewersSeeProposalContents: false,
     policiesDisplay: {},
     version: 1,
-    createdAt: input.createdAt,
+    revisedAt: input.revisedAt,
   });
 }
 
-export type ManifestRevisionRefusal = 'INVALID_MANIFEST' | 'OTHER_VAULT' | 'VERSION_NOT_NEXT' | 'PREV_HASH_MISMATCH' | 'PARTICIPANTS_CHANGED';
+export type ManifestRevisionRefusal =
+  | 'INVALID_MANIFEST'
+  | 'OTHER_VAULT'
+  | 'VERSION_NOT_NEXT'
+  | 'PREV_HASH_MISMATCH'
+  | 'PARTICIPANTS_CHANGED'
+  | 'TIME_BACKWARDS';
 
 export type ManifestRevisionCheck = { readonly ok: true } | { readonly ok: false; readonly code: ManifestRevisionRefusal };
 
 function scriptParticipants(m: VaultManifest): string {
   const keys = (list: readonly ParticipantEntry[]) => list.map(e => `${e.credential}:${e.vaultKeys.payment}:${e.vaultKeys.stake}`);
-  return JSON.stringify([keys(m.roles.owners), keys(m.roles.backupHolders), m.roles.external.map(e => e.credential)]);
+  const external = m.roles.external.map(e => `${e.credential}:${e.vaultKeys.payment}:${e.vaultKeys.stake}:${e.role}:${e.importedBy}`);
+  return JSON.stringify([keys(m.roles.owners), keys(m.roles.backupHolders), external]);
 }
 
 /**
- * Whether `next` is the next revision of `prev` (spec 5.3): the same vault, `version` one higher,
- * `prevManifestHash` the hash of `prev`, and the same script participants with the same vault
- * keys (a phase 1 vault's keys never change; new owners make a new vault). Devices, viewers and
- * labels may change. Whether the revision carries the attestations it needs is GV-22. Never throws.
+ * Whether `next` is the next revision of `prev` (spec 5.3): the same vault and scripts, `version`
+ * one higher, `prevManifestHash` the hash of `prev`, the same script participants with the same
+ * vault keys (a phase 1 vault's keys never change; new owners make a new vault), and `revisedAt`
+ * not earlier. Devices, viewers and labels may change; which attestations such a change needs is
+ * GV-22 (#1690). Never throws.
  */
 export function checkManifestRevision(prev: VaultManifest, next: VaultManifest): ManifestRevisionCheck {
   let a: VaultManifest;
@@ -643,20 +888,20 @@ export function checkManifestRevision(prev: VaultManifest, next: VaultManifest):
   } catch {
     return { ok: false, code: 'INVALID_MANIFEST' };
   }
-  if (a.network !== b.network || a.vaultId !== b.vaultId || a.scriptHash !== b.scriptHash
-    || a.stakeScriptHash !== b.stakeScriptHash || a.threshold !== b.threshold) {
+  if (a.network !== b.network || a.vaultId !== b.vaultId || a.paymentScript !== b.paymentScript || a.stakeScript !== b.stakeScript) {
     return { ok: false, code: 'OTHER_VAULT' };
   }
   if (b.version !== a.version + 1) return { ok: false, code: 'VERSION_NOT_NEXT' };
   if (b.prevManifestHash !== prevHash) return { ok: false, code: 'PREV_HASH_MISMATCH' };
   if (scriptParticipants(a) !== scriptParticipants(b)) return { ok: false, code: 'PARTICIPANTS_CHANGED' };
+  if (b.revisedAt < a.revisedAt) return { ok: false, code: 'TIME_BACKWARDS' };
   return { ok: true };
 }
 
 /** The next revision of `prev`, with the role slots given replaced. Throws `GeroVaultError`. */
 export function nextManifestRevision(
   prev: VaultManifest,
-  change: { readonly roles: Partial<ManifestRoles>; /** Unix seconds. */ readonly createdAt: number },
+  change: { readonly roles: Partial<ManifestRoles>; /** Unix seconds. */ readonly revisedAt: number },
 ): VaultManifest {
   const base = normalizeOrThrow(prev);
   const next = normalizeOrThrow({
@@ -664,7 +909,7 @@ export function nextManifestRevision(
     roles: { ...base.roles, ...change?.roles },
     version: base.version + 1,
     prevManifestHash: manifestHash(base),
-    createdAt: change?.createdAt,
+    revisedAt: change?.revisedAt,
   });
   const link = checkManifestRevision(base, next);
   if (link.ok === false) throw new GeroVaultError('INVALID_MANIFEST', link.code);
@@ -673,9 +918,8 @@ export function nextManifestRevision(
 
 /**
  * Two revisions of one vault with the same `version` and different contents are a fork (spec
- * 5.3 names the case of different `prevManifestHash`; two different children of one parent are
- * the other case). The client refuses both and alerts. Never throws; an invalid manifest is not a
- * fork of anything, it is refused on its own.
+ * 5.3): the client refuses both and alerts every owner. Never throws; an invalid manifest is not
+ * a fork of anything, it is refused on its own.
  */
 export function isManifestFork(a: VaultManifest, b: VaultManifest): boolean {
   try {
@@ -690,19 +934,26 @@ export function isManifestFork(a: VaultManifest, b: VaultManifest): boolean {
 // ---------------------------------------------------------------------------------------------
 // Decoding untrusted manifests
 
+type Value = CborValueOf<CborBoolean>;
+type Item = CborItemOf<CborBoolean>;
+
 const TOP_KEYS = [
-  'protocol', 'network', 'vaultId', 'scriptHash', 'stakeScriptHash', 'threshold', 'roles',
-  'viewersSeeProposalContents', 'policiesDisplay', 'version', 'prevManifestHash', 'createdAt',
+  'protocol', 'schema', 'network', 'vaultId', 'paymentScript', 'stakeScript', 'roles',
+  'viewersSeeProposalContents', 'policiesDisplay', 'version', 'prevManifestHash', 'revisedAt',
 ] as const;
 const ENTRY_KEYS = ['credential', 'vaultKeys', 'devices'] as const;
-const BINDING_KEYS = ['vaultId', 'role', 'credential', 'deviceId', 'ed25519Pub', 'x25519Pub', 'label', 'bindingVersion', 'attestation'] as const;
+const EXTERNAL_KEYS = ['credential', 'vaultKeys', 'label', 'importedBy', 'role'] as const;
+const BINDING_KEYS = [
+  'vaultId', 'role', 'credential', 'vaultKeys', 'deviceId', 'ed25519Pub', 'x25519Pub', 'label', 'bindingVersion',
+  'deviceSig', 'attestation',
+] as const;
 
-type Fields = Readonly<Record<string, CborValue>>;
+type Fields = Readonly<Record<string, Value>>;
 
 /** The fields of a map that has exactly `keys`, all text. */
-function fields(v: CborValue, keys: readonly string[], what: string): Fields {
+function fields(v: Value, keys: readonly string[], what: string): Fields {
   if (v.type !== 'map') return fault('SCHEMA_INVALID', `${what} is not a map`);
-  const out: Record<string, CborValue> = {};
+  const out: Record<string, Value> = {};
   for (const [k, value] of v.value) {
     if (k.value.type !== 'text' || !keys.includes(k.value.value)) fault('SCHEMA_INVALID', `${what} has an unknown field`);
     out[(k.value as { value: string }).value] = value.value;
@@ -711,83 +962,98 @@ function fields(v: CborValue, keys: readonly string[], what: string): Fields {
   return out;
 }
 
-function text(v: CborValue, what: string): string {
+function text(v: Value, what: string): string {
   return v.type === 'text' ? v.value : fault('SCHEMA_INVALID', `${what} is not text`);
 }
 
-function uint(v: CborValue, what: string): number {
+function uint(v: Value, what: string): number {
   return v.type === 'int' && v.value >= 0n && v.value <= BigInt(Number.MAX_SAFE_INTEGER)
     ? Number(v.value)
     : fault('SCHEMA_INVALID', `${what} is not an unsigned integer`);
 }
 
-function byteString(v: CborValue, lengths: readonly number[], what: string): string {
+function byteString(v: Value, lengths: readonly number[] | undefined, what: string): string {
   if (v.type !== 'bytes') return fault('SCHEMA_INVALID', `${what} is not bytes`);
-  if (!lengths.includes(v.value.length)) fault('FIELD_INVALID', `${what} has the wrong length`);
+  if (lengths && !lengths.includes(v.value.length)) fault('FIELD_INVALID', `${what} has the wrong length`);
   return bytesToHex(v.value);
 }
 
-function list(v: CborValue, max: number, what: string): readonly CborItem[] {
+function list(v: Value, max: number, what: string): readonly Item[] {
   if (v.type !== 'array') return fault('SCHEMA_INVALID', `${what} is not an array`);
   if (v.value.length > max) fault('TOO_MANY_ENTRIES', what);
   return v.value;
 }
 
-function bindingFrom(v: CborValue): OwnerDeviceBinding {
+function keysFrom(v: Value, what: string): VaultPublicKeys {
+  const k = fields(v, ['payment', 'stake'], what);
+  try {
+    return vaultKeysOf(byteString(k['payment'], [32], 'payment key'), byteString(k['stake'], [32], 'stake key'));
+  } catch (e) {
+    if (e instanceof GeroVaultError) fault('FIELD_INVALID', what);
+    throw e;
+  }
+}
+
+function emptyMap(v: Value, what: string): boolean {
+  if (v.type !== 'map') return fault('SCHEMA_INVALID', `${what} is not a map`);
+  return v.value.length === 0;
+}
+
+function bindingFrom(v: Value): OwnerDeviceBinding {
   const f = fields(v, BINDING_KEYS, 'binding');
-  const att = f['attestation'];
-  if (att.type !== 'map') fault('SCHEMA_INVALID', 'attestation is not a map');
   let attestation: OwnerAttestation | undefined;
-  if (att.type === 'map' && att.value.length > 0) {
-    const a = fields(att, ['method', 'proof'], 'attestation');
+  if (!emptyMap(f['attestation'], 'attestation')) {
+    const a = fields(f['attestation'], ['method', 'proof'], 'attestation');
     const proof = a['proof'];
-    if (proof.type !== 'bytes') fault('SCHEMA_INVALID', 'attestation proof is not bytes');
     if (proof.type === 'bytes' && proof.value.length > MAX_ATTESTATION_BYTES) fault('ATTESTATION_INVALID', 'attestation proof too large');
-    attestation = { method: text(a['method'], 'attestation method') as AttestationMethod, proof: bytesToHex((proof as { value: Uint8Array }).value) };
+    attestation = { method: uint(a['method'], 'attestation method'), proof: byteString(proof, undefined, 'attestation proof') };
   }
   const credential = byteString(f['credential'], [0, 28], 'binding credential');
+  const keyed = !emptyMap(f['vaultKeys'], 'binding vaultKeys');
   return {
     vaultId: byteString(f['vaultId'], [32], 'binding vaultId'),
     role: text(f['role'], 'role') as ManifestRole,
     ...(credential ? { credential: Ed25519KeyHashHex(credential) } : {}),
+    ...(keyed ? { vaultKeys: keysFrom(f['vaultKeys'], 'binding vaultKeys') } : {}),
     deviceId: byteString(f['deviceId'], [16], 'deviceId'),
     ed25519Pub: byteString(f['ed25519Pub'], [32], 'ed25519Pub'),
     x25519Pub: byteString(f['x25519Pub'], [32], 'x25519Pub'),
     label: text(f['label'], 'device label'),
     bindingVersion: uint(f['bindingVersion'], 'bindingVersion'),
+    deviceSig: byteString(f['deviceSig'], [64], 'deviceSig'),
     ...(attestation ? { attestation } : {}),
   };
 }
 
-function devicesFrom(v: CborValue): OwnerDeviceBinding[] {
+function devicesFrom(v: Value): OwnerDeviceBinding[] {
   return list(v, MAX_DEVICES_PER_ENTRY, 'devices').map(i => bindingFrom(i.value));
 }
 
-function participantFrom(v: CborValue): ParticipantEntry {
+function participantFrom(v: Value): ParticipantEntry {
   const f = fields(v, ENTRY_KEYS, 'participant');
-  const credential = byteString(f['credential'], [28], 'credential');
-  const k = fields(f['vaultKeys'], ['payment', 'stake'], 'vaultKeys');
-  let vaultKeys: VaultPublicKeys;
-  try {
-    vaultKeys = vaultKeysOf(byteString(k['payment'], [32], 'payment key'), byteString(k['stake'], [32], 'stake key'));
-  } catch (e) {
-    if (e instanceof GeroVaultError) fault('FIELD_INVALID', 'vaultKeys');
-    throw e;
-  }
-  return { credential: Ed25519KeyHashHex(credential), vaultKeys, devices: devicesFrom(f['devices']) };
+  return {
+    credential: Ed25519KeyHashHex(byteString(f['credential'], [28], 'credential')),
+    vaultKeys: keysFrom(f['vaultKeys'], 'vaultKeys'),
+    devices: devicesFrom(f['devices']),
+  };
 }
 
-function viewerFrom(v: CborValue): ViewerEntry {
+function viewerFrom(v: Value): ViewerEntry {
   const f = fields(v, ENTRY_KEYS, 'viewer');
   byteString(f['credential'], [0], 'a viewer credential');
-  const keys = f['vaultKeys'];
-  if (keys.type !== 'map' || keys.value.length > 0) fault('FIELD_INVALID', 'a viewer has no vault keys');
+  if (!emptyMap(f['vaultKeys'], 'viewer vaultKeys')) fault('FIELD_INVALID', 'a viewer has no vault keys');
   return { devices: devicesFrom(f['devices']) };
 }
 
-function externalFrom(v: CborValue): ExternalEntry {
-  const f = fields(v, ['credential', 'label'], 'external');
-  return { credential: Ed25519KeyHashHex(byteString(f['credential'], [28], 'external credential')), label: text(f['label'], 'external label') };
+function externalFrom(v: Value): ExternalEntry {
+  const f = fields(v, EXTERNAL_KEYS, 'external');
+  return {
+    credential: Ed25519KeyHashHex(byteString(f['credential'], [28], 'external credential')),
+    vaultKeys: keysFrom(f['vaultKeys'], 'external vaultKeys'),
+    label: text(f['label'], 'external label'),
+    importedBy: Ed25519KeyHashHex(byteString(f['importedBy'], [28], 'importedBy')),
+    role: text(f['role'], 'external role') as ExternalRole,
+  };
 }
 
 function networkFromWire(wire: string): VaultNetwork {
@@ -795,28 +1061,27 @@ function networkFromWire(wire: string): VaultNetwork {
   return found ?? fault('UNKNOWN_NETWORK');
 }
 
-function manifestFrom(root: CborValue): VaultManifest {
+function manifestFrom(root: Value): VaultManifest {
   const f = fields(root, TOP_KEYS, 'manifest');
   if (text(f['protocol'], 'protocol') !== MANIFEST_PROTOCOL) fault('UNSUPPORTED_PROTOCOL');
+  if (uint(f['schema'], 'schema') !== MANIFEST_SCHEMA) fault('UNSUPPORTED_SCHEMA');
   const network = networkFromWire(text(f['network'], 'network'));
   const r = fields(f['roles'], SLOTS, 'roles');
   if (list(r['guardians'], MAX_SCRIPT_PARTICIPANTS, 'guardians').length > 0
     || list(r['delegates'], MAX_SCRIPT_PARTICIPANTS, 'delegates').length > 0) {
     fault('NOT_IN_PHASE_1', 'guardians and delegates arrive with Plutus vaults');
   }
-  const flag = uint(f['viewersSeeProposalContents'], 'viewersSeeProposalContents');
-  if (flag > 1) fault('SCHEMA_INVALID', 'viewersSeeProposalContents is 0 or 1');
-  const policies = f['policiesDisplay'];
-  if (policies.type !== 'map') fault('SCHEMA_INVALID', 'policiesDisplay is not a map');
-  if (policies.type === 'map' && policies.value.length > 0) fault('NOT_IN_PHASE_1', 'no policies in phase 1');
+  const flag = f['viewersSeeProposalContents'];
+  if (flag.type !== 'bool') fault('SCHEMA_INVALID', 'viewersSeeProposalContents is a boolean');
+  if (!emptyMap(f['policiesDisplay'], 'policiesDisplay')) fault('NOT_IN_PHASE_1', 'no policies in phase 1');
   const prev = byteString(f['prevManifestHash'], [0, 32], 'prevManifestHash');
   return {
     protocol: MANIFEST_PROTOCOL,
+    schema: MANIFEST_SCHEMA,
     network,
     vaultId: byteString(f['vaultId'], [32], 'vaultId'),
-    scriptHash: Hash28ByteBase16(byteString(f['scriptHash'], [28], 'scriptHash')),
-    stakeScriptHash: Hash28ByteBase16(byteString(f['stakeScriptHash'], [28], 'stakeScriptHash')),
-    threshold: uint(f['threshold'], 'threshold'),
+    paymentScript: byteString(f['paymentScript'], undefined, 'paymentScript'),
+    stakeScript: byteString(f['stakeScript'], undefined, 'stakeScript'),
     roles: {
       owners: list(r['owners'], MAX_OWNERS, 'owners').map(i => participantFrom(i.value)),
       backupHolders: list(r['backupHolders'], MAX_BACKUP_KEYS, 'backupHolders').map(i => participantFrom(i.value)),
@@ -825,32 +1090,36 @@ function manifestFrom(root: CborValue): VaultManifest {
       viewers: list(r['viewers'], MAX_VIEWERS, 'viewers').map(i => viewerFrom(i.value)),
       external: list(r['external'], MAX_SCRIPT_PARTICIPANTS, 'external').map(i => externalFrom(i.value)),
     },
-    viewersSeeProposalContents: flag === 1,
+    viewersSeeProposalContents: (flag as { value: boolean }).value,
     policiesDisplay: {},
     version: uint(f['version'], 'version'),
     ...(prev ? { prevManifestHash: prev } : {}),
-    createdAt: uint(f['createdAt'], 'createdAt'),
+    revisedAt: uint(f['revisedAt'], 'revisedAt'),
   };
 }
 
+const LOWER_HEX = /^(?:[0-9a-f]{2})*$/;
+
 /**
- * Decodes an untrusted manifest: its canonical CBOR, as hex or bytes. The bytes must be exactly
- * the canonical encoding of a valid manifest (one manifest, one encoding), so the hash returned
- * is the hash of what was received. Never throws: anything else is a typed refusal.
+ * Decodes an untrusted manifest: its canonical CBOR, as lowercase hex or bytes. The bytes must be
+ * exactly the canonical encoding of a valid manifest (one manifest, one encoding), so the hash
+ * returned is the hash of what was received. Signatures are not verified here
+ * (`checkManifestBeforeAck`). Never throws: anything else is a typed refusal.
  */
 export function decodeManifest(input: string | Uint8Array): DecodeManifestResult {
   try {
     let raw: Uint8Array;
     if (typeof input === 'string') {
       if (input.length > MAX_MANIFEST_BYTES * 2) fault('TOO_LARGE');
-      raw = hexToBytes(input) ?? fault('MALFORMED_INPUT', 'not hex');
+      if (!LOWER_HEX.test(input)) fault('MALFORMED_INPUT', 'not lowercase hex');
+      raw = hexToBytes(input);
     } else if (input instanceof Uint8Array) {
-      raw = input;
+      if (input.length > MAX_MANIFEST_BYTES) fault('TOO_LARGE');
+      raw = Uint8Array.from(input);
     } else {
       return fault('MALFORMED_INPUT', 'not hex or bytes');
     }
-    if (raw.length > MAX_MANIFEST_BYTES) fault('TOO_LARGE');
-    let root: CborItem;
+    let root: Item;
     try {
       root = readCbor(raw, CBOR_LIMITS);
     } catch (e) {
@@ -860,7 +1129,7 @@ export function decodeManifest(input: string | Uint8Array): DecodeManifestResult
     const manifest = normalize(manifestFrom(root.value));
     const cbor = bytesToHex(encodeCanonicalCbor(manifestWritable(manifest)));
     if (cbor !== bytesToHex(raw)) fault('NOT_CANONICAL');
-    return { ok: true, manifest, cbor, hash: hashCbor(raw) };
+    return { ok: true, manifest, cbor, hash: taggedHash(MANIFEST_HASH_TAG, raw) };
   } catch (e) {
     if (e instanceof Fault) return { ok: false, code: e.code, ...(e.detail ? { detail: e.detail } : {}) };
     return { ok: false, code: 'MALFORMED_INPUT', detail: 'unexpected input' };

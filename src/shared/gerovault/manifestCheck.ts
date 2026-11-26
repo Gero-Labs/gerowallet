@@ -1,32 +1,43 @@
 /**
- * The key checks a device makes before it acknowledges a manifest (spec 5.3, GV-60 #1728).
+ * The checks a device makes before it acknowledges a manifest (spec 5.3, GV-60 #1728).
  *
- * - The device's own entry matches the keys it derives locally at its own index.
- * - Every other participant's vault keys hash to the key hashes in the scripts. For an external
- *   cosigner, whose manifest entry is a credential only, the device uses the keys it holds for
- *   them (an xpub the external wallet gave, from which it derives their keys, or their vault
- *   keys) and checks them the same way.
- * - The manifest names the scripts' vault: its vault id is the id `vaultId.ts` derives from the
- *   scripts and the network, and a first manifest for a vault this device already accepted is
- *   refused, so a duplicate registration of an accepted vault's scripts never makes a second vault.
+ * `decodeManifest` and `normalizeManifest` already guarantee that the manifest is well formed and
+ * that its participants are exactly the keys of the scripts it carries, each in the branch of their
+ * role. On top of that, before `VAULT_ACK`:
  *
- * The scripts are the ones this device holds for the vault: decoded from its registration, or
- * built locally. The manifest carries only their hashes, so the scripts of a dated backup vault
- * (backup threshold, backup slot) must reach the device with them.
+ * - the device's own entry must hold the vault keys it derives locally at its own index, in the
+ *   role it agreed to, and its own binding when it expects one;
+ * - every device binding's `deviceSig` and every participant binding's attestation must verify;
+ * - the manifest must follow the latest manifest this device accepted for the vault: a first
+ *   manifest only for a vault it never accepted (or the same one again), a revision only as the
+ *   next version of the latest accepted one, never two different manifests of one version;
+ * - its scripts must not belong to another accepted vault on the same network.
  *
- * The per-participant checks reuse `rebuildFromRegistration`: every key hash of both scripts must
- * belong to exactly one participant, each participant's payment key in the payment script and
- * stake key in the stake script, and the template rebuilt from those keys must give the same
- * hashes. On top of that, each role slot must match the participant's place in the scripts.
+ * A revision can change devices, viewers and labels. A participant's new binding carries that
+ * participant's own attestation, which is verified here; removing a device or changing viewers or
+ * external labels needs the owners' threshold attestations of the revision (GV-22 #1690), which
+ * this module cannot check yet. Such a result has `attestationsVerified: false`, and no
+ * `VAULT_ACK` may be sent on it.
  */
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
+import { AttestationRefusalCode, verifyAttestation } from './attestation';
 import { GeroVaultError } from './errors';
 import { deriveVaultPublicKeys, vaultKeyHashes } from './keys';
-import { ManifestRole, VaultManifest, normalizeManifest } from './manifest';
-import { DecodedRegistration, RebuildParticipant, RebuildRefusalCode, rebuildFromRegistration } from './registration';
-import { vaultScript } from './scripts';
-import { ROLE, RoleKeys, VaultNetwork, VaultPublicKeys, VaultScripts, VaultTemplate } from './types';
-import { vaultId } from './vaultId';
+import {
+  ManifestRevisionRefusal,
+  OwnerDeviceBinding,
+  VaultManifest,
+  bindingDigest,
+  checkManifestRevision,
+  manifestHash,
+  manifestScripts,
+  manifestTemplate,
+  normalizeManifest,
+  scriptsHaveCanonicalKeyOrder,
+  verifyDeviceSignature,
+} from './manifest';
+import { RoleKeys, VaultNetwork, VaultPublicKeys, VaultTemplate } from './types';
+import { verificationDigest } from './verificationNumber';
 
 /** This device's own keys for one device binding. */
 export interface OwnDevice {
@@ -51,108 +62,96 @@ export type OwnParticipant =
     }
   | { readonly kind: 'viewer'; readonly device: OwnDevice };
 
-/** Keys this device holds for an external cosigner: their role keys (scanned) or vault keys. */
-export type ExternalCosignerKeys = { readonly roleKeys: RoleKeys } | { readonly vaultKeys: VaultPublicKeys };
-
 export interface ManifestAckInput {
   readonly manifest: VaultManifest;
-  readonly scripts: Pick<VaultScripts, 'payment' | 'stake'>;
   readonly network: VaultNetwork;
   readonly own: OwnParticipant;
-  /** Keyed by the external entry's credential. Every external cosigner needs an entry here. */
-  readonly externalKeys?: Readonly<Record<string, ExternalCosignerKeys>>;
   /**
-   * The ids of every vault this device has accepted, all of them: an id left out loses the refusal
-   * of a second first manifest for that vault.
+   * The latest accepted manifest of every vault this device has accepted, on every network. A
+   * vault left out loses the fork, duplicate and chain checks.
    */
-  readonly acceptedVaultIds?: readonly string[];
+  readonly accepted?: readonly VaultManifest[];
 }
+
+/** Revision changes whose authorisation (threshold attestations, GV-22) is not verified here. */
+export type UnverifiedChange = 'VIEWER_CHANGE' | 'DEVICE_REMOVED' | 'EXTERNAL_CHANGE';
 
 export type ManifestAckRefusalCode =
   | 'INVALID_INPUT'
   | 'INVALID_MANIFEST'
   | 'NETWORK_MISMATCH'
-  | 'SCRIPT_HASH_MISMATCH'
-  | 'VAULT_ID_MISMATCH'
   | 'VAULT_ALREADY_ACCEPTED'
+  | 'MANIFEST_FORK'
+  | 'UNKNOWN_VAULT'
+  | 'STALE_REVISION'
+  | 'REVISION_GAP'
+  | 'REVISION_INVALID'
+  | 'SCRIPT_OF_ANOTHER_VAULT'
   | 'OWN_ENTRY_MISSING'
   | 'OWN_KEYS_MISMATCH'
   | 'OWN_ROLE_MISMATCH'
   | 'OWN_DEVICE_MISMATCH'
-  | 'EXTERNAL_KEYS_REQUIRED'
-  | 'EXTERNAL_CREDENTIAL_MISMATCH'
-  | 'UNKNOWN_TEMPLATE'
-  | 'TEMPLATE_MISMATCH'
-  | 'KEY_NOT_IN_SCRIPT'
-  | 'ROLE_INDEX_MISMATCH'
-  | 'SCRIPT_KEY_UNACCOUNTED'
-  | 'DUPLICATE_PARTICIPANT'
-  | 'ROLE_MISMATCH'
-  | 'THRESHOLD_MISMATCH'
-  | 'OUTSIDE_POLICY'
-  | 'SCRIPT_MISMATCH';
+  | 'DEVICE_SIGNATURE_INVALID'
+  | 'ATTESTATION_INVALID';
+
+export interface ManifestAck {
+  readonly ok: true;
+  readonly vaultId: string;
+  /** The hash of the manifest checked; the funding gate takes this result for this manifest only. */
+  readonly manifestHash: string;
+  /** The digest the ceremony compares (`verificationNumber.ts`). */
+  readonly verificationDigest: string;
+  readonly template: VaultTemplate;
+  readonly ownRole: 'owner' | 'backupHolder' | 'viewer';
+  /** This device's payment key hash, derived from its own keys; absent for a viewer. */
+  readonly ownCredential?: Ed25519KeyHashHex;
+  /** The same manifest as the one accepted (a redelivery). */
+  readonly redelivery: boolean;
+  /** False when the scripts list keys in another order than this wallet writes. */
+  readonly canonicalKeyOrder: boolean;
+  /** True only when every change this manifest makes is authorised by a verified signature. */
+  readonly attestationsVerified: boolean;
+  readonly unverified: readonly UnverifiedChange[];
+}
 
 export type ManifestAckResult =
-  | {
-      readonly ok: true;
-      readonly vaultId: string;
-      readonly template: VaultTemplate;
-      readonly ownRole: Extract<ManifestRole, 'owner' | 'backupHolder' | 'viewer'>;
-      /**
-       * This device's own payment key hash, derived from its own keys (absent for a viewer). It is
-       * the `self` to give the funding gate (`fundingVerified`).
-       */
-      readonly ownCredential?: Ed25519KeyHashHex;
-    }
+  | ManifestAck
   | {
       readonly ok: false;
       readonly code: ManifestAckRefusalCode;
       /** The credential of the participant at fault, where there is one. */
       readonly credential?: Ed25519KeyHashHex;
+      /** Set on a fork: the client refuses both manifests and alerts every owner (spec 5.3). */
+      readonly alert?: true;
+      readonly revision?: ManifestRevisionRefusal;
+      readonly attestation?: AttestationRefusalCode;
     };
-
-const FROM_REBUILD: Readonly<Record<RebuildRefusalCode, ManifestAckRefusalCode>> = {
-  INVALID_OPTIONS: 'INVALID_INPUT',
-  STAKE_SCRIPT_MISSING: 'UNKNOWN_TEMPLATE',
-  UNKNOWN_TEMPLATE: 'UNKNOWN_TEMPLATE',
-  TEMPLATE_MISMATCH: 'TEMPLATE_MISMATCH',
-  FOREIGN_KEY: 'SCRIPT_KEY_UNACCOUNTED',
-  PARTICIPANT_NOT_IN_VAULT: 'KEY_NOT_IN_SCRIPT',
-  PARTICIPANT_INCOMPLETE: 'KEY_NOT_IN_SCRIPT',
-  ROLE_INDEX_MISMATCH: 'ROLE_INDEX_MISMATCH',
-  DUPLICATE_PARTICIPANT: 'DUPLICATE_PARTICIPANT',
-  OUTSIDE_POLICY: 'OUTSIDE_POLICY',
-  INVALID_VAULT: 'SCRIPT_MISMATCH',
-  SCRIPT_MISMATCH: 'SCRIPT_MISMATCH',
-};
 
 type Refusal = Extract<ManifestAckResult, { ok: false }>;
 
-const refuse = (code: ManifestAckRefusalCode, credential?: Ed25519KeyHashHex): Refusal =>
-  credential ? { ok: false, code, credential } : { ok: false, code };
+const refuse = (code: ManifestAckRefusalCode, extra: Omit<Refusal, 'ok' | 'code'> = {}): Refusal => ({ ok: false, code, ...extra });
 
-function hasDevice(devices: readonly { ed25519Pub: string; x25519Pub: string }[], own: OwnDevice): boolean {
+function hasDevice(devices: readonly OwnerDeviceBinding[], own: OwnDevice): boolean {
   return devices.some(d => d.ed25519Pub === own?.ed25519Pub && d.x25519Pub === own?.x25519Pub);
 }
 
-/** Whether each script's CBOR and hash are what `scripts.ts` writes for its script, in its role. */
-function consistentScripts(scripts: Pick<VaultScripts, 'payment' | 'stake'>): boolean {
-  const same = (role: typeof ROLE.PAYMENT | typeof ROLE.STAKE, s: VaultScripts['payment']) => {
-    if (!s?.script || s.role !== role) return false;
-    const rebuilt = vaultScript(role, s.script);
-    return rebuilt.cbor === s.cbor && rebuilt.hash === s.hash;
-  };
-  return same(ROLE.PAYMENT, scripts?.payment) && same(ROLE.STAKE, scripts?.stake);
-}
-
-interface Slot {
-  readonly role: 'owner' | 'backupHolder' | 'external';
-  readonly credential: Ed25519KeyHashHex;
+/** What changed between two revisions that only threshold attestations (GV-22) can authorise. */
+function unverifiedChanges(prev: VaultManifest, next: VaultManifest): UnverifiedChange[] {
+  const out: UnverifiedChange[] = [];
+  const viewers = (m: VaultManifest) => JSON.stringify(m.roles.viewers.map(v => v.devices.map(d => [d.deviceId, d.x25519Pub, d.label, d.bindingVersion])));
+  if (viewers(prev) !== viewers(next)) out.push('VIEWER_CHANGE');
+  const bound = (m: VaultManifest) => new Set([...m.roles.owners, ...m.roles.backupHolders].flatMap(e => e.devices.map(d => d.deviceId)));
+  const now = bound(next);
+  if ([...bound(prev)].some(id => !now.has(id))) out.push('DEVICE_REMOVED');
+  const labels = (m: VaultManifest) => JSON.stringify(m.roles.external.map(e => [e.credential, e.label]));
+  if (labels(prev) !== labels(next)) out.push('EXTERNAL_CHANGE');
+  return out;
 }
 
 /**
  * The checks before `VAULT_ACK`. Never throws: any failure is a typed refusal, and the manifest
- * must then be refused (spec 5.3).
+ * must then be refused (spec 5.3). A refusal with `alert` is a fork: refuse both manifests and
+ * alert every owner.
  */
 export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<ManifestAckResult> {
   try {
@@ -162,18 +161,50 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
     } catch {
       return refuse('INVALID_MANIFEST');
     }
-    const { scripts, network, own } = input;
-    if (!consistentScripts(scripts) || !own) return refuse('INVALID_INPUT');
+    const { network, own } = input;
+    if (!own) return refuse('INVALID_INPUT');
     if (manifest.network !== network) return refuse('NETWORK_MISMATCH');
-    if (manifest.scriptHash !== scripts.payment.hash || manifest.stakeScriptHash !== scripts.stake.hash) {
-      return refuse('SCRIPT_HASH_MISMATCH');
+    let accepted: VaultManifest[];
+    try {
+      accepted = (Array.isArray(input.accepted) ? input.accepted : []).map(normalizeManifest);
+    } catch {
+      return refuse('INVALID_INPUT');
     }
-    const id = vaultId(scripts, network);
-    if (manifest.vaultId !== id) return refuse('VAULT_ID_MISMATCH');
-    const accepted = Array.isArray(input.acceptedVaultIds) ? input.acceptedVaultIds.map(v => String(v).toLowerCase()) : [];
-    if (manifest.version === 1 && accepted.includes(id)) return refuse('VAULT_ALREADY_ACCEPTED');
+    const hash = manifestHash(manifest);
 
-    const { owners, backupHolders, viewers, external } = manifest.roles;
+    // The same scripts are one vault: no second vault id for a script of an accepted vault.
+    for (const other of accepted) {
+      if (other.network === manifest.network && other.vaultId !== manifest.vaultId
+        && (other.paymentScript === manifest.paymentScript || other.stakeScript === manifest.stakeScript)) {
+        return refuse('SCRIPT_OF_ANOTHER_VAULT');
+      }
+    }
+
+    // The chain: follow the latest accepted manifest of this vault.
+    const latest = accepted.find(m => m.network === manifest.network && m.vaultId === manifest.vaultId);
+    let redelivery = false;
+    let unverified: UnverifiedChange[] = [];
+    if (!latest) {
+      if (manifest.version !== 1) return refuse('UNKNOWN_VAULT');
+    } else if (manifest.version === latest.version) {
+      if (manifestHash(latest) !== hash) {
+        return refuse(manifest.version === 1 ? 'VAULT_ALREADY_ACCEPTED' : 'MANIFEST_FORK', { alert: true });
+      }
+      redelivery = true;
+    } else if (manifest.version < latest.version) {
+      return refuse('STALE_REVISION');
+    } else if (manifest.version > latest.version + 1) {
+      return refuse('REVISION_GAP');
+    } else {
+      const link = checkManifestRevision(latest, manifest);
+      if (link.ok === false) {
+        return refuse('REVISION_INVALID', { revision: link.code, ...(link.code === 'PREV_HASH_MISMATCH' ? { alert: true as const } : {}) });
+      }
+      unverified = unverifiedChanges(latest, manifest);
+    }
+
+    // The device's own entry.
+    const { owners, backupHolders, viewers } = manifest.roles;
     let ownRole: 'owner' | 'backupHolder' | 'viewer';
     let ownCredential: Ed25519KeyHashHex | undefined;
     if (own.kind === 'viewer') {
@@ -190,61 +221,43 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       const credential = (await vaultKeyHashes(mine)).payment;
       const asOwner = owners.find(e => e.credential === credential);
       const entry = asOwner ?? backupHolders.find(e => e.credential === credential);
-      if (!entry) return refuse('OWN_ENTRY_MISSING', credential);
-      if (entry.vaultKeys.payment !== mine.payment || entry.vaultKeys.stake !== mine.stake) return refuse('OWN_KEYS_MISMATCH', credential);
+      if (!entry) return refuse('OWN_ENTRY_MISSING', { credential });
+      if (entry.vaultKeys.payment !== mine.payment || entry.vaultKeys.stake !== mine.stake) return refuse('OWN_KEYS_MISMATCH', { credential });
       ownRole = asOwner ? 'owner' : 'backupHolder';
-      if (own.role !== undefined && own.role !== ownRole) return refuse('OWN_ROLE_MISMATCH', credential);
-      if (own.device !== undefined && !hasDevice(entry.devices, own.device)) return refuse('OWN_DEVICE_MISMATCH', credential);
+      if (own.role !== undefined && own.role !== ownRole) return refuse('OWN_ROLE_MISMATCH', { credential });
+      if (own.device !== undefined && !hasDevice(entry.devices, own.device)) return refuse('OWN_DEVICE_MISMATCH', { credential });
       ownCredential = credential;
     } else {
       return refuse('INVALID_INPUT');
     }
 
-    // Every participant with script keys, in one list for the rebuild.
-    const slots: Slot[] = [];
-    const participants: RebuildParticipant[] = [];
-    for (const [list, role] of [[owners, 'owner'], [backupHolders, 'backupHolder']] as const) {
-      for (const e of list) {
-        slots.push({ role, credential: e.credential });
-        participants.push({ kind: 'vaultKeys', keys: e.vaultKeys });
+    // Every binding: the device's own signature, and the participant's attestation.
+    for (const entry of [...owners, ...backupHolders]) {
+      for (const binding of entry.devices) {
+        if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID', { credential: entry.credential });
+        const check = await verifyAttestation(binding.attestation, entry.credential, { kind: 'binding', digest: bindingDigest(binding) });
+        if (check.ok === false) return refuse('ATTESTATION_INVALID', { credential: entry.credential, attestation: check.code });
       }
     }
-    const held = input.externalKeys ?? {};
-    for (const e of external) {
-      const keys = Object.prototype.hasOwnProperty.call(held, e.credential) ? held[e.credential] : undefined;
-      if (keys && 'roleKeys' in keys && keys.roleKeys) participants.push({ kind: 'external', roleKeys: keys.roleKeys });
-      else if (keys && 'vaultKeys' in keys && keys.vaultKeys) participants.push({ kind: 'vaultKeys', keys: keys.vaultKeys });
-      else return refuse('EXTERNAL_KEYS_REQUIRED', e.credential);
-      slots.push({ role: 'external', credential: e.credential });
+    for (const viewer of viewers) {
+      for (const binding of viewer.devices) {
+        if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID');
+      }
     }
 
-    const registration: DecodedRegistration = {
-      encryption: 'none',
-      scripts: [scripts.payment, scripts.stake],
-      payment: scripts.payment,
-      stake: scripts.stake,
-      participants: {},
+    return {
+      ok: true,
+      vaultId: manifest.vaultId,
+      manifestHash: hash,
+      verificationDigest: verificationDigest(manifest),
+      template: manifestTemplate(manifest),
+      ownRole,
+      ...(ownCredential ? { ownCredential } : {}),
+      redelivery,
+      canonicalKeyOrder: scriptsHaveCanonicalKeyOrder(manifestScripts(manifest)),
+      attestationsVerified: unverified.length === 0,
+      unverified: Object.freeze(unverified),
     };
-    const rebuilt = await rebuildFromRegistration(registration, participants);
-    if (rebuilt.ok === false) return refuse(FROM_REBUILD[rebuilt.code] ?? 'SCRIPT_MISMATCH', slots[rebuilt.participant]?.credential);
-
-    // Each role slot must be the participant's place in the scripts.
-    const place = (positions: readonly number[], keys: VaultScripts['owners'], kind: 'owner' | 'backupHolder'): Refusal | undefined => {
-      for (let k = 0; k < positions.length; k++) {
-        const slot = slots[positions[k]];
-        if (slot.role === 'external') {
-          if (keys[k].payment !== slot.credential) return refuse('EXTERNAL_CREDENTIAL_MISMATCH', slot.credential);
-        } else if (slot.role !== kind) {
-          return refuse('ROLE_MISMATCH', slot.credential);
-        }
-      }
-      return undefined;
-    };
-    const misplaced = place(rebuilt.owners, rebuilt.vault.owners, 'owner') ?? place(rebuilt.backups, rebuilt.vault.backups, 'backupHolder');
-    if (misplaced) return misplaced;
-    if (rebuilt.vault.template.threshold !== manifest.threshold) return refuse('THRESHOLD_MISMATCH');
-
-    return { ok: true, vaultId: id, template: rebuilt.vault.template, ownRole, ...(ownCredential ? { ownCredential } : {}) };
   } catch {
     return refuse('INVALID_INPUT');
   }
