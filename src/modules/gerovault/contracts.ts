@@ -127,7 +127,8 @@ export interface VaultCandidateInput {
   readonly participants: readonly VaultParticipantInput[];
   /**
    * The caller derived the `self` participant's keys at this index (`indexAllocation.ts`); the store
-   * cannot check that. 1 or above: index 0 is refused while the dApp signing guard cannot see vaults.
+   * cannot check that. Index 0 is allowed: with such a vault stored, the dApp signing guard also
+   * refuses the 0/0 multisig key (vaultSignGuard.ts).
    */
   readonly ownIndex: number;
   /** A manifest revision for this vault, canonical CBOR hex. */

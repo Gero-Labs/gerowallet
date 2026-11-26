@@ -118,6 +118,8 @@ const MULTISIG_MODE_TX = tx({ inputs: [FOREIGN_IN], outputs: [{ address: FOREIGN
 
 const NO_VAULTS: KnownVaultScriptHashes = { payment: new Set(), stake: new Set() };
 const THE_VAULT: KnownVaultScriptHashes = { payment: new Set([VAULT_PAYMENT]), stake: new Set([VAULT_STAKE]) };
+/** A stored vault holds the wallet's own CIP-1854 keys at index 0. */
+const INDEX_ZERO_VAULT: KnownVaultScriptHashes = { ...THE_VAULT, ownIndexZero: true };
 
 beforeAll(() => {
   // The input resolvers log each input the wallet does not own.
@@ -165,6 +167,12 @@ describe('Ledger', () => {
     expect(signTransaction.mock.lastCall![0].additionalWitnessPaths).toEqual([[1854 + H, 1815 + H, H, 0, 0]]);
   });
 
+  it('with a stored vault at the wallet\'s index 0, asks the device for no 0/0 multisig witness', async () => {
+    knownVaults.mockResolvedValue(INDEX_ZERO_VAULT);
+    await expect(sign(MULTISIG_MODE_TX, keysAt(), [WALLET_UTXO])).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    expect(signTransaction).not.toHaveBeenCalled();
+  });
+
   it.each(VAULT_TOUCHES)('with the vault known, refuses a transaction that %s', async (_, core, utxos) => {
     knownVaults.mockResolvedValue(THE_VAULT);
     await expect(sign(core, keysAt(), utxos)).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
@@ -193,6 +201,15 @@ describe('Ledger', () => {
 
       await expect(signLedgerTransaction(agent(), body, context)).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
     });
+
+    it('is refused at 0/0 while a stored vault holds the wallet\'s index 0', async () => {
+      knownVaults.mockResolvedValue(INDEX_ZERO_VAULT);
+      signTransaction.mockResolvedValueOnce({
+        txHashHex: NO_COLLATERAL_TX_ID, witnesses: [{ path: [1854 + H, 1815 + H, H, 0, 0], witnessSignatureHex: 'ab'.repeat(64) }], auxiliaryDataSupplement: null,
+      });
+
+      await expect(signLedgerTransaction(agent(), body, context)).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    });
   });
 });
 
@@ -217,6 +234,12 @@ describe('Trezor', () => {
   it('still asks for the 0/0 multisig key of a transaction it signs in multisig mode', async () => {
     await sign(MULTISIG_MODE_TX, keysAt(), [WALLET_UTXO]);
     expect(deviceRequest().additionalWitnessRequests).toEqual([MULTISIG_0]);
+  });
+
+  it('with a stored vault at the wallet\'s index 0, asks the device for no 0/0 multisig witness', async () => {
+    knownVaults.mockResolvedValue(INDEX_ZERO_VAULT);
+    await expect(sign(MULTISIG_MODE_TX, keysAt(), [WALLET_UTXO])).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    expect(connect.cardanoSignTransaction).not.toHaveBeenCalled();
   });
 
   it.each(VAULT_TOUCHES)('with the vault known, refuses a transaction that %s', async (_, core, utxos) => {
