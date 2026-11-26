@@ -1,7 +1,7 @@
 /**
  * GeroVault core: CIP-1854 role keys, native vault scripts, the CIP-0146 registration codec,
- * vault index allocation and the `gero-vault/v1` manifest. Pure TypeScript: no Vue, no storage,
- * no network, no `chrome.*`.
+ * vault index allocation, the `gero-vault/v1` manifest and the verification ceremony. Pure
+ * TypeScript: no Vue, no storage, no network, no `chrome.*`.
  */
 export * from './types';
 export * from './errors';
@@ -49,3 +49,4 @@ export { encodeCanonicalCbor } from './canonicalCbor';
 export type { CborWritable, CborWritableMap } from './canonicalCbor';
 export * from './manifest';
 export * from './manifestCheck';
+export * from './safetyCode';
