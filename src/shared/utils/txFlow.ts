@@ -19,6 +19,11 @@ export type FlowKind =
   | 'other'
   | 'script'
   | 'more'
+  /**
+   * Inputs of a transaction still to be signed that the wallet cannot resolve (someone else's
+   * UTxO, a script's): their address and value are unknown, never zero (`txFlowUnsigned.ts`)
+   */
+  | 'unknown'
   /** Left-side sources that are not inputs */
   | 'rewards'
   | 'refund'
@@ -177,20 +182,22 @@ export function buildTxFlow(tx: FlowTxRecord | null | undefined, ownAddresses: R
 }
 
 /**
- * At most `limit` boxes of addresses per side: every own node stays, the largest
- * others fill what is left, and the rest fold into one "more" node at the end.
- * Sources and sinks are never folded. `open` shows everything.
+ * At most `limit` boxes of addresses per side: every own node and every unknown
+ * input stays (an unknown value folded into "more" would read as part of its
+ * total), the largest others fill what is left, and the rest fold into one
+ * "more" node at the end. Sources and sinks are never folded. `open` shows everything.
  */
 export function collapseFlowNodes(nodes: FlowNode[], limit = 5, open = false): FlowNode[] {
   const addresses = nodes.filter((node) => !FLOW_SOURCE_KINDS.has(node.kind) && !FLOW_SINK_KINDS.has(node.kind));
   const extras = nodes.filter((node) => FLOW_SOURCE_KINDS.has(node.kind) || FLOW_SINK_KINDS.has(node.kind));
   if (open || addresses.length <= limit) return nodes;
 
-  const own = addresses.filter((node) => node.kind === 'own');
+  const pinned = (node: FlowNode) => node.kind === 'own' || node.kind === 'unknown';
+  const own = addresses.filter(pinned);
   const room = Math.max(0, limit - 1 - own.length);
   const kept = new Set<FlowNode>([
     ...own,
-    ...addresses.filter((node) => node.kind !== 'own').sort((a, b) => b.lovelace - a.lovelace).slice(0, room),
+    ...addresses.filter((node) => !pinned(node)).sort((a, b) => b.lovelace - a.lovelace).slice(0, room),
   ]);
   const hidden = addresses.filter((node) => !kept.has(node));
   if (!hidden.length) return nodes;

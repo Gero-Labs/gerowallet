@@ -75,10 +75,10 @@
               <span class="tx-flow__name">{{ nodeLabel(box.node) }}</span>
               <span v-if="box.node.count > 1 && box.node.kind !== 'more'" class="tx-flow__count g-num">×{{ box.node.count }}</span>
             </span>
-            <span v-if="compact" class="tx-flow__sub t-caption g-num">{{ ada(box.node.lovelace) }}</span>
+            <span v-if="compact" class="tx-flow__sub t-caption g-num">{{ amount(box.node) }}</span>
             <span v-else class="tx-flow__sub t-caption">{{ nodeSub(box.node) }}</span>
           </span>
-          <span v-if="!compact" class="tx-flow__ada t-body-sm g-num">{{ ada(box.node.lovelace) }}</span>
+          <span v-if="!compact" class="tx-flow__ada t-body-sm g-num">{{ amount(box.node) }}</span>
         </div>
         <div v-if="box.node.tokens.length" class="tx-flow__chips" :data-chips="box.node.key">
           <button
@@ -160,6 +160,8 @@ interface Props {
   /** Display name, image and decimals of a token unit */
   tokenInfo: (unit: string) => FlowTokenInfo;
   currencySymbol: string;
+  /** Accessible name; defaults to the one for a confirmed transaction */
+  label?: string;
 }
 
 const props = defineProps<Props>();
@@ -170,6 +172,7 @@ const KIND_COLOR: Record<FlowKind, string> = {
   other: 'var(--g-text-3)',
   script: 'var(--g-info)',
   more: 'var(--g-text-3)',
+  unknown: 'var(--g-text-3)',
   rewards: 'var(--g-success)',
   refund: 'var(--g-success)',
   fee: 'var(--g-warning)',
@@ -182,6 +185,7 @@ const KIND_ICON: Record<FlowKind, string> = {
   other: 'mdi-account-outline',
   script: 'mdi-file-code-outline',
   more: 'mdi-dots-horizontal',
+  unknown: 'mdi-help-circle-outline',
   rewards: 'mdi-gift-outline',
   refund: 'mdi-lock-open-variant-outline',
   fee: 'mdi-fire',
@@ -254,6 +258,7 @@ function nodeLabel(node: FlowNode): string {
     case 'script': return t('transactions.flow.contract');
     case 'other': return t('transactions.flow.address');
     case 'more': return t('transactions.moreTokens', { count: node.count });
+    case 'unknown': return t('transactions.flow.unknownInput');
     case 'rewards': return t('transactions.flow.rewards');
     case 'refund': return t('transactions.flow.depositRefund');
     case 'fee': return t('signTx.networkFee');
@@ -266,6 +271,7 @@ function nodeSub(node: FlowNode): string {
   if (node.address) return filters.truncate(node.address);
   switch (node.kind) {
     case 'more': return t('common.showAll');
+    case 'unknown': return t('transactions.flow.unknownInputHint');
     case 'fee': return t('transactions.flow.toNetwork');
     case 'deposit': return t('transactions.flow.depositHint');
     case 'refund': return t('transactions.flow.refundHint');
@@ -278,6 +284,10 @@ function nodeSub(node: FlowNode): string {
 /** Large amounts shorten (1.26M), small ones keep two decimals. */
 const ada = (lovelace: number): string =>
   filters.toCurrency(lovelace, false, 2, props.currencySymbol, '', lovelace >= 1e11, 6);
+
+/** An unknown input's value is not known: it never reads as an amount, least of all 0. */
+const amount = (node: FlowNode): string =>
+  node.kind === 'unknown' ? t('transactions.flow.unknownValue') : ada(node.lovelace);
 
 const tokenImage = (unit: string): string => props.tokenInfo(unit).img || assts.questionMarkDark;
 
@@ -301,12 +311,10 @@ const nodeLine = (node: FlowNode): string =>
     nodeLabel(node),
     node.count > 1 && node.kind !== 'more' ? tc('transactions.flow.utxoCount', node.count, { count: node.count }) : '',
     node.address ? filters.truncate(node.address) : '',
-    ada(node.lovelace),
+    amount(node),
   ].filter(Boolean).join(' · ');
 
-const ariaLabel = computed(() =>
-  t('transactions.flow.ariaLabel')
-);
+const ariaLabel = computed(() => props.label || t('transactions.flow.ariaLabel'));
 
 // ---------------------------------------------------------------------------
 // Token chips: as many as fit the box, the rest folded into "+N"
@@ -381,9 +389,11 @@ const info = computed(() => {
     const holders = allBoxes.value.filter((node) => node.tokens.some((token) => token.unit === unit));
     const names = (side: FlowNode[]) =>
       [...new Set(holders.filter((node) => side.includes(node)).map(nodeLabel))].join(', ');
+    // With an input of unknown value, a token no known input holds may come from it: not "Minted"
+    const unknownInput = inputs.value.find((node) => node.kind === 'unknown');
     return t('transactions.flow.trace', {
       token: props.tokenInfo(unit).name,
-      from: names(inputs.value) || t('transactions.flow.minted'),
+      from: names(inputs.value) || (unknownInput ? nodeLabel(unknownInput) : t('transactions.flow.minted')),
       to: names(outputs.value) || t('transactions.flow.burned'),
     });
   }
@@ -467,9 +477,13 @@ const info = computed(() => {
   border-color: var(--g-warning-line);
 }
 
-.tx-flow__box--more {
+.tx-flow__box--more,
+.tx-flow__box--unknown {
   border-style: dashed;
   border-color: var(--g-hairline-3);
+}
+
+.tx-flow__box--more {
   cursor: pointer;
 }
 

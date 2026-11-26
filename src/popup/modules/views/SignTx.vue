@@ -81,6 +81,17 @@
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
         />
+        <!-- Display only, after every warning above: inputs to outputs, an input the wallet can't
+             resolve shown as unknown. Draws nothing when the transaction did not parse. -->
+        <TxApprovalFlow
+          class="mt-2"
+          :tx="tx ?? null"
+          :own-addresses="flowOwnAddresses"
+          :own-utxos="provenOwnUtxos"
+          :deposits="approvalDepositsFrom(networkStore.epochParams)"
+          :token-info="flowTokenInfo"
+          :currency-symbol="networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)"
+        />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
         <div class="flex-grow-1">
@@ -279,6 +290,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
+import TxApprovalFlow from '@/shared/components/TxApprovalFlow.vue';
 import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
@@ -390,6 +402,11 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return null;
   }
 });
+// The flow diagram's view of the same wallet (display only).
+const flowOwnAddresses = computed(() => new Set(
+  [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])].map((key) => key.address).filter((address): address is string => !!address),
+));
+const flowTokenInfo = (unit: string) => ({ name: filters.truncate(unit), decimals: 0 });
 const approvalCard = computed(() =>
   approvalSummary.value ? toTransactionDetailsCardProps(approvalSummary.value, filters.truncate) : null,
 );
