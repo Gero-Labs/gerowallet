@@ -12,7 +12,7 @@
 import { computed, ref, shallowRef } from 'vue';
 import { GeroVaultError, exportRecoveryPackage, generateRecoveryPassphrase, type ExportSkipped } from '@/shared/gerovault';
 import type { VaultRecord } from '@/modules/gerovault/contracts';
-import { RoleKeysError, type VaultRoleKeysSource } from '@/modules/gerovault/detail/context';
+import { RoleKeysError, type VaultRoleKeysSource } from '@/modules/gerovault/detail/roleKeys';
 import { checkOwnPassphrase, groupMatches, ownPassphraseReady, passphraseGroups, randomGroupIndex } from './passphrase';
 import { recoveryContentsFromRecord } from './packageContents';
 import { downloadRecoveryFile, recordRecoveryExport, recoveryFileName } from './exportRecord';
@@ -26,18 +26,20 @@ export type RecoveryExportStep = 'choose' | 'write' | 'confirm' | 'own' | 'expor
  *   `HISTORY_TOO_LARGE`, `MANIFEST_HISTORY_CORRUPT`, `PACKAGE_CHECK_FAILED`, `INVALID_PACKAGE`;
  * - `FAILED`: anything else.
  */
-export type RecoveryExportError =
-  | 'KEYS_UNAVAILABLE'
-  | 'WRONG_PASSWORD'
-  | 'LOCKED'
-  | 'NOT_SUPPORTED'
-  | 'SEED_MISMATCH'
-  | 'INVALID_PASSPHRASE'
-  | 'HISTORY_TOO_LARGE'
-  | 'MANIFEST_HISTORY_CORRUPT'
-  | 'PACKAGE_CHECK_FAILED'
-  | 'INVALID_PACKAGE'
-  | 'FAILED';
+export const RECOVERY_EXPORT_ERRORS = [
+  'KEYS_UNAVAILABLE',
+  'WRONG_PASSWORD',
+  'LOCKED',
+  'NOT_SUPPORTED',
+  'SEED_MISMATCH',
+  'INVALID_PASSPHRASE',
+  'HISTORY_TOO_LARGE',
+  'MANIFEST_HISTORY_CORRUPT',
+  'PACKAGE_CHECK_FAILED',
+  'INVALID_PACKAGE',
+  'FAILED',
+] as const;
+export type RecoveryExportError = (typeof RECOVERY_EXPORT_ERRORS)[number];
 
 const LIBRARY_ERRORS: readonly RecoveryExportError[] = [
   'SEED_MISMATCH',

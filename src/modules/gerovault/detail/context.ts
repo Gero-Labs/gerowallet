@@ -8,7 +8,9 @@ import { inject, type InjectionKey } from 'vue';
 import { vaultStore } from '@/db/vaultStore';
 import { walletStore } from '@/stores/walletStore';
 import { vaultNetworkOf, type VaultChainReader, type VaultStore } from '@/modules/gerovault/contracts';
-import type { RoleKeys, VaultNetwork } from '@/shared/gerovault';
+import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
+import type { VaultNetwork } from '@/shared/gerovault';
+import { unavailableRoleKeysSource, type VaultRoleKeysSource } from './roleKeys';
 import { noFundingVerifier, type FundingVerifier } from './verification';
 
 // -------------------------------------------------------------------------------------------------
@@ -51,53 +53,33 @@ export type VaultChainReaderFactory = (network: VaultNetwork) => VaultChainReade
 
 export const GEROVAULT_CHAIN_READER: InjectionKey<VaultChainReaderFactory> = Symbol('gerovault.chainReader');
 
-/** No reader until the slice's implementation is wired in: chain data then shows as unavailable. */
-const noReader: VaultChainReaderFactory = () => undefined;
+const readers = new Map<VaultNetwork, VaultChainReader>();
+
+/** The wallet's own reader (`chain/vaultChainReader.ts`), one per network; undefined if it cannot be built. */
+export const walletChainReader: VaultChainReaderFactory = network => {
+  let reader = readers.get(network);
+  if (!reader) {
+    try {
+      reader = createVaultChainReader(network);
+    } catch {
+      return undefined;
+    }
+    readers.set(network, reader);
+  }
+  return reader;
+};
 
 export function useVaultChainReaderFactory(): VaultChainReaderFactory {
-  return inject(GEROVAULT_CHAIN_READER, null) ?? noReader;
+  return inject(GEROVAULT_CHAIN_READER, null) ?? walletChainReader;
 }
 
 // -------------------------------------------------------------------------------------------------
 // The wallet's own role keys
 
-/** Why the wallet's own role keys could not be read. */
-export type RoleKeysErrorCode = 'UNAVAILABLE' | 'WRONG_PASSWORD' | 'LOCKED' | 'NOT_SUPPORTED';
-
-export class RoleKeysError extends Error {
-  readonly code: RoleKeysErrorCode;
-
-  constructor(code: RoleKeysErrorCode, message: string) {
-    super(message);
-    this.name = 'RoleKeysError';
-    this.code = code;
-  }
-}
-
-/**
- * The logged-in wallet's own CIP-1854 role keys (`m/1854'/1815'/0'/0` and `.../2`): public keys,
- * but they derive every vault key the wallet will ever hold, so they stay on this device. The
- * recovery package needs them to check that the exporting or restoring seed is the participant's.
- */
-export interface VaultRoleKeysSource {
-  /** Whether `roleKeys` needs the spending password. */
-  readonly needsSpendingPassword: boolean;
-  /** Throws `RoleKeysError`. */
-  roleKeys(request: { readonly walletId: number; readonly spendingPassword?: string }): Promise<RoleKeys>;
-}
+export { RoleKeysError, unavailableRoleKeysSource } from './roleKeys';
+export type { RoleKeysErrorCode, VaultRoleKeysSource } from './roleKeys';
 
 export const GEROVAULT_ROLE_KEYS: InjectionKey<VaultRoleKeysSource> = Symbol('gerovault.roleKeys');
-
-/**
- * Nothing in the wallet derives CIP-1854 keys for a page yet: that needs a background message that
- * decrypts the root key. Until one exists, the recovery screens say so instead of guessing.
- */
-export const unavailableRoleKeysSource: VaultRoleKeysSource = Object.freeze({
-  needsSpendingPassword: false,
-  roleKeys: async () => {
-    throw new RoleKeysError('UNAVAILABLE', 'This build cannot read the wallet\'s vault keys');
-  },
-});
 
 export function useVaultRoleKeysSource(): VaultRoleKeysSource {
   return inject(GEROVAULT_ROLE_KEYS, null) ?? unavailableRoleKeysSource;

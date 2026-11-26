@@ -28,7 +28,7 @@ import {
   type VaultNetwork,
 } from '@/shared/gerovault';
 import type { VaultChainReader, VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
-import { RoleKeysError, type VaultRoleKeysSource } from '@/modules/gerovault/detail/context';
+import { RoleKeysError, type VaultRoleKeysSource } from '@/modules/gerovault/detail/roleKeys';
 import { nativeChainFacts, plutusChainUtxos } from './chainFacts';
 import { candidateInputFromRestore } from './packageContents';
 
@@ -52,30 +52,31 @@ export type RecoveryImportStep =
  *   (truncated, tampered or an invalid payload: use another copy);
  * - `WRONG_PASSPHRASE`;
  * - the vault: `OTHER_NETWORK` (not this wallet's network), `SEED_MISMATCH` (this wallet's seed is not
- *   the exporter's), `INCONSISTENT` (the keys do not build the scripts), `INDEX_ZERO`;
+ *   the exporter's), `INCONSISTENT` (the keys do not build the scripts);
  * - role keys: `KEYS_UNAVAILABLE`, `WRONG_PASSWORD`, `LOCKED`, `NOT_SUPPORTED`;
  * - the store: `ALREADY_HELD`, `STORE_UNAVAILABLE`, `SAVE_FAILED`;
  * - `FAILED`: anything else.
  */
-export type RecoveryImportError =
-  | 'NOT_A_PACKAGE'
-  | 'UNKNOWN_VERSION'
-  | 'TOO_LARGE'
-  | 'UNREADABLE_FILE'
-  | 'DAMAGED'
-  | 'WRONG_PASSPHRASE'
-  | 'OTHER_NETWORK'
-  | 'SEED_MISMATCH'
-  | 'INCONSISTENT'
-  | 'INDEX_ZERO'
-  | 'KEYS_UNAVAILABLE'
-  | 'WRONG_PASSWORD'
-  | 'LOCKED'
-  | 'NOT_SUPPORTED'
-  | 'ALREADY_HELD'
-  | 'STORE_UNAVAILABLE'
-  | 'SAVE_FAILED'
-  | 'FAILED';
+export const RECOVERY_IMPORT_ERRORS = [
+  'NOT_A_PACKAGE',
+  'UNKNOWN_VERSION',
+  'TOO_LARGE',
+  'UNREADABLE_FILE',
+  'DAMAGED',
+  'WRONG_PASSPHRASE',
+  'OTHER_NETWORK',
+  'SEED_MISMATCH',
+  'INCONSISTENT',
+  'KEYS_UNAVAILABLE',
+  'WRONG_PASSWORD',
+  'LOCKED',
+  'NOT_SUPPORTED',
+  'ALREADY_HELD',
+  'STORE_UNAVAILABLE',
+  'SAVE_FAILED',
+  'FAILED',
+] as const;
+export type RecoveryImportError = (typeof RECOVERY_IMPORT_ERRORS)[number];
 
 /** What the file refusals mean to the user. */
 export function fileRefusalError(code: string): RecoveryImportError {
@@ -326,10 +327,6 @@ export function useRecoveryImport(deps: RecoveryImportDeps) {
     const pkg = opened.value;
     if (!wallet || !restored || !pkg) return undefined;
     if (saved.value) return saved.value;
-    if (restored.self.index === 0) {
-      fail('INDEX_ZERO');
-      return undefined;
-    }
     step.value = 'saving';
     try {
       const row = await deps.store.addCandidate(wallet.walletId, candidateInputFromRestore(restored, pkg));
