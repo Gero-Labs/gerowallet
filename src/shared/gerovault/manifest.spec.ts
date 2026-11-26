@@ -694,7 +694,18 @@ describe('decoding untrusted manifests', () => {
         default: return [pick(INTS)];
       }
     };
-    const plain = () => cborgDecode(baseBytes, { useMaps: false }) as P;
+    // A fresh copy each time: cborg returns byte strings as views into its input, and the
+    // mutations below flip bytes in place.
+    const plain = () => cborgDecode(Uint8Array.from(baseBytes), { useMaps: false }) as P;
+    /** The value at `path`, or undefined when an earlier mutation removed it. */
+    const lookup = (root: P, path: readonly (string | number)[]): unknown => {
+      let o: unknown = root;
+      for (const k of path) {
+        if (o === null || typeof o !== 'object') return undefined;
+        o = (o as P)[k as string];
+      }
+      return o;
+    };
     const paths: (string | number)[][] = [];
     const collect = (v: unknown, path: (string | number)[]) => {
       paths.push(path);
@@ -705,12 +716,7 @@ describe('decoding untrusted manifests', () => {
     const mutate = (root: P): P => {
       const path = pick(paths);
       if (path.length === 0) return root;
-      let parent: P;
-      try {
-        parent = at(root, ...path.slice(0, -1));
-      } catch {
-        return root;
-      }
+      const parent = lookup(root, path.slice(0, -1)) as P;
       if (!parent || typeof parent !== 'object') return root;
       const k = path[path.length - 1] as string;
       const v = parent[k];
@@ -720,7 +726,10 @@ describe('decoding untrusted manifests', () => {
         case 2: if (Array.isArray(parent)) parent.push(structuredClone(v)); else parent[`${k}x`] = v; break;
         case 3: if (v instanceof Uint8Array && v.length) v[rand() % v.length] ^= 1 << (rand() % 8); break;
         case 4: if (typeof v === 'number') parent[k] = v + pick([-1, 1, 2 ** 32]); break;
-        default: parent[k] = structuredClone(at(root, ...pick(paths)));
+        default: {
+          const source = lookup(root, pick(paths));
+          if (source !== undefined) parent[k] = structuredClone(source);
+        }
       }
       return root;
     };
