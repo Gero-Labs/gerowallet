@@ -163,7 +163,7 @@ import { VaultSpendError } from '@/modules/gerovault/spend/errors';
 import { saveTextFile } from '@/modules/gerovault/spend/files';
 import { reviewBundle, type SpendReview } from '@/modules/gerovault/spend/review';
 import { signWithSpendingPassword, signerSupport } from '@/modules/gerovault/spend/signer';
-import { clearSpendSession, spendSession, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
+import { clearSpendSession, spendSession, spendSessionKey, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
 import { useVaultSpend } from '@/modules/gerovault/spend/useVaultSpend';
 import { addSignature, signingProgress, verifyOwnWitness } from '@/modules/gerovault/spend/witnesses';
 import SpendApprovalSheet from '@/modules/gerovault/spend/components/SpendApprovalSheet.vue';
@@ -179,7 +179,7 @@ interface RecipientDraft { id: number; address: string; ada: string; tokens: Tok
 const route = useRoute();
 const { t } = useTranslation();
 const vaultId = computed(() => String(route.params['vaultId'] ?? ''));
-const { load, wallet, currentSlot, protocolParameters } = useVaultSpend(vaultId);
+const { load, wallet, walletId, currentSlot, protocolParameters } = useVaultSpend(vaultId);
 const { enabled: detailsOn, peeking, visible: detailsVisible } = useDetailsLayer('gerovault.spend');
 
 const ready = computed(() => (load.value.status === 'ready' ? load.value : null));
@@ -270,7 +270,8 @@ function readForm(): SpendRecipient[] | null {
 }
 
 // 2 to 4. Review, sign, share
-const session = computed(() => (ready.value ? spendSession(ready.value.context.vaultId) ?? null : null));
+const sessionKey = computed(() => (ready.value && walletId.value !== null ? spendSessionKey(walletId.value, ready.value.context.vaultId) : null));
+const session = computed(() => (sessionKey.value ? spendSession(sessionKey.value) ?? null : null));
 const review = ref<SpendReview | null>(null);
 const phase = computed<'form' | 'review'>(() => (session.value && review.value ? 'review' : 'form'));
 const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context) : null));
@@ -289,8 +290,9 @@ async function refreshReview(): Promise<void> {
 }
 
 async function build(): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
-  if (!current || building.value || !utxos.value) return;
+  if (!key || !current || building.value || !utxos.value) return;
   buildError.value = null;
   const read = readForm();
   if (!read) return;
@@ -305,7 +307,7 @@ async function build(): Promise<void> {
       currentSlot: currentSlot.value,
     });
     const bundle = await createUnsignedBundle(current.context, built, current.reader.txCbor);
-    startSpendSession(bundle);
+    startSpendSession(key, bundle);
     await refreshReview();
   } catch (error) {
     buildError.value = describe(error);
@@ -315,9 +317,10 @@ async function build(): Promise<void> {
 }
 
 async function sign(password: string): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
   const active = session.value;
-  if (!current || !active || signing.value || review.value?.status !== 'ready') return;
+  if (!key || !current || !active || signing.value || review.value?.status !== 'ready') return;
   signing.value = true;
   signError.value = null;
   try {
@@ -329,7 +332,7 @@ async function sign(password: string): Promise<void> {
       txId: active.bundle.txId,
     });
     const verified = await verifyOwnWitness(witness, active.bundle, current.context);
-    updateSpendSession(current.context.vaultId, { collection: addSignature(active.collection, verified).collection });
+    updateSpendSession(key, { collection: addSignature(active.collection, verified).collection });
   } catch (error) {
     signError.value = describe(error);
   } finally {
@@ -343,7 +346,7 @@ function saveBundle(): void {
 }
 
 function discard(): void {
-  if (ready.value) clearSpendSession(ready.value.context.vaultId);
+  if (sessionKey.value) clearSpendSession(sessionKey.value);
   review.value = null;
   signError.value = null;
 }

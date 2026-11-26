@@ -16,7 +16,7 @@ import { GEROVAULT_IMPORT_SIGNATURES_ROUTE, GEROVAULT_SPEND_ROUTE, GEROVAULT_VAU
 import GerovaultSpend from '@/modules/gerovault/views/GerovaultSpend.vue';
 import GerovaultImportSignatures from '@/modules/gerovault/views/GerovaultImportSignatures.vue';
 import { VAULT_CHAIN_READER_KEY } from './chainReader';
-import { clearSpendSession } from './spendSession';
+import { clearSpendSession, spendSession, spendSessionKey } from './spendSession';
 import { TEST_PARAMS, fundingTransaction, lovelaceOutput, payeeAddress, testOwner, testReader, testVaultRecord, type TestOwner } from './__fixtures__/testVault';
 
 const files = vi.hoisted(() => ({ saved: [] as { name: string; text: string }[] }));
@@ -64,7 +64,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   files.saved.length = 0;
-  clearSpendSession(records[0].vaultId);
+  for (const walletId of [10, 11, 12]) clearSpendSession(spendSessionKey(walletId, records[0].vaultId));
   const base = (await import('./vaultSpendContext')).vaultBaseAddress('preprod', records[0].paymentScriptHash, records[0].stakeScriptHash).bech32;
   const funding = fundingTransaction([lovelaceOutput(base, 40_000_000n), lovelaceOutput(base, 30_000_000n)]);
   ({ reader, submitted } = testReader([funding]));
@@ -147,9 +147,9 @@ describe('GeroVault spend screens', () => {
     const bundleText = files.saved[0].text;
     spend.unmount();
 
-    // On the proposer's device the session goes on at the signatures screen.
-    const proposerSession = (await import('./spendSession')).spendSession(records[0].vaultId);
-    clearSpendSession(records[0].vaultId);
+    // The proposer's spend goes on at the signatures screen; the cosigner's wallet has none of it.
+    const proposerSession = spendSession(spendSessionKey(10, records[0].vaultId));
+    expect(proposerSession?.collection.signatures).toHaveLength(1);
 
     // A cosigner opens the file on their own device, checks it and signs.
     const cosigner = await openAs(1, `/vaults/${records[1].vaultId}/import-signatures`);
@@ -163,11 +163,7 @@ describe('GeroVault spend screens', () => {
     expect(cosigner.get('[data-test="submit"]').attributes('disabled')).toBeDefined();
     cosigner.unmount();
 
-    // Back on the proposer's device: the signature file is added and the transaction submitted.
-    clearSpendSession(records[0].vaultId);
-    const { startSpendSession, updateSpendSession } = await import('./spendSession');
-    startSpendSession(proposerSession!.bundle);
-    updateSpendSession(records[0].vaultId, { collection: proposerSession!.collection });
+    // Back as the proposer: the signature file is added and the transaction submitted.
     const collect = await openAs(0, `/vaults/${records[0].vaultId}/import-signatures`);
     expect(collect.get('[data-test="submit"]').attributes('disabled')).toBeDefined();
     await chooseFile(collect, '[data-test="witness-input"]', 'cosigner.gvsig.json', witnessText);

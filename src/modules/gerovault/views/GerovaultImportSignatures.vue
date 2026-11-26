@@ -145,7 +145,7 @@ import { VaultSpendError } from '@/modules/gerovault/spend/errors';
 import { readTextFile, saveTextFile } from '@/modules/gerovault/spend/files';
 import { reviewBundle, type SpendReview } from '@/modules/gerovault/spend/review';
 import { signWithSpendingPassword, signerSupport } from '@/modules/gerovault/spend/signer';
-import { clearSpendSession, spendSession, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
+import { clearSpendSession, spendSession, spendSessionKey, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
 import { useVaultSpend } from '@/modules/gerovault/spend/useVaultSpend';
 import {
   addSignature,
@@ -166,15 +166,16 @@ defineOptions({ name: 'GerovaultImportSignatures' });
 const route = useRoute();
 const { t } = useTranslation();
 const vaultId = computed(() => String(route.params['vaultId'] ?? ''));
-const { load, wallet, currentSlot } = useVaultSpend(vaultId);
+const { load, wallet, walletId, currentSlot } = useVaultSpend(vaultId);
 const { enabled: detailsOn, peeking, visible: detailsVisible } = useDetailsLayer('gerovault.spend');
 
 const ready = computed(() => (load.value.status === 'ready' ? load.value : null));
 const support = computed(() => signerSupport(wallet.value));
-const session = computed(() => (ready.value ? spendSession(ready.value.context.vaultId) ?? null : null));
+const sessionKey = computed(() => (ready.value && walletId.value !== null ? spendSessionKey(walletId.value, ready.value.context.vaultId) : null));
+const session = computed(() => (sessionKey.value ? spendSession(sessionKey.value) ?? null : null));
 const review = ref<SpendReview | null>(null);
 const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context) : null));
-const ownSignature = computed(() => session.value?.collection.signatures.find(s => s.signer.self) ?? null);
+const ownSignature = computed(() => session.value?.collection.signatures.find(s => s.signer.credential === ready.value?.context.self.credential) ?? null);
 const describe = (error: unknown) => errorText(error, t);
 
 const bundleInput = ref<HTMLInputElement | null>(null);
@@ -204,9 +205,10 @@ function takeFiles(event: Event): File[] {
 }
 
 async function openBundle(event: Event): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
   const [file] = takeFiles(event);
-  if (!current || !file) return;
+  if (!key || !current || !file) return;
   opening.value = true;
   openError.value = null;
   try {
@@ -214,7 +216,7 @@ async function openBundle(event: Event): Promise<void> {
     if (text === null) throw new VaultSpendError('BUNDLE_INVALID', 'Too large', 'size');
     const bundle = parseUnsignedBundle(text);
     checkBundleForVault(bundle, current.context);
-    startSpendSession(bundle);
+    startSpendSession(key, bundle);
     importResults.value = [];
     await refreshReview();
   } catch (error) {
@@ -225,9 +227,10 @@ async function openBundle(event: Event): Promise<void> {
 }
 
 async function sign(password: string): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
   const active = session.value;
-  if (!current || !active || signing.value || review.value?.status !== 'ready') return;
+  if (!key || !current || !active || signing.value || review.value?.status !== 'ready') return;
   signing.value = true;
   signError.value = null;
   try {
@@ -239,7 +242,7 @@ async function sign(password: string): Promise<void> {
       txId: active.bundle.txId,
     });
     const verified = await verifyOwnWitness(witness, active.bundle, current.context);
-    updateSpendSession(current.context.vaultId, { collection: addSignature(active.collection, verified).collection });
+    updateSpendSession(key, { collection: addSignature(active.collection, verified).collection });
   } catch (error) {
     signError.value = describe(error);
   } finally {
@@ -256,19 +259,20 @@ function saveOwnSignature(): void {
 }
 
 async function addWitnessFiles(event: Event): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
   const files = takeFiles(event);
-  if (!current || files.length === 0 || review.value?.status !== 'ready') return;
+  if (!key || !current || files.length === 0 || review.value?.status !== 'ready') return;
   const results: { tone: 'ok' | 'refused'; text: string }[] = [];
   for (const file of files) {
-    const active = session.value;
+    const active = spendSession(key);
     if (!active) break;
     try {
       const text = await readTextFile(file, MAX_WITNESS_FILE_BYTES);
       if (text === null) throw new VaultSpendError('WITNESS_INVALID', 'Too large', 'malformed');
       const verified = await verifyWitnessFile(parseWitnessFile(text), active.bundle, current.context);
       const { collection, added } = addSignature(active.collection, verified);
-      updateSpendSession(current.context.vaultId, { collection });
+      updateSpendSession(key, { collection });
       const index = current.context.owners.indexOf(verified.signer.credential);
       const name = participantName(verified.signer, t('gerovault.spend.signers.owner', { n: index + 1 }));
       results.push(added
@@ -282,9 +286,10 @@ async function addWitnessFiles(event: Event): Promise<void> {
 }
 
 async function submit(): Promise<void> {
+  const key = sessionKey.value;
   const current = ready.value;
   const active = session.value;
-  if (!current || !active || submitting.value) return;
+  if (!key || !current || !active || submitting.value) return;
   submitting.value = true;
   submitError.value = null;
   submitDetail.value = null;
@@ -294,7 +299,7 @@ async function submit(): Promise<void> {
     if (review.value?.status !== 'ready') return;
     const txCbor = assembleTransaction(active.bundle, current.context, active.collection);
     const txId = await current.reader.submit(txCbor);
-    updateSpendSession(current.context.vaultId, { submittedTxId: txId || active.bundle.txId });
+    updateSpendSession(key, { submittedTxId: txId || active.bundle.txId });
   } catch (error) {
     if (error instanceof VaultSpendError) {
       submitError.value = describe(error);
@@ -311,7 +316,7 @@ async function submit(): Promise<void> {
 }
 
 function closeTransaction(): void {
-  if (ready.value) clearSpendSession(ready.value.context.vaultId);
+  if (sessionKey.value) clearSpendSession(sessionKey.value);
   review.value = null;
   importResults.value = [];
   signError.value = null;
