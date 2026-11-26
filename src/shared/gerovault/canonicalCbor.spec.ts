@@ -24,8 +24,8 @@ describe('deterministic CBOR writer', () => {
     ['', '60'],
     ['a', '6161'],
     ['IETF', '6449455446'],
-    ['ü', '62c3bc'],
-    ['水', '63e6b0b4'],
+    [String.fromCharCode(0xfc), '62c3bc'],
+    [String.fromCharCode(0x6c34), '63e6b0b4'],
     [new Uint8Array([1, 2, 3, 4]), '4401020304'],
     [[], '80'],
     [[1, [2, 3], [4, 5]], '8301820203820405'],
@@ -58,14 +58,61 @@ describe('deterministic CBOR writer', () => {
   it('agrees with an independent canonical encoder (cborg) on a nested value', () => {
     const value = {
       protocol: 'gero-vault/v1',
-      threshold: 2,
+      schema: 1,
       roles: { owners: [{ credential: new Uint8Array(28).fill(1), devices: [] }], external: [] },
-      viewersSeeProposalContents: 0,
-      createdAt: 1764158400,
+      viewersSeeProposalContents: false,
+      flag: true,
+      revisedAt: 1764158400,
       big: 2 ** 40,
       negative: -5,
     };
     expect(hex(value)).toBe(Buffer.from(cborgEncode(value)).toString('hex'));
+  });
+
+  it('writes booleans as the two simple values', () => {
+    expect(hex(false)).toBe('f4');
+    expect(hex(true)).toBe('f5');
+    expect(hex([true, false])).toBe('82f5f4');
+  });
+
+  it('writes a Map with integer keys in the bytewise order of their encodings', () => {
+    // 1 is 01, 24 is 1818, -1 is 20: bytewise order 01, 1818, 20 (RFC 8949 4.2.1).
+    expect(hex(new Map<number, CborWritable>([[-1, 0], [24, 0], [1, 0]]))).toBe('a3' + '0100' + '181800' + '2000');
+    const inner = new Map<number, CborWritable>([[0, new Uint8Array([7])]]);
+    expect(hex(new Map<number, CborWritable>([[18541, inner]]))).toBe('a119486da1004107');
+    expect(() => encodeCanonicalCbor(new Map<number | bigint, CborWritable>([[1, 0], [1n, 0]]))).toThrow(TypeError);
+    expect(() => encodeCanonicalCbor(new Map([[true, 0]]) as unknown as CborWritable)).toThrow(TypeError);
+  });
+
+  it('agrees with cborg on random text-keyed trees, and writes what the strict reader accepts', () => {
+    let seed = 12345;
+    const rand = () => {
+      seed ^= seed << 13; seed >>>= 0;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5; seed >>>= 0;
+      return seed;
+    };
+    const pick = <T>(xs: readonly T[]): T => xs[rand() % xs.length];
+    const INTS = [0, 1, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296, Number.MAX_SAFE_INTEGER, -1, -24, -25];
+    const KEYS = ['a', 'b', 'aa', 'zz', 'credential', 'viewersSeeProposalContents', 'x'.repeat(24), String.fromCharCode(0xe9)];
+    const tree = (depth: number): CborWritable => {
+      const r = rand() % (depth > 4 ? 5 : 7);
+      if (r === 0) return pick([...INTS, 18446744073709551615n, -18446744073709551616n, 2n ** 32n]);
+      if (r === 1) return pick(['', 'a', 'x'.repeat(pick([23, 24, 255, 256])), String.fromCodePoint(0x1f600)]);
+      if (r === 2) return new Uint8Array(pick([0, 23, 24, 255, 256]));
+      if (r === 3) return rand() % 2 === 0;
+      if (r === 4) return pick(INTS);
+      if (r === 5) return Array.from({ length: rand() % 4 }, () => tree(depth + 1));
+      const o: Record<string, CborWritable> = {};
+      for (let i = 0; i < rand() % 5; i++) o[pick(KEYS)] = tree(depth + 1);
+      return o;
+    };
+    for (let i = 0; i < 1000; i++) {
+      const v = tree(0);
+      const mine = encodeCanonicalCbor(v);
+      expect(Buffer.from(mine).toString('hex')).toBe(Buffer.from(cborgEncode(v)).toString('hex'));
+      expect(() => readCbor(mine, { maxDepth: 64, maxItems: 100000, booleans: true })).not.toThrow();
+    }
   });
 
   it('writes what the strict reader accepts', () => {
@@ -74,8 +121,24 @@ describe('deterministic CBOR writer', () => {
   });
 
   it('refuses values outside the subset', () => {
-    for (const bad of [1.5, NaN, Infinity, 2 ** 53, 2n ** 64n, -(2n ** 64n) - 1n, true, null, undefined, new Date(0), new Map(), '\ud800']) {
+    const lone = String.fromCharCode(0xd800);
+    for (const bad of [1.5, NaN, Infinity, 2 ** 53, 2n ** 64n, -(2n ** 64n) - 1n, null, undefined, new Date(0), new Set(), lone]) {
       expect(() => encodeCanonicalCbor(bad as unknown as CborWritable)).toThrow(TypeError);
+    }
+  });
+});
+
+describe('the strict reader and booleans (opt in)', () => {
+  const limits = { maxDepth: 4, maxItems: 16 };
+  it('refuses booleans unless the limits ask for them', () => {
+    expect(() => readCbor(Uint8Array.from([0xf5]), limits)).toThrow(expect.objectContaining({ reason: 'UNSUPPORTED_TYPE' }));
+    expect(readCbor(Uint8Array.from([0xf5]), { ...limits, booleans: true }).value).toEqual({ type: 'bool', value: true });
+    expect(readCbor(Uint8Array.from([0x82, 0xf4, 0x01]), { ...limits, booleans: true }).value.type).toBe('array');
+  });
+
+  it('still refuses every other simple value and floats with booleans on', () => {
+    for (const bytes of [[0xf6], [0xf7], [0xf0], [0xf8, 0x20], [0xf9, 0x3c, 0x00], [0xfa, 0, 0, 0, 0], [0xfb, 0, 0, 0, 0, 0, 0, 0, 0]]) {
+      expect(() => readCbor(Uint8Array.from(bytes), { ...limits, booleans: true })).toThrow(expect.objectContaining({ reason: 'UNSUPPORTED_TYPE' }));
     }
   });
 });

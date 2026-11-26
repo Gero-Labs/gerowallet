@@ -1,20 +1,28 @@
 /**
  * A deterministic CBOR writer (RFC 8949 section 4.2.1, core deterministic encoding) for the
- * subset the `gero-vault/v1` objects use: integers, byte strings, text strings, arrays and maps
- * with text keys. `cbor.ts` is the matching strict reader.
+ * subset the `gero-vault/v1` objects use: integers, byte strings, text strings, booleans, arrays
+ * and maps. `cbor.ts` is the matching strict reader (with `booleans: true` where booleans occur).
  *
  * - Integers and lengths take the shortest head, and every length is definite.
  * - Map keys are sorted by the bytewise lexicographic order of their encodings. For text keys
- *   that is shorter keys first, then by bytes (the same order as RFC 7049's length-first rule).
- * - Floats, booleans, `null`, tags and simple values are not written, because the reader refuses
- *   them. A caller encodes a flag as the integer 0 or 1.
+ *   that is shorter keys first, then by bytes; integer keys sort by their encoded heads.
+ * - Floats, `null`, tags and other simple values are never written.
  *
  * Input mapping: `number` or `bigint` is an integer, `string` a text string, `Uint8Array` a byte
- * string, an array an array, and a plain object a map. Anything else throws a `TypeError`: callers
- * validate their values first, so a throw here is a programming error.
+ * string, `boolean` a boolean, an array an array, a plain object a map with text keys, and a
+ * `Map` a map with integer or text keys. Anything else throws a `TypeError`: callers validate
+ * their values first, so a throw here is a programming error.
  */
 
-export type CborWritable = number | bigint | string | Uint8Array | readonly CborWritable[] | CborWritableMap;
+export type CborWritable =
+  | number
+  | bigint
+  | string
+  | boolean
+  | Uint8Array
+  | readonly CborWritable[]
+  | CborWritableMap
+  | ReadonlyMap<number | bigint | string, CborWritable>;
 
 export interface CborWritableMap {
   readonly [key: string]: CborWritable;
@@ -65,6 +73,10 @@ function write(value: CborWritable, out: number[][], depth: number): void {
     out.push(head(3, BigInt(bytes.length)), Array.from(bytes));
     return;
   }
+  if (typeof value === 'boolean') {
+    out.push([value ? 0xf5 : 0xf4]);
+    return;
+  }
   if (value instanceof Uint8Array) {
     out.push(head(2, BigInt(value.length)), Array.from(value));
     return;
@@ -74,14 +86,22 @@ function write(value: CborWritable, out: number[][], depth: number): void {
     for (const item of value) write(item, out, depth + 1);
     return;
   }
-  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    const entries = Object.keys(value).map(key => {
+  const isMap = value instanceof Map;
+  if (isMap || (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)) {
+    const pairs: [number | bigint | string, CborWritable][] = isMap
+      ? [...(value as ReadonlyMap<number | bigint | string, CborWritable>).entries()]
+      : Object.keys(value).map(key => [key, (value as CborWritableMap)[key]]);
+    const entries = pairs.map(([key, item]) => {
+      if (typeof key !== 'string' && typeof key !== 'number' && typeof key !== 'bigint') throw new TypeError('A CBOR map key is an integer or text');
       const k = encodeCanonicalCbor(key);
       const v: number[][] = [];
-      write((value as CborWritableMap)[key], v, depth + 1);
+      write(item, v, depth + 1);
       return { k, v };
     });
     entries.sort((a, b) => compareBytes(a.k, b.k));
+    for (let i = 1; i < entries.length; i++) {
+      if (compareBytes(entries[i - 1].k, entries[i].k) === 0) throw new TypeError('A CBOR map key appears twice');
+    }
     out.push(head(5, BigInt(entries.length)));
     for (const { k, v } of entries) {
       out.push(Array.from(k));
