@@ -10,7 +10,7 @@ import { walletStore } from '@/stores/walletStore';
 import { vaultNetworkOf, type VaultChainReader, type VaultStore } from '@/modules/gerovault/contracts';
 import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
 import type { VaultNetwork } from '@/shared/gerovault';
-import { unavailableRoleKeysSource, type VaultRoleKeysSource } from './roleKeys';
+import { walletRoleKeysSource, type RoleKeysWallet, type VaultRoleKeysSource } from './roleKeys';
 import { noFundingVerifier, type FundingVerifier } from './verification';
 
 // -------------------------------------------------------------------------------------------------
@@ -76,13 +76,16 @@ export function useVaultChainReaderFactory(): VaultChainReaderFactory {
 // -------------------------------------------------------------------------------------------------
 // The wallet's own role keys
 
-export { RoleKeysError, unavailableRoleKeysSource } from './roleKeys';
+export { RoleKeysError, unavailableRoleKeysSource, walletRoleKeysSource } from './roleKeys';
 export type { RoleKeysErrorCode, VaultRoleKeysSource } from './roleKeys';
 
 export const GEROVAULT_ROLE_KEYS: InjectionKey<VaultRoleKeysSource> = Symbol('gerovault.roleKeys');
 
+/** The logged-in wallet's own source (`walletRoleKeysSource`), reading the wallet at each call. */
+const loggedWalletRoleKeys = walletRoleKeysSource(() => walletStore.loggedWallet as RoleKeysWallet | null);
+
 export function useVaultRoleKeysSource(): VaultRoleKeysSource {
-  return inject(GEROVAULT_ROLE_KEYS, null) ?? unavailableRoleKeysSource;
+  return inject(GEROVAULT_ROLE_KEYS, null) ?? loggedWalletRoleKeys;
 }
 
 // -------------------------------------------------------------------------------------------------
