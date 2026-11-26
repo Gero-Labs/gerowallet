@@ -96,6 +96,18 @@ describe('isOwnExtensionPageSender', () => {
     }
   });
 
+  it('gates the GeroVault key requests: a content script is refused (they open the root key with the spending password)', () => {
+    const contentScript = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
+    const page = { id: OWN, url: `chrome-extension://${OWN}/options.html` } as unknown as S;
+    for (const method of ['GEROVAULT_DERIVE_ACCOUNT_KEY', 'GEROVAULT_SIGN_VAULT_BUNDLE']) {
+      expect(EXTENSION_PAGE_ONLY_METHODS.has(method), method).toBe(true);
+      expect(CONTENT_SCRIPT_OPTIONS_METHODS.has(method), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, contentScript, CHROME), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, undefined, CHROME), method).toBe(false);
+      expect(isOptionsSenderAllowed(method, page, CHROME), method).toBe(true);
+    }
+  });
+
   it('gates the listing sale-alert registration: a content script is refused (it registers watches for the logged wallet)', () => {
     const contentScript = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
     const page = { id: OWN, url: `chrome-extension://${OWN}/options.html` } as unknown as S;
