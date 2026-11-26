@@ -3,12 +3,16 @@ import { Serialization } from '@cardano-sdk/core';
 import { blake2b as sdkBlake2b } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { COSESign1 } from '@emurgo/cardano-message-signing-browser';
+import { ed25519 as nobleEd25519 } from '@noble/curves/ed25519.js';
+import { blake2b } from '@noble/hashes/blake2.js';
+import { sha512 } from '@noble/hashes/sha2.js';
 import { decode as cborgDecode, encode as cborgEncode } from 'cborg';
 import {
   ATTESTATION_LABEL,
   AttestedDigest,
   OwnerAttestation,
   assembleExpiredTx,
+  attestationSigner,
   canonicalAttestation,
   cip8Proof,
   expiredTxAuxiliaryData,
@@ -16,6 +20,7 @@ import {
   expiredTxBodyHash,
   ingestAttestation,
   isCanonicalAttestation,
+  isUsableEd25519Key,
   verifyAttestation,
   verifyEd25519,
 } from './attestation';
@@ -26,13 +31,15 @@ import { TestParticipant, cip8Attestation, expiredTxAttestation, testParticipant
 /**
  * PROVISIONAL vectors (GV-07): the expired transaction body and auxiliary data for test
  * participant 0 (the published cardano-addresses key at vault index 1) over the binding digest
- * `ab` x 32, and the hashes of both complete stored proofs by that key.
+ * `ab` x 32, the hashes of both complete stored proofs by that key, and of the stored proof whose
+ * body writes both sets with tag 258.
  */
 const VECTORS = {
   auxiliaryData: 'a119486da1005820abababababababababababababababababababababababababababababababab',
   body: 'a600818258200000000000000000000000000000000000000000000000000000000000000000000180020003010758204c492b248804e86d28819091a2394b6d435e71db70c24b6bf4d28ade935fcf260e81581c1196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d',
   expiredTxProofHash: '62c26f4c4ce0c0945bfb0e7ece0ea96de809c7e68d64f35b12472f816412ef33',
   cip8ProofHash: 'dec4ff211e9350228c0b7f8adbaab061cd408e668edd8f58fd262223726a0f6b',
+  taggedBodyProofHash: '343b601f872a7c619af389d574ae89f7ffd9c57ca9e208daa7d06488213ead6e',
 };
 
 const DIGEST = 'ab'.repeat(32);
@@ -271,13 +278,22 @@ describe('expired-transaction attestations', () => {
     expect(await codeOf(expiredTxAttestation(people[1].signer, people[1].credential, binding), people[0])).toBe('WRONG_SIGNER');
   });
 
-  it('refuse a body in another key order, even signed', async () => {
+  it('accept a body in another key order when it was signed as written, and keep it so', async () => {
     const reordered = tamper((_tx, body) => {
       const entries = [...body.entries()].reverse();
       body.clear();
       for (const [k, v] of entries) body.set(k, v);
     }, true);
-    expect(await codeOf(reordered, people[0])).toBe('NOT_CANONICAL');
+    expect(await codeOf(reordered, people[0])).toBe('ok');
+    expect(isCanonicalAttestation(reordered)).toBe(true);
+    expect(await ingested(reordered, people[0])).toEqual(reordered);
+    // The same reordering under the signature of the canonical body is another transaction.
+    const tx = decoded(expiredTxAttestation(people[0].signer, people[0].credential, binding).proof);
+    const body = tx[0] as Map<number, unknown>;
+    const entries = [...body.entries()].reverse();
+    body.clear();
+    for (const [k, v] of entries) body.set(k, v);
+    expect(await codeOf({ method: 1, proof: hexOf(cborgEncode(tx, { mapSorter: () => 0 })) }, people[0])).toBe('BAD_SIGNATURE');
   });
 
   it('match the provisional vectors', async () => {
@@ -285,6 +301,93 @@ describe('expired-transaction attestations', () => {
     expect(expiredTxBody(people[0].credential, binding)).toBe(VECTORS.body);
     expect(sdkBlake2b.hash(HexBlob(expiredTxAttestation(people[0].signer, people[0].credential, binding).proof), 32)).toBe(VECTORS.expiredTxProofHash);
     expect(sdkBlake2b.hash(HexBlob(cip8Attestation(people[0].signer, people[0].credential, DIGEST).proof), 32)).toBe(VECTORS.cip8ProofHash);
+  });
+});
+
+describe('an expired transaction body as the wallet signed it', () => {
+  const canonicalBody = () => expiredTxBody(people[0].credential, binding);
+  // `a6 00 81 ...` and `0e 81 58 1c ...`: the input set and the signer set, here with tag 258.
+  const tagged = () => canonicalBody().replace(/^a60081/, 'a600d9010281').replace(/0e81581c/, '0ed9010281581c');
+  const signedAs = (body: string) => {
+    const signature = people[0].signer.sign(HexBlob(sdkBlake2b.hash(HexBlob(body), 32))).hex();
+    return { method: 1, proof: assembleExpiredTx(people[0].credential, binding, people[0].signer.toPublic().hex(), signature, body) };
+  };
+  // After the input come `01 80 02 00 03 01 07 58 20`: no outputs, no fee, slot 1, the hash.
+  const AFTER_INPUT = '0180020003010758';
+
+  it('accepts the sets with tag 258 and keeps the body bytes as signed (checked with cardano-sdk)', async () => {
+    expect(tagged()).not.toBe(canonicalBody());
+    const a = signedAs(tagged());
+    expect(await codeOf(a, people[0])).toBe('ok');
+    expect(isCanonicalAttestation(a)).toBe(true);
+    expect(await ingested(a, people[0])).toEqual(a);
+    expect(a.proof.slice(2, 2 + tagged().length)).toBe(tagged());
+    const tx = Serialization.Transaction.fromCbor(HexBlob(a.proof));
+    expect(tx.getId()).toBe(sdkBlake2b.hash(HexBlob(tagged()), 32));
+    expect(tx.toCore().body.requiredExtraSignatures).toEqual([people[0].credential]);
+    expect(sdkBlake2b.hash(HexBlob(a.proof), 32)).toBe(VECTORS.taggedBodyProofHash);
+    // The witness made over the canonical body does not verify over the tagged one.
+    const canonicalSig = people[0].signer.sign(HexBlob(expiredTxBodyHash(people[0].credential, binding))).hex();
+    const mixed = assembleExpiredTx(people[0].credential, binding, people[0].signer.toPublic().hex(), canonicalSig, tagged());
+    expect(await codeOf({ method: 1, proof: mixed }, people[0])).toBe('BAD_SIGNATURE');
+  });
+
+  it('takes a whole transaction with such a body at ingest, making only the rest canonical', async () => {
+    const signature = people[0].signer.sign(HexBlob(sdkBlake2b.hash(HexBlob(tagged()), 32))).hex();
+    // An indefinite-length wrapper and witness list, and a witness set with tag 258.
+    const loose = `9f${tagged()}a100d901029f825820${people[0].signer.toPublic().hex()}5840${signature}fff5${expiredTxAuxiliaryData(binding)}ff`;
+    const stored = signedAs(tagged());
+    expect(isCanonicalAttestation({ method: 1, proof: loose })).toBe(false);
+    expect(await codeOf({ method: 1, proof: loose }, people[0])).not.toBe('ok');
+    expect(await ingested({ method: 1, proof: loose }, people[0])).toEqual(stored);
+  });
+
+  it('accepts indefinite lengths and wider integers in the body when signed so', async () => {
+    const body = canonicalBody();
+    const indefinite = body.replace(/^a60081(825820(?:00){32}00)/, 'a6009f$1ff');
+    const wide = body.replace(AFTER_INPUT, '0180021900000301 0758'.replace(' ', ''));
+    for (const variant of [indefinite, wide]) {
+      expect(variant).not.toBe(body);
+      expect(await codeOf(signedAs(variant), people[0])).toBe('ok');
+    }
+  });
+
+  it.each([
+    ['BODY_SHAPE', 'outputs written as a set', () => canonicalBody().replace(AFTER_INPUT, '01d90102800200030107' + '58')],
+    ['BODY_SHAPE', 'a fee in a set tag', () => canonicalBody().replace(AFTER_INPUT, '0180' + '02d9010200' + '0301' + '0758')],
+    ['MALFORMED_PROOF', 'a tag other than 258', () => canonicalBody().replace(/^a60081/, 'a600d81881')],
+    ['MALFORMED_PROOF', 'a key twice', () => `a7${canonicalBody().slice(2)}0301`],
+    ['MALFORMED_PROOF', 'a body that is not a map', () => '80'],
+    ['SUBMITTABLE', 'a later time to live', () => canonicalBody().replace(AFTER_INPUT, '01800200031a0bebc2000758')],
+    ['WRONG_SIGNER', 'two required signers in a set', () => canonicalBody().replace(/0e81581c([0-9a-f]{56})$/, `0ed9010282581c$1581c${'00'.repeat(28)}`)],
+  ] as [string, string, () => string][])('refuses %s: %s, however it is written', async (code, _what, make) => {
+    expect(await codeOf(signedAs(make()), people[0])).toBe(code);
+  });
+});
+
+describe('what an attestation is over', () => {
+  const KINDS = ['binding', 'verification', 'removal', 'import', 'endorsement'] as const;
+
+  it('names each kind under its own metadatum key, and takes CIP-8 for every kind but a verification', async () => {
+    for (const [k, kind] of KINDS.entries()) {
+      const subject: AttestedDigest = { kind, digest: DIGEST };
+      expect(expiredTxAuxiliaryData(subject)).toBe(hexOf(cborgEncode(new Map([[ATTESTATION_LABEL, new Map([[k, bytesOf(DIGEST)]])]]))));
+      expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, subject), people[0], subject)).toBe('ok');
+      expect(await codeOf(cip8Attestation(people[0].signer, people[0].credential, DIGEST), people[0], subject)).toBe(kind === 'verification' ? 'METHOD_NOT_ALLOWED' : 'ok');
+    }
+    // An expired transaction for one kind is not one for another; CIP-8 carries the tagged digest only.
+    const removal: AttestedDigest = { kind: 'removal', digest: DIGEST };
+    expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, removal), people[0], { kind: 'import', digest: DIGEST })).toBe('WRONG_PAYLOAD');
+    expect(await verifyAttestation(expiredTxAttestation(people[0].signer, people[0].credential, binding), people[0].credential, { kind: 'other' } as unknown as AttestedDigest))
+      .toEqual({ ok: false, code: 'INVALID_INPUT' });
+  });
+
+  it('names the key that made a stored attestation, and nothing for another form', () => {
+    expect(attestationSigner(cip8Attestation(people[1].signer, people[1].credential, DIGEST))).toBe(people[1].credential);
+    expect(attestationSigner(expiredTxAttestation(people[2].signer, people[2].credential, binding))).toBe(people[2].credential);
+    expect(attestationSigner(walletCip8Attestation(people[1].signer, people[1].credential, DIGEST))).toBeUndefined();
+    expect(attestationSigner({ method: 2, proof: '00' })).toBeUndefined();
+    expect(attestationSigner(undefined)).toBeUndefined();
   });
 });
 
@@ -328,6 +431,73 @@ describe('strict Ed25519 (RFC 8032)', () => {
     expect(await codeOf(cip8, credential)).toBe('BAD_SIGNATURE');
     const tx = { method: 1, proof: assembleExpiredTx(credential, binding, IDENTITY, IDENTITY + '00'.repeat(32)) };
     expect(await codeOf(tx, credential)).toBe('BAD_SIGNATURE');
+  });
+});
+
+/**
+ * PROVISIONAL shared vectors (GV-07) for the strict check: signatures a lax verifier accepts. The
+ * key is test key `blake2b-256("gerovault strict ed25519 vector")`, the messages are their UTF-8
+ * names, and each signature is made with the private scalar so that it verifies under noble's
+ * default (ZIP215, cofactored) rules. Every one is refused here.
+ */
+describe('strict Ed25519: signatures that verifiers without these checks would accept', () => {
+  const L = GROUP_ORDER;
+  const SEED = blake2b(new TextEncoder().encode('gerovault strict ed25519 vector'), { dkLen: 32 });
+  const fromLe = (b: Uint8Array) => b.reduceRight((n, x) => (n << 8n) | BigInt(x), 0n);
+  const le = (n: bigint) => Uint8Array.from({ length: 32 }, (_, i) => Number((n >> BigInt(8 * i)) & 0xffn));
+  const cat = (...parts: Uint8Array[]) => Uint8Array.from(parts.flatMap(p => [...p]));
+  const point = (h: string) => nobleEd25519.Point.fromHex(h);
+  const B = nobleEd25519.Point.BASE;
+  const TORSION = point('c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a');
+  const h = sha512(SEED);
+  h[0] &= 248;
+  h[31] &= 127;
+  h[31] |= 64;
+  const a = fromLe(h.subarray(0, 32)) % L;
+  const r = fromLe(blake2b(new TextEncoder().encode('gerovault strict ed25519 nonce'), { dkLen: 32 })) % L;
+  const A = B.multiply(a);
+  const k = (R: Uint8Array, key: Uint8Array, m: Uint8Array) => fromLe(sha512(cat(R, key, m))) % L;
+  const utf8 = (t: string) => new TextEncoder().encode(t);
+
+  /** A key, a message and a signature: R, then S = r + k a (or k a alone for the identity R). */
+  function forge(name: string, keyPoint: typeof A, R: typeof A, scalarOfR: bigint, needKMultipleOf8 = false) {
+    const key = keyPoint.toBytes();
+    const Rb = R.toBytes();
+    let m = utf8(name);
+    for (let i = 0; needKMultipleOf8 && k(Rb, key, m) % 8n !== 0n; i++) m = utf8(`${name} ${i}`);
+    const S = (scalarOfR + k(Rb, key, m) * a) % L;
+    return { key: hexOf(key), message: hexOf(m), signature: hexOf(cat(Rb, le(S))) };
+  }
+
+  const cases = {
+    // R the identity, S = k a: [S]B = R + [k]A holds exactly, cofactor or not.
+    smallOrderR: forge('small-order R', A, nobleEd25519.Point.ZERO, 0n),
+    // A key with a torsion component, k a multiple of 8: both equations hold.
+    mixedOrderKey: forge('mixed-order key', A.add(TORSION), B.multiply(r), r, true),
+    // R with a torsion component: only the cofactored equation holds.
+    mixedOrderR: forge('mixed-order R', A, B.multiply(r).add(TORSION), r),
+  };
+  const VECTORS_ED25519 = {
+    smallOrderR: 'bfeab1d3ed0bbbb6f8a0ed06684a4b043aeb478742bacbe5449af8c2e506af99',
+    mixedOrderKey: 'bab9cd1a2cb19e477228bdb3d38f8a8b02a00d42cbeae6c47247f3903ba840ae',
+    mixedOrderR: '05f7c403cdc39e0830d23fb1e3cc7e9a04fc92044107102af667b6f5f386a4fe',
+  };
+
+  it.each(Object.keys(cases) as (keyof typeof cases)[])('%s: accepted by ZIP215 rules, refused here', async name => {
+    const c = cases[name];
+    expect(sdkBlake2b.hash(HexBlob(c.key + c.message + c.signature), 32)).toBe(VECTORS_ED25519[name]);
+    expect(nobleEd25519.verify(bytesOf(c.signature), bytesOf(c.message), bytesOf(c.key))).toBe(true);
+    expect(await verifyEd25519(bytesOf(c.key), bytesOf(c.signature), bytesOf(c.message))).toBe(false);
+  });
+
+  it('refuses a mixed-order key as a device or vault key, and accepts the key without its torsion', async () => {
+    expect(isUsableEd25519Key(cases.mixedOrderKey.key)).toBe(false);
+    expect(point(cases.mixedOrderKey.key).isSmallOrder()).toBe(false);
+    expect(point(cases.mixedOrderKey.key).isTorsionFree()).toBe(false);
+    expect(isUsableEd25519Key(hexOf(A.toBytes()))).toBe(true);
+    // The honest signature by the same scalar verifies.
+    const honest = forge('honest', A, B.multiply(r), r);
+    expect(await verifyEd25519(bytesOf(honest.key), bytesOf(honest.signature), bytesOf(honest.message))).toBe(true);
   });
 });
 

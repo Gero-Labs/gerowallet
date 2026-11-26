@@ -52,6 +52,7 @@ export {
   ATTESTATION_METHOD,
   MAX_ATTESTATION_BYTES,
   assembleExpiredTx,
+  attestationSigner,
   canonicalAttestation,
   cip8Proof,
   expiredTxAuxiliaryData,
