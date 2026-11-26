@@ -27,6 +27,58 @@ function retryDelay(header: string | null, retry: number): number | null {
   return delay <= MAX_RETRY_DELAY_MS ? delay : null;
 }
 
+/**
+ * Pace of light-sync requests: at most this many a second, evenly spaced (one start every
+ * 200 ms), for every transport in this context that talks to the same light-sync URL. The URL
+ * names the network, so a wallet's syncs and fee builds share one pace. The spend scan runs
+ * `DUST_SPEND_CONCURRENCY` requests side by side and a cached page answers in milliseconds,
+ * so without this a sync sent its pages in bursts. Every attempt takes a slot: retries,
+ * re-authentication and the first try alike.
+ */
+export const DUST_LIGHT_SYNC_REQUESTS_PER_SECOND = 5;
+const PACE_GAP_MS = 1000 / DUST_LIGHT_SYNC_REQUESTS_PER_SECOND;
+/**
+ * A next slot further ahead than any Retry-After hold plus a queue can put it means the
+ * clock was set back: start again from now rather than stall the sync.
+ */
+const PACE_MAX_AHEAD_MS = MAX_RETRY_DELAY_MS + 30_000;
+/** Per light-sync URL: when the next request may start, and a 429's hold (ms since epoch). */
+const paces = new Map<string, { next: number; holdUntil: number }>();
+
+/**
+ * Wait for this URL's next request slot. Slots are handed out in call order, and a hold
+ * placed while a request waits (another request's 429) moves that request past it too.
+ */
+async function waitForSlot(url: string, signal: AbortSignal): Promise<void> {
+  const pace = paces.get(url) ?? { next: 0, holdUntil: 0 };
+  paces.set(url, pace);
+  for (;;) {
+    signal.throwIfAborted();
+    const now = Date.now();
+    if (pace.holdUntil - now > PACE_MAX_AHEAD_MS) pace.holdUntil = 0;
+    if (pace.holdUntil > now) {
+      await waitForRetry(pace.holdUntil - now, signal);
+      continue;
+    }
+    const slot = pace.next - now > PACE_MAX_AHEAD_MS ? now : Math.max(now, pace.next);
+    pace.next = slot + PACE_GAP_MS;
+    if (slot === now) return;
+    await waitForRetry(slot - now, signal);
+    if (pace.holdUntil <= Date.now()) return;
+  }
+}
+
+/** A 429's Retry-After holds every request to this URL, not just the one that got it. */
+function holdSlots(url: string, milliseconds: number): void {
+  const pace = paces.get(url) ?? { next: 0, holdUntil: 0 };
+  pace.holdUntil = Math.max(pace.holdUntil, Date.now() + milliseconds);
+  paces.set(url, pace);
+}
+
+export function resetDustLightSyncPaceForTest(): void {
+  paces.clear();
+}
+
 function waitForRetry(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(signal.reason); return; }
@@ -67,6 +119,7 @@ export function createDustLightTransport(
     };
     for (;;) {
       signal.throwIfAborted();
+      await waitForSlot(url, signal);
       let response: Response;
       // Not reported as activity: no answer is silence, and the caller's watchdog bounds it.
       try { response = await attempt(token); } catch (error) { await waitAfterFailure(error); continue; }
@@ -93,9 +146,14 @@ export function createDustLightTransport(
         operation: body.operation, status: response.status, retryInMs: delay,
       });
       if (delay !== null) {
-        if (response.status === 429) rateLimitRetries++;
-        else transientRetries++;
-        await waitForRetry(delay, signal);
+        if (response.status === 429) {
+          // The retry, and every other request to this URL, waits in `waitForSlot` until then.
+          rateLimitRetries++;
+          holdSlots(url, delay);
+        } else {
+          transientRetries++;
+          await waitForRetry(delay, signal);
+        }
         continue;
       }
       if (response.status === 429) throw new Error('DUST synchronization is busy. Please try again shortly.');
