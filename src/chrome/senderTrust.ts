@@ -78,6 +78,10 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'SET_SUBMIT_API',
   'TEST_SUBMIT_API',
   'CLEAR_SUBMIT_API',
+  // GeroVault: the wallet's CIP-1854 account key, and its signature on a vault spend. Both take the
+  // spending password and open the root key in the worker (gerovaultHandlers.ts).
+  'GEROVAULT_DERIVE_ACCOUNT_KEY',
+  'GEROVAULT_SIGN_VAULT_BUNDLE',
   // Gero's fee station: seals a send with the wallet's key and spends a voucher of the user's
   // daily allowance. A web page must not be able to do either.
   'MIDNIGHT_STATION_STATUS',

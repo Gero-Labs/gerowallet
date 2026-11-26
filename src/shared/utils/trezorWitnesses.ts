@@ -191,6 +191,25 @@ export const extraWitnessRequests = (request: TrezorRequest, walletPaths: string
   return extra.length > 0 ? extra : undefined;
 };
 
+/**
+ * Every path a Trezor request has the device sign with: those `extraWitnessRequests` reads (each
+ * certificate's included), a pool owner's staking path, and the additional witness requests. The
+ * vault guard reads them just before the request goes out (vaultSignGuard.ts).
+ */
+export const requestSigningPaths = (
+  request: TrezorRequest & Pick<Trezor.CardanoSignTransaction, 'additionalWitnessRequests'>,
+): Array<string | readonly number[] | undefined> => [
+  ...request.inputs.map(({ path }) => path),
+  ...(request.collateralInputs ?? []).map(({ path }) => path),
+  ...(request.withdrawals ?? []).map(({ path }) => path),
+  ...(request.requiredSigners ?? []).map(({ keyPath }) => keyPath),
+  ...(request.certificates ?? []).flatMap(({ path, poolParameters }) => [
+    path,
+    ...(poolParameters?.owners ?? []).map(({ stakingKeyPath }) => stakingKeyPath),
+  ]),
+  ...(request.additionalWitnessRequests ?? []),
+];
+
 /** A CIP-1852 key path's role and index under its account, as an account xpub derives the key. */
 export const accountKeyIndices = (path: string): { role: number; index: number } => {
   const [role, index] = path.split('/').slice(-2).map((part) => Number(part.replace(/'$/, '')));

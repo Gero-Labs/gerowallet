@@ -164,6 +164,51 @@ test('exposes isNftMarketEnabled, defaulting to false, following the remote flag
   expect(featureFlagsStore.isNftMarketEnabled()).toBe(false);
 });
 
+test('exposes isVaultsEnabled, defaulting to false, following the remote flag and a live flip', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isVaultsEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(true);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isVaultsEnabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+});
+
+test('a local test build with VITE_GEROVAULT_FORCE_ON keeps GeroVault on whatever the service says', async () => {
+  vi.stubEnv('VITE_GEROVAULT_FORCE_ON', 'true');
+  vi.resetModules();
+  try {
+    const { featureFlagsStore: forced } = await import('@/stores/featureFlagsStore');
+    const service = (await import('@/services/featureFlag.service')).default;
+    expect(forced.isVaultsEnabled()).toBe(true);
+
+    vi.mocked(service.getFlag).mockImplementation((_key: string, fallback: unknown) => fallback);
+    forced.loadFlags();
+    expect(forced.isVaultsEnabled()).toBe(true);
+
+    forced.subscribeToFlagChanges();
+    const listener = vi.mocked(service.onFlagChange).mock.calls.filter(([key]) => key === 'isVaultsEnabled').at(-1)?.[1];
+    expect(listener).toBeDefined();
+    listener?.(false, true);
+    expect(forced.isVaultsEnabled()).toBe(true);
+
+    forced.reset();
+    expect(forced.isVaultsEnabled()).toBe(true);
+  } finally {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  }
+});
+
 // After a failed first fetch the service retries (issue 1195); the store must
 // pick the real values up then, and must not hand the background all-off
 // fallbacks in the meantime.

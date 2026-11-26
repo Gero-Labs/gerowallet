@@ -11,6 +11,7 @@ import {
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
   SUBMIT_API_STORAGE_MESSAGE,
+  VAULT_SIGN_REFUSAL_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 import { NFT_MARKET_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
@@ -164,6 +165,15 @@ describe('friendlyTxError on a signing refusal', () => {
 
   it('localizes the Trezor refusal of a body it cannot carry', () => {
     expect(friendlyTxError(new Error(TREZOR_GOVERNANCE_REFUSAL_MESSAGE))).toBe(i18n.t('errors.trezorGovernanceRefused'));
+  });
+
+  it('localizes the vault refusal, on the dApp approval screens and anywhere else', () => {
+    const text = i18n.t('errors.vaultSignRefused');
+    expect(text).toContain('vault');
+    expect(friendlyTxError(new Error(VAULT_SIGN_REFUSAL_MESSAGE))).toBe(text);
+    expect(friendlyDappTxError(new Error(VAULT_SIGN_REFUSAL_MESSAGE))).toBe(text);
+    // The popup (SignTx.vue) reads the refusals alone.
+    expect(signRefusalText(VAULT_SIGN_REFUSAL_MESSAGE, { marketApproval: true })).toBe(text);
   });
 });
 

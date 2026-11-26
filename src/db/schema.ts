@@ -9,7 +9,8 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };
 
-export const walletDBVersion: number = 11;
+// 12 adds `vaults` (GeroVault, src/db/vaultStore.ts). Additive, like every earlier change.
+export const walletDBVersion: number = 12;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -25,6 +26,9 @@ export const walletDBSchema = {
   multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
   portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
   utxos: '++id', // Persisted UTxOs from server (survives logout)
+  // GeroVault: the vaults this wallet holds, candidates and accepted, keyed by vault id.
+  // Never the legacy `multisig` table above: it names signers by address and has no vault keys.
+  vaults: 'vaultId, status, network, updatedAt',
 };
 
 export const blockChainDBVersion: number = 5;

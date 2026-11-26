@@ -45,6 +45,10 @@ export enum MessageTypes {
   // "Add account" for a recovery-phrase or Google wallet: the xpub of another of
   // its accounts. Only the public key comes back; see chrome/addAccountKeys.ts.
   DERIVE_ACCOUNT_XPUB = 'DERIVE_ACCOUNT_XPUB',
+  /** GeroVault: the wallet's CIP-1854 account public key, from its root key in the background. */
+  GEROVAULT_DERIVE_ACCOUNT_KEY = 'GEROVAULT_DERIVE_ACCOUNT_KEY',
+  /** GeroVault: the wallet's own witness file for a vault spend, signed in the background. */
+  GEROVAULT_SIGN_VAULT_BUNDLE = 'GEROVAULT_SIGN_VAULT_BUNDLE',
   // Live support chat: one-time-per-wallet identity handshake. BG asks Nexus for a
   // nonce, CIP-8 signs the challenge subject with the wallet's STAKE key (same
   // machinery as PRODUCE_DEVICE_REGISTER_PROOF), and returns the pseudonymous
