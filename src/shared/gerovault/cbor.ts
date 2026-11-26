@@ -127,7 +127,8 @@ class Reader {
         value = { type: 'int', value: -1n - this.argument(info) };
         break;
       case 2:
-        value = { type: 'bytes', value: Uint8Array.from(this.take(this.length(info))) };
+        // A copy, so the value does not hold on to the input; slice() copies natively.
+        value = { type: 'bytes', value: this.take(this.length(info)).slice() };
         break;
       case 3: {
         let text: string;
@@ -153,7 +154,7 @@ class Reader {
         const seen = new Set<string>();
         for (let i = 0; i < n; i++) {
           const key = this.item(depth + 1);
-          const encoded = Array.from(this.bytes.subarray(key.start, key.end)).join(',');
+          const encoded = bytesToHex(this.bytes.subarray(key.start, key.end));
           if (seen.has(encoded)) throw new CborError('DUPLICATE_MAP_KEY');
           seen.add(encoded);
           out.push([key, this.item(depth + 1)]);
@@ -186,16 +187,41 @@ export function readCbor(bytes: Uint8Array, limits: CborLimits): CborItemOf<Cbor
   return item;
 }
 
-const HEX = /^(?:[0-9a-fA-F]{2})*$/;
+// Hex digits by character code, -1 for anything else; and the two lowercase digits of each byte.
+const HEX_VALUE = new Int8Array(128).fill(-1);
+for (let i = 0; i < 16; i++) {
+  HEX_VALUE['0123456789abcdef'.charCodeAt(i)] = i;
+  HEX_VALUE['0123456789ABCDEF'.charCodeAt(i)] = i;
+}
+const HEX_PAIR = Array.from({ length: 256 }, (_, b) => b.toString(16).padStart(2, '0'));
+const HEX_CODE = new TextEncoder().encode('0123456789abcdef');
 
-/** Hex to bytes, or `undefined` for anything that is not an even-length hex string. */
+/** Hex to bytes, or `undefined` for anything that is not an even-length hex string (either case). */
 export function hexToBytes(hex: unknown): Uint8Array | undefined {
-  if (typeof hex !== 'string' || !HEX.test(hex)) return undefined;
+  if (typeof hex !== 'string' || hex.length % 2 !== 0) return undefined;
   const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    const a = hex.charCodeAt(2 * i);
+    const b = hex.charCodeAt(2 * i + 1);
+    const hi = a < 128 ? HEX_VALUE[a] : -1;
+    const lo = b < 128 ? HEX_VALUE[b] : -1;
+    if (hi < 0 || lo < 0) return undefined;
+    out[i] = (hi << 4) | lo;
+  }
   return out;
 }
 
+/** Bytes to lowercase hex. Long inputs go through one ASCII buffer rather than a string per byte. */
 export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  if (bytes.length <= 64) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) out += HEX_PAIR[bytes[i]];
+    return out;
+  }
+  const ascii = new Uint8Array(bytes.length * 2);
+  for (let i = 0; i < bytes.length; i++) {
+    ascii[2 * i] = HEX_CODE[bytes[i] >> 4];
+    ascii[2 * i + 1] = HEX_CODE[bytes[i] & 15];
+  }
+  return utf8.decode(ascii);
 }

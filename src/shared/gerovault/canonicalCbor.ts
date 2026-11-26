@@ -54,7 +54,10 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
   return a.length - b.length;
 }
 
-function write(value: CborWritable, out: number[][], depth: number): void {
+/** Pieces of the encoding: heads as small arrays, byte and text strings as they are, never copied byte by byte. */
+type Chunk = Uint8Array | readonly number[];
+
+function write(value: CborWritable, out: Chunk[], depth: number): void {
   if (depth > 64) throw new TypeError('CBOR value nested too deep');
   if (typeof value === 'number' || typeof value === 'bigint') {
     if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new TypeError('A CBOR integer must be a safe integer');
@@ -70,7 +73,7 @@ function write(value: CborWritable, out: number[][], depth: number): void {
   }
   if (typeof value === 'string') {
     const bytes = text(value);
-    out.push(head(3, BigInt(bytes.length)), Array.from(bytes));
+    out.push(head(3, BigInt(bytes.length)), bytes);
     return;
   }
   if (typeof value === 'boolean') {
@@ -78,7 +81,7 @@ function write(value: CborWritable, out: number[][], depth: number): void {
     return;
   }
   if (value instanceof Uint8Array) {
-    out.push(head(2, BigInt(value.length)), Array.from(value));
+    out.push(head(2, BigInt(value.length)), value);
     return;
   }
   if (Array.isArray(value)) {
@@ -94,7 +97,7 @@ function write(value: CborWritable, out: number[][], depth: number): void {
     const entries = pairs.map(([key, item]) => {
       if (typeof key !== 'string' && typeof key !== 'number' && typeof key !== 'bigint') throw new TypeError('A CBOR map key is an integer or text');
       const k = encodeCanonicalCbor(key);
-      const v: number[][] = [];
+      const v: Chunk[] = [];
       write(item, v, depth + 1);
       return { k, v };
     });
@@ -104,7 +107,7 @@ function write(value: CborWritable, out: number[][], depth: number): void {
     }
     out.push(head(5, BigInt(entries.length)));
     for (const { k, v } of entries) {
-      out.push(Array.from(k));
+      out.push(k);
       for (const chunk of v) out.push(chunk);
     }
     return;
@@ -114,7 +117,7 @@ function write(value: CborWritable, out: number[][], depth: number): void {
 
 /** The deterministic CBOR encoding of `value`. */
 export function encodeCanonicalCbor(value: CborWritable): Uint8Array {
-  const chunks: number[][] = [];
+  const chunks: Chunk[] = [];
   write(value, chunks, 0);
   const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
   let offset = 0;
