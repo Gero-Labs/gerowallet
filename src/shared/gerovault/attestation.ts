@@ -15,9 +15,11 @@
  *   Sig_structure (RFC 8152 section 4.4).
  * - method 1, an expired transaction: `proof` is a full signed transaction that no node would ever
  *   accept. Its body means exactly
- *     { 0: [[32 zero bytes, 0]], 1: [], 2: 0, 3: 1, 7: auxiliary data hash, 14: [credential] }
+ *     { 0: [[32 zero bytes, 0]], 1: [], 2: 0, 3: 1, 7: auxiliary data hash, 14: [credential],
+ *       15: network id }
  *   (an input that cannot exist, no outputs, no fee, a time to live of slot 1, the credential as
- *   the one required signer), its witness set is exactly one vkey witness by the vault payment
+ *   the one required signer, and the vault's network: 1 on mainnet, 0 otherwise, so that a
+ *   hardware wallet can show the network of a transaction with no outputs), its witness set is exactly one vkey witness by the vault payment
  *   key, and its auxiliary data is exactly `{ 18541: { k: digest } }`, where `k` names what is
  *   attested: 0 a binding, 1 a verification digest, 2 a device removal, 3 an external import,
  *   4 an endorsement. Label 1854 is never used, because CIP-0146 wallets scan it for vault
@@ -30,9 +32,10 @@
  * protected header (`MAX_PROTECTED_HEADER_BYTES`), the address or `kid` signed in it
  * (`MAX_SIGNED_ADDRESS_BYTES`), and the expired transaction's body (`MAX_SIGNED_BODY_BYTES`).
  *
- * `ingestAttestation` takes what a wallet returns (a COSE_Key with a `kid` or no `alg` or in
- * another order, an unprotected `{ hashed: false }`, a tagged COSE_Sign1, a witness set with set
- * tags or indefinite lengths), checks it, and gives the stored form. `verifyAttestation` takes the
+ * `ingestAttestation` takes what a wallet returns (a COSE_Key with or without a `kid`, which must
+ * equal the signed address when present, with or without `alg`, in any order; an unprotected
+ * `{ hashed: false }`; a tagged COSE_Sign1; a witness set with set tags or indefinite lengths),
+ * checks it, and gives the stored form, which never has a `kid`. `verifyAttestation` takes the
  * stored form only, which is what manifests and records keep.
  *
  * Every Ed25519 check here is strict (RFC 8032): a key or an `R` that is not a canonical encoding,
@@ -51,6 +54,7 @@ import { blake2b } from '@noble/hashes/blake2.js';
 import { decode as lenientDecode } from 'cborg';
 import { CborBoolean, CborError, CborItemOf, CborValueOf, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
+import { VaultNetwork } from './types';
 
 /** Metadata label of the expired transaction's auxiliary data. Not 1854. */
 export const ATTESTATION_LABEL = 18541;
@@ -81,6 +85,8 @@ export interface AttestedDigest {
   readonly kind: 'binding' | 'verification' | 'removal' | 'import' | 'endorsement';
   /** 32 bytes, lowercase hex. */
   readonly digest: string;
+  /** The vault's network, which an expired transaction names (`network_id`); CIP-8 does not use it. */
+  readonly network: VaultNetwork;
 }
 
 /** The metadatum key of each kind in the expired transaction. */
@@ -101,7 +107,8 @@ export type AttestationRefusalCode =
   | 'BODY_SHAPE'
   | 'WRONG_SIGNER'
   | 'AUX_HASH_MISMATCH'
-  | 'WITNESS_SHAPE';
+  | 'WITNESS_SHAPE'
+  | 'WRONG_NETWORK';
 
 export type AttestationCheck = { readonly ok: true } | { readonly ok: false; readonly code: AttestationRefusalCode };
 
@@ -460,12 +467,12 @@ function signedBody(bytes: Uint8Array): Map<unknown, unknown> {
   return body instanceof Map ? body : refuse('MALFORMED_PROOF');
 }
 
-const BODY_KEYS = [0, 1, 2, 3, 7, 14];
+const BODY_KEYS = [0, 1, 2, 3, 7, 14, 15];
 const isNumber = (v: unknown, n: number) => (typeof v === 'number' && v === n) || (typeof v === 'bigint' && v === BigInt(n));
 const setItems = (v: unknown): unknown => (v instanceof TaggedSet ? v.items : v);
 
-/** The body must mean exactly the unsubmittable transaction for `credential` with this auxiliary data. */
-function checkSignedBody(body: Map<unknown, unknown>, credential: string, auxBytes: Uint8Array): void {
+/** The body must mean exactly the unsubmittable transaction for `credential` on `network` with this auxiliary data. */
+function checkSignedBody(body: Map<unknown, unknown>, credential: string, auxBytes: Uint8Array, network: VaultNetwork): void {
   const ttl = body.get(3);
   if (ttl === undefined || ((typeof ttl === 'number' || typeof ttl === 'bigint') && BigInt(ttl) > 1n)) refuse('SUBMITTABLE');
   if (!isNumber(ttl, 1)) refuse('BODY_SHAPE');
@@ -481,6 +488,7 @@ function checkSignedBody(body: Map<unknown, unknown>, credential: string, auxByt
   if (!Array.isArray(signers) || signers.length !== 1 || !(signers[0] instanceof Uint8Array) || bytesToHex(signers[0]) !== credential) {
     refuse('WRONG_SIGNER');
   }
+  if (!isNumber(body.get(15), networkIdOf(network))) refuse('WRONG_NETWORK');
   const auxHash = body.get(7);
   if (!(auxHash instanceof Uint8Array) || auxHash.length !== 32) refuse('BODY_SHAPE');
   if (!sameBytes(blake2b256(auxBytes), auxHash as Uint8Array)) refuse('AUX_HASH_MISMATCH');
@@ -490,7 +498,11 @@ function auxiliaryData(subject: AttestedDigest): ReadonlyMap<number, CborWritabl
   return new Map([[ATTESTATION_LABEL, new Map([[DIGEST_KEY[subject.kind], hexToBytes(subject.digest)]])]]);
 }
 
-function bodyOf(credential: string, auxiliaryDataHash: Uint8Array): ReadonlyMap<number, CborWritable> {
+/** The transaction body's `network_id`: 1 for mainnet, 0 for the test networks. */
+const networkIdOf = (network: VaultNetwork): number => (network === 'mainnet' ? 1 : 0);
+const NETWORKS: readonly VaultNetwork[] = ['mainnet', 'preprod', 'preview'];
+
+function bodyOf(credential: string, auxiliaryDataHash: Uint8Array, network: VaultNetwork): ReadonlyMap<number, CborWritable> {
   return new Map<number, CborWritable>([
     [0, [[ZERO_TX_ID, 0]]],
     [1, []],
@@ -498,13 +510,15 @@ function bodyOf(credential: string, auxiliaryDataHash: Uint8Array): ReadonlyMap<
     [3, 1],
     [7, auxiliaryDataHash],
     [14, [hexToBytes(credential)]],
+    [15, networkIdOf(network)],
   ]);
 }
 
 function assertSubject(credential: string, subject: AttestedDigest): void {
   if (typeof credential !== 'string' || !KEY_HASH.test(credential)) throw new TypeError('A credential is 28 bytes of lowercase hex');
-  if (!subject || !Object.prototype.hasOwnProperty.call(DIGEST_KEY, subject.kind) || typeof subject.digest !== 'string' || !DIGEST.test(subject.digest)) {
-    throw new TypeError('An attested digest is a kind and 32 bytes of lowercase hex');
+  if (!subject || !Object.prototype.hasOwnProperty.call(DIGEST_KEY, subject.kind) || typeof subject.digest !== 'string' || !DIGEST.test(subject.digest)
+    || !NETWORKS.includes(subject.network)) {
+    throw new TypeError('An attested digest is a kind, 32 bytes of lowercase hex and a vault network');
   }
 }
 
@@ -518,7 +532,7 @@ export function expiredTxAuxiliaryData(subject: AttestedDigest): string {
 export function expiredTxBody(credential: string, subject: AttestedDigest): string {
   assertSubject(credential, subject);
   const aux = encodeCanonicalCbor(auxiliaryData(subject));
-  return bytesToHex(encodeCanonicalCbor(bodyOf(credential, blake2b256(aux))));
+  return bytesToHex(encodeCanonicalCbor(bodyOf(credential, blake2b256(aux), subject.network)));
 }
 
 /** The hash the vault payment key signs: the expired transaction's id, hex. */
@@ -564,7 +578,7 @@ function vkeyWitness(witnessBytes: Uint8Array): { readonly vkey: Uint8Array; rea
 async function verifyExpiredTx(proof: Uint8Array, credential: string, subject: AttestedDigest): Promise<void> {
   const [bodyBytes, witnessBytes, validBytes, auxBytes] = transactionParts(proof);
   if (validBytes.length !== 1 || validBytes[0] !== 0xf5) refuse('MALFORMED_PROOF');
-  checkSignedBody(signedBody(bodyBytes), credential, auxBytes);
+  checkSignedBody(signedBody(bodyBytes), credential, auxBytes, subject.network);
   if (!sameBytes(auxBytes, encodeCanonicalCbor(auxiliaryData(subject)))) refuse('WRONG_PAYLOAD');
   const { vkey, signature } = vkeyWitness(witnessBytes);
   if (keyHashOf(vkey) !== credential) refuse('WRONG_KEY');

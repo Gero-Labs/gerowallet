@@ -368,12 +368,12 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
     for (const entry of [...owners, ...backupHolders]) {
       for (const binding of entry.devices) {
         if (!(await verifyDeviceSignature(binding))) return refuse('DEVICE_SIGNATURE_INVALID', { credential: entry.credential });
-        const check = await verifyAttestation(binding.attestation, entry.credential, { kind: 'binding', digest: bindingDigest(binding) });
+        const check = await verifyAttestation(binding.attestation, entry.credential, { kind: 'binding', digest: bindingDigest(binding), network: manifest.network });
         if (check.ok === false) return refuse('ATTESTATION_INVALID', { credential: entry.credential, attestation: check.code });
       }
       for (const tombstone of entry.removedDevices) {
         if (redelivery || verifiedTombstones.has(tombstoneKey(entry.credential, tombstone))) continue;
-        const check = await verifyAttestation(tombstone.removal, entry.credential, { kind: 'removal', digest: deviceRemovalDigest(manifest.vaultId, tombstone) });
+        const check = await verifyAttestation(tombstone.removal, entry.credential, { kind: 'removal', digest: deviceRemovalDigest(manifest.vaultId, tombstone), network: manifest.network });
         if (check.ok === false) return refuse('REMOVAL_INVALID', { credential: entry.credential, attestation: check.code });
       }
     }
@@ -391,7 +391,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       }
     }
     for (const entry of external) {
-      const check = await verifyAttestation(entry.importSig, entry.importedBy, { kind: 'import', digest: externalImportDigest(manifest.vaultId, entry) });
+      const check = await verifyAttestation(entry.importSig, entry.importedBy, { kind: 'import', digest: externalImportDigest(manifest.vaultId, entry), network: manifest.network });
       if (check.ok === false) return refuse('IMPORT_SIGNATURE_INVALID', { credential: entry.credential, attestation: check.code });
     }
 

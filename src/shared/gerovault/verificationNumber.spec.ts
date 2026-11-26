@@ -55,7 +55,7 @@ const VECTOR = {
   verificationDigest: '22efd723ccd592ab2ab8f1da2300544048d478f0a8193cd8499c8a3455326e4f',
   numberDigest: '4546bb0b9b747c7cc17171fc49924f0cf685befe531e6bb3a6c33f9217974612301f653fe6655001',
   number: '06747 57105 84463 67870 60390 61623 54373 38945',
-  endorsementDigest: 'b8d965ae8a0e096fd3e385b4c7a9bd8d01e3dae46ad99d093d4d08364ce3d04c',
+  endorsementDigest: '59b1c90a6ae7e3ab7afe531ed029374d24a20e46d9390cfb3d765896d20ae92a',
 };
 
 const T = VECTOR_REVISED_AT + 100;
@@ -326,7 +326,7 @@ describe('external cosigners: their own attestation, received directly or endors
 
   beforeAll(async () => {
     ext = await externalManifest();
-    proof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(ext) }).proof;
+    proof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(ext) }).proof;
     ack0 = await ackOf(ext, 0);
     ack1 = await ackOf(ext, 1);
   });
@@ -393,15 +393,15 @@ describe('external cosigners: their own attestation, received directly or endors
       revisedAt: T,
     });
     expect(await verifyExternalEndorsement(ext, endorse(elsewhere, 1, proof, people[2].credential), proof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
-    const otherProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: 'ab'.repeat(32) }).proof;
+    const otherProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: 'ab'.repeat(32) }).proof;
     expect(await verifyExternalEndorsement(ext, endorse(ext, 1, proof), otherProof)).toEqual({ ok: false, code: 'ATTESTATION_HASH_MISMATCH' });
     expect(await verifyExternalEndorsement(ext, endorse(ext, 1, otherProof), otherProof)).toEqual({ ok: false, code: 'WRONG_PAYLOAD' });
     // Named as owner 2's, attested by owner 1's key.
     const honest = endorse(ext, 1, proof);
-    const byOther = { ...honest, attestation: attestationBy(people[0], { kind: 'endorsement', digest: externalEndorsementDigest(honest) }) };
+    const byOther = { ...honest, attestation: attestationBy(people[0], { kind: 'endorsement', network: 'preprod', digest: externalEndorsementDigest(honest) }) };
     expect(await verifyExternalEndorsement(ext, byOther, proof)).toEqual({ ok: false, code: 'ENDORSEMENT_INVALID', attestation: 'WRONG_KEY' });
     // Attested by owner 2 over another body.
-    const otherBody = { ...honest, attestation: attestationBy(people[1], { kind: 'endorsement', digest: 'cd'.repeat(32) }) };
+    const otherBody = { ...honest, attestation: attestationBy(people[1], { kind: 'endorsement', network: 'preprod', digest: 'cd'.repeat(32) }) };
     expect(await verifyExternalEndorsement(ext, otherBody, proof)).toEqual({ ok: false, code: 'ENDORSEMENT_INVALID', attestation: 'WRONG_PAYLOAD' });
     expect(await verifyExternalEndorsement(ext, { ...honest, externalCredential: people[1].credential }, proof)).toEqual({ ok: false, code: 'NOT_AN_EXTERNAL' });
     expect(await verifyExternalEndorsement(ext, undefined, proof)).toEqual({ ok: false, code: 'MALFORMED' });
@@ -429,7 +429,7 @@ describe('external cosigners: their own attestation, received directly or endors
       external: [signedExternal({ vaultId: vaultId(before, 'preprod'), participant: people[2], importer: people[0] })],
       revisedAt: T,
     });
-    const oldProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(old) }).proof;
+    const oldProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(old) }).proof;
     const oldEndorsement = endorse(old, 3, oldProof);
     expect(await verifyExternalEndorsement(old, oldEndorsement, oldProof)).toEqual({ ok: true });
     // Owner 1 leaves: the vault migrates to owners 2 and 4, and owner 2 imports the external again.
@@ -452,7 +452,7 @@ describe('external cosigners: their own attestation, received directly or endors
     const status = await cosignerVerificationStatus(migrated, ackMigrated, [ceremony, stale.ok === true ? stale.record : undefined]);
     expect(status.find(c => c.credential === people[2].credential)).toMatchObject({ role: 'external', state: 'stale' });
     // A new attestation by the external and a new endorsement by owner 4 open it.
-    const newProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(migrated) }).proof;
+    const newProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(migrated) }).proof;
     const fresh = await endorsedVerification(migrated, endorse(migrated, 3, newProof), newProof, T);
     expect(await fundingVerified(migrated, ackMigrated, [ceremony, fresh.ok === true ? fresh.record : undefined])).toBe(true);
   });
@@ -471,7 +471,7 @@ describe('external cosigners: their own attestation, received directly or endors
       revisedAt: T,
     });
     expect(next.roles.external[0].importedBy).toBe(people[1].credential);
-    const nextProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: verificationDigest(next) }).proof;
+    const nextProof = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(next) }).proof;
     const ackNew = await ackOf(next, 1);
     const ceremony = numberVerification(next, people[3].credential, T);
     expect(await verifyExternalEndorsement(next, oldEndorsement, proof)).toEqual({ ok: false, code: 'DIGEST_MISMATCH' });
@@ -499,7 +499,7 @@ describe('external cosigners: their own attestation, received directly or endors
       external: [signedExternal({ vaultId: vid, participant: people[1], importer: people[0] })],
       revisedAt: T,
     });
-    const extProof = expiredTxAttestation(people[1].signer, people[1].credential, { kind: 'verification', digest: verificationDigest(m) }).proof;
+    const extProof = expiredTxAttestation(people[1].signer, people[1].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(m) }).proof;
     const ackOnly = await ackOf(m, 0);
     const r = await externalVerification(m, ackOnly, people[1].credential, extProof, T);
     expect(r.ok).toBe(true);
@@ -510,9 +510,9 @@ describe('external cosigners: their own attestation, received directly or endors
 
   it('refuses proofs by another key, over another digest, and number records for an external', async () => {
     const digest = verificationDigest(ext);
-    const forged = expiredTxAttestation(people[3].signer, people[2].credential, { kind: 'verification', digest }).proof;
+    const forged = expiredTxAttestation(people[3].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest }).proof;
     expect(await externalVerification(ext, ack1, people[2].credential, forged, T)).toEqual({ ok: false, code: 'WRONG_KEY' });
-    const otherDigest = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', digest: 'ab'.repeat(32) }).proof;
+    const otherDigest = expiredTxAttestation(people[2].signer, people[2].credential, { kind: 'verification', network: 'preprod', digest: 'ab'.repeat(32) }).proof;
     expect(await externalVerification(ext, ack1, people[2].credential, otherDigest, T)).toEqual({ ok: false, code: 'WRONG_PAYLOAD' });
     expect(await externalVerification(ext, ack1, people[1].credential, proof, T)).toEqual({ ok: false, code: 'NOT_AN_EXTERNAL' });
     expect(await externalVerification(ext, { ...ack1 }, people[2].credential, proof, T)).toEqual({ ok: false, code: 'INVALID_ACK' });
@@ -536,7 +536,7 @@ describe('external cosigners: their own attestation, received directly or endors
       external: [signedExternal({ vaultId: subId, participant: people[3], importer: people[0] })],
       revisedAt: T,
     });
-    const subProof = expiredTxAttestation(people[3].signer, people[3].credential, { kind: 'verification', digest: verificationDigest(sub) }).proof;
+    const subProof = expiredTxAttestation(people[3].signer, people[3].credential, { kind: 'verification', network: 'preprod', digest: verificationDigest(sub) }).proof;
     const ackSub1 = await ackOf(sub, 1);
     const r = await externalVerification(sub, ackSub1, people[3].credential, subProof, T);
     expect(r.ok).toBe(true);

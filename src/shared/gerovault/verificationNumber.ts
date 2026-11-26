@@ -250,9 +250,9 @@ export async function verifyExternalEndorsement(manifest: VaultManifest, endorse
     if (!m.roles.owners.some(e => e.credential === endorsement.endorserCredential)) return { ok: false, code: 'NOT_AN_OWNER' };
     if (endorsement.endorserCredential === external.importedBy) return { ok: false, code: 'ENDORSER_IS_IMPORTER' };
     if (externalAttestationHash(proof) !== endorsement.externalAttestationHash) return { ok: false, code: 'ATTESTATION_HASH_MISMATCH' };
-    const check = await verifyAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof }, external.credential, { kind: 'verification', digest });
+    const check = await verifyAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof }, external.credential, { kind: 'verification', digest, network: m.network });
     if (check.ok === false) return check;
-    const signed = await verifyAttestation(endorsement.attestation, endorsement.endorserCredential, { kind: 'endorsement', digest: externalEndorsementDigest(endorsement) });
+    const signed = await verifyAttestation(endorsement.attestation, endorsement.endorserCredential, { kind: 'endorsement', digest: externalEndorsementDigest(endorsement), network: m.network });
     return signed.ok === true ? { ok: true } : { ok: false, code: 'ENDORSEMENT_INVALID', attestation: signed.code };
   } catch {
     return { ok: false, code: 'MALFORMED' };
@@ -375,7 +375,7 @@ export async function externalVerification(
   if (!external) return { ok: false, code: 'NOT_AN_EXTERNAL' };
   if (ack.ownRole !== 'owner') return { ok: false, code: 'NOT_AN_OWNER' };
   const digest = verificationDigest(m);
-  const ingested = await ingestAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof }, credential, { kind: 'verification', digest });
+  const ingested = await ingestAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof }, credential, { kind: 'verification', digest, network: m.network });
   if (ingested.ok === false) return ingested;
   if (ack.ownCredential === external.importedBy && !importerIsOnlyOwner(m, external.importedBy)) return { ok: false, code: 'WRONG_ROUTE' };
   return { ok: true, record: Object.freeze({ method: 'external', credential, verificationDigest: digest, proof: ingested.attestation.proof, at }) };
@@ -482,7 +482,7 @@ export async function cosignerVerificationStatus(
           }
           continue;
         }
-        const proofOk = (await verifyAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof: r.proof }, credential, { kind: 'verification', digest })).ok;
+        const proofOk = (await verifyAttestation({ method: ATTESTATION_METHOD.EXPIRED_TX, proof: r.proof }, credential, { kind: 'verification', digest, network: m.network })).ok;
         if (!proofOk) continue;
         if (onlyOwner || (ack.ownRole === 'owner' && ack.ownCredential !== external.importedBy)) {
           state = 'verified';
