@@ -6,11 +6,12 @@
  *   C0 or C1 control character (U+0000 to U+001F, U+007F to U+009F), nothing more. It needs no
  *   Unicode tables, so a label written with a code point assigned after this client's Unicode
  *   version is still read.
- * - Write (`writeLabel`): NFC, then refuse any control (Cc), format (Cf), line or paragraph
- *   separator (Zl, Zp), private-use (Co), unassigned (Cn) or surrogate code point, and the Hangul
- *   fillers U+115F, U+1160, U+3164 and U+FFA0, which render as nothing. The categories are this
+ * - Write (`writeLabel`), where a person types a label: NFC, then refuse any control (Cc), format
+ *   (Cf), line or paragraph separator (Zl, Zp), private-use (Co), unassigned (Cn) or surrogate code
+ *   point, and the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0, which render as nothing. The categories are this
  *   platform's; another client's tables may differ, which is harmless because readers check none of
- *   them. The result is never empty and passes the read rule.
+ *   them. The result is never empty and passes the read rule. Labels that already exist (from a
+ *   manifest, another device or a package) are copied under the read rule only, never rewritten.
  * - Display (`displayLabel`): never trusted as text. The label is isolated for bidirectional text
  *   (U+2068 FIRST STRONG ISOLATE before, U+2069 POP DIRECTIONAL ISOLATE after), and every format,
  *   unassigned, private-use, separator, control or surrogate code point and Hangul filler is shown

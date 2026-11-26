@@ -146,7 +146,6 @@ describe('round trip', () => {
     expect(p.proposalHistoryTruncated).toBe(false);
     expect(p.addressBookDropped).toBe(0);
     expect(p.addressBookTruncated).toBe(false);
-    expect(p.manifestsDropped).toBe(0);
     expect(p.endorsements).toEqual(contents.endorsements ?? []);
     expect(p.externalAttestations).toEqual(contents.externalAttestations ?? []);
     expect(p.manifests.map(({ version, cbor }) => ({ version, cbor }))).toEqual(contents.manifests);
@@ -210,8 +209,8 @@ describe('strict decoding of untrusted bytes', () => {
   });
 
   it('refuses unknown and missing keys at every level', () => {
-    expect(refusal(bytesOf(put(standardTree, 15, int(0))))).toBe('PAYLOAD_INVALID');
-    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 14, int(0))))).toBe('PAYLOAD_INVALID');
+    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
     const vault = field(standardTree, 3);
     expect(refusal(bytesOf(put(standardTree, 3, put(vault, 9, int(0)))))).toBe('PAYLOAD_INVALID');
     const participants = field(standardTree, 5);
@@ -235,12 +234,12 @@ describe('strict decoding of untrusted bytes', () => {
   it('refuses the encodings the strict reader refuses', () => {
     const canonical = encodeRecoveryPayload(standard);
     const hex = bytesToHex(canonical);
-    // af 00 01 01 01: fifteen keys, version 1, network magic 1. Rewrite the magic with a one-byte argument.
-    expect(hex.startsWith('af00010101')).toBe(true);
-    expect(detail(hexToBytes(`af0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
+    // ae 00 01 01 01: fourteen keys, version 1, network magic 1. Rewrite the magic with a one-byte argument.
+    expect(hex.startsWith('ae00010101')).toBe(true);
+    expect(detail(hexToBytes(`ae0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
     expect(detail(new Uint8Array([...canonical, 0]))).toBe('CBOR TRAILING_BYTES');
     expect(detail(canonical.subarray(0, canonical.length - 1))).toBe('CBOR TRUNCATED');
-    expect(detail(hexToBytes(`af0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
+    expect(detail(hexToBytes(`ae0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
     // Proposals (key 7) as an indefinite-length list.
     const proposals = hex.indexOf('0780', hex.length - 40);
     expect(detail(hexToBytes(`${hex.slice(0, proposals)}079fff${hex.slice(proposals + 4)}`))).toBe('CBOR INDEFINITE_LENGTH');
@@ -542,7 +541,7 @@ describe('fitting the history into one package', () => {
     expect(decoded).toMatchObject({ ok: true, package: { proposalsDropped: 3, proposalHistoryTruncated: true } });
     // Earlier drops add up.
     expect(fitRecoveryHistory({ ...standard, proposals: many, proposalsDropped: 5 }).contents.proposalsDropped).toBe(8);
-    expect(fitRecoveryHistory(standard)).toMatchObject({ contents: { proposals: [], proposalsDropped: 0 }, skipped: { manifests: 0, proposals: 0, addressBook: 0, participantLabels: 0 } });
+    expect(fitRecoveryHistory(standard)).toMatchObject({ contents: { proposals: [], proposalsDropped: 0 }, skipped: { proposals: 0, addressBook: 0, participantLabels: 0 } });
   });
 
   it('leaves the oldest proposals out to fit the size bound, keeping every manifest revision', () => {
@@ -562,17 +561,10 @@ describe('fitting the history into one package', () => {
       .toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
   });
 
-  it('leaves out, and counts, entries that cannot be carried, keeping the newest copy of each', () => {
+  it('leaves out, and counts, proposals and address book entries that cannot be carried, keeping the newest copy of each', () => {
     const contents: RecoveryPackageContents = {
       ...standard,
-      manifests: [
-        { version: 3, cbor: 'a3' },
-        { version: 1, cbor: 'a1' },
-        { version: 2, cbor: 'NOT HEX' },
-        { version: 1, cbor: 'b1' },
-        { version: -1, cbor: 'a0' },
-        { version: 4, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES + 1) },
-      ],
+      manifests: [{ version: 3, cbor: 'a3' }, { version: 1, cbor: 'b1' }, { version: 1, cbor: 'b1' }],
       proposals: [
         proposal(1),
         { id: proposal(2).id, cbor: 'ab'.repeat(MAX_PROPOSAL_BYTES + 1) },
@@ -588,19 +580,46 @@ describe('fitting the history into one package', () => {
         { ...entry(3), label: 'Alice' + RLO + 'ecila' },
         { address: Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Mainnet, { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16('1c'.repeat(28)) }).toAddress().toBech32(), label: 'mainnet' },
         { ...entry(4), label: 'Ame' + String.fromCharCode(0x301) + 'lie' },
+        { ...entry(5), label: 'two\nlines' },
       ],
-      participants: [{ ...standard.participants[0], label: 'Bob' + RLO }, { ...standard.participants[1], label: 'Carol' }, standard.participants[2]],
+      participants: [
+        { ...standard.participants[0], label: 'Bob' + RLO },
+        { ...standard.participants[1], label: 'Carol\nSmith' },
+        { ...standard.participants[2], label: 'new' + UNASSIGNED },
+      ],
     };
     const { contents: fitted, skipped } = fitRecoveryHistory(contents);
-    expect(skipped).toEqual({ manifests: 4, proposals: 3, addressBook: 5, participantLabels: 1 });
+    expect(skipped).toEqual({ proposals: 3, addressBook: 5, participantLabels: 1 });
+    // The manifest history is kept whole, merged and in version order.
     expect(fitted.manifests).toEqual([{ version: 1, cbor: 'b1' }, { version: 3, cbor: 'a3' }]);
     expect(fitted.proposals).toEqual([{ ...proposal(1), cbor: 'cdcd' }, proposal(3)]);
-    expect(fitted.addressBook).toEqual([{ ...entry(1), label: 'Payee one, renamed' }, { ...entry(4), label: 'Am' + String.fromCharCode(0xe9) + 'lie' }]);
-    expect(fitted.participants[0].label).toBeUndefined();
-    expect(fitted.participants[1].label).toBe('Carol');
-    expect({ m: fitted.manifestsDropped, p: fitted.proposalsDropped, a: fitted.addressBookDropped }).toEqual({ m: 4, p: 3, a: 5 });
+    // Labels are copied as they are under the read rule: no NFC, no write rule.
+    expect(fitted.addressBook).toEqual([
+      { ...entry(1), label: 'Payee one, renamed' },
+      { ...entry(3), label: 'Alice' + RLO + 'ecila' },
+      { ...entry(4), label: 'Ame' + String.fromCharCode(0x301) + 'lie' },
+    ]);
+    expect(fitted.participants.map(p => p.label)).toEqual(['Bob' + RLO, undefined, 'new' + UNASSIGNED]);
+    expect({ p: fitted.proposalsDropped, a: fitted.addressBookDropped }).toEqual({ p: 3, a: 5 });
     const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
-    expect(decoded).toMatchObject({ ok: true, package: { manifestsDropped: 4, proposalHistoryTruncated: true, addressBookTruncated: true } });
+    expect(decoded).toMatchObject({ ok: true, package: { proposalHistoryTruncated: true, addressBookTruncated: true } });
+  });
+
+  it('refuses a manifest history with a revision it cannot carry: a gap would be corruption', () => {
+    const corrupt = (manifests: unknown[]) => () => fitRecoveryHistory({ ...standard, manifests: manifests as never });
+    const err = expect.objectContaining({ code: 'MANIFEST_HISTORY_CORRUPT' });
+    expect(corrupt([{ version: 1, cbor: 'a1' }, { version: 2, cbor: 'NOT HEX' }])).toThrow(err);
+    expect(corrupt([{ version: 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES + 1) }])).toThrow(err);
+    expect(corrupt([{ version: -1, cbor: 'a0' }])).toThrow(err);
+    expect(corrupt([{ version: 1, cbor: 'AB' }])).toThrow(err);
+    expect(corrupt([null])).toThrow(err);
+    expect(corrupt([{ version: 1, cbor: 'a1' }, { version: 1, cbor: 'b1' }])).toThrow(expect.objectContaining({
+      code: 'MANIFEST_HISTORY_CORRUPT',
+      message: expect.stringContaining('version 1'),
+    }));
+    // An exact copy is the same revision twice, not corruption.
+    expect(fitRecoveryHistory({ ...standard, manifests: [{ version: 2, cbor: 'a2' }, { version: 2, cbor: 'a2' }] }).contents.manifests)
+      .toEqual([{ version: 2, cbor: 'a2' }]);
   });
 
   it('never leaves out endorsements or external attestations, merging repeated copies', () => {

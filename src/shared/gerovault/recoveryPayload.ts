@@ -22,7 +22,6 @@
  *     11: uint,                      ; address book entries left out, likewise
  *     12: [* endorsement],           ; the vault's external endorsements, never left out
  *     13: [* external-attestation],  ; the external attestations they cover, never left out
- *     14: uint,                      ; manifest revisions left out because they could not be carried
  *   }
  *   native-vault = {
  *     0: 0,
@@ -70,8 +69,9 @@
  * belong to the manifest code (GV-60, GV-61). They are small and never left out; a package that
  * cannot hold them is refused like one that cannot hold its manifests.
  *
- * Labels follow `labels.ts`: the decoder applies the read rule (well-formed, at most 64 bytes, no
- * control character) and refuses an empty label, and an export applies the write rule.
+ * Labels follow the read rule of `labels.ts` (well-formed, at most 64 bytes, no control character)
+ * and are never empty, in the decoder and at export alike: an export copies existing labels as
+ * they are. The write rule applies where a person types a label, before it reaches the wallet.
  *
  * Owners and backup holders appear in native vaults, owners and guardians in Plutus vaults.
  * Native participants carry both vault keys and may be external wallets; Plutus participants
@@ -83,8 +83,9 @@
  * of the validator bytes, which a restore computes and checks against the chain.
  *
  * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
- * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision that
- * can be carried is kept. When the rest does not fit, the oldest proposals and the oldest address
+ * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision is
+ * kept: a revision that cannot be carried is corruption of the wallet's own history, and an export
+ * refuses it (`MANIFEST_HISTORY_CORRUPT`). When the rest does not fit, the oldest proposals and the oldest address
  * book entries are left out, and keys 10 and 11 count them (`fitRecoveryHistory`). Address book
  * entries carry no usage time, so "oldest" means added first. The counts are claims from the
  * writer: no reader can tell from them that a history is complete.
@@ -104,7 +105,7 @@ import { bech32 } from 'bech32';
 import { CborError, CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX } from './keys';
-import { readLabel, writeLabel } from './labels';
+import { readLabel } from './labels';
 import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import { decodeRegistration } from './registration';
 import { NETWORK_MAGIC } from './vaultId';
@@ -247,8 +248,6 @@ export interface RecoveryPackageContents {
   readonly proposalsDropped?: number;
   /** Address book entries already left out of `addressBook`, counted from the oldest; 0 when absent. */
   readonly addressBookDropped?: number;
-  /** Manifest revisions already left out because they could not be carried; 0 when absent. */
-  readonly manifestsDropped?: number;
   readonly endorsements?: readonly ExternalEndorsement[];
   readonly externalAttestations?: readonly ExternalAttestationRecord[];
 }
@@ -269,7 +268,6 @@ export interface RecoveryPackage extends RecoveryPackageContents {
   readonly addressBookDropped: number;
   /** The writer says some address book entries were left out. */
   readonly addressBookTruncated: boolean;
-  readonly manifestsDropped: number;
   readonly endorsements: readonly ExternalEndorsement[];
   readonly externalAttestations: readonly ExternalAttestationRecord[];
 }
@@ -584,7 +582,7 @@ function encodeContents(contents: RecoveryPackageContents): Uint8Array {
   const magic = Object.prototype.hasOwnProperty.call(NETWORK_MAGIC, contents.network) ? NETWORK_MAGIC[contents.network] : undefined;
   if (magic === undefined) invalid('A vault network is mainnet, preprod or preview');
   if (!isUint(contents.exportedAtMs)) invalid('The export time is Unix milliseconds');
-  const counts = [contents.proposalsDropped, contents.addressBookDropped, contents.manifestsDropped].map(n => n ?? 0);
+  const counts = [contents.proposalsDropped, contents.addressBookDropped].map(n => n ?? 0);
   if (!counts.every(n => isUint(n))) invalid('A count of entries left out is an unsigned integer');
   const vault = vaultBytes(contents.vault);
   const participants = participantsBytes(contents);
@@ -603,7 +601,6 @@ function encodeContents(contents: RecoveryPackageContents): Uint8Array {
     11: cUint(counts[1]),
     12: distinctList(contents.endorsements, MAX_ENDORSEMENTS, 'The endorsements', endorsementBytes),
     13: distinctList(contents.externalAttestations, MAX_EXTERNAL_ATTESTATIONS, 'The external attestations', externalAttestationBytes),
-    14: cUint(counts[2]),
   });
 }
 
@@ -620,13 +617,11 @@ export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8A
 
 /** What an export could not carry and left out, beyond what it left out to fit. */
 export interface RecoverySkipped {
-  /** Malformed or oversized revisions, and earlier copies of a repeated version. */
-  readonly manifests: number;
   /** Malformed or oversized proposals, and earlier copies of a repeated id. */
   readonly proposals: number;
-  /** Entries with an address off the network or a label the write rule refuses, and earlier copies of an address. */
+  /** Entries with an address off the network or a label the read rule refuses, and earlier copies of an address. */
   readonly addressBook: number;
-  /** Participant labels the write rule refuses: the participant stays, without the label. */
+  /** Participant labels the read rule refuses: the participant stays, without the label. */
   readonly participantLabels: number;
 }
 
@@ -658,19 +653,23 @@ function newestValid<T>(items: readonly T[], keyOf: (x: T) => string | undefined
 }
 
 /**
- * Prepares contents for an export so that no single history or address book entry, and no size of
+ * Prepares contents for an export so that no single proposal or address book entry, and no size of
  * either, ever makes it fail:
- * - entries that cannot be carried are left out and counted in `skipped`: a manifest revision,
- *   proposal or address book entry that is malformed, oversized or (an address) off the vault's
- *   network, or whose label the write rule refuses, and every earlier copy of a repeated manifest
- *   version, proposal id or address (the newest is kept); a participant label the write rule
- *   refuses is left off its participant; labels are written in their NFC form;
- * - then the history is fitted: every manifest revision left is kept; at most
- *   `MAX_ADDRESS_BOOK_ENTRIES` address book entries and `MAX_PROPOSALS` proposals are kept; the room
- *   left after everything else goes to the address book first (it is small and serves every spend),
- *   then to the proposals; in each the newest are kept;
- * - `manifestsDropped`, `addressBookDropped` and `proposalsDropped` count everything left out,
- *   earlier exports included.
+ * - the manifest history is kept whole, in version order; an exact copy of a revision is merged, but
+ *   a revision that cannot be carried (malformed, oversized, or another revision with the same
+ *   version) is corruption of the wallet's own accepted history and throws
+ *   `GeroVaultError('MANIFEST_HISTORY_CORRUPT')`: a gap would break the chain of revisions;
+ * - proposals and address book entries that cannot be carried are left out and counted in
+ *   `skipped`: one that is malformed, oversized or (an address) off the vault's network, or whose
+ *   label the read rule refuses, and every earlier copy of a repeated proposal id or address (the
+ *   newest is kept); a participant label the read rule refuses is left off its participant;
+ *   labels are copied as they are, never rewritten, so one authored with newer Unicode data than
+ *   this client's is carried;
+ * - then the history is fitted: at most `MAX_MANIFEST_REVISIONS` revisions within the 16 MiB file
+ *   (more throws `HISTORY_TOO_LARGE`); at most `MAX_ADDRESS_BOOK_ENTRIES` address book entries and
+ *   `MAX_PROPOSALS` proposals; the room left after everything else goes to the address book first
+ *   (it is small and serves every spend), then to the proposals; in each the newest are kept;
+ * - `addressBookDropped` and `proposalsDropped` count everything left out, earlier exports included.
  * Endorsements and external attestations are never left out; repeated copies are merged.
  * Throws `GeroVaultError('HISTORY_TOO_LARGE')`, with the sizes, when the package does not fit even
  * without any proposal or address book entry, and `INVALID_PACKAGE` for contents that break any
@@ -680,30 +679,36 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
   if (!isObject(contents)) invalid('No contents');
   const network = contents.network;
   if (!Object.prototype.hasOwnProperty.call(NETWORK_MAGIC, network)) invalid('A vault network is mainnet, preprod or preview');
-  const counts = [contents.proposalsDropped, contents.addressBookDropped, contents.manifestsDropped].map(n => n ?? 0);
+  const counts = [contents.proposalsDropped, contents.addressBookDropped].map(n => n ?? 0);
   if (!counts.every(n => isUint(n))) invalid('A count of entries left out is an unsigned integer');
-  const [earlierProposals, earlierBook, earlierManifests] = counts;
+  const [earlierProposals, earlierBook] = counts;
 
   const rawManifests = list(contents.manifests, Number.MAX_SAFE_INTEGER, 'The manifest history');
-  const manifests = newestValid(rawManifests, m => (attempt(() => manifestsBytes([m])) ? String(m.version) : undefined))
-    .sort((a, b) => a.version - b.version);
+  const byVersion = new Map<number, ManifestRevision>();
+  rawManifests.forEach((m, i) => {
+    if (attempt(() => manifestsBytes([m])) === undefined) {
+      throw new GeroVaultError('MANIFEST_HISTORY_CORRUPT', `Manifest revision ${i} cannot be carried: it is malformed or over ${MAX_MANIFEST_BYTES} bytes`);
+    }
+    const seen = byVersion.get(m.version);
+    if (seen && seen.cbor !== m.cbor) {
+      throw new GeroVaultError('MANIFEST_HISTORY_CORRUPT', `Two different manifest revisions have version ${m.version}`);
+    }
+    byVersion.set(m.version, { version: m.version, cbor: m.cbor });
+  });
+  const manifests = [...byVersion.values()].sort((a, b) => a.version - b.version);
   if (manifests.length > MAX_MANIFEST_REVISIONS) {
     throw new GeroVaultError('HISTORY_TOO_LARGE', `The manifest history has ${manifests.length} revisions; a package holds at most ${MAX_MANIFEST_REVISIONS}`);
   }
   const rawProposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
   const proposals = newestValid(rawProposals, p => (attempt(() => proposalBytes(p)) ? p.id : undefined));
   const rawBook = list(contents.addressBook, Number.MAX_SAFE_INTEGER, 'The address book');
-  const written = rawBook.map(e => {
-    const labelText = isObject(e) ? attempt(() => writeLabel(e.label)) : undefined;
-    return labelText === undefined ? undefined : { ...e, label: labelText };
-  });
-  const book = newestValid(written, e => (e ? attempt(() => addressBookEntryBytes(e, network))?.address : undefined)) as AddressBookEntry[];
+  // The encoder applies the read rule to every label, so an entry it accepts is carried as it is.
+  const book = newestValid(rawBook, e => attempt(() => addressBookEntryBytes(e, network))?.address);
   let participantLabels = 0;
   const participants = Array.isArray(contents.participants)
     ? contents.participants.map(p => {
       if (!isObject(p) || p.label === undefined) return p;
-      const text = attempt(() => writeLabel(p.label));
-      if (text !== undefined) return { ...p, label: text };
+      if (attempt(() => storedLabel(p.label, 'A participant label')) !== undefined) return p;
       participantLabels++;
       const { label: _dropped, ...rest } = p;
       return rest;
@@ -721,7 +726,6 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
   const endorsements = unique(contents.endorsements, endorsementBytes);
   const externalAttestations = unique(contents.externalAttestations, externalAttestationBytes);
   const skipped: RecoverySkipped = Object.freeze({
-    manifests: rawManifests.length - manifests.length,
     proposals: rawProposals.length - proposals.length,
     addressBook: rawBook.length - book.length,
     participantLabels,
@@ -733,7 +737,6 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRec
     manifests,
     endorsements,
     externalAttestations,
-    manifestsDropped: earlierManifests + skipped.manifests,
   };
   const base = encodeContents({
     ...clean,
@@ -925,7 +928,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   if (version !== BigInt(RECOVERY_PAYLOAD_VERSION)) {
     throw new PayloadRefusal(version === undefined ? 'PAYLOAD_INVALID' : 'UNKNOWN_PAYLOAD_VERSION', String(version ?? 'missing'));
   }
-  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   const network = MAGIC_TO_NETWORK.get(uintOf(f.get(1), 'network magic', 0xffffffff)) ?? bad('unknown network');
   const self = fields(f.get(4) as CborItem, 'self', [0, 1]);
   const contents: RecoveryPackageContents = {
@@ -963,7 +966,6 @@ function decode(bytes: Uint8Array): RecoveryPackage {
       const [method, proof] = tuple(a, 'external attestation', 2);
       return Object.freeze({ method: uintOf(method, 'attestation method', 255), proof: hexOf(bytesOf(proof, 'attestation proof', 1, MAX_EXTERNAL_ATTESTATION_BYTES)) });
     })),
-    manifestsDropped: uintOf(f.get(14), 'manifest revisions left out'),
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
@@ -978,7 +980,6 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     proposalHistoryTruncated: dropped > 0,
     addressBookDropped: bookDropped,
     addressBookTruncated: bookDropped > 0,
-    manifestsDropped: contents.manifestsDropped ?? 0,
     endorsements: contents.endorsements ?? [],
     externalAttestations: contents.externalAttestations ?? [],
   });

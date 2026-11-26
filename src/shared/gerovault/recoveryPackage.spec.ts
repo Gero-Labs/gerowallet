@@ -130,8 +130,7 @@ describe('export', () => {
     expect(await exportRecoveryPackage(contents, PASS, people[0])).toMatchObject({
       addressBookDropped: 0,
       addressBookTruncated: false,
-      manifestsDropped: 0,
-      skipped: { manifests: 0, proposals: 0, addressBook: 0, participantLabels: 0 },
+      skipped: { proposals: 0, addressBook: 0, participantLabels: 0 },
     });
     const again = await exportRecoveryPackage(contents, PASS, people[0]);
     expect(Buffer.from(again.file).equals(Buffer.from(file))).toBe(false);
@@ -240,7 +239,7 @@ describe('export', () => {
     }).toAddress().toBech32();
     const exported = await exportRecoveryPackage({
       ...contents,
-      manifests: [{ version: 1, cbor: 'a0' }, { version: 2, cbor: 'zz' }],
+      manifests: [{ version: 1, cbor: 'a0' }],
       proposals: [{ id: '01', cbor: 'ab' }, { id: '01', cbor: 'cd' }, { id: '02', cbor: 'ab'.repeat(65537) }],
       addressBook: [
         { address: addr(1), label: 'a' },
@@ -248,15 +247,41 @@ describe('export', () => {
         { address: addr(2), label: 'x'.repeat(65) },
         { address: mainnet, label: 'm' },
       ],
-      participants: [{ ...contents.participants[0], label: 'Bob' + String.fromCharCode(0x202e) }, ...contents.participants.slice(1)],
+      participants: [{ ...contents.participants[0], label: 'Bob\nSmith' }, ...contents.participants.slice(1)],
     }, PASS, people[0]);
-    expect(exported.skipped).toEqual({ manifests: 1, proposals: 2, addressBook: 3, participantLabels: 1 });
-    expect(exported).toMatchObject({ manifestsDropped: 1, proposalsDropped: 2, addressBookDropped: 3, proposalHistoryTruncated: true, addressBookTruncated: true });
+    expect(exported.skipped).toEqual({ proposals: 2, addressBook: 3, participantLabels: 1 });
+    expect(exported).toMatchObject({ proposalsDropped: 2, addressBookDropped: 3, proposalHistoryTruncated: true, addressBookTruncated: true });
     const result = await openRecoveryPackage(exported.file, PASS);
     if (result.ok !== true) throw new Error(result.code);
     expect(result.package.proposals).toEqual([{ id: '01', cbor: 'cd' }]);
     expect(result.package.addressBook).toEqual([{ address: addr(1), label: 'b' }]);
     expect(result.package.participants[0].label).toBeUndefined();
+  });
+
+  it('refuses to export a damaged manifest history', async () => {
+    const contents = await standardContents(people);
+    await expect(exportRecoveryPackage({ ...contents, manifests: [{ version: 1, cbor: 'a0' }, { version: 2, cbor: 'zz' }] }, PASS, people[0]))
+      .rejects.toMatchObject({ code: 'MANIFEST_HISTORY_CORRUPT' });
+    await expect(exportRecoveryPackage({ ...contents, manifests: [{ version: 1, cbor: 'a0' }, { version: 1, cbor: 'a1' }] }, PASS, people[0]))
+      .rejects.toMatchObject({ code: 'MANIFEST_HISTORY_CORRUPT' });
+    expect(kdf).not.toHaveBeenCalled();
+  });
+
+  it('carries labels authored with newer Unicode data than this client has, unchanged', async () => {
+    const contents = await backupContents(people);
+    // An unassigned code point here may be assigned on the client that wrote it; an isolate and
+    // decomposed text are carried as stored too. Only the screen sanitises (displayLabel).
+    const labels = ['new' + String.fromCharCode(0x378), 'Alice' + String.fromCharCode(0x202e) + 'ecila', 'Ame' + String.fromCharCode(0x301) + 'lie'];
+    const exported = await exportRecoveryPackage({
+      ...contents,
+      participants: contents.participants.map((p, i) => ({ ...p, label: labels[i] })),
+      addressBook: [{ ...contents.addressBook[0], label: labels[0] }],
+    }, PASS, people[2]);
+    expect(exported.skipped).toEqual({ proposals: 0, addressBook: 0, participantLabels: 0 });
+    const result = await openRecoveryPackage(exported.file, PASS);
+    if (result.ok !== true) throw new Error(result.code);
+    expect(result.package.participants.map(p => p.label)).toEqual(labels);
+    expect(result.package.addressBook[0].label).toBe(labels[0]);
   });
 
   it('carries the endorsements and external attestations as they are', async () => {

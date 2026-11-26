@@ -230,8 +230,6 @@ export interface ExportedRecoveryPackage {
   /** Address book entries left out, likewise; entries carry no usage time, so the oldest added go first. */
   readonly addressBookDropped: number;
   readonly addressBookTruncated: boolean;
-  /** Manifest revisions left out because they could not be carried. */
-  readonly manifestsDropped: number;
   /** What this export could not carry, by kind (part of the counts above). */
   readonly skipped: RecoverySkipped;
 }
@@ -245,9 +243,12 @@ export interface ExportedRecoveryPackage {
  *   rebuild from their keys, roles, backup terms and external keys;
  * - `SEED_MISMATCH` when `roleKeys` do not derive the exporter's recorded keys at its index;
  * - `HISTORY_TOO_LARGE`, with the sizes, when the package does not fit even without any proposal
- *   or address book entry (every carriable manifest revision, endorsement and external attestation
- *   is kept; the oldest proposals and address book entries are left out first, and an entry that
- *   cannot be carried is left out and counted, so neither ever makes an export fail);
+ *   or address book entry, or the manifest history has more than `MAX_MANIFEST_REVISIONS`
+ *   revisions (every manifest revision, endorsement and external attestation is kept; the oldest
+ *   proposals and address book entries are left out first, and one that cannot be carried is left
+ *   out and counted, so neither ever makes an export fail);
+ * - `MANIFEST_HISTORY_CORRUPT` when a manifest revision cannot be carried, or two different
+ *   revisions share a version: the wallet's own accepted history is damaged;
  * - `PACKAGE_CHECK_FAILED` if the sealed file does not open again with the passphrase to the same
  *   payload.
  */
@@ -281,7 +282,6 @@ export async function exportRecoveryPackage(
     proposalHistoryTruncated: pkg.proposalHistoryTruncated,
     addressBookDropped: pkg.addressBookDropped,
     addressBookTruncated: pkg.addressBookTruncated,
-    manifestsDropped: pkg.manifestsDropped,
     skipped,
   });
 }

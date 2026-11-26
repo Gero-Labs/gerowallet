@@ -34,7 +34,8 @@ export type GeroVaultErrorCode =
   | 'INVALID_MANIFEST_REVISION'
   | 'SEED_MISMATCH'
   | 'HISTORY_TOO_LARGE'
-  | 'INVALID_LABEL';
+  | 'INVALID_LABEL'
+  | 'MANIFEST_HISTORY_CORRUPT';
 
 export class GeroVaultError extends Error {
   readonly code: GeroVaultErrorCode;
