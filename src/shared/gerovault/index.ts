@@ -12,7 +12,7 @@ export * from './backupTime';
 export * from './vaultId';
 export {
   CIP146_LABEL,
-  DEFAULT_REBUILD_SCAN,
+  EXTERNAL_SCAN_MAX,
   MAX_PARTICIPANTS,
   MAX_REGISTRATION_BYTES,
   decodeRegistration,
@@ -31,6 +31,7 @@ export type {
   DecryptedParticipant,
   EncodedRegistration,
   ParticipantDescription,
+  RebuildParticipant,
   RebuildRefusalCode,
   RebuildResult,
   RegistrationEncryption,

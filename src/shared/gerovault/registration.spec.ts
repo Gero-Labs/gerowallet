@@ -10,12 +10,13 @@ import {
   decodeRegistration,
   decryptRegistrationFields,
   encodeRegistration,
+  RebuildParticipant,
   rebuildFromRegistration,
 } from './registration';
 import { cip83Decrypt, cip83Encrypt } from './cip83';
-import { deriveParticipantKeyHashes, deriveSharedRoleKeys } from './keys';
-import { buildVaultFromRoleKeys, instantiateVaultScripts, vaultScript } from './scripts';
-import { ROLE, SharedRoleKeys, VaultScripts } from './types';
+import { deriveParticipantKeyHashes, deriveRoleKeys, deriveVaultPublicKeys } from './keys';
+import { buildVaultFromParticipants, instantiateVaultScripts, vaultScript } from './scripts';
+import { ROLE, RoleKeys, VaultScripts } from './types';
 import { CIP83_EXAMPLE, publishedAccountKey, testCosignerAccount } from './__fixtures__/vectors';
 
 const native = Cardano.ScriptType.Native;
@@ -48,20 +49,22 @@ const fromOffChain = (e: EncodedRegistration): RegistrationInput => ({
   nativeScripts: { cbor: e.offChain.native_scripts },
 });
 
-let people: SharedRoleKeys[];
-let outsider: SharedRoleKeys;
+let people: RoleKeys[];
+let outsider: RoleKeys;
 let vault: VaultScripts;
 let backupVault: VaultScripts;
 
+const at = (index: number) => (roleKeys: RoleKeys) => ({ roleKeys, index });
+const external = (roleKeys: RoleKeys): RebuildParticipant => ({ kind: 'external', roleKeys });
+
 beforeAll(async () => {
-  people = await Promise.all([publishedAccountKey(), testCosignerAccount(21), testCosignerAccount(22)].map(async a => deriveSharedRoleKeys(await a)));
-  outsider = await deriveSharedRoleKeys(await testCosignerAccount(23));
-  vault = await buildVaultFromRoleKeys({ template: { kind: 'standard', threshold: 2 }, owners: people, index: INDEX });
-  backupVault = await buildVaultFromRoleKeys({
+  people = await Promise.all([publishedAccountKey(), testCosignerAccount(21), testCosignerAccount(22)].map(async a => deriveRoleKeys(await a)));
+  outsider = await deriveRoleKeys(await testCosignerAccount(23));
+  vault = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: people.map(at(INDEX)) });
+  backupVault = await buildVaultFromParticipants({
     template: { kind: 'backup', threshold: 2, backupThreshold: 1, backupAfterSlot: 123_456_789 },
-    owners: people.slice(0, 2),
-    backups: [people[2]],
-    index: INDEX,
+    owners: people.slice(0, 2).map(at(INDEX)),
+    backups: [at(INDEX)(people[2])],
   });
 });
 
@@ -311,24 +314,79 @@ describe('malformed and hostile registrations are refused, never thrown', () => 
 });
 
 describe('rebuilding the vault from a registration and the participants keys', () => {
-  it('finds the index and rebuilds the same scripts, whatever order the participants come in', async () => {
+  it('finds every participant on their own and rebuilds the same scripts, whatever their order', async () => {
     const reg = decoded(fromOffChain(encodeRegistration(vault)));
     const shuffled = [people[2], people[0], people[1]];
-    const result = await rebuildFromRegistration(reg, shuffled);
-    expect(result).toMatchObject({ ok: true, index: INDEX, canonicalOrder: true });
+    const result = await rebuildFromRegistration(reg, shuffled.map(external));
+    expect(result).toMatchObject({ ok: true, indexes: [INDEX, INDEX, INDEX], canonicalOrder: true });
     if (result.ok !== true) return;
     expect(result.vault.payment.hash).toBe(vault.payment.hash);
     expect(result.vault.stake.hash).toBe(vault.stake.hash);
     const own = await deriveParticipantKeyHashes(people[0], INDEX);
     const slot = result.vault.owners.findIndex(o => o.payment === own.payment);
     expect(shuffled[result.owners[slot]]).toBe(people[0]);
-    expect(await rebuildFromRegistration(reg, shuffled, { index: INDEX })).toMatchObject({ ok: true, index: INDEX });
+  });
+
+  it('accepts a registration with mixed indexes, and a cosigner known only by the keys they sent', async () => {
+    const indexes = [21, 1, 0];
+    const mixed = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: people.map((roleKeys, i) => ({ roleKeys, index: indexes[i] })),
+    });
+    const reg = decoded(fromOffChain(encodeRegistration(mixed)));
+    const sent = await deriveVaultPublicKeys(people[1], 1);
+    const result = await rebuildFromRegistration(reg, [
+      { kind: 'own', roleKeys: people[0], history: { onChain: [...Array(20).keys()].map(i => i + 1), held: [] } },
+      { kind: 'vaultKeys', keys: sent },
+      external(people[2]),
+    ]);
+    expect(result).toMatchObject({ ok: true, indexes: [21, undefined, 0] });
+    if (result.ok === true) expect(result.vault.payment.hash).toBe(mixed.payment.hash);
+  });
+
+  it("the wallet's own scan stops after 20 consecutive indexes neither on chain nor held", async () => {
+    const far = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: [{ roleKeys: people[0], index: 25 }, { roleKeys: people[1], index: 1 }],
+      acknowledged: ['ALL_OWNERS_REQUIRED'],
+    });
+    const reg = decoded(fromOffChain(encodeRegistration(far)));
+    const cosigner = external(people[1]);
+    expect(await rebuildFromRegistration(reg, [{ kind: 'own', roleKeys: people[0], history: { onChain: [], held: [] } }, cosigner]))
+      .toEqual({ ok: false, code: 'PARTICIPANT_NOT_IN_VAULT', participant: 0 });
+    const held = { onChain: [1, 2, 3, 4, 5, 6], held: [{ index: 7, kind: 'vault' as const }] };
+    expect(await rebuildFromRegistration(reg, [{ kind: 'own', roleKeys: people[0], history: held }, cosigner]))
+      .toMatchObject({ ok: true, indexes: [25, 1] });
+    // An external wallet is scanned to index 100 and no further.
+    const beyond = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: [{ roleKeys: people[0], index: 101 }, { roleKeys: people[1], index: 1 }],
+      acknowledged: ['ALL_OWNERS_REQUIRED'],
+    });
+    expect(await rebuildFromRegistration(decoded(fromOffChain(encodeRegistration(beyond))), [external(people[0]), cosigner]))
+      .toEqual({ ok: false, code: 'PARTICIPANT_NOT_IN_VAULT', participant: 0 });
+  });
+
+  it('refuses a participant whose payment and stake keys sit at different indexes', async () => {
+    const pay = await deriveParticipantKeyHashes(people[2], INDEX);
+    const stake = await deriveParticipantKeyHashes(people[2], INDEX + 1);
+    const split = { payment: pay.payment, stake: stake.stake };
+    const others = await Promise.all(people.slice(0, 2).map(p => deriveParticipantKeyHashes(p, INDEX)));
+    const v = instantiateVaultScripts(
+      { template: vault.template, owners: [...others, split] },
+      {
+        payment: { owners: [...others, split].map(o => o.payment), backups: [] },
+        stake: { owners: [...others, split].map(o => o.stake), backups: [] },
+      },
+    );
+    expect(await rebuildFromRegistration(decoded(fromOffChain(encodeRegistration(v))), people.map(external)))
+      .toEqual({ ok: false, code: 'ROLE_INDEX_MISMATCH', participant: 2 });
   });
 
   it('rebuilds the dated backup template and says who holds the backup keys', async () => {
     const reg = decoded(fromOffChain(encodeRegistration(backupVault)));
-    const result = await rebuildFromRegistration(reg, people);
-    expect(result).toMatchObject({ ok: true, index: INDEX, backups: [2] });
+    const result = await rebuildFromRegistration(reg, people.map(external));
+    expect(result).toMatchObject({ ok: true, backups: [2] });
     if (result.ok !== true) return;
     expect(result.vault.template).toEqual({ kind: 'backup', threshold: 2, backupThreshold: 1, backupAfterSlot: 123_456_789 });
   });
@@ -342,49 +400,41 @@ describe('rebuilding the vault from a registration and the participants keys', (
         stake: { owners: order(vault.owners.map(o => o.stake)), backups: [] },
       },
     );
-    const result = await rebuildFromRegistration(decoded(fromOffChain(encodeRegistration(reordered))), people);
+    const result = await rebuildFromRegistration(decoded(fromOffChain(encodeRegistration(reordered))), people.map(external));
     expect(result).toMatchObject({ ok: true, canonicalOrder: false });
   });
 
-  it('refuses when the keys are not all the participants keys at one index', async () => {
+  it('refuses keys that are not all the participants, or a participant not in the vault', async () => {
     const reg = decoded(fromOffChain(encodeRegistration(vault)));
-    expect(await rebuildFromRegistration(reg, people, { index: INDEX + 1 })).toEqual({ ok: false, code: 'KEYS_NOT_FOUND' });
-    expect(await rebuildFromRegistration(reg, [outsider])).toEqual({ ok: false, code: 'KEYS_NOT_FOUND' });
-    expect(await rebuildFromRegistration(reg, people.slice(0, 2))).toEqual({ ok: false, code: 'FOREIGN_KEY' });
-    expect(await rebuildFromRegistration(reg, [...people, outsider])).toEqual({ ok: false, code: 'PARTICIPANT_NOT_IN_VAULT' });
+    expect(await rebuildFromRegistration(reg, [external(outsider)])).toEqual({ ok: false, code: 'PARTICIPANT_NOT_IN_VAULT', participant: 0 });
+    expect(await rebuildFromRegistration(reg, people.slice(0, 2).map(external))).toEqual({ ok: false, code: 'FOREIGN_KEY' });
+    expect(await rebuildFromRegistration(reg, [...people, outsider].map(external)))
+      .toEqual({ ok: false, code: 'PARTICIPANT_NOT_IN_VAULT', participant: 3 });
+    expect(await rebuildFromRegistration(reg, [...people, people[0]].map(external)))
+      .toEqual({ ok: false, code: 'DUPLICATE_PARTICIPANT', participant: 3 });
   });
 
-  it('refuses a stake script built from keys at another index', async () => {
-    const other = await buildVaultFromRoleKeys({ template: vault.template, owners: people, index: INDEX + 1 });
-    const mixed = decoded(fromOffChain(encodeRegistration({ payment: vault.payment, stake: other.stake })));
-    expect(await rebuildFromRegistration(mixed, people)).toEqual({ ok: false, code: 'FOREIGN_KEY' });
-  });
-
-  it('refuses a person whose keys come from different indices', async () => {
-    const shifted = await deriveParticipantKeyHashes(people[2], INDEX + 1);
-    const at = await Promise.all(people.slice(0, 2).map(p => deriveParticipantKeyHashes(p, INDEX)));
-    const v = instantiateVaultScripts(
-      { template: vault.template, owners: [...at, shifted] },
-      {
-        payment: { owners: [...at, shifted].map(o => o.payment), backups: [] },
-        stake: { owners: [...at, shifted].map(o => o.stake), backups: [] },
-      },
-    );
-    expect(await rebuildFromRegistration(decoded(fromOffChain(encodeRegistration(v))), people)).toEqual({ ok: false, code: 'FOREIGN_KEY' });
+  it('refuses a participant with only one of their two keys in the vault', async () => {
+    const other = await buildVaultFromParticipants({ template: vault.template, owners: people.map(at(INDEX + 1)) });
+    const half = decoded(fromOffChain(encodeRegistration({ payment: vault.payment, stake: other.stake })));
+    expect(await rebuildFromRegistration(half, [{ kind: 'vaultKeys', keys: await deriveVaultPublicKeys(people[0], INDEX) }]))
+      .toEqual({ ok: false, code: 'PARTICIPANT_INCOMPLETE', participant: 0 });
+    // Scanned, the stake key is found at the next index: a role index mismatch.
+    expect(await rebuildFromRegistration(half, people.map(external))).toEqual({ ok: false, code: 'ROLE_INDEX_MISMATCH', participant: 0 });
   });
 
   it('refuses scripts that are not one of the two templates, or disagree', async () => {
     const keys = vault.owners;
     const allOf = vaultScript(ROLE.PAYMENT, { __type: native, kind: K.RequireAllOf, scripts: keys.map(k => ({ __type: native, kind: K.RequireSignature, keyHash: k.payment })) });
     const unknown = decoded(fromOffChain(encodeRegistration({ payment: allOf, stake: vault.stake })));
-    expect(await rebuildFromRegistration(unknown, people)).toEqual({ ok: false, code: 'UNKNOWN_TEMPLATE' });
+    expect(await rebuildFromRegistration(unknown, people.map(external))).toEqual({ ok: false, code: 'UNKNOWN_TEMPLATE' });
 
     const stake3 = vaultScript(ROLE.STAKE, { ...(vault.stake.script as Cardano.RequireAtLeastScript), required: 3 });
     const disagree = decoded(fromOffChain(encodeRegistration({ payment: vault.payment, stake: stake3 })));
-    expect(await rebuildFromRegistration(disagree, people)).toEqual({ ok: false, code: 'TEMPLATE_MISMATCH' });
+    expect(await rebuildFromRegistration(disagree, people.map(external))).toEqual({ ok: false, code: 'TEMPLATE_MISMATCH' });
 
     const paymentOnly = decoded({ metadata: { json: { types: [0] } }, nativeScripts: { cbors: [vault.payment.cbor] } });
-    expect(await rebuildFromRegistration(paymentOnly, people)).toEqual({ ok: false, code: 'STAKE_SCRIPT_MISSING' });
+    expect(await rebuildFromRegistration(paymentOnly, people.map(external))).toEqual({ ok: false, code: 'STAKE_SCRIPT_MISSING' });
   });
 
   it('a registered vault outside the bounds is refused as such; an all-owners vault carries its warning', async () => {
@@ -393,18 +443,17 @@ describe('rebuilding the vault from a registration and the participants keys', (
     const stakeWith = (required: number) =>
       vaultScript(ROLE.STAKE, { ...(vault.stake.script as Cardano.RequireAtLeastScript), required });
     const oneOfThree = decoded(fromOffChain(encodeRegistration({ payment: withRequired(1), stake: stakeWith(1) })));
-    expect(await rebuildFromRegistration(oneOfThree, people)).toEqual({ ok: false, code: 'OUTSIDE_POLICY' });
+    expect(await rebuildFromRegistration(oneOfThree, people.map(external))).toEqual({ ok: false, code: 'OUTSIDE_POLICY' });
     const threeOfThree = decoded(fromOffChain(encodeRegistration({ payment: withRequired(3), stake: stakeWith(3) })));
-    const result = await rebuildFromRegistration(threeOfThree, people);
+    const result = await rebuildFromRegistration(threeOfThree, people.map(external));
     expect(result).toMatchObject({ ok: true, vault: { warnings: ['ALL_OWNERS_REQUIRED'] } });
   });
 
-  it('refuses bad options and never throws', async () => {
+  it('refuses bad input and never throws', async () => {
     const reg = decoded(fromOffChain(encodeRegistration(vault)));
     expect(await rebuildFromRegistration(reg, [])).toEqual({ ok: false, code: 'INVALID_OPTIONS' });
-    expect(await rebuildFromRegistration(reg, people, { index: -1 })).toEqual({ ok: false, code: 'INVALID_OPTIONS' });
-    expect(await rebuildFromRegistration(reg, people, { maxIndex: 2 ** 31 })).toEqual({ ok: false, code: 'INVALID_OPTIONS' });
-    expect((await rebuildFromRegistration(null as never, people)).ok).toBe(false);
+    expect((await rebuildFromRegistration(null as never, people.map(external))).ok).toBe(false);
     expect((await rebuildFromRegistration(reg, [null] as never)).ok).toBe(false);
+    expect((await rebuildFromRegistration(reg, [{ kind: 'external', roleKeys: null }] as never)).ok).toBe(false);
   });
 });

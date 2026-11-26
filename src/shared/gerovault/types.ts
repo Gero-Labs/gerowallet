@@ -21,11 +21,12 @@ export type VaultNetwork = 'mainnet' | 'preprod' | 'preview';
 
 declare const accountKeyBrand: unique symbol;
 declare const roleKeyBrand: unique symbol;
+declare const vaultKeysBrand: unique symbol;
 
 /**
- * The wallet's own CIP-1854 account-level extended public key (`m/1854'/1815'/0'`).
- * It stays on this device: knowing it reveals every key of every vault the wallet will ever
- * join, so nothing in this library encodes it for sharing. Build it with
+ * A CIP-1854 account-level extended public key (`m/1854'/1815'/0'`): the wallet's own, or one
+ * an external wallet gave as input. Knowing it reveals every key of every vault its owner will
+ * ever join, so nothing in this library encodes one for sharing. Build it with
  * `multisigAccountPublicKey()`.
  */
 export interface MultisigAccountPublicKey {
@@ -36,7 +37,7 @@ export interface MultisigAccountPublicKey {
 
 /**
  * A role-level extended public key (`m/1854'/1815'/0'/0` or `.../2`). Only `keys.ts` creates
- * one, by deriving it from an account key or by parsing a cosigner's shared key.
+ * one: derived from an account key, or parsed from an external wallet's input. Never shared.
  */
 export interface RolePublicKey<R extends Role = Role> {
   readonly [roleKeyBrand]: true;
@@ -45,17 +46,32 @@ export interface RolePublicKey<R extends Role = Role> {
   readonly hex: Bip32PublicKeyHex;
 }
 
-/** What a cosigner shares with the others: the payment and stake role keys, never the account key. */
-export interface SharedRoleKeys {
+/**
+ * The payment and stake role keys of one participant: the wallet's own (derived from its account
+ * key) or an external wallet's (given as input). Used to derive vault keys locally, never shared.
+ */
+export interface RoleKeys {
   readonly payment: RolePublicKey<typeof ROLE.PAYMENT>;
   readonly stake: RolePublicKey<typeof ROLE.STAKE>;
 }
 
-/** The bech32 form of `SharedRoleKeys` (CIP-1854 user-facing encoding, CIP-5 prefixes). */
-export interface EncodedSharedRoleKeys {
-  /** `addr_shared_xvk1...` */
+/**
+ * What a participant contributes to one vault and what cosigners exchange: that vault's payment
+ * and stake public keys, raw Ed25519 (32 bytes, no chain code, no index). Nobody can derive any
+ * other key from them.
+ */
+export interface VaultPublicKeys {
+  readonly [vaultKeysBrand]: true;
+  readonly level: 'vault';
+  readonly payment: Ed25519PublicKeyHex;
+  readonly stake: Ed25519PublicKeyHex;
+}
+
+/** The bech32 form of `VaultPublicKeys` (CIP-1854 user-facing encoding without chain code). */
+export interface EncodedVaultPublicKeys {
+  /** `addr_shared_vk1...` */
   readonly payment: string;
-  /** `stake_shared_xvk1...` */
+  /** `stake_shared_vk1...` */
   readonly stake: string;
 }
 
@@ -67,7 +83,7 @@ export interface VaultKey {
   readonly keyHash: Ed25519KeyHashHex;
 }
 
-/** The payment and stake key hashes one participant contributes to a vault at one index. */
+/** The payment and stake key hashes one participant contributes to a vault. */
 export interface ParticipantKeyHashes {
   readonly payment: Ed25519KeyHashHex;
   readonly stake: Ed25519KeyHashHex;

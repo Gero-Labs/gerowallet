@@ -1,8 +1,9 @@
 /**
  * Native scripts of a phase 1 vault (spec 4.1).
  *
- *   standard  payment  atLeast t [ sig(owner_i role 0 key at y) ]
- *             stake    atLeast t [ sig(owner_i role 2 key at y) ]
+ *   standard  payment  atLeast t [ sig(owner_i role 0 key at y_i) ]
+ *             stake    atLeast t [ sig(owner_i role 2 key at y_i) ]
+ *   (y_i is owner i's own vault index; a participant's two keys share it)
  *   backup    any [ atLeast t owners, all [ atLeast b backupKeys, after slot ] ]   (GV-69)
  *
  * No script-wide time bound in the standard template: inside the script it would lock the
@@ -17,18 +18,19 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { GeroVaultError } from './errors';
-import { deriveParticipantKeyHashes } from './keys';
+import { deriveParticipantKeyHashes, vaultKeyHashes } from './keys';
 import { assertVaultIndex } from './paths';
 import {
   BackupTemplate,
   ParticipantKeyHashes,
   ROLE,
   Role,
-  SharedRoleKeys,
+  RoleKeys,
   VaultAddresses,
   VaultNetwork,
   VaultScript,
   VaultScripts,
+  VaultPublicKeys,
   VaultTemplate,
   VaultWarning,
 } from './types';
@@ -253,21 +255,36 @@ export function buildVaultScripts(spec: VaultSpec, options?: BuildOptions): Vaul
 }
 
 /**
- * Derives every participant's keys at vault index `index` and builds the vault. The same index
- * is used for all participants and both roles (CIP-1854 instantiation rules 1 and 2), backup
- * holders included: their keys are at `0/y` and `2/y` like the owners', so a backup holder's own
- * seed scan finds the vault.
+ * One participant of a vault being built: role keys and that participant's own vault index (the
+ * wallet's own, or an external wallet's), or the vault keys a Gero cosigner sent, which carry no
+ * index. A participant's payment and stake keys always share their index.
  */
-export async function buildVaultFromRoleKeys(input: {
+export type VaultParticipant =
+  | { readonly roleKeys: RoleKeys; readonly index: number }
+  | { readonly vaultKeys: VaultPublicKeys };
+
+async function participantKeyHashes(p: VaultParticipant): Promise<ParticipantKeyHashes> {
+  if (p && 'vaultKeys' in p) return vaultKeyHashes(p.vaultKeys);
+  if (p && 'roleKeys' in p) {
+    assertVaultIndex(p.index);
+    return deriveParticipantKeyHashes(p.roleKeys, p.index);
+  }
+  return fail('INVALID_ROLE_KEY', 'A participant is role keys with an index, or vault keys');
+}
+
+/**
+ * Builds a vault from its participants, owners and backup holders alike, each at their own index
+ * (`indexAllocation.ts`). Indexes may differ between participants: this departs from CIP-1854's
+ * template rule that every cosigner uses the same index, a convention the ledger does not enforce.
+ * When every participant is at the same index the vault follows CIP-1854 to the letter.
+ */
+export async function buildVaultFromParticipants(input: {
   readonly template: VaultTemplate;
-  readonly owners: readonly SharedRoleKeys[];
-  readonly backups?: readonly SharedRoleKeys[];
-  readonly index: number;
+  readonly owners: readonly VaultParticipant[];
+  readonly backups?: readonly VaultParticipant[];
   readonly acknowledged?: readonly VaultWarning[];
 }): Promise<VaultScripts> {
-  assertVaultIndex(input.index);
-  const derive = (keys: readonly SharedRoleKeys[] | undefined) =>
-    Promise.all((keys ?? []).map(k => deriveParticipantKeyHashes(k, input.index)));
+  const derive = (list: readonly VaultParticipant[] | undefined) => Promise.all((list ?? []).map(participantKeyHashes));
   const [owners, backups] = await Promise.all([derive(input.owners), derive(input.backups)]);
   return buildVaultScripts({ template: input.template, owners, backups }, { acknowledged: input.acknowledged });
 }

@@ -16,7 +16,7 @@ import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
 import {
   MAX_OWNERS,
-  buildVaultFromRoleKeys,
+  buildVaultFromParticipants,
   buildVaultScripts,
   instantiateVaultScripts,
   parseVaultScript,
@@ -26,7 +26,7 @@ import {
   vaultScript,
   VaultSpec,
 } from './scripts';
-import { deriveParticipantKeyHashes, deriveSharedRoleKeys } from './keys';
+import { deriveParticipantKeyHashes, deriveRoleKeys, deriveVaultPublicKeys } from './keys';
 import { ParticipantKeyHashes, ROLE, VaultNetwork } from './types';
 import { CARDANO_ADDRESSES, bech32Hex, publishedAccountKey, testCosignerAccount } from './__fixtures__/vectors';
 
@@ -190,15 +190,38 @@ describe('vault addresses', () => {
   });
 });
 
-describe('vaults from role keys', () => {
-  it('uses every participant key at the same index, role 0 for payment and role 2 for stake', async () => {
-    const people = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2)].map(async a => deriveSharedRoleKeys(await a)));
-    const vault = await buildVaultFromRoleKeys({ template: { kind: 'standard', threshold: 2 }, owners: people, index: 5 });
-    const expected = await Promise.all(people.map(p => deriveParticipantKeyHashes(p, 5)));
+describe('vaults from participants', () => {
+  it('each participant contributes role 0 and role 2 keys at their own index', async () => {
+    const people = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2)].map(async a => deriveRoleKeys(await a)));
+    const indexes = [5, 1, 2];
+    const vault = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: people.map((roleKeys, i) => ({ roleKeys, index: indexes[i] })),
+    });
+    const expected = await Promise.all(people.map((p, i) => deriveParticipantKeyHashes(p, indexes[i])));
     expect(new Set(parseVaultScript(vault.payment.script).owners)).toEqual(new Set(expected.map(e => e.payment)));
     expect(new Set(parseVaultScript(vault.stake.script).owners)).toEqual(new Set(expected.map(e => e.stake)));
-    await expect(buildVaultFromRoleKeys({ template: { kind: 'standard', threshold: 2 }, owners: people, index: -1 }))
+  });
+
+  it('a cosigner may be given as the vault keys they sent; the vault is the same', async () => {
+    const people = await Promise.all([testCosignerAccount(3), testCosignerAccount(4)].map(async a => deriveRoleKeys(await a)));
+    const template = { kind: 'standard', threshold: 2 } as const;
+    const acknowledged = ['ALL_OWNERS_REQUIRED'] as const;
+    const byRole = await buildVaultFromParticipants({ template, acknowledged, owners: [{ roleKeys: people[0], index: 1 }, { roleKeys: people[1], index: 7 }] });
+    const sent = await deriveVaultPublicKeys(people[1], 7);
+    const byKeys = await buildVaultFromParticipants({ template, acknowledged, owners: [{ roleKeys: people[0], index: 1 }, { vaultKeys: sent }] });
+    expect(byKeys.payment.cbor).toBe(byRole.payment.cbor);
+    expect(byKeys.stake.cbor).toBe(byRole.stake.cbor);
+  });
+
+  it('refuses a bad index or a participant of neither kind', async () => {
+    const roleKeys = await deriveRoleKeys(await testCosignerAccount(5));
+    const other = await deriveRoleKeys(await testCosignerAccount(6));
+    const template = { kind: 'standard', threshold: 2 } as const;
+    await expect(buildVaultFromParticipants({ template, owners: [{ roleKeys, index: -1 }, { roleKeys: other, index: 1 }] }))
       .rejects.toMatchObject({ code: 'INVALID_INDEX' });
+    await expect(buildVaultFromParticipants({ template, owners: [{} as never, { roleKeys: other, index: 1 }] }))
+      .rejects.toMatchObject({ code: 'INVALID_ROLE_KEY' });
   });
 });
 

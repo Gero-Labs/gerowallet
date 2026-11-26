@@ -9,7 +9,7 @@
  * Anyone can publish a registration naming anyone's key hashes, so a decoded registration is a
  * candidate, never a vault (spec 4.0). `decodeRegistration` checks the shape only and never
  * throws; `rebuildFromRegistration` is the check that the scripts are the vault the participants'
- * own keys make at one index.
+ * own keys make, each participant's keys at one index of their own.
  */
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
@@ -17,8 +17,8 @@ import { HexBlob } from '@cardano-sdk/util';
 import { CborError, CborItem, CborValue, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { CIP83_CHUNK, CIP83_DEFAULT_PASSPHRASE, cip83Decrypt, cip83Encrypt } from './cip83';
 import { GeroVaultError } from './errors';
-import { deriveParticipantKeyHashes } from './keys';
-import { isVaultIndex } from './paths';
+import { deriveParticipantKeyHashes, deriveVaultKey, vaultKeyHashes } from './keys';
+import { DISCOVERY_GAP_LIMIT, ParticipantIndexHistory } from './indexAllocation';
 import {
   ParsedVaultScript,
   buildVaultScripts,
@@ -27,7 +27,17 @@ import {
   vaultScript,
   vaultSpecWarnings,
 } from './scripts';
-import { ParticipantKeyHashes, ROLE, Role, SharedRoleKeys, VaultScript, VaultScripts, VaultTemplate } from './types';
+import {
+  MAX_VAULT_INDEX,
+  ParticipantKeyHashes,
+  ROLE,
+  Role,
+  RoleKeys,
+  VaultPublicKeys,
+  VaultScript,
+  VaultScripts,
+  VaultTemplate,
+} from './types';
 
 export const CIP146_LABEL = 1854n;
 
@@ -42,8 +52,6 @@ const MAX_SCRIPT_KEYS = 64;
 export const MAX_PARTICIPANTS = 80;
 /** An encrypted field longer than this many 64-character chunks is refused (4 KiB of base64). */
 const MAX_CHUNKS = 64;
-/** How far `rebuildFromRegistration` scans for the index when none is given. */
-export const DEFAULT_REBUILD_SCAN = 100;
 
 const KEY_HASH = /^[0-9a-f]{56}$/;
 const SUPPORTED_TYPES: readonly number[] = [ROLE.PAYMENT, ROLE.STAKE];
@@ -572,14 +580,35 @@ export function decryptRegistrationFields(registration: DecodedRegistration, pas
 // ---------------------------------------------------------------------------------------------
 // Rebuilding the vault from a registration and the participants' keys
 
+/**
+ * One participant to find in a registration:
+ * - `vaultKeys`: the vault keys a Gero cosigner sent, matched by hash, no index involved;
+ * - `external`: an external wallet's role keys, scanned at indexes 0 to `EXTERNAL_SCAN_MAX`;
+ * - `own`: this wallet's own role keys, scanned from 0 until `DISCOVERY_GAP_LIMIT` consecutive
+ *   indexes that are neither on chain nor held in its history.
+ */
+export type RebuildParticipant =
+  | { readonly kind: 'vaultKeys'; readonly keys: VaultPublicKeys }
+  | { readonly kind: 'external'; readonly roleKeys: RoleKeys }
+  | {
+      readonly kind: 'own';
+      readonly roleKeys: RoleKeys;
+      readonly history: Pick<ParticipantIndexHistory, 'onChain' | 'held'>;
+    };
+
+/** How far an external wallet's keys are scanned. */
+export const EXTERNAL_SCAN_MAX = 100;
+
 export type RebuildRefusalCode =
   | 'INVALID_OPTIONS'
   | 'STAKE_SCRIPT_MISSING'
   | 'UNKNOWN_TEMPLATE'
   | 'TEMPLATE_MISMATCH'
-  | 'KEYS_NOT_FOUND'
   | 'FOREIGN_KEY'
   | 'PARTICIPANT_NOT_IN_VAULT'
+  | 'PARTICIPANT_INCOMPLETE'
+  | 'ROLE_INDEX_MISMATCH'
+  | 'DUPLICATE_PARTICIPANT'
   | 'OUTSIDE_POLICY'
   | 'INVALID_VAULT'
   | 'SCRIPT_MISMATCH';
@@ -587,17 +616,25 @@ export type RebuildRefusalCode =
 export type RebuildResult =
   | {
       readonly ok: true;
-      /** The vault index `y` at which every participant's keys make these scripts. */
-      readonly index: number;
       readonly vault: VaultScripts;
       /** For each owner slot in payment script order, the position of its participant in the input. */
       readonly owners: readonly number[];
       /** The same for backup slots. */
       readonly backups: readonly number[];
+      /**
+       * Each input participant's own vault index, where it was found (`undefined` for vault keys,
+       * which carry none). Indexes may differ between participants.
+       */
+      readonly indexes: readonly (number | undefined)[];
       /** The key order is the one `buildVaultScripts` writes (sorted by bytes). */
       readonly canonicalOrder: boolean;
     }
-  | { readonly ok: false; readonly code: RebuildRefusalCode };
+  | { readonly ok: false; readonly code: RebuildRefusalCode; /** Position of the participant at fault. */ readonly participant?: number };
+
+/** Bounds the ledger accepts but this wallet does not create (threshold 1, more than 20 owners). */
+const POLICY_CODES: ReadonlySet<string> = new Set(['THRESHOLD_TOO_LOW', 'TOO_FEW_OWNERS', 'TOO_MANY_OWNERS']);
+
+const backupsOf = (p: ParsedVaultScript): readonly Ed25519KeyHashHex[] => (p.kind === 'backup' ? p.backups : []);
 
 function templateOf(payment: ParsedVaultScript, stake: ParsedVaultScript): VaultTemplate | undefined {
   if (payment.kind !== stake.kind || payment.threshold !== stake.threshold || payment.owners.length !== stake.owners.length) {
@@ -616,29 +653,63 @@ function templateOf(payment: ParsedVaultScript, stake: ParsedVaultScript): Vault
   };
 }
 
-/** Bounds the ledger accepts but this wallet does not create (threshold 1, more than 20 owners). */
-const POLICY_CODES: ReadonlySet<string> = new Set(['THRESHOLD_TOO_LOW', 'TOO_FEW_OWNERS', 'TOO_MANY_OWNERS']);
+type Located = { readonly keys: ParticipantKeyHashes; readonly index?: number };
 
-const backupsOf = (p: ParsedVaultScript): readonly Ed25519KeyHashHex[] => (p.kind === 'backup' ? p.backups : []);
+/** Finds one participant's keys in the scripts; a refusal code when they are not both there. */
+async function locate(
+  p: RebuildParticipant,
+  paymentKeys: ReadonlySet<string>,
+  stakeKeys: ReadonlySet<string>,
+): Promise<Located | RebuildRefusalCode> {
+  if (p?.kind === 'vaultKeys') {
+    const keys = await vaultKeyHashes(p.keys);
+    const inPayment = paymentKeys.has(keys.payment);
+    const inStake = stakeKeys.has(keys.stake);
+    if (inPayment && inStake) return { keys };
+    return inPayment || inStake ? 'PARTICIPANT_INCOMPLETE' : 'PARTICIPANT_NOT_IN_VAULT';
+  }
+  if (p?.kind !== 'external' && p?.kind !== 'own') return 'INVALID_OPTIONS';
+  let quiet: (i: number) => boolean = () => false;
+  if (p.kind === 'own') {
+    const onChain = new Set(p.history?.onChain ?? []);
+    const held = new Set((p.history?.held ?? []).map(h => h?.index));
+    quiet = i => !onChain.has(i) && !held.has(i);
+  }
+  let paymentAt: number | undefined;
+  let stakeAt: number | undefined;
+  let run = 0;
+  for (let i = 0; i <= MAX_VAULT_INDEX; i++) {
+    if (p.kind === 'external' && i > EXTERNAL_SCAN_MAX) break;
+    const [payment, stake] = await Promise.all([deriveVaultKey(p.roleKeys.payment, i), deriveVaultKey(p.roleKeys.stake, i)]);
+    if (paymentAt === undefined && paymentKeys.has(payment.keyHash)) paymentAt = i;
+    if (stakeAt === undefined && stakeKeys.has(stake.keyHash)) stakeAt = i;
+    if (paymentAt !== undefined && stakeAt !== undefined) break;
+    if (p.kind === 'own') {
+      run = quiet(i) ? run + 1 : 0;
+      if (run >= DISCOVERY_GAP_LIMIT) break;
+    }
+  }
+  if (paymentAt === undefined && stakeAt === undefined) return 'PARTICIPANT_NOT_IN_VAULT';
+  if (paymentAt === undefined || stakeAt === undefined) return 'PARTICIPANT_INCOMPLETE';
+  if (paymentAt !== stakeAt) return 'ROLE_INDEX_MISMATCH';
+  return { keys: await deriveParticipantKeyHashes(p.roleKeys, paymentAt), index: paymentAt };
+}
 
 /**
- * Rebuilds a registered vault from the participants' shared role keys (the wallet's own keys
- * among them), as CIP-0146 discovery does: every key hash of every script must be the key of one
- * participant at one index `y`, the payment script from role 0 keys and the stake script from
- * role 2 keys, each participant an owner or a backup holder in both scripts. The scripts are then
- * instantiated again from those keys, in the registration's key order, and must hash the same.
+ * Rebuilds a registered vault from its participants' keys (the wallet's own among them), each
+ * participant found on their own (CIP-0146 discovery): a participant's payment key must be in
+ * the payment script and their stake key in the stake script, at one index of theirs, while
+ * different participants may sit at different indexes. Every key hash of both scripts must belong
+ * to exactly one participant, and a participant is an owner or a backup holder in both scripts.
+ * The scripts are then instantiated again in the registration's key order and must hash the same.
  * Never throws.
  */
 export async function rebuildFromRegistration(
   registration: DecodedRegistration,
-  participants: readonly SharedRoleKeys[],
-  options: { readonly index?: number; readonly maxIndex?: number } = {},
+  participants: readonly RebuildParticipant[],
 ): Promise<RebuildResult> {
   try {
     if (!Array.isArray(participants) || participants.length === 0) return { ok: false, code: 'INVALID_OPTIONS' };
-    if (options.index !== undefined && !isVaultIndex(options.index)) return { ok: false, code: 'INVALID_OPTIONS' };
-    const maxIndex = options.maxIndex ?? DEFAULT_REBUILD_SCAN;
-    if (!isVaultIndex(maxIndex)) return { ok: false, code: 'INVALID_OPTIONS' };
     if (!registration?.payment) return { ok: false, code: 'UNKNOWN_TEMPLATE' };
     if (!registration.stake) return { ok: false, code: 'STAKE_SCRIPT_MISSING' };
     const payment = parseVaultScript(registration.payment.script);
@@ -647,30 +718,36 @@ export async function rebuildFromRegistration(
     const template = templateOf(payment, stake);
     if (!template) return { ok: false, code: 'TEMPLATE_MISMATCH' };
 
-    const paymentKeys = [...payment.owners, ...backupsOf(payment)];
-    const candidates = options.index !== undefined ? [options.index] : Array.from({ length: maxIndex + 1 }, (_, i) => i);
-    for (const index of candidates) {
-      const derived = await Promise.all(participants.map(p => deriveParticipantKeyHashes(p, index)));
-      const byPayment = new Map(derived.map((d, i) => [d.payment as string, i]));
-      if (!paymentKeys.some(h => byPayment.has(h))) continue;
-      return matchAt(index, derived, byPayment, registration, payment, stake, template);
+    const paymentKeys = new Set<string>([...payment.owners, ...backupsOf(payment)]);
+    const stakeKeys = new Set<string>([...stake.owners, ...backupsOf(stake)]);
+    const located: Located[] = [];
+    for (let i = 0; i < participants.length; i++) {
+      const found = await locate(participants[i], paymentKeys, stakeKeys);
+      if (typeof found === 'string') return { ok: false, code: found, participant: i };
+      located.push(found);
     }
-    return { ok: false, code: 'KEYS_NOT_FOUND' };
+    return assemble(registration, payment, stake, template, located);
   } catch {
     return { ok: false, code: 'INVALID_VAULT' };
   }
 }
 
-function matchAt(
-  index: number,
-  derived: readonly ParticipantKeyHashes[],
-  byPayment: ReadonlyMap<string, number>,
+function assemble(
   registration: DecodedRegistration,
   payment: ParsedVaultScript,
   stake: ParsedVaultScript,
   template: VaultTemplate,
+  located: readonly Located[],
 ): RebuildResult {
-  const byStake = new Map(derived.map((d, i) => [d.stake as string, i]));
+  const byPayment = new Map<string, number>();
+  const byStake = new Map<string, number>();
+  for (let i = 0; i < located.length; i++) {
+    if (byPayment.has(located[i].keys.payment) || byStake.has(located[i].keys.stake)) {
+      return { ok: false, code: 'DUPLICATE_PARTICIPANT', participant: i };
+    }
+    byPayment.set(located[i].keys.payment, i);
+    byStake.set(located[i].keys.stake, i);
+  }
   const slots = (hashes: readonly string[], lookup: ReadonlyMap<string, number>) => hashes.map(h => lookup.get(h));
   const owners = slots(payment.owners, byPayment);
   const backups = slots(backupsOf(payment), byPayment);
@@ -680,11 +757,10 @@ function matchAt(
     return { ok: false, code: 'FOREIGN_KEY' };
   }
   const sameSet = (a: readonly number[], b: readonly number[]) =>
-    a.length === b.length && [...a].sort().join() === [...b].sort().join();
+    a.length === b.length && [...a].sort((x, y) => x - y).join() === [...b].sort((x, y) => x - y).join();
   if (!sameSet(owners, stakeOwners) || !sameSet(backups, stakeBackups)) return { ok: false, code: 'TEMPLATE_MISMATCH' };
-  if (new Set([...owners, ...backups]).size !== derived.length) return { ok: false, code: 'PARTICIPANT_NOT_IN_VAULT' };
 
-  const spec = { template, owners: owners.map(i => derived[i]), backups: backups.map(i => derived[i]) };
+  const spec = { template, owners: owners.map(i => located[i].keys), backups: backups.map(i => located[i].keys) };
   // A vault someone else registered is rebuilt with its warnings, which the result carries for
   // the caller to show; the bounds still apply.
   const options = { acknowledged: vaultSpecWarnings(spec) };
@@ -706,10 +782,10 @@ function matchAt(
   const canonical = buildVaultScripts(spec, options);
   return {
     ok: true,
-    index,
     vault,
     owners: Object.freeze(owners),
     backups: Object.freeze(backups),
+    indexes: Object.freeze(located.map(l => l.index)),
     canonicalOrder: canonical.payment.hash === vault.payment.hash && canonical.stake.hash === vault.stake.hash,
   };
 }

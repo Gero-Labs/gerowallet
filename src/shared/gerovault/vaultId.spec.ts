@@ -1,11 +1,11 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { blake2b as sdkBlake2b } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { deriveSharedRoleKeys } from './keys';
-import { buildVaultFromRoleKeys } from './scripts';
+import { deriveRoleKeys, deriveVaultPublicKeys } from './keys';
+import { buildVaultFromParticipants } from './scripts';
 import { NETWORK_MAGIC, VAULT_ID_TAG, vaultId, vaultIdPreimage } from './vaultId';
 import { decodeRegistration, dedupeRegistrations, encodeRegistration, rebuildFromRegistration } from './registration';
-import { VaultNetwork, VaultScripts } from './types';
+import { RoleKeys, VaultNetwork, VaultScripts } from './types';
 import { publishedAccountKey, testCosignerAccount } from './__fixtures__/vectors';
 
 /**
@@ -39,15 +39,17 @@ const VECTORS: Record<'standard' | 'backup', { payment: string; stake: string; i
 const NETWORKS: VaultNetwork[] = ['mainnet', 'preprod', 'preview'];
 let vaults: Record<'standard' | 'backup', VaultScripts>;
 
+let people: RoleKeys[];
+
 beforeAll(async () => {
-  const people = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2)].map(async a => deriveSharedRoleKeys(await a)));
+  people = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2)].map(async a => deriveRoleKeys(await a)));
+  const at1 = people.map(roleKeys => ({ roleKeys, index: 1 }));
   vaults = {
-    standard: await buildVaultFromRoleKeys({ template: { kind: 'standard', threshold: 2 }, owners: people, index: 1 }),
-    backup: await buildVaultFromRoleKeys({
+    standard: await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: at1 }),
+    backup: await buildVaultFromParticipants({
       template: { kind: 'backup', threshold: 2, backupThreshold: 1, backupAfterSlot: 200_000_000 },
-      owners: people.slice(0, 2),
-      backups: [people[2]],
-      index: 1,
+      owners: at1.slice(0, 2),
+      backups: [at1[2]],
     }),
   };
 });
@@ -82,10 +84,32 @@ describe('vault identifier (provisional vectors)', () => {
     const decoded = [a, b].map(e => decodeRegistration({ metadata: { cbor: e.offChain.metadata }, nativeScripts: { cbor: e.offChain.native_scripts } }));
     const regs = decoded.map(d => (d.ok === true ? d.registration : undefined));
     expect(dedupeRegistrations(regs)).toEqual([regs[0]]);
-    const people = await Promise.all([publishedAccountKey(), testCosignerAccount(1), testCosignerAccount(2)].map(async x => deriveSharedRoleKeys(await x)));
-    const rebuilt = await Promise.all(regs.map(r => rebuildFromRegistration(r, people)));
+    const rebuilt = await Promise.all(regs.map(r => rebuildFromRegistration(r, people.map(roleKeys => ({ kind: 'external' as const, roleKeys })))));
     const ids = rebuilt.map(r => (r.ok === true ? vaultId(r.vault, 'preprod') : undefined));
     expect(ids).toEqual([VECTORS.standard.ids.preprod, VECTORS.standard.ids.preprod]);
+  });
+
+  it('never depends on the participants indexes, only on the scripts', async () => {
+    // The same keys reached through different indexes, through the keys sent, and through a
+    // rebuild that discovers the indexes give one identifier.
+    const sent = await Promise.all(people.map(p => deriveVaultPublicKeys(p, 1)));
+    const fromKeys = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: sent.map(vaultKeys => ({ vaultKeys })) });
+    expect(vaultId(fromKeys, 'preprod')).toBe(VECTORS.standard.ids.preprod);
+    // vaultId takes scripts and a network, nothing else: an index cannot reach it.
+    expect(vaultId.length).toBe(2);
+    // Mixed indexes make other keys, so other scripts: the id follows the scripts, not the indexes.
+    const mixed = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: people.map((roleKeys, i) => ({ roleKeys, index: [21, 1, 3][i] })),
+    });
+    const mixedFromKeys = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: await Promise.all(people.map(async (p, i) => ({ vaultKeys: await deriveVaultPublicKeys(p, [21, 1, 3][i]) }))),
+    });
+    expect(vaultId(mixedFromKeys, 'preprod')).toBe(vaultId(mixed, 'preprod'));
+    expect(vaultIdPreimage(mixed, 'preprod')).toBe(
+      `${Buffer.from(VAULT_ID_TAG).toString('hex')}00000001${mixed.payment.cbor}${mixed.stake.cbor}`,
+    );
   });
 
   it('refuses an unknown network or a missing script', () => {
