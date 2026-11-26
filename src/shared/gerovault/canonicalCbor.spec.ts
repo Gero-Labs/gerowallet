@@ -171,28 +171,32 @@ describe('large payloads and hex', () => {
     expect(hexToBytes(42)).toBeUndefined();
   });
 
-  it('encodes, reads and converts a payload of 8 MB without copying byte strings byte by byte', () => {
+  it('encodes, reads and converts a payload of 8 MB well under the time a copy byte by byte takes', () => {
     // The shape of a recovery payload: 32 manifests of 256 KiB inside revision maps.
     const blob = (i: number) => Uint8Array.from({ length: 262144 }, (_, j) => (i * 31 + j * 7) & 0xff);
     const value = { revisions: Array.from({ length: 32 }, (_, i) => ({ version: i + 1, manifest: blob(i) })) };
-    const time = <T>(f: () => T): [T, number] => {
+    const ms = (f: () => unknown) => {
       const t0 = performance.now();
-      const r = f();
-      return [r, performance.now() - t0];
+      f();
+      return performance.now() - t0;
     };
-    const [bytes, encodeMs] = time(() => encodeCanonicalCbor(value));
+    // The best of three, so that one garbage collection pause cannot fail the test.
+    const best = (f: () => unknown) => Math.min(ms(f), ms(f), ms(f));
+    const bytes = encodeCanonicalCbor(value);
     expect(bytes.length).toBeGreaterThan(8_000_000);
     expect(bytes.subarray(0, 64)).toEqual(Uint8Array.from(cborgEncode(value).subarray(0, 64)));
-    const [item, readMs] = time(() => readCbor(bytes, { maxDepth: 8, maxItems: 1000 }));
-    expect(item.end).toBe(bytes.length);
-    const [hexes, toHexMs] = time(() => value.revisions.map(r => bytesToHex(r.manifest)));
-    const [back, fromHexMs] = time(() => hexes.map(h => hexToBytes(h)));
-    expect(back[31]).toEqual(value.revisions[31].manifest);
-    // Bounds far above what this takes (a few ms to write and read, tens of ms for hex), well below
-    // what a copy byte by byte took (hundreds of ms to write, over a second for hex).
-    expect(encodeMs).toBeLessThan(150);
-    expect(readMs).toBeLessThan(150);
-    expect(toHexMs).toBeLessThan(400);
-    expect(fromHexMs).toBeLessThan(600);
+    expect(readCbor(bytes, { maxDepth: 8, maxItems: 1000 }).end).toBe(bytes.length);
+    const hexes = value.revisions.map(r => bytesToHex(r.manifest));
+    expect(hexes.map(h => hexToBytes(h))[31]).toEqual(value.revisions[31].manifest);
+    // Baselines measured in the same run, on the same machine and load: the work done byte by byte,
+    // which the writer and the hex helpers used to do. Each operation must take less than half its
+    // baseline; it takes a small fraction of it, so only a return to per-byte work fails.
+    const perByteCopy = ms(() => value.revisions.map(r => Array.from(r.manifest)));
+    const perByteToHex = ms(() => value.revisions.map(r => reference.toHex(r.manifest)));
+    const perByteFromHex = ms(() => hexes.map(h => reference.fromHex(h)));
+    expect(best(() => encodeCanonicalCbor(value))).toBeLessThan(perByteCopy / 2);
+    expect(best(() => readCbor(bytes, { maxDepth: 8, maxItems: 1000 }))).toBeLessThan(perByteCopy / 2);
+    expect(best(() => value.revisions.map(r => bytesToHex(r.manifest)))).toBeLessThan(perByteToHex / 2);
+    expect(best(() => hexes.map(h => hexToBytes(h)))).toBeLessThan(perByteFromHex / 2);
   });
 });
