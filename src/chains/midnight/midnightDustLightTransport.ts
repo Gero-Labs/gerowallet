@@ -29,20 +29,21 @@ function retryDelay(header: string | null, retry: number): number | null {
 
 /**
  * Pace of light-sync requests: at most this many a second, evenly spaced (one start every
- * 200 ms), for every transport in this context that talks to the same light-sync URL. The URL
+ * 250 ms), for every transport in this context that talks to the same light-sync URL. The URL
  * names the network, so a wallet's syncs and fee builds share one pace. The spend scan runs
  * `DUST_SPEND_CONCURRENCY` requests side by side and a cached page answers in milliseconds,
  * so without this a sync sent its pages in bursts. Every attempt takes a slot: retries,
- * re-authentication and the first try alike.
+ * re-authentication and the first try alike. Other Midnight calls go out beside these, so
+ * the pace leaves them room.
  */
-export const DUST_LIGHT_SYNC_REQUESTS_PER_SECOND = 5;
+export const DUST_LIGHT_SYNC_REQUESTS_PER_SECOND = 4;
 const PACE_GAP_MS = 1000 / DUST_LIGHT_SYNC_REQUESTS_PER_SECOND;
 /**
- * A next slot further ahead than any Retry-After hold plus a queue can put it means the
- * clock was set back: start again from now rather than stall the sync.
+ * The pace's clock. Monotonic: a wall clock stepped back would hold every request until it
+ * caught up, and one stepped forward would let a burst through.
  */
-const PACE_MAX_AHEAD_MS = MAX_RETRY_DELAY_MS + 30_000;
-/** Per light-sync URL: when the next request may start, and a 429's hold (ms since epoch). */
+const paceNow = (): number => performance.now();
+/** Per light-sync URL: when the next request may start, and a 429's hold (`paceNow` ms). */
 const paces = new Map<string, { next: number; holdUntil: number }>();
 
 /**
@@ -54,24 +55,23 @@ async function waitForSlot(url: string, signal: AbortSignal): Promise<void> {
   paces.set(url, pace);
   for (;;) {
     signal.throwIfAborted();
-    const now = Date.now();
-    if (pace.holdUntil - now > PACE_MAX_AHEAD_MS) pace.holdUntil = 0;
+    const now = paceNow();
     if (pace.holdUntil > now) {
       await waitForRetry(pace.holdUntil - now, signal);
       continue;
     }
-    const slot = pace.next - now > PACE_MAX_AHEAD_MS ? now : Math.max(now, pace.next);
+    const slot = Math.max(now, pace.next);
     pace.next = slot + PACE_GAP_MS;
     if (slot === now) return;
     await waitForRetry(slot - now, signal);
-    if (pace.holdUntil <= Date.now()) return;
+    if (pace.holdUntil <= paceNow()) return;
   }
 }
 
 /** A 429's Retry-After holds every request to this URL, not just the one that got it. */
 function holdSlots(url: string, milliseconds: number): void {
   const pace = paces.get(url) ?? { next: 0, holdUntil: 0 };
-  pace.holdUntil = Math.max(pace.holdUntil, Date.now() + milliseconds);
+  pace.holdUntil = Math.max(pace.holdUntil, paceNow() + milliseconds);
   paces.set(url, pace);
 }
 
@@ -126,7 +126,7 @@ export function createDustLightTransport(
       onActivity();
       if ((response.status === 401 || response.status === 403) && !refreshed) {
         await response.body?.cancel();
-        token = await withMidnightAbort(reauthenticateNexus(), signal);
+        token = await withMidnightAbort(reauthenticateNexus(token), signal);
         refreshed = true;
         continue;
       }

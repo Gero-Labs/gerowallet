@@ -151,5 +151,32 @@ describe('one device registration for concurrent callers', () => {
       expect(request).toHaveBeenCalledTimes(2);
       expect(request.mock.calls.every(([name]) => name === 'gero-nexus-device-auth')).toBe(true);
     });
+
+    it('never hands a retry the token its request was refused with, even from an acquisition it joined', async () => {
+      installLocks();
+      vi.resetModules();
+      const page = await import('./nexusDevice.service');
+      await setPrivate('geroNexusDeviceId', 'device-1');
+      // Another context holds the device-auth lock, in the middle of a login of its own.
+      let finishOther!: () => void;
+      const other = navigator.locks.request('gero-nexus-device-auth', () => new Promise<void>(resolve => { finishOther = resolve; }));
+      // A page caller finds no tokens and waits for that lock with an acquisition of its own.
+      const waiting = page.getNexusAccessToken();
+      await parked();
+      // The other context's login lands. A page request takes those tokens from the cache and is refused.
+      await setPrivate('geroNexusTokens', { accessToken: 'refused', refreshToken: 'ref', expiresAt: Date.now() + 3_600_000 });
+      const sent = await page.getNexusAccessToken();
+      expect(sent).toBe('refused');
+      post.mockResolvedValueOnce(tokens('acc-fresh'));
+      // The retry joins the waiting acquisition, which will read the same refused token back.
+      const retry = page.reauthenticateNexus(sent);
+      finishOther();
+      await other;
+
+      expect(await retry).toBe('acc-fresh');
+      expect(logins()).toHaveLength(1);
+      expect(logins()[0][1].deviceId).toBe('device-1');
+      await waiting;
+    });
   });
 });

@@ -665,6 +665,12 @@ export interface SubmitNightDustRegistrationResponse {
 // Cloudflare in front of Nexus gives up at 100 s, so the edge's 524 normally arrives before this fires.
 const MIDNIGHT_SUBMIT_TIMEOUT_MS = 110_000;
 
+/** The bearer token a refused request sent, so re-authentication never hands that one back. */
+function sentBearerToken(config: AxiosRequestConfig): string | undefined {
+  const header: unknown = config.headers?.Authorization;
+  return typeof header === 'string' && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+}
+
 /**
  * Single shared axios instance — uses the Midnight network's Nexus URL from config.
  * Caller passes the `network` per call so we can reuse one instance across sessions.
@@ -720,7 +726,7 @@ export class MidnightApi {
         if ((status === 401 || status === 403) && cfg && !cfg._retried) {
           cfg._retried = true;
           try {
-            const token = await reauthenticateNexus();
+            const token = await reauthenticateNexus(sentBearerToken(cfg));
             if (cfg.headers) {
               cfg.headers.Authorization = `Bearer ${token}`;
             }

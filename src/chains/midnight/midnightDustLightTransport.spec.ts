@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDustLightTransport, resetDustLightSyncPaceForTest } from './midnightDustLightTransport';
+import { createDustLightTransport, DUST_LIGHT_SYNC_REQUESTS_PER_SECOND, resetDustLightSyncPaceForTest } from './midnightDustLightTransport';
 import { getMidnightEndpoints } from './midnightConfig';
 import type { DustSyncBlock } from './midnightDustLightSync';
 
@@ -107,7 +107,7 @@ describe('DUST projection transport', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // The retry with the fresh token waits for its own slot, one pace step after the 401.
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(250);
     await expect(result).resolves.toEqual({ version: 1 });
     expect(auth.refresh).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe('Bearer fresh');
@@ -124,6 +124,7 @@ describe('DUST projection transport', () => {
     const signal = new AbortController().signal;
     await createDustLightTransport(endpoints, signal).spends(block, ['12'], 0, 100);
     expect(auth.refresh).toHaveBeenCalledOnce();
+    expect(auth.refresh).toHaveBeenCalledWith('first');
     expect(fetchMock.mock.calls[1]).toEqual([expect.stringContaining('/midnight-mainnet/dust/light-sync'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer fresh' },
       body: JSON.stringify({ operation: 'spends', blockHash: block.hash, prefixes: ['12'], fromBlock: 0, toBlock: 100 }), signal,
@@ -243,7 +244,7 @@ describe('DUST projection transport', () => {
     /** Most fetch starts inside any one-second window. */
     const busiestSecond = (starts: number[]) => Math.max(...starts.map(at => starts.filter(t => t >= at && t < at + 1000).length));
 
-    it('spaces a burst of pages to five a second, across transports, and still answers every page', async () => {
+    it('spaces a burst of pages to four a second, across transports, and still answers every page', async () => {
       vi.useFakeTimers();
       const starts: number[] = [];
       const origin = Date.now();
@@ -259,11 +260,12 @@ describe('DUST projection transport', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(999);
-      expect(fetchMock).toHaveBeenCalledTimes(5);
-      await vi.advanceTimersByTimeAsync(1_400);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1_800);
       await expect(Promise.all(pages)).resolves.toHaveLength(12);
-      expect(starts).toEqual(Array.from({ length: 12 }, (_, i) => i * 200));
-      expect(busiestSecond(starts)).toBe(5);
+      expect(starts).toEqual(Array.from({ length: 12 }, (_, i) => i * 250));
+      expect(busiestSecond(starts)).toBe(4);
+      expect(DUST_LIGHT_SYNC_REQUESTS_PER_SECOND).toBe(4);
     });
 
     it('keeps a quiet transport immediate: a lone request does not wait', async () => {
@@ -292,13 +294,13 @@ describe('DUST projection transport', () => {
       const transport = createDustLightTransport(endpoints, new AbortController().signal);
       const pages = [0, 10, 20, 30].map(from => transport.spends(block, ['12'], from, from + 9));
       await vi.advanceTimersByTimeAsync(2_999);
-      // The others had their slots at 200, 400 and 600 ms: the refusal came first and moved them.
+      // The others had their slots at 250, 500 and 750 ms: the refusal came first and moved them.
       expect(starts).toEqual([0]);
       await vi.advanceTimersByTimeAsync(1);
       expect(starts).toEqual([0, 3_000]);
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(750);
       await expect(Promise.all(pages)).resolves.toHaveLength(4);
-      expect(starts).toEqual([0, 3_000, 3_200, 3_400, 3_600]);
+      expect(starts).toEqual([0, 3_000, 3_250, 3_500, 3_750]);
     });
 
     it('lets a request waiting for its slot be cancelled, and leaves no timer behind', async () => {
@@ -316,16 +318,21 @@ describe('DUST projection transport', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('starts again from now when the clock was set back, instead of stalling', async () => {
-      vi.useFakeTimers();
-      fetchMock.mockImplementation(async () => Response.json({ version: 1 }));
-      const transport = createDustLightTransport(endpoints, new AbortController().signal);
-      await transport.snapshot('public-address');
-      vi.setSystemTime(Date.now() - 3_600_000);
-      const afterJump = transport.snapshot('public-address');
-      await vi.advanceTimersByTimeAsync(0);
-      await expect(afterJump).resolves.toEqual({ version: 1 });
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
+    it.each([['back', -3_600_000], ['forward', 3_600_000], ['back a little', -2_000]])(
+      'keeps the same pace when the wall clock is set %s', async (_direction, step) => {
+        vi.useFakeTimers();
+        fetchMock.mockImplementation(async () => Response.json({ version: 1 }));
+        const transport = createDustLightTransport(endpoints, new AbortController().signal);
+        await transport.snapshot('public-address');
+        vi.setSystemTime(Date.now() + step);
+        const next = transport.snapshot('public-address');
+        // Neither held until the wall clock catches up nor let through early.
+        await vi.advanceTimersByTimeAsync(249);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(next).resolves.toEqual({ version: 1 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      },
+    );
   });
 });

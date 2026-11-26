@@ -14,10 +14,11 @@ async function authenticatedGet(url: string, signal?: AbortSignal): Promise<Resp
     headers: { Authorization: `Bearer ${token}`, ...geroClientHeaders() },
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
-  let response = await attempt(await withMidnightAbort(getNexusAccessToken(), signal));
+  const token = await withMidnightAbort(getNexusAccessToken(), signal);
+  let response = await attempt(token);
   if (response.status === 401 || response.status === 403) {
     await response.body?.cancel();
-    response = await attempt(await withMidnightAbort(reauthenticateNexus(), signal));
+    response = await attempt(await withMidnightAbort(reauthenticateNexus(token), signal));
   }
   return response;
 }

@@ -183,17 +183,33 @@ export async function getNexusAccessToken(): Promise<string> {
 }
 
 /**
- * Force a fresh login (used by the API client's 401 handler). Requests rejected together
- * share one login, and so does a login or refresh already running: its tokens are new.
+ * A login that never answers with `refused`: tokens another caller or context wrote since
+ * that request was refused are taken as they are, anything else is a fresh login.
  */
-export async function reauthenticateNexus(): Promise<string> {
-  if (pendingTokens) return (await pendingTokens).accessToken;
-  const rejected = (await readCachedTokens())?.accessToken;
-  return (await singleFlight(async () => {
-    // Another context logged in again while this one waited for the lock.
-    const current = await readCachedTokens();
-    if (current && stillValid(current) && current.accessToken !== rejected) return current;
-    await clearCachedTokens();
-    return login();
-  })).accessToken;
+async function freshLogin(refused: string | undefined): Promise<CachedTokens> {
+  const current = await readCachedTokens();
+  if (current && stillValid(current) && current.accessToken !== refused) return current;
+  await clearCachedTokens();
+  return login();
+}
+
+/**
+ * Force a fresh login (used by the API clients' 401/403 handlers).
+ *
+ * @param refusedToken the access token the refused request sent. Never handed back: a
+ *   login or refresh already running is joined, but when it answers with that same token
+ *   (it read the cache before the refusal), a fresh login is started or joined instead.
+ *   Without it, the token cached now stands in for it.
+ *
+ * Requests refused together share one login, here and across contexts.
+ */
+export async function reauthenticateNexus(refusedToken?: string): Promise<string> {
+  const refused = refusedToken ?? (await readCachedTokens())?.accessToken;
+  // A joined acquisition can answer with the refused token once; the login after it cannot.
+  // Three rounds only bound a pathological run of other callers' acquisitions.
+  for (let round = 0; round < 3; round++) {
+    const tokens = await singleFlight(() => freshLogin(refused));
+    if (tokens.accessToken !== refused) return tokens.accessToken;
+  }
+  throw new Error('Nexus re-authentication kept answering with the refused token');
 }

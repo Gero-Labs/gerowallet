@@ -71,9 +71,10 @@ function refusalOf(answer: Answer): StationCode | null {
 
 /** A device-token call. Logs in again once when the token is refused and the answer names no station code. */
 async function authedPost(url: string, body: unknown): Promise<Answer> {
-  let answer = await post(url, body, await getNexusAccessToken(), CALL_TIMEOUT_MS);
+  const token = await getNexusAccessToken();
+  let answer = await post(url, body, token, CALL_TIMEOUT_MS);
   if (answer && (answer.status === 401 || answer.status === 403) && !refusalOf(answer)) {
-    answer = await post(url, body, await reauthenticateNexus(), CALL_TIMEOUT_MS);
+    answer = await post(url, body, await reauthenticateNexus(token), CALL_TIMEOUT_MS);
   }
   if (!answer) throw new MidnightStationError('STATION_UNAVAILABLE');
   return answer;
