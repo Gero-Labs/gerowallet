@@ -20,9 +20,19 @@ import { HexBlob } from '@cardano-sdk/util';
 import * as library from './index';
 import { deriveRoleKeys, deriveVaultPublicKeys, vaultKeyHashes } from './keys';
 import { sealRecoveryFile } from './recoveryFormat';
-import { MAX_ADDRESS_BOOK_ENTRIES, MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHashOf } from './recoveryPayload';
 import {
+  MAX_ADDRESS_BOOK_ENTRIES,
+  MAX_PROPOSALS,
+  ManifestRevision,
+  RecoveryPackage,
+  RecoveryPackageContents,
+  encodeRecoveryPayload,
+  manifestRevisionHashOf,
+} from './recoveryPayload';
+import {
+  ATTESTATION_TIMEOUT_MS,
   OwnAttestationQuery,
+  OwnAttestationVerifier,
   MAX_CHAIN_REGISTRATIONS,
   MAX_REVEALED_SCRIPTS,
   RecoveryChainFacts,
@@ -34,17 +44,30 @@ import {
   openRecoveryPackage,
   recoveryPackageStaleness,
   restoreVaultFromPackage,
+  verifyOwnAttestationInManifests,
 } from './recoveryPackage';
 import { RegistrationInput, encodeRegistration } from './registration';
 import { buildVaultFromParticipants, vaultAddresses } from './scripts';
 import { vaultId } from './vaultId';
-import { encodeManifest } from './manifest';
-import { verificationDigest } from './verificationNumber';
-import { VECTOR_REVISED_AT, vectorFixture } from './__fixtures__/manifest';
+import { ATTESTATION_METHOD, OwnerAttestation, isCanonicalAttestation, verifyAttestation } from './attestation';
+import { VaultManifest, encodeManifest, newManifest, nextManifestRevision, nextRevisionRemovingDevice } from './manifest';
+import { ExternalEndorsement, externalEndorsementDigest, verificationDigest } from './verificationNumber';
+import {
+  TestParticipant,
+  VECTOR_REVISED_AT,
+  attestationBy,
+  expiredTxAttestation,
+  removalBy,
+  signedBinding,
+  signedEndorsement,
+  signedExternal,
+  vectorFixture,
+} from './__fixtures__/manifest';
 import { RoleKeys, VaultScripts } from './types';
 import { testCosignerAccount } from './__fixtures__/vectors';
 import {
   BACKUP_OPENS_AT_MS,
+  EXPORTED_AT_MS,
   PLUTUS_VALIDATOR,
   backupContents,
   backupVault,
@@ -53,7 +76,6 @@ import {
   plutusContents,
   standardContents,
   standardVault,
-  vectorEndorsement,
   vectorPeople,
 } from './__fixtures__/recoveryPackageVectors';
 
@@ -251,7 +273,7 @@ describe('export', () => {
       ],
       participants: [{ ...contents.participants[0], label: 'Bob\nSmith' }, ...contents.participants.slice(1)],
     }, PASS, people[0]);
-    expect(exported.skipped).toEqual({ proposals: 2, addressBook: 3, participantLabels: 1 });
+    expect(exported.skipped).toEqual({ proposals: 2, addressBook: 3, participantLabels: 1, endorsements: 0, externalAttestations: 0 });
     expect(exported).toMatchObject({ proposalsDropped: 2, addressBookDropped: 3, proposalHistoryTruncated: true, addressBookTruncated: true });
     const result = await openRecoveryPackage(exported.file, PASS);
     if (result.ok !== true) throw new Error(result.code);
@@ -279,18 +301,12 @@ describe('export', () => {
       participants: contents.participants.map((p, i) => ({ ...p, label: labels[i] })),
       addressBook: [{ ...contents.addressBook[0], label: labels[0] }],
     }, PASS, people[2]);
-    expect(exported.skipped).toEqual({ proposals: 0, addressBook: 0, participantLabels: 0 });
+    // Its manifests are placeholders that do not decode, so its endorsement cannot be checked.
+    expect(exported.skipped).toEqual({ proposals: 0, addressBook: 0, participantLabels: 0, endorsements: 1, externalAttestations: 1 });
     const result = await openRecoveryPackage(exported.file, PASS);
     if (result.ok !== true) throw new Error(result.code);
     expect(result.package.participants.map(p => p.label)).toEqual(labels);
     expect(result.package.addressBook[0].label).toBe(labels[0]);
-  });
-
-  it('carries the endorsements and external attestations as they are', async () => {
-    const pkg = await opened(await backupContents(people));
-    const { endorsement, externalAttestation } = await vectorEndorsement();
-    expect(pkg.endorsements).toEqual([endorsement]);
-    expect(pkg.externalAttestations).toEqual([externalAttestation]);
   });
 
   it('exports a Plutus package for its owner or guardian: the seed is checked, the payment key only', async () => {
@@ -387,10 +403,13 @@ describe('restore of a native vault', () => {
       chain: onChain(backup),
       verifyOwnAttestation: async q => {
         queries.push(q);
-        return { verified: true, acceptedAtMs: 1795000000000, vaultId: q.vaultId, credential: q.credential };
+        return { verified: true, recordedAtMs: 1795000000000, vaultId: q.vaultId, credential: q.credential, attestingDeviceRemoved: false };
       },
     }));
-    expect(verified).toMatchObject({ ownAttestation: { verified: true, acceptedAtMs: 1795000000000, vaultId: id, credential }, depositsBlocked: false });
+    expect(verified).toMatchObject({
+      ownAttestation: { verified: true, recordedAtMs: 1795000000000, vaultId: id, credential, attestingDeviceRemoved: false },
+      depositsBlocked: false,
+    });
     expect(queries).toHaveLength(1);
     expect(queries[0]).toMatchObject({ network: 'preprod', vaultId: id, vaultKeys: own, credential });
     expect(queries[0].scripts.payment.hash).toBe(backup.payment.hash);
@@ -400,14 +419,26 @@ describe('restore of a native vault', () => {
     expect(queries[0].signal.aborted).toBe(true); // released once the restore stopped waiting
     for (const hook of [
       async () => { throw new Error('verifier down'); },
-      async () => ({ verified: true, acceptedAtMs: 1 }) as never,
-      async () => ({ verified: 'yes', acceptedAtMs: 1, vaultId: id, credential }) as never,
-      async () => ({ verified: true, acceptedAtMs: 1, vaultId: id, credential: (await vaultKeyHashes(await deriveVaultPublicKeys(people[0], 1))).payment }),
+      async () => ({ verified: true, recordedAtMs: 1, attestingDeviceRemoved: false }) as never,
+      async () => ({ verified: 'yes', recordedAtMs: 1, vaultId: id, credential, attestingDeviceRemoved: false }) as never,
+      async () => ({ verified: true, recordedAtMs: 1, vaultId: id, credential: (await vaultKeyHashes(await deriveVaultPublicKeys(people[0], 1))).payment, attestingDeviceRemoved: false }),
+      // An answer that does not say whether the attesting device is still bound.
+      async () => ({ verified: true, recordedAtMs: 1, vaultId: id, credential }) as never,
       async () => undefined as never,
     ]) {
       const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: onChain(backup), verifyOwnAttestation: hook }));
       expect(c).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
     }
+  });
+
+  it('keeps deposits blocked when the verifier reports the attesting device removed, and dates nothing after the export', async () => {
+    const pkg = await opened(await backupContents(people));
+    const answer = (attestingDeviceRemoved: boolean, recordedAtMs: number): OwnAttestationVerifier =>
+      async q => ({ verified: true, recordedAtMs, vaultId: q.vaultId, credential: q.credential, attestingDeviceRemoved });
+    expect(candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: nothing, verifyOwnAttestation: answer(true, 1) })))
+      .toMatchObject({ ownAttestation: { verified: true, recordedAtMs: 1, attestingDeviceRemoved: true }, depositsBlocked: true });
+    expect(candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: nothing, verifyOwnAttestation: answer(false, pkg.exportedAtMs + 1) })))
+      .toMatchObject({ ownAttestation: { verified: true, recordedAtMs: pkg.exportedAtMs, attestingDeviceRemoved: false }, depositsBlocked: false });
   });
 
   it('verifies the restorer\'s own attestation from the manifest history by default, with the manifest code\'s verifier', async () => {
@@ -421,7 +452,14 @@ describe('restore of a native vault', () => {
       const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[i], chain: nothing }));
       expect(c).toMatchObject({
         depositsBlocked: false,
-        ownAttestation: { verified: true, acceptedAtMs: VECTOR_REVISED_AT * 1000, vaultId: vaultId(standard, 'preprod'), credential: credentials[i], verificationDigest: verificationDigest(manifest) },
+        ownAttestation: {
+          verified: true,
+          recordedAtMs: VECTOR_REVISED_AT * 1000,
+          vaultId: vaultId(standard, 'preprod'),
+          credential: credentials[i],
+          verificationDigest: verificationDigest(manifest),
+          attestingDeviceRemoved: false,
+        },
       });
     }
     // Owner 3 has no device yet, so no attestation of theirs: deposits stay blocked.
@@ -451,11 +489,11 @@ describe('restore of a native vault', () => {
   it('keeps deposits blocked when a careless verifier accepts an attestation copied from another vault', async () => {
     const pkg = await opened(await backupContents(people));
     // The restorer's own attestation, really made for the standard vault, which shares their key.
-    const copied = { vaultId: vaultId(standard, 'preprod'), acceptedAtMs: 1795000000000 };
+    const copied = { vaultId: vaultId(standard, 'preprod'), recordedAtMs: 1795000000000 };
     const c = candidateOf(await restoreVaultFromPackage(pkg, {
       roleKeys: people[2],
       chain: onChain(backup),
-      verifyOwnAttestation: async q => ({ verified: true, acceptedAtMs: copied.acceptedAtMs, vaultId: copied.vaultId, credential: q.credential }),
+      verifyOwnAttestation: async q => ({ verified: true, recordedAtMs: copied.recordedAtMs, vaultId: copied.vaultId, credential: q.credential, attestingDeviceRemoved: false }),
     }));
     expect(c).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
   });
@@ -823,5 +861,236 @@ describe('staleness reminder', () => {
     for (const bad of [{ version: -1 }, { version: 1.5 }, { version: 1, hash: 'AB'.repeat(32) }, { version: 1, hash: 'ab' }]) {
       expect(() => recoveryPackageStaleness({ manifests: [] }, bad)).toThrow(expect.objectContaining({ code: 'INVALID_MANIFEST_REVISION' }));
     }
+  });
+});
+
+describe('export: endorsements', () => {
+  let tp: TestParticipant[];
+  let latest: VaultManifest;
+  let proof: string;
+  let endorsement: ExternalEndorsement;
+  let endorsed: RecoveryPackageContents;
+  const expired = (p: string): OwnerAttestation => ({ method: ATTESTATION_METHOD.EXPIRED_TX, proof: p });
+
+  /** The first one-bit change of `a` that stays in the stored form and no longer verifies. */
+  async function brokenButStored(a: OwnerAttestation, verifies: (x: OwnerAttestation) => Promise<boolean>): Promise<OwnerAttestation> {
+    for (let i = 0; i < a.proof.length; i += 2) {
+      const byte = (parseInt(a.proof.slice(i, i + 2), 16) ^ 1).toString(16).padStart(2, '0');
+      const x = { method: a.method, proof: `${a.proof.slice(0, i)}${byte}${a.proof.slice(i + 2)}` };
+      if (isCanonicalAttestation(x) && !(await verifies(x))) return x;
+    }
+    throw new Error('fixture: every one-bit change leaves the stored form or still verifies');
+  }
+
+  async function exported(contents: RecoveryPackageContents) {
+    const out = await exportRecoveryPackage(contents, PASS, people[0]);
+    const result = await openRecoveryPackage(out.file, PASS);
+    if (result.ok !== true) throw new Error(result.code);
+    return { skipped: out.skipped, pkg: result.package };
+  }
+
+  beforeAll(async () => {
+    const fx = await vectorFixture();
+    tp = fx.people;
+    // Owners 1 and 2 bound; the third cosigner an external wallet imported by owner 1. Its
+    // attestation reached owner 2, who endorses it.
+    latest = newManifest({
+      vault: fx.vault,
+      network: 'preprod',
+      owners: [
+        { vaultKeys: tp[0].vaultKeys, devices: [await signedBinding({ vaultId: fx.id, role: 'owner', participant: tp[0], device: 1 })] },
+        { vaultKeys: tp[1].vaultKeys, devices: [await signedBinding({ vaultId: fx.id, role: 'owner', participant: tp[1], device: 2 })] },
+      ],
+      external: [signedExternal({ vaultId: fx.id, participant: tp[2], importer: tp[0] })],
+      revisedAt: VECTOR_REVISED_AT,
+    });
+    proof = expiredTxAttestation(tp[2].signer, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest) }).proof;
+    endorsement = signedEndorsement(latest, tp[1], tp[2].credential, proof);
+    const base = await standardContents(people, 0);
+    endorsed = {
+      ...base,
+      participants: base.participants.map((p, i) => (i === 2 ? { ...p, external: externalRoleKeys(people[2]) } : p)),
+      manifests: [{ version: 1, cbor: encodeManifest(latest) }],
+      endorsements: [endorsement],
+      externalAttestations: [expired(proof)],
+    };
+  });
+
+  it('keeps an endorsement that verifies against the latest accepted manifest, with the attestation it names', async () => {
+    const { skipped, pkg } = await exported(endorsed);
+    expect(pkg.endorsements).toEqual([endorsement]);
+    expect(pkg.externalAttestations).toEqual([expired(proof)]);
+    expect(skipped).toMatchObject({ endorsements: 0, externalAttestations: 0 });
+  });
+
+  it('leaves out and counts an endorsement with an altered proof, and an endorsement of an altered external proof', async () => {
+    const digest = externalEndorsementDigest(endorsement);
+    const altered = await brokenButStored(endorsement.attestation, async x =>
+      (await verifyAttestation(x, endorsement.endorserCredential, { kind: 'endorsement', digest })).ok === true);
+    const one = await exported({ ...endorsed, endorsements: [{ ...endorsement, attestation: altered }] });
+    expect(one.skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
+    expect(one.pkg).toMatchObject({ endorsements: [], externalAttestations: [] });
+    // An altered external proof, endorsed as it is: the pair matches by hash, the proof does not verify.
+    const badProof = (await brokenButStored(expired(proof), async x =>
+      (await verifyAttestation(x, tp[2].credential, { kind: 'verification', digest: verificationDigest(latest) })).ok === true)).proof;
+    const two = await exported({
+      ...endorsed,
+      endorsements: [signedEndorsement(latest, tp[1], tp[2].credential, badProof), endorsement],
+      externalAttestations: [expired(badProof), expired(proof)],
+    });
+    expect(two.skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
+    expect(two.pkg).toMatchObject({ endorsements: [endorsement], externalAttestations: [expired(proof)] });
+  });
+
+  it('leaves out an endorsement attested by another key than its endorser\'s', async () => {
+    const otherKey = { ...endorsement, attestation: attestationBy(tp[3], { kind: 'endorsement', digest: externalEndorsementDigest(endorsement) }) };
+    const { skipped, pkg } = await exported({ ...endorsed, endorsements: [otherKey] });
+    expect(skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
+    expect(pkg).toMatchObject({ endorsements: [], externalAttestations: [] });
+  });
+
+  it('leaves out an endorsement whose attestation is not carried, and an attestation no endorsement names', async () => {
+    const unpairedEndorsement = await exported({ ...endorsed, externalAttestations: [] });
+    expect(unpairedEndorsement.skipped).toMatchObject({ endorsements: 1, externalAttestations: 0 });
+    expect(unpairedEndorsement.pkg.endorsements).toEqual([]);
+    const unpairedAttestation = await exported({ ...endorsed, endorsements: [] });
+    expect(unpairedAttestation.skipped).toMatchObject({ endorsements: 0, externalAttestations: 1 });
+    expect(unpairedAttestation.pkg.externalAttestations).toEqual([]);
+  });
+
+  it('checks against the latest revision only', async () => {
+    // The external cosigner later joined as an owner: the endorsement no longer applies.
+    const { manifest: joined } = await vectorFixture();
+    const v2 = { ...joined, version: 2, prevManifestHash: manifestRevisionHashOf(endorsed.manifests[0].cbor), revisedAt: VECTOR_REVISED_AT + 60 };
+    const later = await exported({ ...endorsed, manifests: [...endorsed.manifests, { version: 2, cbor: encodeManifest(v2) }] });
+    expect(later.skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
+    // A latest revision that is not a manifest: nothing can be checked, so nothing is carried.
+    const broken = await exported({ ...endorsed, manifests: [...endorsed.manifests, { version: 2, cbor: 'a0' }] });
+    expect(broken.skipped).toMatchObject({ endorsements: 1, externalAttestations: 1 });
+  });
+});
+
+describe('the default attestation verifier over long histories', () => {
+  const N = 1000;
+  /** The revision in which owner 3 binds their first device. */
+  const BOUND_AT = 700;
+  const dateOf = (version: number) => (VECTOR_REVISED_AT + (version - 1) * 60) * 1000;
+  const EXPORTED = dateOf(N) + 86_400_000;
+  let fx: Awaited<ReturnType<typeof vectorFixture>>;
+  let history: ManifestRevision[];
+
+  async function queryFor(i: number, manifests: readonly ManifestRevision[], signal = new AbortController().signal): Promise<OwnAttestationQuery> {
+    const vaultKeys = await deriveVaultPublicKeys(people[i], 1);
+    return {
+      network: 'preprod',
+      vaultId: fx.id,
+      scripts: fx.vault,
+      participants: (await standardContents(people, i)).participants,
+      manifests: manifests.map(m => ({ ...m, hash: manifestRevisionHashOf(m.cbor) as string })),
+      vaultKeys,
+      credential: (await vaultKeyHashes(vaultKeys)).payment,
+      signal,
+    };
+  }
+
+  const restoreAs = async (i: number, manifests: readonly ManifestRevision[], timeout?: number) =>
+    candidateOf(await restoreVaultFromPackage(
+      { ...(await standardContents(people, i)), exportedAtMs: EXPORTED, manifests },
+      { roleKeys: people[i], chain: nothing, ...(timeout ? { attestationTimeoutMs: timeout } : {}) },
+    ));
+
+  beforeAll(async () => {
+    fx = await vectorFixture();
+    const tablet = await signedBinding({ vaultId: fx.id, role: 'owner', participant: fx.people[2], device: 3, label: 'Tablet' });
+    // An honest history: each revision a minute after the last, linked by hash, as the manifest
+    // code writes them.
+    let m = fx.manifest;
+    let cbor = encodeManifest(m);
+    history = [{ version: 1, cbor }];
+    for (let v = 2; v <= N; v++) {
+      const roles = v === BOUND_AT
+        ? { ...m.roles, owners: m.roles.owners.map(e => (e.credential === fx.people[2].credential ? { ...e, devices: [tablet] } : e)) }
+        : m.roles;
+      m = { ...m, roles, version: v, prevManifestHash: manifestRevisionHashOf(cbor), revisedAt: m.revisedAt + 60 };
+      cbor = encodeManifest(m);
+      history.push({ version: v, cbor });
+    }
+  }, 120000);
+
+  it('lets the restore\'s timeout fire: the scan yields between revisions and stops once aborted', async () => {
+    // Owner 3 before their device: no attestation in 699 distinct revisions.
+    const unbound = history.slice(0, BOUND_AT - 1);
+    const controller = new AbortController();
+    const query = await queryFor(2, unbound, controller.signal);
+    setTimeout(() => controller.abort(), 50);
+    const started = performance.now();
+    expect(await verifyOwnAttestationInManifests(query)).toEqual({ verified: false });
+    expect(performance.now() - started).toBeLessThan(1000);
+    // Through a restore with a short timeout: timers keep running while it waits.
+    let ticks = 0;
+    const ticker = setInterval(() => {
+      ticks++;
+    }, 10);
+    try {
+      expect(await restoreAs(2, unbound, 100)).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+    } finally {
+      clearInterval(ticker);
+    }
+    expect(ticks).toBeGreaterThanOrEqual(3);
+  });
+
+  it('verifies an honest long history well inside the default timeout, dated by the earliest revision holding the binding', async () => {
+    for (const [i, recordedAtMs] of [[0, dateOf(1)], [1, dateOf(1)], [2, dateOf(BOUND_AT)]] as const) {
+      const query = await queryFor(i, history);
+      const started = performance.now();
+      expect(await verifyOwnAttestationInManifests(query)).toMatchObject({ verified: true, recordedAtMs, attestingDeviceRemoved: false });
+      expect(performance.now() - started).toBeLessThan(ATTESTATION_TIMEOUT_MS / 5);
+    }
+    expect(await restoreAs(2, history)).toMatchObject({
+      ownAttestation: { verified: true, recordedAtMs: dateOf(BOUND_AT), attestingDeviceRemoved: false },
+      depositsBlocked: false,
+    });
+  });
+
+  it('decodes repeated bytes once, and counts a revision only at its own version', async () => {
+    const copies = Array.from({ length: 3000 }, (_, k) => ({ version: k + 1, cbor: history[0].cbor }));
+    const [third, first] = [await queryFor(2, copies), await queryFor(0, copies)];
+    const started = performance.now();
+    expect(await verifyOwnAttestationInManifests(third)).toEqual({ verified: false });
+    expect(await verifyOwnAttestationInManifests(first)).toMatchObject({ verified: true, recordedAtMs: dateOf(1), attestingDeviceRemoved: false });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('reports an attesting device removed later and keeps deposits blocked until the verification is redone', async () => {
+    const { manifest, people: tp, id } = fx;
+    const laptop = manifest.roles.owners[0].devices[0];
+    const v2 = nextRevisionRemovingDevice(manifest, { deviceId: laptop.deviceId, removal: removalBy(tp[0], id, laptop), revisedAt: manifest.revisedAt + 86400 });
+    const v1v2 = [{ version: 1, cbor: encodeManifest(manifest) }, { version: 2, cbor: encodeManifest(v2) }];
+    expect(await restoreAs(0, v1v2)).toMatchObject({
+      ownAttestation: { verified: true, recordedAtMs: dateOf(1), attestingDeviceRemoved: true },
+      depositsBlocked: true,
+    });
+    // Without the revision that held it, there is no attestation at all.
+    expect(await restoreAs(0, v1v2.slice(1))).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+    // A device bound again with a fresh attestation lifts the block, dated by its own revision.
+    const tablet = await signedBinding({ vaultId: id, role: 'owner', participant: tp[0], device: 21 });
+    const v3 = nextManifestRevision(v2, {
+      roles: { owners: v2.roles.owners.map(e => (e.credential === tp[0].credential ? { ...e, devices: [tablet] } : e)) },
+      revisedAt: v2.revisedAt + 60,
+    });
+    expect(await restoreAs(0, [...v1v2, { version: 3, cbor: encodeManifest(v3) }])).toMatchObject({
+      ownAttestation: { verified: true, recordedAtMs: v3.revisedAt * 1000, attestingDeviceRemoved: false },
+      depositsBlocked: false,
+    });
+  });
+
+  it('never dates an attestation after the package was exported: the recorded date is not signed', async () => {
+    const late = { ...fx.manifest, revisedAt: 99_999_999_999 };
+    const contents = { ...(await standardContents(people, 0)), manifests: [{ version: 1, cbor: encodeManifest(late) }] };
+    expect(contents.exportedAtMs).toBe(EXPORTED_AT_MS);
+    expect(candidateOf(await restoreVaultFromPackage(contents, { roleKeys: people[0], chain: nothing }))).toMatchObject({
+      ownAttestation: { verified: true, recordedAtMs: EXPORTED_AT_MS, attestingDeviceRemoved: false },
+      depositsBlocked: false,
+    });
   });
 });

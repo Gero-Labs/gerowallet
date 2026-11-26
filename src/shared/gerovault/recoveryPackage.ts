@@ -34,7 +34,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { bech32 } from 'bech32';
 import { bytesToHex, hexToBytes } from './cbor';
-import { verifyAttestation } from './attestation';
+import { ATTESTATION_METHOD, OwnerAttestation, verifyAttestation } from './attestation';
 import { GeroVaultError } from './errors';
 import {
   BECH32_PREFIX,
@@ -61,10 +61,10 @@ import {
   fitRecoveryHistory,
   manifestRevisionHashOf,
 } from './recoveryPayload';
-import { VaultManifest, bindingDigest, decodeManifest } from './manifest';
+import { ParticipantEntry, VaultManifest, bindingDigest, decodeManifest } from './manifest';
 import { DecodedRegistration, EXTERNAL_SCAN_MAX, RebuildParticipant, RegistrationInput, decodeRegistration, rebuildFromRegistration } from './registration';
 import { vaultAddresses } from './scripts';
-import { verificationDigest } from './verificationNumber';
+import { ExternalEndorsement, externalAttestationHash, verificationDigest, verifyExternalEndorsement } from './verificationNumber';
 import { vaultId } from './vaultId';
 import { ROLE, RoleKeys, VaultAddresses, VaultNetwork, VaultPublicKeys, VaultScripts, VaultWarning } from './types';
 
@@ -225,6 +225,14 @@ function reread(pkg: RecoveryPackageContents): RecoveryPackage | undefined {
 // ---------------------------------------------------------------------------------------------
 // Export
 
+/** What an export left out, by kind. */
+export interface ExportSkipped extends RecoverySkipped {
+  /** Endorsements that do not verify against the latest accepted manifest, or name no carried attestation. */
+  readonly endorsements: number;
+  /** External attestations that no kept endorsement names. */
+  readonly externalAttestations: number;
+}
+
 export interface ExportedRecoveryPackage {
   readonly file: Uint8Array;
   /** Proposals left out of the package, the oldest first, to fit it or because they could not be carried (earlier exports included). */
@@ -233,8 +241,84 @@ export interface ExportedRecoveryPackage {
   /** Address book entries left out, likewise; entries carry no usage time, so the oldest added go first. */
   readonly addressBookDropped: number;
   readonly addressBookTruncated: boolean;
-  /** What this export could not carry, by kind (part of the counts above). */
-  readonly skipped: RecoverySkipped;
+  /**
+   * What this export left out, by kind: proposals, address book entries and participant labels it
+   * could not carry (part of the counts above), and endorsements and external attestations that did
+   * not verify.
+   */
+  readonly skipped: ExportSkipped;
+}
+
+const isRecord = (x: unknown): x is object => typeof x === 'object' && x !== null;
+
+/**
+ * The history's latest accepted manifest: its highest version, decoded, when it is this vault's
+ * (same network and both scripts). `undefined` otherwise, a Plutus vault included.
+ */
+function latestManifestOf(contents: RecoveryPackageContents): VaultManifest | undefined {
+  const vault = contents.vault;
+  if (!Array.isArray(contents.manifests) || !isRecord(vault) || vault.kind !== 'native') return undefined;
+  let latest: ManifestRevision | undefined;
+  for (const r of contents.manifests as readonly Partial<ManifestRevision>[]) {
+    if (isRecord(r) && Number.isSafeInteger(r.version) && (!latest || (r.version as number) > latest.version)) latest = r as ManifestRevision;
+  }
+  if (!latest) return undefined;
+  const decoded = decodeManifest(latest.cbor);
+  if (decoded.ok !== true) return undefined;
+  const m = decoded.manifest;
+  return m.version === latest.version && m.network === contents.network
+    && m.paymentScript === vault.payment?.cbor && m.stakeScript === vault.stake?.cbor
+    ? m
+    : undefined;
+}
+
+interface CheckedEndorsements {
+  readonly contents: RecoveryPackageContents;
+  readonly endorsements: number;
+  readonly externalAttestations: number;
+}
+
+/**
+ * Keeps the endorsements and external attestations that verify (spec 5.3, GV-61). Each endorsement
+ * is paired by hash with the carried attestation it names (`externalAttestationHash`) and checked
+ * with `verifyExternalEndorsement` against the latest accepted manifest; an attestation is kept when
+ * a kept endorsement names it. Everything else is left out and counted, so that a package never
+ * carries a claim its restorer would take on trust. Lists that are not lists are left as they are,
+ * for the payload to refuse.
+ */
+async function checkedEndorsements(contents: RecoveryPackageContents): Promise<CheckedEndorsements> {
+  const endorsements: unknown = contents?.endorsements;
+  const attestations: unknown = contents?.externalAttestations;
+  const none = { contents, endorsements: 0, externalAttestations: 0 };
+  if ((endorsements !== undefined && !Array.isArray(endorsements)) || (attestations !== undefined && !Array.isArray(attestations))) return none;
+  const allEndorsements = (endorsements ?? []) as readonly ExternalEndorsement[];
+  const allAttestations = (attestations ?? []) as readonly OwnerAttestation[];
+  if (allEndorsements.length === 0 && allAttestations.length === 0) return none;
+  const hashOf = (a: OwnerAttestation): string | undefined => {
+    try {
+      return isRecord(a) && a.method === ATTESTATION_METHOD.EXPIRED_TX && typeof a.proof === 'string' ? externalAttestationHash(a.proof) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const hashes = allAttestations.map(hashOf);
+  const latest = latestManifestOf(contents);
+  const kept: ExternalEndorsement[] = [];
+  const named = new Set<string>();
+  for (const e of latest ? allEndorsements : []) {
+    const i = isRecord(e) && typeof e.externalAttestationHash === 'string' ? hashes.indexOf(e.externalAttestationHash) : -1;
+    if (i < 0) continue;
+    const check = await verifyExternalEndorsement(latest as VaultManifest, e, allAttestations[i].proof);
+    if (check.ok !== true) continue;
+    kept.push(e);
+    named.add(hashes[i] as string);
+  }
+  const keptAttestations = allAttestations.filter((_, i) => hashes[i] !== undefined && named.has(hashes[i] as string));
+  return {
+    contents: { ...contents, endorsements: kept, externalAttestations: keptAttestations },
+    endorsements: allEndorsements.length - kept.length,
+    externalAttestations: allAttestations.length - keptAttestations.length,
+  };
 }
 
 /**
@@ -247,13 +331,16 @@ export interface ExportedRecoveryPackage {
  * - `SEED_MISMATCH` when `roleKeys` do not derive the exporter's recorded keys at its index;
  * - `HISTORY_TOO_LARGE`, with the sizes, when the package does not fit even without any proposal
  *   or address book entry, or the manifest history has more than `MAX_MANIFEST_REVISIONS`
- *   revisions (every manifest revision, endorsement and external attestation is kept; the oldest
- *   proposals and address book entries are left out first, and one that cannot be carried is left
- *   out and counted, so neither ever makes an export fail);
+ *   revisions (every manifest revision and every endorsement and external attestation that
+ *   verifies is kept; the oldest proposals and address book entries are left out first, and one
+ *   that cannot be carried is left out and counted, so neither ever makes an export fail);
  * - `MANIFEST_HISTORY_CORRUPT` when a manifest revision cannot be carried, or two different
  *   revisions share a version: the wallet's own accepted history is damaged;
  * - `PACKAGE_CHECK_FAILED` if the sealed file does not open again with the passphrase to the same
  *   payload.
+ * An endorsement is kept only when it verifies against the latest accepted manifest and pairs by
+ * hash with a carried external attestation, and an external attestation only when a kept
+ * endorsement names it; the rest is left out and counted in `skipped`.
  */
 export async function exportRecoveryPackage(
   contents: RecoveryPackageContents,
@@ -263,7 +350,8 @@ export async function exportRecoveryPackage(
   const problem = recoveryPassphraseProblem(passphrase);
   if (problem) throw new GeroVaultError('INVALID_PASSPHRASE', `The passphrase is refused: ${problem}`);
   if (!validRoleKeys(roleKeys)) throw new GeroVaultError('INVALID_ROLE_KEY', 'The exporter\'s role keys are needed');
-  const { contents: fitted, skipped } = fitRecoveryHistory(contents);
+  const checked = await checkedEndorsements(contents);
+  const { contents: fitted, skipped } = fitRecoveryHistory(checked.contents);
   const payload = encodeRecoveryPayload(fitted);
   const decoded = decodeRecoveryPayload(payload);
   if (decoded.ok !== true) throw new GeroVaultError('INVALID_PACKAGE', `The payload does not decode: ${decoded.detail ?? decoded.code}`);
@@ -285,7 +373,7 @@ export async function exportRecoveryPackage(
     proposalHistoryTruncated: pkg.proposalHistoryTruncated,
     addressBookDropped: pkg.addressBookDropped,
     addressBookTruncated: pkg.addressBookTruncated,
-    skipped,
+    skipped: Object.freeze({ ...skipped, endorsements: checked.endorsements, externalAttestations: checked.externalAttestations }),
   });
 }
 
@@ -348,68 +436,154 @@ export interface OwnAttestationQuery {
 export type OwnAttestationResult =
   | {
       readonly verified: true;
-      readonly acceptedAtMs: number;
+      /**
+       * The recorded `revisedAt` of the earliest revision found holding the attesting binding, in
+       * Unix milliseconds; a restore never gives one later than the package's export time. No
+       * signature covers it: a screen shows it as "recorded on <date>", never as a proven date.
+       */
+      readonly recordedAtMs: number;
       /** The vault and the credential the verified attestation is bound to. */
       readonly vaultId: string;
       readonly credential: Ed25519KeyHashHex;
       /** The verification digest of the manifest revision that holds it, when the verifier gives it. */
       readonly verificationDigest?: string;
+      /**
+       * The newest revision of this vault in the package no longer holds the binding that carries
+       * the attestation: its device was removed later (or bound again under a binding that does not
+       * verify). Deposits then stay blocked until the cosigner verification is redone.
+       */
+      readonly attestingDeviceRemoved: boolean;
     }
   | { readonly verified: false };
 
 /**
  * Verifies the restorer's own owner attestation in the manifest history, signed by their vault
  * key at their index. A restore with no verifier given uses `verifyOwnAttestationInManifests`.
+ * The restore's timeout is a timer, so a verifier with long work yields to the event loop between
+ * steps and stops once `signal` is aborted.
  */
 export type OwnAttestationVerifier = (query: OwnAttestationQuery) => Promise<OwnAttestationResult>;
 
 const HASH224 = (hex: string) => bytesToHex(blake2b(hexToBytes(hex) as Uint8Array, { dkLen: 28 }));
 
+const participantKey = (role: string, payment: string, stake: string | undefined, credential: string) => `${role}|${payment}|${stake ?? ''}|${credential}`;
+
+/** The package's participants, with their roles and keys, as `sameParticipants` compares them. */
+function packageParticipantKeys(participants: readonly PackageParticipant[]): readonly string[] {
+  return participants.map(p => participantKey(p.role, p.payment, p.stake, HASH224(p.payment))).sort();
+}
+
 /** Whether a manifest revision names exactly the package's participants, with their roles and keys. */
-function sameParticipants(m: VaultManifest, participants: readonly PackageParticipant[]): boolean {
-  const key = (role: string, payment: string, stake: string | undefined, credential: string) => `${role}|${payment}|${stake ?? ''}|${credential}`;
+function sameParticipants(m: VaultManifest, inPackage: readonly string[]): boolean {
   const inManifest = [
-    ...m.roles.owners.map(e => key('owner', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
-    ...m.roles.backupHolders.map(e => key('backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
-    ...m.roles.guardians.map(e => key('guardian', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
-    ...m.roles.external.map(e => key(e.role === 'owner' ? 'owner' : 'backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.owners.map(e => participantKey('owner', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.backupHolders.map(e => participantKey('backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.guardians.map(e => participantKey('guardian', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
+    ...m.roles.external.map(e => participantKey(e.role === 'owner' ? 'owner' : 'backup', e.vaultKeys.payment, e.vaultKeys.stake, e.credential)),
   ].sort();
-  const inPackage = participants.map(p => key(p.role, p.payment, p.stake, HASH224(p.payment))).sort();
   return inManifest.length === inPackage.length && inManifest.every((k, i) => k === inPackage[i]);
 }
+
+/** How long the default verifier works between two yields to the event loop, in milliseconds. */
+const VERIFIER_SLICE_MS = 8;
+
+const clock = (): number => (typeof performance === 'object' && typeof performance.now === 'function' ? performance.now() : Date.now());
+
+/** One turn of the macrotask queue, so that timers (the restore's timeout among them) run. */
+const nextTurn = (): Promise<void> => new Promise(resolve => {
+  setTimeout(resolve, 0);
+});
 
 /**
  * The default verifier (spec 5.3, GV-22): the restorer's own owner attestation in the package's
  * manifest history, verified with the manifest code's attestation verifier. A revision counts
- * only when it decodes, names this vault's identifier, network and both scripts, and names
- * exactly the package's participants with their keys, so that its verification digest is this
- * vault's; then the restorer's entry must hold their own vault keys, and one of its device bindings
- * must carry an attestation by their vault payment key over that binding's digest, which names
- * this vault. The earliest such revision gives the acceptance time. An attestation from another
- * vault, a tampered one, or one by another key never verifies. Never throws.
+ * only when it decodes, carries the version the package gives it, names this vault's identifier,
+ * network and both scripts, and names exactly the package's participants with their keys, so that
+ * its verification digest is this vault's; then the restorer's entry must hold their own vault
+ * keys, and one of its device bindings must carry an attestation by their vault payment key over
+ * that binding's digest, which names this vault. An attestation from another vault, a tampered
+ * one, or one by another key never verifies.
+ *
+ * The scan goes newest first, each distinct revision decoded once and each binding verified once.
+ * A binding carries forward unchanged from revision to revision and a removed one never returns, so
+ * the revisions holding it are consecutive; the newest one that holds a verified binding settles
+ * the answer, and only its recorded date needs a look further back, by bisection. When that
+ * revision is not the newest of this vault in the package, the device was removed later
+ * (`attestingDeviceRemoved`). The scan yields to the macrotask queue between revisions at least
+ * every `VERIFIER_SLICE_MS` of work, so the restore's timeout can fire, and stops once the query's
+ * signal is aborted. Never throws.
  */
 export const verifyOwnAttestationInManifests: OwnAttestationVerifier = async query => {
   try {
-    const revisions = [...query.manifests].sort((a, b) => a.version - b.version);
-    for (const revision of revisions) {
-      if (query.signal?.aborted) return { verified: false };
-      const decoded = decodeManifest(revision.cbor);
-      if (decoded.ok !== true) continue;
-      const m = decoded.manifest;
-      if (m.vaultId !== query.vaultId || m.network !== query.network
-        || m.paymentScript !== query.scripts.payment.cbor || m.stakeScript !== query.scripts.stake.cbor
-        || !sameParticipants(m, query.participants)) {
-        continue;
+    const signal = query.signal;
+    const revisions = (query.manifests as readonly Partial<ManifestRevision>[])
+      .filter((r): r is ManifestRevision => isRecord(r) && Number.isSafeInteger(r.version) && typeof r.cbor === 'string')
+      .sort((a, b) => b.version - a.version);
+    const inPackage = packageParticipantKeys(query.participants);
+    const decoded = new Map<string, VaultManifest | null>();
+    /** Revision `i` as this vault's manifest, each distinct encoding decoded once; `undefined` when it is not. */
+    const manifestAt = (i: number): VaultManifest | undefined => {
+      const { version, cbor } = revisions[i];
+      let m = decoded.get(cbor);
+      if (m === undefined) {
+        const d = decodeManifest(cbor);
+        const ours = d.ok === true && d.manifest.vaultId === query.vaultId && d.manifest.network === query.network
+          && d.manifest.paymentScript === query.scripts.payment.cbor && d.manifest.stakeScript === query.scripts.stake.cbor
+          && sameParticipants(d.manifest, inPackage);
+        m = ours ? d.manifest : null;
+        decoded.set(cbor, m);
       }
-      const digest = verificationDigest(m);
-      const mine = [...m.roles.owners, ...m.roles.backupHolders, ...m.roles.guardians].find(e => e.credential === query.credential);
-      if (!mine || mine.vaultKeys.payment !== query.vaultKeys.payment || mine.vaultKeys.stake !== query.vaultKeys.stake) continue;
-      for (const binding of mine.devices) {
-        if (!binding.attestation || binding.vaultId !== query.vaultId || binding.credential !== query.credential) continue;
-        const check = await verifyAttestation(binding.attestation, query.credential, { kind: 'binding', digest: bindingDigest(binding) });
-        if (check.ok === true) {
-          return { verified: true, acceptedAtMs: m.revisedAt * 1000, vaultId: m.vaultId, credential: query.credential, verificationDigest: digest };
+      return m !== null && m.version === version ? m : undefined;
+    };
+    /** The restorer's entry in a revision, when it holds their own vault keys. */
+    const entryIn = (m: VaultManifest | undefined): ParticipantEntry | undefined => {
+      const e = m && [...m.roles.owners, ...m.roles.backupHolders, ...m.roles.guardians].find(x => x.credential === query.credential);
+      return e && e.vaultKeys.payment === query.vaultKeys.payment && e.vaultKeys.stake === query.vaultKeys.stake ? e : undefined;
+    };
+    let sliceStart = clock();
+    /** Between two revisions: yields once the slice is used up; true once the restore stopped waiting. */
+    const stopped = async (): Promise<boolean> => {
+      if (clock() - sliceStart >= VERIFIER_SLICE_MS) {
+        await nextTurn();
+        sliceStart = clock();
+      }
+      return signal?.aborted === true;
+    };
+    const verifiedBindings = new Map<string, boolean>();
+    let newest: number | undefined;
+    for (let i = 0; i < revisions.length; i++) {
+      if (await stopped()) return { verified: false };
+      const m = manifestAt(i);
+      if (!m) continue;
+      if (newest === undefined) newest = i;
+      for (const binding of entryIn(m)?.devices ?? []) {
+        const attestation = binding.attestation;
+        if (!attestation || binding.vaultId !== query.vaultId || binding.credential !== query.credential) continue;
+        const digest = bindingDigest(binding);
+        const key = `${digest}|${attestation.method}|${attestation.proof}`;
+        if (!verifiedBindings.has(key)) {
+          verifiedBindings.set(key, (await verifyAttestation(attestation, query.credential, { kind: 'binding', digest })).ok === true);
         }
+        if (verifiedBindings.get(key) !== true) continue;
+        // The earliest revision that still holds this very binding: its recorded date is shown.
+        const holds = (j: number) => entryIn(manifestAt(j))?.devices.some(d => d.attestation?.method === attestation.method
+          && d.attestation.proof === attestation.proof && bindingDigest(d) === digest) === true;
+        let first = i;
+        let last = revisions.length - 1;
+        while (first < last) {
+          if (await stopped()) return { verified: false };
+          const mid = Math.ceil((first + last) / 2);
+          if (holds(mid)) first = mid;
+          else last = mid - 1;
+        }
+        return {
+          verified: true,
+          recordedAtMs: (manifestAt(first) as VaultManifest).revisedAt * 1000,
+          vaultId: m.vaultId,
+          credential: query.credential,
+          verificationDigest: verificationDigest(m),
+          attestingDeviceRemoved: i !== newest,
+        };
       }
     }
   } catch {
@@ -454,7 +628,8 @@ export interface RecoveryChainState {
  * participant with their key and label marked as claims from the package, the backup terms and
  * the restorer's position, and the user confirms it is a vault they agreed to join. Deposits from
  * this wallet stay blocked until the cosigner verification of spec 5.3 is redone, unless the
- * restorer's own attestation was found in the manifest history; spending works either way.
+ * restorer's own attestation was found in the manifest history on a binding the newest revision
+ * still holds (not `attestingDeviceRemoved`); spending works either way.
  */
 export interface RestoredNativeCandidate {
   readonly kind: 'native';
@@ -600,9 +775,14 @@ function readNativeChain(
   };
 }
 
+/**
+ * Asks the verifier, for at most the timeout. Only an answer bound to this vault and this restorer
+ * counts, and its recorded date is never later than `exportedAtMs`, the package's export time.
+ */
 async function ownAttestation(
   options: RestoreOptions,
   query: Omit<OwnAttestationQuery, 'signal'>,
+  exportedAtMs: number,
 ): Promise<OwnAttestationResult> {
   const verify = options.verifyOwnAttestation ?? verifyOwnAttestationInManifests;
   if (typeof verify !== 'function') return { verified: false };
@@ -621,15 +801,15 @@ async function ownAttestation(
   });
   try {
     const r = await Promise.race([verify({ ...query, signal: controller.signal }), gaveUp]);
-    // Only an answer bound to this vault and this restorer counts.
-    return r?.verified === true && Number.isSafeInteger(r.acceptedAtMs) && r.acceptedAtMs >= 0
-      && r.vaultId === query.vaultId && r.credential === query.credential
+    return r?.verified === true && Number.isSafeInteger(r.recordedAtMs) && r.recordedAtMs >= 0
+      && typeof r.attestingDeviceRemoved === 'boolean' && r.vaultId === query.vaultId && r.credential === query.credential
       ? Object.freeze({
         verified: true,
-        acceptedAtMs: r.acceptedAtMs,
+        recordedAtMs: Math.min(r.recordedAtMs, exportedAtMs),
         vaultId: r.vaultId,
         credential: r.credential,
         ...(typeof r.verificationDigest === 'string' ? { verificationDigest: r.verificationDigest } : {}),
+        attestingDeviceRemoved: r.attestingDeviceRemoved,
       })
       : { verified: false };
   } catch {
@@ -729,7 +909,7 @@ export async function restoreVaultFromPackage(pkg: RecoveryPackageContents, opti
       manifests: fresh.manifests,
       vaultKeys: own,
       credential: ownHashes.payment,
-    });
+    }, fresh.exportedAtMs);
     const terms = (fresh as NativePackage).vault.backup;
     const opensAtMs = terms ? backupPathOpensAtMs(fresh.network, terms.afterSlot) : undefined;
     const me = fresh.participants[fresh.self.position];
@@ -749,7 +929,7 @@ export async function restoreVaultFromPackage(pkg: RecoveryPackageContents, opti
       chainFactsTruncated: chain.truncated,
       conflicts: chain.conflicts,
       ownAttestation: attestation,
-      depositsBlocked: !attestation.verified,
+      depositsBlocked: attestation.verified !== true || attestation.attestingDeviceRemoved,
     };
     return { ok: true, candidate: Object.freeze(candidate) };
   } catch {

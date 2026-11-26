@@ -140,6 +140,7 @@ export {
   verifyOwnAttestationInManifests,
 } from './recoveryPackage';
 export type {
+  ExportSkipped,
   ExportedRecoveryPackage,
   LatestManifestRevision,
   OpenRecoveryPackageResult,

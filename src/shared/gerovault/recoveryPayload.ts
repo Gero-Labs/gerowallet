@@ -633,7 +633,9 @@ function newestValid<T>(items: readonly T[], keyOf: (x: T) => string | undefined
  *   `MAX_PROPOSALS` proposals; the room left after everything else goes to the address book first
  *   (it is small and serves every spend), then to the proposals; in each the newest are kept;
  * - `addressBookDropped` and `proposalsDropped` count everything left out, earlier exports included.
- * Endorsements and external attestations are never left out; repeated copies are merged.
+ * Endorsements and external attestations are not left out here, only merged when repeated: their
+ * signatures are the manifest code's to check, and `exportRecoveryPackage` keeps only those that
+ * verify against the latest accepted manifest.
  * Throws `GeroVaultError('HISTORY_TOO_LARGE')`, with the sizes, when the package does not fit even
  * without any proposal or address book entry, and `INVALID_PACKAGE` for contents that break any
  * rule outside the history.
