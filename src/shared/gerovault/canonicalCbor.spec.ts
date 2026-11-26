@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { encode as cborgEncode } from 'cborg';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
-import { readCbor } from './cbor';
+import { bytesToHex, hexToBytes, readCbor } from './cbor';
 import { decodeRegistration } from './registration';
 
 const hex = (v: CborWritable) => Buffer.from(encodeCanonicalCbor(v)).toString('hex');
@@ -147,5 +147,52 @@ describe('the strict reader and booleans (opt in)', () => {
     for (const bytes of [[0xf6], [0xf7], [0xf0], [0xf8, 0x20], [0xf9, 0x3c, 0x00], [0xfa, 0, 0, 0, 0], [0xfb, 0, 0, 0, 0, 0, 0, 0, 0]]) {
       expect(() => readCbor(Uint8Array.from(bytes), { ...limits, booleans: true })).toThrow(expect.objectContaining({ reason: 'UNSUPPORTED_TYPE' }));
     }
+  });
+});
+
+describe('large payloads and hex', () => {
+  const reference = {
+    toHex: (bytes: Uint8Array) => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''),
+    fromHex: (h: string) => (/^(?:[0-9a-fA-F]{2})*$/.test(h) ? Uint8Array.from(h.match(/../g) ?? [], x => parseInt(x, 16)) : undefined),
+  };
+
+  it('converts hex both ways exactly as a byte-by-byte reference does', () => {
+    const samples = [0, 1, 28, 32, 63, 64, 65, 1000].map(n => Uint8Array.from({ length: n }, (_, i) => (i * 37 + n) & 0xff));
+    for (const bytes of samples) {
+      expect(bytesToHex(bytes)).toBe(reference.toHex(bytes));
+      expect(hexToBytes(reference.toHex(bytes))).toEqual(bytes);
+      expect(hexToBytes(reference.toHex(bytes).toUpperCase())).toEqual(bytes);
+    }
+    for (const bad of ['0', 'abc', '0g', 'zz', ' 00', '00 ', '0x00', '\u00E900', '00\u0660', '\uFF10\uFF10']) {
+      expect(hexToBytes(bad)).toBe(reference.fromHex(bad));
+      expect(hexToBytes(bad)).toBeUndefined();
+    }
+    expect(hexToBytes('')).toEqual(new Uint8Array(0));
+    expect(hexToBytes(42)).toBeUndefined();
+  });
+
+  it('encodes, reads and converts a payload of 8 MB without copying byte strings byte by byte', () => {
+    // The shape of a recovery payload: 32 manifests of 256 KiB inside revision maps.
+    const blob = (i: number) => Uint8Array.from({ length: 262144 }, (_, j) => (i * 31 + j * 7) & 0xff);
+    const value = { revisions: Array.from({ length: 32 }, (_, i) => ({ version: i + 1, manifest: blob(i) })) };
+    const time = <T>(f: () => T): [T, number] => {
+      const t0 = performance.now();
+      const r = f();
+      return [r, performance.now() - t0];
+    };
+    const [bytes, encodeMs] = time(() => encodeCanonicalCbor(value));
+    expect(bytes.length).toBeGreaterThan(8_000_000);
+    expect(bytes.subarray(0, 64)).toEqual(Uint8Array.from(cborgEncode(value).subarray(0, 64)));
+    const [item, readMs] = time(() => readCbor(bytes, { maxDepth: 8, maxItems: 1000 }));
+    expect(item.end).toBe(bytes.length);
+    const [hexes, toHexMs] = time(() => value.revisions.map(r => bytesToHex(r.manifest)));
+    const [back, fromHexMs] = time(() => hexes.map(h => hexToBytes(h)));
+    expect(back[31]).toEqual(value.revisions[31].manifest);
+    // Bounds far above what this takes (a few ms to write and read, tens of ms for hex), well below
+    // what a copy byte by byte took (hundreds of ms to write, over a second for hex).
+    expect(encodeMs).toBeLessThan(150);
+    expect(readMs).toBeLessThan(150);
+    expect(toHexMs).toBeLessThan(400);
+    expect(fromHexMs).toBeLessThan(600);
   });
 });
