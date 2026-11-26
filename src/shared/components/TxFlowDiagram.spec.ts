@@ -55,7 +55,13 @@ const model = (overrides: Partial<TxFlowModel> = {}): TxFlowModel => ({
   ...overrides,
 });
 
-const mountDiagram = async (props: Partial<{ model: TxFlowModel }> = {}) => {
+const mountDiagram = async (props: Partial<{
+  model: TxFlowModel;
+  currencySymbol: string;
+  currencySuffix: string;
+  decimals: number;
+  fractionDigits: number;
+}> = {}) => {
   const wrapper = mount(TxFlowDiagram, {
     props: {
       model: model(),
@@ -170,6 +176,36 @@ describe('TxFlowDiagram', () => {
     } finally {
       narrow.unmount();
       wide.unmount();
+    }
+  });
+
+  it('formats amounts in the units it is given (satoshis as BTC)', async () => {
+    const wrapper = await mountDiagram({
+      model: model({
+        inputs: [node('in:btc', 'other', 150_000_000)],
+        outputs: [node('out:btc', 'own', 149_998_500), node('src:fee', 'fee', 1_500)],
+      }),
+      currencySymbol: '',
+      currencySuffix: ' BTC',
+      decimals: 8,
+      fractionDigits: 8,
+    });
+    try {
+      const amounts = wrapper.findAll('.tx-flow__ada').map((amount) => amount.text());
+      expect(amounts).toEqual(['1.5 BTC', '1.499985 BTC', '0.000015 BTC']);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('keeps the ADA defaults: two decimals, shortened from 100,000', async () => {
+    const wrapper = await mountDiagram({
+      model: model({ inputs: [node('in:a', 'other', 1_260_000_000_000)], outputs: [node('src:fee', 'fee', 172_000)] }),
+    });
+    try {
+      expect(wrapper.findAll('.tx-flow__ada').map((amount) => amount.text())).toEqual(['₳1.26M', '₳0.17']);
+    } finally {
+      wrapper.unmount();
     }
   });
 });

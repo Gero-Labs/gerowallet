@@ -19,15 +19,19 @@ export type FlowKind =
   | 'other'
   | 'script'
   | 'more'
+  /** An output that pays no address (Bitcoin OP_RETURN) */
+  | 'data'
   /** Left-side sources that are not inputs */
   | 'rewards'
   | 'refund'
+  /** Bitcoin: newly mined coins, the only "input" of a coinbase transaction */
+  | 'coinbase'
   /** Right-side sinks that are not outputs */
   | 'fee'
   | 'donation'
   | 'deposit';
 
-export const FLOW_SOURCE_KINDS: ReadonlySet<FlowKind> = new Set<FlowKind>(['rewards', 'refund']);
+export const FLOW_SOURCE_KINDS: ReadonlySet<FlowKind> = new Set<FlowKind>(['rewards', 'refund', 'coinbase']);
 export const FLOW_SINK_KINDS: ReadonlySet<FlowKind> = new Set<FlowKind>(['fee', 'donation', 'deposit']);
 
 export interface FlowToken {
@@ -38,8 +42,9 @@ export interface FlowToken {
 export interface FlowNode {
   key: string;
   kind: FlowKind;
-  /** Bech32 address; empty for sources, sinks and the "more" node */
+  /** The chain's address string; empty for sources, sinks, data outputs and the "more" node */
   address: string;
+  /** Value in the chain's base unit: lovelace on Cardano, satoshis on Bitcoin */
   lovelace: number;
   /** UTxOs folded into this node */
   count: number;

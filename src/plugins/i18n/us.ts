@@ -3545,6 +3545,7 @@ export default {
   'transactions.flow.address': 'Other address',
   'transactions.flow.rewards': 'Rewards withdrawn',
   'transactions.flow.rewardsHint': 'From a reward account',
+  'transactions.flow.coinbaseHint': 'Block subsidy and fees',
   'transactions.flow.deposit': 'Deposit',
   'transactions.flow.depositHint': 'Locked, refundable',
   'transactions.flow.depositRefund': 'Deposit returned',

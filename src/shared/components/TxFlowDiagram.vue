@@ -159,10 +159,21 @@ interface Props {
   model: TxFlowModel;
   /** Display name, image and decimals of a token unit */
   tokenInfo: (unit: string) => FlowTokenInfo;
+  /** Printed before an amount (₳); empty when the unit follows it */
   currencySymbol: string;
+  /** Printed after an amount, e.g. " BTC" */
+  currencySuffix?: string;
+  /** Decimals of the chain's coin: node values are in its base unit (6 for lovelace, 8 for sats) */
+  decimals?: number;
+  /** Decimals shown for an amount that is not shortened */
+  fractionDigits?: number;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  currencySuffix: '',
+  decimals: 6,
+  fractionDigits: 2,
+});
 const { t, tc } = useTranslation();
 
 const KIND_COLOR: Record<FlowKind, string> = {
@@ -170,6 +181,8 @@ const KIND_COLOR: Record<FlowKind, string> = {
   other: 'var(--g-text-3)',
   script: 'var(--g-info)',
   more: 'var(--g-text-3)',
+  data: 'var(--g-text-3)',
+  coinbase: 'var(--g-success)',
   rewards: 'var(--g-success)',
   refund: 'var(--g-success)',
   fee: 'var(--g-warning)',
@@ -182,6 +195,8 @@ const KIND_ICON: Record<FlowKind, string> = {
   other: 'mdi-account-outline',
   script: 'mdi-file-code-outline',
   more: 'mdi-dots-horizontal',
+  data: 'mdi-text-box-outline',
+  coinbase: 'mdi-pickaxe',
   rewards: 'mdi-gift-outline',
   refund: 'mdi-lock-open-variant-outline',
   fee: 'mdi-fire',
@@ -254,6 +269,8 @@ function nodeLabel(node: FlowNode): string {
     case 'script': return t('transactions.flow.contract');
     case 'other': return t('transactions.flow.address');
     case 'more': return t('transactions.moreTokens', { count: node.count });
+    case 'data': return t('bitcoin.dataOutput');
+    case 'coinbase': return t('bitcoin.coinbase');
     case 'rewards': return t('transactions.flow.rewards');
     case 'refund': return t('transactions.flow.depositRefund');
     case 'fee': return t('signTx.networkFee');
@@ -271,13 +288,22 @@ function nodeSub(node: FlowNode): string {
     case 'refund': return t('transactions.flow.refundHint');
     case 'donation': return t('transactions.flow.toTreasury');
     case 'rewards': return t('transactions.flow.rewardsHint');
+    case 'coinbase': return t('transactions.flow.coinbaseHint');
     default: return '';
   }
 }
 
-/** Large amounts shorten (1.26M), small ones keep two decimals. */
-const ada = (lovelace: number): string =>
-  filters.toCurrency(lovelace, false, 2, props.currencySymbol, '', lovelace >= 1e11, 6);
+/** Amounts of 100,000 coins or more shorten (1.26M), smaller ones keep `fractionDigits` decimals. */
+const ada = (base: number): string =>
+  filters.toCurrency(
+    base,
+    false,
+    props.fractionDigits,
+    props.currencySymbol,
+    props.currencySuffix,
+    base / 10 ** props.decimals >= 1e5,
+    props.decimals,
+  );
 
 const tokenImage = (unit: string): string => props.tokenInfo(unit).img || assts.questionMarkDark;
 
