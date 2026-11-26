@@ -30,7 +30,7 @@ import {
 } from '../manifest';
 import { ExternalEndorsement, externalEndorsementBody, externalEndorsementDigest } from '../verificationNumber';
 import { buildVaultFromParticipants } from '../scripts';
-import { RoleKeys, VaultPublicKeys, VaultScripts } from '../types';
+import { RoleKeys, VaultNetwork, VaultPublicKeys, VaultScripts } from '../types';
 import { vaultId } from '../vaultId';
 import { CARDANO_ADDRESSES, bech32Bytes } from './vectors';
 
@@ -146,6 +146,8 @@ export async function signedBinding(input: {
   readonly admitter?: number;
   readonly bindingVersion?: number;
   readonly x25519Pub?: string;
+  /** The vault's network, which an expired transaction names; preprod by default. */
+  readonly network?: VaultNetwork;
 }): Promise<OwnerDeviceBinding> {
   const device = await testDevice(input.device);
   const body = deviceBinding({
@@ -163,7 +165,8 @@ export async function signedBinding(input: {
     const signature = admitter.key.sign(HexBlob(viewerAdmissionDigest(body))).hex();
     return { ...body, deviceSig, admittedBy: { deviceId: deviceIdOf(admitter.ed25519Pub), signature } };
   }
-  return { ...body, deviceSig, attestation: attestationBy(input.participant, { kind: 'binding', digest: bindingDigest(body) }, input.method) };
+  const subject = { kind: 'binding', digest: bindingDigest(body), network: input.network ?? 'preprod' } as const;
+  return { ...body, deviceSig, attestation: attestationBy(input.participant, subject, input.method) };
 }
 
 /** An external entry for `participant`'s keys, imported by the owner `importer`, whose payment key attests it. */
@@ -174,9 +177,11 @@ export function signedExternal(input: {
   readonly role?: ExternalRole;
   readonly label?: string;
   readonly method?: TestMethod;
+  readonly network?: VaultNetwork;
 }): ExternalEntry {
   const body = externalEntry({ vaultKeys: input.participant.vaultKeys, label: input.label ?? 'Other wallet', role: input.role ?? 'owner' });
-  return { ...body, importSig: attestationBy(input.importer, { kind: 'import', digest: externalImportDigest(input.vaultId, body) }, input.method) };
+  const subject = { kind: 'import', digest: externalImportDigest(input.vaultId, body), network: input.network ?? 'preprod' } as const;
+  return { ...body, importSig: attestationBy(input.importer, subject, input.method) };
 }
 
 /** `participant`'s attestation removing the binding of `removed`'s device id and binding version. */
@@ -185,8 +190,9 @@ export function removalBy(
   vaultId: string,
   removed: { readonly deviceId: string; readonly bindingVersion: number },
   method?: TestMethod,
+  network: VaultNetwork = 'preprod',
 ): OwnerAttestation {
-  return attestationBy(participant, { kind: 'removal', digest: deviceRemovalDigest(vaultId, removed) }, method);
+  return attestationBy(participant, { kind: 'removal', digest: deviceRemovalDigest(vaultId, removed), network }, method);
 }
 
 /** `endorser`'s endorsement of the external attestation `proof`, attested by their payment key. */
@@ -198,7 +204,7 @@ export function signedEndorsement(
   method?: TestMethod,
 ): ExternalEndorsement {
   const body = externalEndorsementBody(manifest, externalCredential, proof, endorser.credential);
-  return { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body) }, method) };
+  return { ...body, attestation: attestationBy(endorser, { kind: 'endorsement', digest: externalEndorsementDigest(body), network: manifest.network }, method) };
 }
 
 export const VECTOR_REVISED_AT = 1795651200;

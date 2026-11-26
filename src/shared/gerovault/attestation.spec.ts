@@ -33,22 +33,24 @@ import { buildSignatureAndCoseKey } from '../utils/converter';
 import { TestParticipant, cip8Attestation, expiredTxAttestation, paddedCip8Attestation, testParticipants, walletCip8Attestation } from './__fixtures__/manifest';
 
 /**
- * PROVISIONAL vectors (GV-07): the expired transaction body and auxiliary data for test
- * participant 0 (the published cardano-addresses key at vault index 1) over the binding digest
- * `ab` x 32, the hashes of both complete stored proofs by that key, and of the stored proof whose
- * body writes both sets with tag 258.
+ * PROVISIONAL vectors (GV-07): the expired transaction body (on preprod, network id 0) and
+ * auxiliary data for test participant 0 (the published cardano-addresses key at vault index 1)
+ * over the binding digest `ab` x 32, the hashes of both complete stored proofs by that key, of the
+ * stored proof whose body writes both sets with tag 258, and of the stored CIP-8 proof made from a
+ * COSE_Key with no kid.
  */
 const VECTORS = {
   auxiliaryData: 'a119486da1005820abababababababababababababababababababababababababababababababab',
-  body: 'a600818258200000000000000000000000000000000000000000000000000000000000000000000180020003010758204c492b248804e86d28819091a2394b6d435e71db70c24b6bf4d28ade935fcf260e81581c1196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d',
-  expiredTxProofHash: '62c26f4c4ce0c0945bfb0e7ece0ea96de809c7e68d64f35b12472f816412ef33',
+  body: 'a700818258200000000000000000000000000000000000000000000000000000000000000000000180020003010758204c492b248804e86d28819091a2394b6d435e71db70c24b6bf4d28ade935fcf260e81581c1196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d0f00',
+  expiredTxProofHash: 'cb1820dd70b6978346ade3be85d5b32ce4ca6de667966bf73e854bfd61c1f820',
   cip8ProofHash: 'dec4ff211e9350228c0b7f8adbaab061cd408e668edd8f58fd262223726a0f6b',
-  taggedBodyProofHash: '343b601f872a7c619af389d574ae89f7ffd9c57ca9e208daa7d06488213ead6e',
+  taggedBodyProofHash: 'ce20a9c9cc869c40184a61eceb1cb692e23dea75cb771dfdaf5142e4256b1443',
+  noKidProofHash: '49cc518896a86db0b0f73b5e46181b7c7af378db1b6e10b194a7ca72e3c1fb0f',
 };
 
 const DIGEST = 'ab'.repeat(32);
 const OTHER = 'cd'.repeat(32);
-const binding: AttestedDigest = { kind: 'binding', digest: DIGEST };
+const binding: AttestedDigest = { kind: 'binding', network: 'preprod', digest: DIGEST };
 const hexOf = (b: Uint8Array) => Buffer.from(b).toString('hex');
 const bytesOf = (h: string) => Uint8Array.from(Buffer.from(h, 'hex'));
 const GROUP_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
@@ -161,7 +163,30 @@ describe('CIP-8 attestations', () => {
   it('refuse another payload, and anything but a binding digest', async () => {
     expect(await codeOf(cip8Attestation(people[0].signer, people[0].credential, OTHER), people[0])).toBe('WRONG_PAYLOAD');
     const a = cip8Attestation(people[0].signer, people[0].credential, DIGEST);
-    expect(await codeOf(a, people[0], { kind: 'verification', digest: DIGEST })).toBe('METHOD_NOT_ALLOWED');
+    expect(await codeOf(a, people[0], { kind: 'verification', network: 'preprod', digest: DIGEST })).toBe('METHOD_NOT_ALLOWED');
+  });
+
+  it('take a COSE_Key with no kid, as a hardware wallet\'s signature is wrapped, into the same stored form', async () => {
+    // A protected header with the algorithm and the address only, and a COSE_Key with no kid.
+    const address = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16(people[0].credential),
+    }).toAddress().toBytes();
+    const protectedBytes = encodeCanonicalCbor(new Map<number | string, CborWritable>([[1, -8], ['address', bytesOf(address)]]));
+    const sigStructure = encodeCanonicalCbor(['Signature1', protectedBytes, new Uint8Array(0), bytesOf(DIGEST)]);
+    const signature = bytesOf(people[0].signer.sign(HexBlob(hexOf(sigStructure))).hex());
+    const sign1 = encodeCanonicalCbor([protectedBytes, new Map(), bytesOf(DIGEST), signature]);
+    const key = (entries: [number, CborWritable][]) => hexOf(encodeCanonicalCbor(new Map<number, CborWritable>(entries)));
+    const x = bytesOf(people[0].signer.toPublic().hex());
+    const noKid = { method: 0, proof: cip8Proof(hexOf(sign1), key([[1, 1], [-1, 6], [-2, x]])) };
+    const stored = await ingested(noKid, people[0]);
+    expect(stored).toMatchObject({ method: 0 });
+    expect(isCanonicalAttestation(stored as OwnerAttestation)).toBe(true);
+    expect(await codeOf(stored as OwnerAttestation, people[0])).toBe('ok');
+    expect(sdkBlake2b.hash(HexBlob((stored as OwnerAttestation).proof), 32)).toBe(VECTORS.noKidProofHash);
+    // A kid, when present, still has to repeat the signed address, and is dropped.
+    expect(await ingested({ method: 0, proof: cip8Proof(hexOf(sign1), key([[1, 1], [2, bytesOf(address)], [-1, 6], [-2, x]])) }, people[0])).toEqual(stored);
+    expect(await ingested({ method: 0, proof: cip8Proof(hexOf(sign1), key([[1, 1], [2, new Uint8Array(29)], [-1, 6], [-2, x]])) }, people[0])).toBe('UNSUPPORTED_KEY');
   });
 
   it('refuse at ingest a kid that does not repeat the signed address, and unsupported headers and keys', async () => {
@@ -183,7 +208,7 @@ describe('CIP-8 attestations', () => {
 
 describe('expired-transaction attestations', () => {
   it('are a well-formed Cardano transaction that can never be submitted (checked with cardano-sdk)', () => {
-    const subject: AttestedDigest = { kind: 'binding', digest: DIGEST };
+    const subject: AttestedDigest = { kind: 'binding', network: 'preprod', digest: DIGEST };
     const proof = expiredTxAttestation(people[0].signer, people[0].credential, subject).proof;
     const tx = Serialization.Transaction.fromCbor(HexBlob(proof));
     expect(tx.getId()).toBe(expiredTxBodyHash(people[0].credential, subject));
@@ -194,14 +219,30 @@ describe('expired-transaction attestations', () => {
     expect(core.body.validityInterval.invalidHereafter).toBe(1);
     expect(core.body.validityInterval.invalidBefore).toBeUndefined();
     expect(core.body.requiredExtraSignatures).toEqual([people[0].credential]);
+    expect(core.body.networkId).toBe(Cardano.NetworkId.Testnet);
     expect(core.body.auxiliaryDataHash).toBe(sdkBlake2b.hash(HexBlob(expiredTxAuxiliaryData(subject)), 32));
     expect(core.auxiliaryData.blob.get(BigInt(ATTESTATION_LABEL))).toEqual(new Map([[0n, bytesOf(DIGEST)]]));
     expect([...core.witness.signatures.keys()]).toEqual([people[0].signer.toPublic().hex()]);
     expect(tx.isValid()).toBe(true);
   });
 
+  it('name the vault\'s network: 1 on mainnet, 0 on the test networks, checked against the vault', async () => {
+    const onMainnet: AttestedDigest = { ...binding, network: 'mainnet' };
+    const mainnetProof = expiredTxAttestation(people[0].signer, people[0].credential, onMainnet);
+    const core = Serialization.Transaction.fromCbor(HexBlob(mainnetProof.proof)).toCore();
+    expect(core.body.networkId).toBe(Cardano.NetworkId.Mainnet);
+    expect(core.body.validityInterval.invalidHereafter).toBe(1);
+    expect(await codeOf(mainnetProof, people[0], onMainnet)).toBe('ok');
+    expect(await codeOf(mainnetProof, people[0], binding)).toBe('WRONG_NETWORK');
+    expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, binding), people[0], onMainnet)).toBe('WRONG_NETWORK');
+    // Preprod and preview share network id 0, as the ledger has it.
+    expect(expiredTxBody(people[0].credential, { ...binding, network: 'preview' })).toBe(expiredTxBody(people[0].credential, binding));
+    expect(expiredTxBody(people[0].credential, onMainnet)).toBe(`${expiredTxBody(people[0].credential, binding).slice(0, -2)}01`);
+    expect(await verifyAttestation(mainnetProof, people[0].credential, { kind: 'binding', digest: DIGEST } as AttestedDigest)).toEqual({ ok: false, code: 'INVALID_INPUT' });
+  });
+
   it('verify over a binding digest and over a verification digest', async () => {
-    const verification: AttestedDigest = { kind: 'verification', digest: DIGEST };
+    const verification: AttestedDigest = { kind: 'verification', network: 'preprod', digest: DIGEST };
     expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, binding), people[0])).toBe('ok');
     expect(await codeOf(expiredTxAttestation(people[2].signer, people[2].credential, verification), people[2], verification)).toBe('ok');
     expect(await codeOf(expiredTxAttestation(people[2].signer, people[2].credential, verification), people[2])).toBe('WRONG_PAYLOAD');
@@ -310,8 +351,8 @@ describe('expired-transaction attestations', () => {
 
 describe('an expired transaction body as the wallet signed it', () => {
   const canonicalBody = () => expiredTxBody(people[0].credential, binding);
-  // `a6 00 81 ...` and `0e 81 58 1c ...`: the input set and the signer set, here with tag 258.
-  const tagged = () => canonicalBody().replace(/^a60081/, 'a600d9010281').replace(/0e81581c/, '0ed9010281581c');
+  // `a7 00 81 ...` and `0e 81 58 1c ...`: the input set and the signer set, here with tag 258.
+  const tagged = () => canonicalBody().replace(/^a70081/, 'a700d9010281').replace(/0e81581c/, '0ed9010281581c');
   const signedAs = (body: string) => {
     const signature = people[0].signer.sign(HexBlob(sdkBlake2b.hash(HexBlob(body), 32))).hex();
     return { method: 1, proof: assembleExpiredTx(people[0].credential, binding, people[0].signer.toPublic().hex(), signature, body) };
@@ -348,7 +389,7 @@ describe('an expired transaction body as the wallet signed it', () => {
 
   it('accepts indefinite lengths and wider integers in the body when signed so', async () => {
     const body = canonicalBody();
-    const indefinite = body.replace(/^a60081(825820(?:00){32}00)/, 'a6009f$1ff');
+    const indefinite = body.replace(/^a70081(825820(?:00){32}00)/, 'a7009f$1ff');
     const wide = body.replace(AFTER_INPUT, '0180021900000301 0758'.replace(' ', ''));
     for (const variant of [indefinite, wide]) {
       expect(variant).not.toBe(body);
@@ -359,25 +400,30 @@ describe('an expired transaction body as the wallet signed it', () => {
   it.each([
     ['BODY_SHAPE', 'outputs written as a set', () => canonicalBody().replace(AFTER_INPUT, '01d90102800200030107' + '58')],
     ['BODY_SHAPE', 'a fee in a set tag', () => canonicalBody().replace(AFTER_INPUT, '0180' + '02d9010200' + '0301' + '0758')],
-    ['MALFORMED_PROOF', 'a tag other than 258', () => canonicalBody().replace(/^a60081/, 'a600d81881')],
-    ['MALFORMED_PROOF', 'a key twice', () => `a7${canonicalBody().slice(2)}0301`],
+    ['MALFORMED_PROOF', 'a tag other than 258', () => canonicalBody().replace(/^a70081/, 'a700d81881')],
+    ['MALFORMED_PROOF', 'a key twice', () => `a8${canonicalBody().slice(2)}0301`],
     ['MALFORMED_PROOF', 'a body that is not a map', () => '80'],
     ['SUBMITTABLE', 'a later time to live', () => canonicalBody().replace(AFTER_INPUT, '01800200031a0bebc2000758')],
     // A decoder reads 1.0 and 0.0 as the integers 1 and 0: floats and simple values are refused outright.
     ['BODY_SHAPE', 'a time to live of 1.0 as a half float', () => canonicalBody().replace(AFTER_INPUT, '0180020003f93c000758')],
     ['BODY_SHAPE', 'a fee of 0.0 as a half float', () => canonicalBody().replace(AFTER_INPUT, '018002f9000003010758')],
-    ['BODY_SHAPE', 'a map key 0.0', () => canonicalBody().replace(/^a600/, 'a6f90000')],
+    ['BODY_SHAPE', 'a map key 0.0', () => canonicalBody().replace(/^a700/, 'a7f90000')],
     ['BODY_SHAPE', 'a value true', () => canonicalBody().replace(AFTER_INPUT, '01800200' + '03f5' + '0758')],
     // Empty chunks of an indefinite byte string mean nothing but take room: past the bound, refused.
-    ['BODY_SHAPE', 'a transaction id padded with empty chunks', () => canonicalBody().replace(/^a60081825820((?:00){32})/, `a60081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`)],
-    ['WRONG_SIGNER', 'two required signers in a set', () => canonicalBody().replace(/0e81581c([0-9a-f]{56})$/, `0ed9010282581c$1581c${'00'.repeat(28)}`)],
+    ['BODY_SHAPE', 'a transaction id padded with empty chunks', () => canonicalBody().replace(/^a70081825820((?:00){32})/, `a70081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`)],
+    ['WRONG_SIGNER', 'two required signers in a set', () => canonicalBody().replace(/0e81581c([0-9a-f]{56})0f00$/, `0ed9010282581c$1581c${'00'.repeat(28)}0f00`)],
+    // The network id: present, and the vault's (0 for preprod).
+    ['BODY_SHAPE', 'no network id', () => `a6${canonicalBody().slice(2, -4)}`],
+    ['WRONG_NETWORK', 'the mainnet network id', () => `${canonicalBody().slice(0, -2)}01`],
+    ['WRONG_NETWORK', 'a network id of 2', () => `${canonicalBody().slice(0, -2)}02`],
+    ['WRONG_NETWORK', 'a network id in a set tag', () => `${canonicalBody().slice(0, -2)}d9010200`],
   ] as [string, string, () => string][])('refuses %s: %s, however it is written', async (code, _what, make) => {
     expect(await codeOf(signedAs(make()), people[0])).toBe(code);
   });
 });
 
 describe('the parts a signer could inflate are bounded', () => {
-  const removal: AttestedDigest = { kind: 'removal', digest: DIGEST };
+  const removal: AttestedDigest = { kind: 'removal', network: 'preprod', digest: DIGEST };
   const stored = (a: OwnerAttestation) => (isCanonicalAttestation(a) ? 'stored form' : 'refused');
 
   it('take a signed address of up to 57 bytes, and refuse a longer one at ingest and when stored', async () => {
@@ -425,7 +471,7 @@ describe('the parts a signer could inflate are bounded', () => {
   it('refuse an expired transaction body over 512 bytes', async () => {
     const body = expiredTxBody(people[0].credential, binding);
     expect(body.length / 2).toBeLessThan(MAX_SIGNED_BODY_BYTES);
-    const padded = body.replace(/^a60081825820((?:00){32})/, `a60081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`);
+    const padded = body.replace(/^a70081825820((?:00){32})/, `a70081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`);
     const signature = people[0].signer.sign(HexBlob(sdkBlake2b.hash(HexBlob(padded), 32))).hex();
     const proof = { method: 1, proof: assembleExpiredTx(people[0].credential, binding, people[0].signer.toPublic().hex(), signature, padded) };
     expect(await codeOf(proof, people[0])).toBe('BODY_SHAPE');
@@ -438,14 +484,14 @@ describe('what an attestation is over', () => {
 
   it('names each kind under its own metadatum key, and takes CIP-8 for every kind but a verification', async () => {
     for (const [k, kind] of KINDS.entries()) {
-      const subject: AttestedDigest = { kind, digest: DIGEST };
+      const subject: AttestedDigest = { kind, network: 'preprod', digest: DIGEST };
       expect(expiredTxAuxiliaryData(subject)).toBe(hexOf(cborgEncode(new Map([[ATTESTATION_LABEL, new Map([[k, bytesOf(DIGEST)]])]]))));
       expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, subject), people[0], subject)).toBe('ok');
       expect(await codeOf(cip8Attestation(people[0].signer, people[0].credential, DIGEST), people[0], subject)).toBe(kind === 'verification' ? 'METHOD_NOT_ALLOWED' : 'ok');
     }
     // An expired transaction for one kind is not one for another; CIP-8 carries the tagged digest only.
-    const removal: AttestedDigest = { kind: 'removal', digest: DIGEST };
-    expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, removal), people[0], { kind: 'import', digest: DIGEST })).toBe('WRONG_PAYLOAD');
+    const removal: AttestedDigest = { kind: 'removal', network: 'preprod', digest: DIGEST };
+    expect(await codeOf(expiredTxAttestation(people[0].signer, people[0].credential, removal), people[0], { kind: 'import', network: 'preprod', digest: DIGEST })).toBe('WRONG_PAYLOAD');
     expect(await verifyAttestation(expiredTxAttestation(people[0].signer, people[0].credential, binding), people[0].credential, { kind: 'other' } as unknown as AttestedDigest))
       .toEqual({ ok: false, code: 'INVALID_INPUT' });
   });
@@ -577,7 +623,7 @@ describe('any attestation', () => {
     expect(await codeOf({ method: 1, proof: '00'.repeat(2049) }, people[0])).toBe('MALFORMED_PROOF');
     expect(await codeOf(undefined, people[0])).toBe('MALFORMED_PROOF');
     expect(await verifyAttestation(a, 'ab', binding)).toEqual({ ok: false, code: 'INVALID_INPUT' });
-    expect(await verifyAttestation(a, people[0].credential, { kind: 'binding', digest: 'ab' })).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    expect(await verifyAttestation(a, people[0].credential, { kind: 'binding', network: 'preprod', digest: 'ab' })).toEqual({ ok: false, code: 'INVALID_INPUT' });
     expect(canonicalAttestation({ method: 3, proof: a.proof })).toEqual({ ok: false, code: 'UNKNOWN_METHOD' });
   });
 
