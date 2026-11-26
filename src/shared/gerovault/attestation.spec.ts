@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Serialization } from '@cardano-sdk/core';
-import { blake2b as sdkBlake2b } from '@cardano-sdk/crypto';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Hash28ByteBase16, blake2b as sdkBlake2b } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { COSESign1 } from '@emurgo/cardano-message-signing-browser';
 import { ed25519 as nobleEd25519 } from '@noble/curves/ed25519.js';
@@ -29,6 +29,7 @@ import {
 } from './attestation';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 import { readCbor } from './cbor';
+import { buildSignatureAndCoseKey } from '../utils/converter';
 import { TestParticipant, cip8Attestation, expiredTxAttestation, paddedCip8Attestation, testParticipants, walletCip8Attestation } from './__fixtures__/manifest';
 
 /**
@@ -391,14 +392,34 @@ describe('the parts a signer could inflate are bounded', () => {
     expect(longest.proof.length / 2).toBeLessThan(300);
   });
 
-  it('refuse a protected header over 128 bytes, a kid and an address of 57 bytes together among them', async () => {
-    const both = paddedCip8Attestation(people[0], DIGEST, MAX_SIGNED_ADDRESS_BYTES, true);
-    const header = (cborgDecode(parts(both.proof)[0]) as Uint8Array[])[0];
-    expect(header.length).toBeGreaterThan(MAX_PROTECTED_HEADER_BYTES);
-    expect(await codeOf(both, people[0], removal)).toBe('UNSUPPORTED_HEADER');
-    expect(stored(both)).toBe('refused');
-    // An enterprise address (29 bytes), signed as kid and address both, fits.
-    expect(await codeOf(paddedCip8Attestation(people[0], DIGEST, 29, true), people[0], removal)).toBe('ok');
+  it('take the wallet\'s own signData output over a 57-byte base address, which signs it as kid and address both', async () => {
+    const hash = (key: string) => Hash28ByteBase16(sdkBlake2b.hash(HexBlob(key), 28));
+    const base = Cardano.BaseAddress.fromCredentials(
+      Cardano.NetworkId.Testnet,
+      { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16(people[0].credential) },
+      { type: Cardano.CredentialType.KeyHash, hash: hash(people[0].vaultKeys.stake) },
+    ).toAddress().toBytes();
+    expect(base.length / 2).toBe(MAX_SIGNED_ADDRESS_BYTES);
+    const { signature, key } = buildSignatureAndCoseKey(bytesOf(base), DIGEST, people[0].signer);
+    const wallet = { method: 0, proof: cip8Proof(signature, key) };
+    const header = (cborgDecode(parts(wallet.proof)[0]) as Uint8Array[])[0];
+    const headers = cborgDecode(header, { useMaps: true }) as Map<number | string, unknown>;
+    expect(hexOf(headers.get(4) as Uint8Array)).toBe(base);
+    expect(hexOf(headers.get('address') as Uint8Array)).toBe(base);
+    expect(header.length).toBe(130);
+    const ingestedProof = await ingested(wallet, people[0], removal);
+    expect(ingestedProof).toMatchObject({ method: 0 });
+    expect(stored(ingestedProof as OwnerAttestation)).toBe('stored form');
+    expect(await codeOf(ingestedProof as OwnerAttestation, people[0], removal)).toBe('ok');
+  });
+
+  it('refuse a protected header over 160 bytes', async () => {
+    const over = paddedCip8Attestation(people[0], DIGEST, 148);
+    const header = (cborgDecode(parts(over.proof)[0]) as Uint8Array[])[0];
+    expect(header.length).toBe(MAX_PROTECTED_HEADER_BYTES + 1);
+    expect(await codeOf(over, people[0], removal)).toBe('UNSUPPORTED_HEADER');
+    expect(await ingested(over, people[0], removal)).toBe('UNSUPPORTED_HEADER');
+    expect(stored(over)).toBe('refused');
   });
 
   it('refuse an expired transaction body over 512 bytes', async () => {

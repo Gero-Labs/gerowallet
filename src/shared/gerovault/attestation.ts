@@ -59,9 +59,10 @@ export const MAX_ATTESTATION_BYTES = 2048;
 /**
  * Bounds on the parts of a proof a signer chooses, so that no stored proof is much larger than an
  * honest one: the CIP-8 protected header, the address (or `kid`) signed in it (a Cardano base
- * address is 57 bytes), and the expired transaction's body.
+ * address is 57 bytes), and the expired transaction's body. The header bound leaves room for a
+ * wallet that signs a base address twice, as `kid` and as `address` (130 bytes).
  */
-export const MAX_PROTECTED_HEADER_BYTES = 128;
+export const MAX_PROTECTED_HEADER_BYTES = 160;
 export const MAX_SIGNED_ADDRESS_BYTES = 57;
 export const MAX_SIGNED_BODY_BYTES = 512;
 
