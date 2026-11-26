@@ -28,7 +28,10 @@ export type GeroVaultErrorCode =
   | 'INVALID_DESCRIPTION'
   | 'INVALID_PASSPHRASE'
   | 'INVALID_TIME'
-  | 'BACKUP_TOO_SOON';
+  | 'BACKUP_TOO_SOON'
+  | 'INVALID_PACKAGE'
+  | 'PACKAGE_CHECK_FAILED'
+  | 'INVALID_MANIFEST_REVISION';
 
 export class GeroVaultError extends Error {
   readonly code: GeroVaultErrorCode;
