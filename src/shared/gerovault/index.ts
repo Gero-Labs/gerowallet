@@ -1,7 +1,7 @@
 /**
  * GeroVault core: CIP-1854 role keys, native vault scripts, the CIP-0146 registration codec,
- * vault index allocation, the `gero-vault/v1` manifest, attestations and the verification
- * ceremony. Pure TypeScript: no Vue, no storage, no network, no `chrome.*`.
+ * vault index allocation, the `gero-vault/v1` manifest, attestations, the verification ceremony
+ * and the recovery package. Pure TypeScript: no Vue, no storage, no network, no `chrome.*`.
  */
 export * from './types';
 export * from './errors';
@@ -73,3 +73,87 @@ export { isManifestAck } from './ackBrand';
 export * from './manifest';
 export * from './manifestCheck';
 export * from './verificationNumber';
+// Recovery package (GV-14): file format, passphrases, payload, export, restore and staleness.
+// `sealRecoveryFile` and its fixed salt and nonce for test vectors are deliberately not exported.
+export {
+  MAX_RECOVERY_FILE_BYTES,
+  MAX_RECOVERY_PAYLOAD_BYTES,
+  RECOVERY_FORMAT_VERSION,
+  RECOVERY_KDF,
+  RECOVERY_KDF_MAXMEM,
+  RECOVERY_PASSPHRASE_ALPHABET,
+  RECOVERY_PASSPHRASE_MIN_CODE_POINTS,
+  generateRecoveryPassphrase,
+  normalizeRecoveryPassphrase,
+  readRecoveryHeader,
+  recoveryPassphraseProblem,
+} from './recoveryFormat';
+export type {
+  ReadRecoveryHeaderResult,
+  RecoveryFileRefusal,
+  RecoveryFileRefusalCode,
+  RecoveryHeader,
+  RecoveryKdfParams,
+} from './recoveryFormat';
+export {
+  MAX_ADDRESS_BOOK_ENTRIES,
+  MAX_ENDORSEMENTS,
+  MAX_EXTERNAL_ATTESTATIONS,
+  MAX_MANIFEST_REVISIONS,
+  MAX_PACKAGE_PARTICIPANTS,
+  MAX_PROPOSALS,
+  MAX_PROPOSAL_BYTES,
+  MAX_REFERENCE_SCRIPTS,
+  RECOVERY_PAYLOAD_VERSION,
+  decodeRecoveryPayload,
+  encodeRecoveryPayload,
+  fitRecoveryHistory,
+} from './recoveryPayload';
+export type {
+  AddressBookEntry,
+  BackupTerms,
+  DecodeRecoveryPayloadResult,
+  ExternalCosignerInput,
+  FittedRecoveryHistory,
+  ManifestRevision,
+  NativeVaultRecord,
+  OutputReference,
+  PackageParticipant,
+  PackageRole,
+  PackageSelf,
+  PlutusVaultRecord,
+  ProposalRecord,
+  RecoveryPackage,
+  RecoveryPackageContents,
+  RecoveryPayloadRefusalCode,
+  RecoverySkipped,
+} from './recoveryPayload';
+export {
+  ATTESTATION_TIMEOUT_MS,
+  MAX_CHAIN_REGISTRATIONS,
+  MAX_REVEALED_SCRIPTS,
+  backupPathOpensAtMs,
+  exportRecoveryPackage,
+  openRecoveryPackage,
+  recoveryPackageStaleness,
+  restoreVaultFromPackage,
+  verifyOwnAttestationInManifests,
+} from './recoveryPackage';
+export type {
+  ExportSkipped,
+  ExportedRecoveryPackage,
+  LatestManifestRevision,
+  OpenRecoveryPackageResult,
+  OwnAttestationQuery,
+  OwnAttestationResult,
+  OwnAttestationVerifier,
+  PlutusRestoreFacts,
+  RecoveryChainFacts,
+  RecoveryChainState,
+  RecoveryChainUtxo,
+  RecoveryPackageStaleness,
+  RestoreOptions,
+  RestoreRefusalCode,
+  RestoreResult,
+  RestoredNativeCandidate,
+} from './recoveryPackage';
