@@ -23,6 +23,8 @@ import { sealRecoveryFile } from './recoveryFormat';
 import { MAX_ADDRESS_BOOK_ENTRIES, MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHash } from './recoveryPayload';
 import {
   OwnAttestationQuery,
+  MAX_CHAIN_REGISTRATIONS,
+  MAX_REVEALED_SCRIPTS,
   RecoveryChainFacts,
   RecoveryChainUtxo,
   RestoreResult,
@@ -40,6 +42,8 @@ import { RoleKeys, VaultScripts } from './types';
 import { testCosignerAccount } from './__fixtures__/vectors';
 import {
   BACKUP_OPENS_AT_MS,
+  ENDORSEMENT,
+  EXTERNAL_ATTESTATION,
   PLUTUS_VALIDATOR,
   backupContents,
   backupVault,
@@ -123,7 +127,12 @@ describe('export', () => {
     const { file, proposalsDropped, proposalHistoryTruncated } = await exportRecoveryPackage(contents, PASS, people[0]);
     expect(kdf).toHaveBeenCalledTimes(2);
     expect({ proposalsDropped, proposalHistoryTruncated }).toEqual({ proposalsDropped: 0, proposalHistoryTruncated: false });
-    expect(await exportRecoveryPackage(contents, PASS, people[0])).toMatchObject({ addressBookDropped: 0, addressBookTruncated: false });
+    expect(await exportRecoveryPackage(contents, PASS, people[0])).toMatchObject({
+      addressBookDropped: 0,
+      addressBookTruncated: false,
+      manifestsDropped: 0,
+      skipped: { manifests: 0, proposals: 0, addressBook: 0, participantLabels: 0 },
+    });
     const again = await exportRecoveryPackage(contents, PASS, people[0]);
     expect(Buffer.from(again.file).equals(Buffer.from(file))).toBe(false);
     const result = await openRecoveryPackage(file, PASS);
@@ -219,6 +228,43 @@ describe('export', () => {
     expect(result.package.addressBookTruncated).toBe(true);
   });
 
+  it('never fails for one bad history or address book entry: it leaves it out and says so', async () => {
+    const contents = await standardContents(people);
+    const addr = (i: number) => Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16(i.toString(16).padStart(56, '0')),
+    }).toAddress().toBech32();
+    const mainnet = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Mainnet, {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16('11'.repeat(28)),
+    }).toAddress().toBech32();
+    const exported = await exportRecoveryPackage({
+      ...contents,
+      manifests: [{ version: 1, cbor: 'a0' }, { version: 2, cbor: 'zz' }],
+      proposals: [{ id: '01', cbor: 'ab' }, { id: '01', cbor: 'cd' }, { id: '02', cbor: 'ab'.repeat(65537) }],
+      addressBook: [
+        { address: addr(1), label: 'a' },
+        { address: addr(1), label: 'b' },
+        { address: addr(2), label: 'x'.repeat(65) },
+        { address: mainnet, label: 'm' },
+      ],
+      participants: [{ ...contents.participants[0], label: 'Bob' + String.fromCharCode(0x202e) }, ...contents.participants.slice(1)],
+    }, PASS, people[0]);
+    expect(exported.skipped).toEqual({ manifests: 1, proposals: 2, addressBook: 3, participantLabels: 1 });
+    expect(exported).toMatchObject({ manifestsDropped: 1, proposalsDropped: 2, addressBookDropped: 3, proposalHistoryTruncated: true, addressBookTruncated: true });
+    const result = await openRecoveryPackage(exported.file, PASS);
+    if (result.ok !== true) throw new Error(result.code);
+    expect(result.package.proposals).toEqual([{ id: '01', cbor: 'cd' }]);
+    expect(result.package.addressBook).toEqual([{ address: addr(1), label: 'b' }]);
+    expect(result.package.participants[0].label).toBeUndefined();
+  });
+
+  it('carries the endorsements and external attestations as they are', async () => {
+    const pkg = await opened(await backupContents(people));
+    expect(pkg.endorsements).toEqual([ENDORSEMENT]);
+    expect(pkg.externalAttestations).toEqual([EXTERNAL_ATTESTATION]);
+  });
+
   it('exports a Plutus package for its owner or guardian: the seed is checked, the payment key only', async () => {
     const contents = await plutusContents(people);
     const pkg = await opened(contents);
@@ -302,31 +348,72 @@ describe('restore of a native vault', () => {
     expect(c).toMatchObject({ status: 'candidate', ownAttestation: { verified: false }, depositsBlocked: true });
   });
 
-  it('asks the attestation hook, and lifts the deposit block only on a verified answer', async () => {
+  it('asks the attestation hook, and lifts the deposit block only on an answer bound to this vault', async () => {
     const pkg = await opened(await backupContents(people));
+    const own = await deriveVaultPublicKeys(people[2], 1);
+    const credential = (await vaultKeyHashes(own)).payment;
+    const id = vaultId(backup, 'preprod');
     const queries: OwnAttestationQuery[] = [];
     const verified = candidateOf(await restoreVaultFromPackage(pkg, {
       roleKeys: people[2],
       chain: onChain(backup),
       verifyOwnAttestation: async q => {
         queries.push(q);
-        return { verified: true, acceptedAtMs: 1795000000000 };
+        return { verified: true, acceptedAtMs: 1795000000000, vaultId: q.vaultId, credential: q.credential };
       },
     }));
-    expect(verified).toMatchObject({ ownAttestation: { verified: true, acceptedAtMs: 1795000000000 }, depositsBlocked: false });
-    const own = await deriveVaultPublicKeys(people[2], 1);
+    expect(verified).toMatchObject({ ownAttestation: { verified: true, acceptedAtMs: 1795000000000, vaultId: id, credential }, depositsBlocked: false });
     expect(queries).toHaveLength(1);
-    expect(queries[0]).toMatchObject({ network: 'preprod', vaultId: vaultId(backup, 'preprod'), vaultKeys: own, credential: (await vaultKeyHashes(own)).payment });
+    expect(queries[0]).toMatchObject({ network: 'preprod', vaultId: id, vaultKeys: own, credential });
+    expect(queries[0].scripts.payment.hash).toBe(backup.payment.hash);
+    expect(queries[0].scripts.stake.hash).toBe(backup.stake.hash);
+    expect(queries[0].participants).toEqual(pkg.participants);
     expect(queries[0].manifests).toEqual(pkg.manifests);
+    expect(queries[0].signal.aborted).toBe(true); // released once the restore stopped waiting
     for (const hook of [
       async () => { throw new Error('verifier down'); },
-      async () => ({ verified: true }) as never,
-      async () => ({ verified: 'yes', acceptedAtMs: 1 }) as never,
+      async () => ({ verified: true, acceptedAtMs: 1 }) as never,
+      async () => ({ verified: 'yes', acceptedAtMs: 1, vaultId: id, credential }) as never,
+      async () => ({ verified: true, acceptedAtMs: 1, vaultId: id, credential: (await vaultKeyHashes(await deriveVaultPublicKeys(people[0], 1))).payment }),
       async () => undefined as never,
     ]) {
       const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: onChain(backup), verifyOwnAttestation: hook }));
       expect(c).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
     }
+  });
+
+  it('keeps deposits blocked when a careless verifier accepts an attestation copied from another vault', async () => {
+    const pkg = await opened(await backupContents(people));
+    // The restorer's own attestation, really made for the standard vault, which shares their key.
+    const copied = { vaultId: vaultId(standard, 'preprod'), acceptedAtMs: 1795000000000 };
+    const c = candidateOf(await restoreVaultFromPackage(pkg, {
+      roleKeys: people[2],
+      chain: onChain(backup),
+      verifyOwnAttestation: async q => ({ verified: true, acceptedAtMs: copied.acceptedAtMs, vaultId: copied.vaultId, credential: q.credential }),
+    }));
+    expect(c).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+  });
+
+  it('never hangs on the verifier: it gives up after the timeout or when the caller aborts', async () => {
+    const pkg = await opened(await backupContents(people));
+    let signal: AbortSignal | undefined;
+    const hung = async (q: OwnAttestationQuery) => {
+      signal = q.signal;
+      return new Promise<never>(() => undefined);
+    };
+    const started = Date.now();
+    const timedOut = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: nothing, verifyOwnAttestation: hung, attestationTimeoutMs: 50 }));
+    expect(timedOut).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(signal?.aborted).toBe(true);
+    const controller = new AbortController();
+    const pending = restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: nothing, verifyOwnAttestation: hung, signal: controller.signal });
+    setTimeout(() => controller.abort(), 20);
+    expect(candidateOf(await pending)).toMatchObject({ ownAttestation: { verified: false }, depositsBlocked: true });
+    const already = new AbortController();
+    already.abort();
+    expect(candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[2], chain: nothing, verifyOwnAttestation: hung, signal: already.signal })))
+      .toMatchObject({ ownAttestation: { verified: false } });
   });
 
   it('a backup holder rebuilds the dated backup path from their package alone, its time from the slot', async () => {
@@ -479,6 +566,54 @@ describe('restore of a native vault', () => {
     expect(JSON.stringify(contents)).toBe(before);
   });
 
+  it('reads only the first chain facts beyond the bounds, ignores unreadable ones, and never refuses for them', async () => {
+    const pkg = await opened(await standardContents(people, 0));
+    const noise = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: [{ roleKeys: people[0], index: 1 }, { roleKeys: outsider, index: 9 }],
+      acknowledged: ['ALL_OWNERS_REQUIRED'],
+    });
+    const many = [registered(standard), ...Array(MAX_CHAIN_REGISTRATIONS).fill(registered(noise))];
+    const over = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: many } }));
+    expect(over).toMatchObject({ chainFactsTruncated: true, chainState: { registered: true } });
+    expect(over.conflicts).toEqual([noise.payment.hash, noise.stake.hash].sort());
+    const at = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: many.slice(0, MAX_CHAIN_REGISTRATIONS) } }));
+    expect(at.chainFactsTruncated).toBe(false);
+    // Past the bound nothing more is read.
+    const late = [...Array(MAX_CHAIN_REGISTRATIONS).fill(registered(noise)), registered(standard)];
+    expect(candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: late } })))
+      .toMatchObject({ chainFactsTruncated: true, chainState: { registered: false } });
+    const revealed = [...Array(MAX_REVEALED_SCRIPTS + 1).fill(noise.payment.cbor)];
+    expect(candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: revealed } })))
+      .toMatchObject({ chainFactsTruncated: true });
+    const unreadable = candidateOf(await restoreVaultFromPackage(pkg, {
+      roleKeys: people[0],
+      chain: { network: 'preprod', revealedScripts: ['zz', 'abc', '', 42 as never, standard.payment.cbor] },
+    }));
+    expect(unreadable).toMatchObject({ chainFactsTruncated: false, chainState: { used: true } });
+  });
+
+  it('checks both of the restorer\'s keys against every script of a registration, whatever role it declares', async () => {
+    const pkg = await opened(await standardContents(people, 0));
+    const b = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: [{ roleKeys: people[0], index: 1 }, { roleKeys: outsider, index: 1 }, { roleKeys: outsider2, index: 1 }],
+    });
+    const filler = await buildVaultFromParticipants({
+      template: { kind: 'standard', threshold: 2 },
+      owners: [{ roleKeys: outsider, index: 5 }, { roleKeys: outsider2, index: 5 }],
+      acknowledged: ['ALL_OWNERS_REQUIRED'],
+    });
+    // A script holding the restorer's payment key, declared as a stake script, and the other way round.
+    const misdeclared: RegistrationInput = { metadata: { json: { types: [0, 2] } }, nativeScripts: { cbors: [filler.payment.cbor, b.payment.cbor] } };
+    const swapped: RegistrationInput = { metadata: { json: { types: [0, 2] } }, nativeScripts: { cbors: [b.stake.cbor, filler.stake.cbor] } };
+    for (const registration of [misdeclared, swapped]) {
+      const c = candidateOf(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: [registration] } }));
+      expect(c.conflicts.length).toBe(1);
+      expect([b.payment.hash, b.stake.hash]).toContain(c.conflicts[0]);
+    }
+  });
+
   it('refuses malformed input without throwing', async () => {
     const pkg = await opened(await standardContents(people));
     const chain = onChain(standard);
@@ -491,10 +626,7 @@ describe('restore of a native vault', () => {
       [{ ...pkg, self: { position: 9, index: 1 } }, { roleKeys: people[0], chain }],
       [pkg, { roleKeys: people[0], chain: { network: 'preprod', registrations: 'none' } }],
       [pkg, { roleKeys: people[0], chain: { network: 'preprod', funded: 'yes' } }],
-      [pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: ['zz'] } }],
-      [pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: ['abc'] } }],
-      [pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: [''] } }],
-      [pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: [42] } }],
+      [pkg, { roleKeys: people[0], chain: { network: 'preprod', revealedScripts: 'none' } }],
     ];
     for (const [p, options] of cases) {
       const r = await restoreVaultFromPackage(p as RecoveryPackage, options as never);
@@ -529,7 +661,7 @@ describe('restore of a Plutus vault', () => {
       detail: 'the state datum check needs the GV-64 datum codec',
       plutus: { scriptHash: h, address, templateVersion: 1, templateVerified: false, spendOnly: true },
     });
-    for (const quantity of [1, '1']) {
+    for (const quantity of [1, '1', 1n]) {
       expect(code(await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preview', utxos: [utxo(address, h, quantity)] } })))
         .toBe('PLUTUS_DATUM_CODEC_UNAVAILABLE');
     }
@@ -549,6 +681,12 @@ describe('restore of a Plutus vault', () => {
       [utxo(fullAddress(other), h)], // this vault's token at another address
       [utxo(address, other)], // another policy's token at this address
       [utxo(address, h, 2n)], // not exactly one
+      [utxo(address, h, ' 0x1 ')],
+      [utxo(address, h, '1.0')],
+      [utxo(address, h, '01')],
+      [utxo(address, h, 1.5)],
+      [utxo(address, h, '1n')],
+      [utxo(address, h.toUpperCase())],
       [utxo(address, h, 1n, Buffer.from('stat').toString('hex'))], // another asset name
       [utxo(vaultAddresses(standard, 'preview').base, h)], // a native vault's address
     ];
@@ -556,6 +694,14 @@ describe('restore of a Plutus vault', () => {
       const r = await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: chain(utxos) });
       expect(r).toMatchObject({ ok: false, code: 'PLUTUS_VAULT_NOT_FOUND', plutus: { scriptHash: h, address, templateVerified: false } });
     }
+  });
+
+  it('looks only for the state token, however many UTxOs and whatever else they hold', async () => {
+    const pkg = await opened(await plutusContents(people));
+    const filler = Array.from({ length: 5000 }, (_, i) => utxo(fullAddress(Hash28ByteBase16(i.toString(16).padStart(56, '0'))), 'ab'.repeat(28)));
+    const garbage = [null, { address: 42 }, { address, assets: 'x' }, { assets: [null] }] as never[];
+    const r = await restoreVaultFromPackage(pkg, { roleKeys: people[0], chain: { network: 'preview', utxos: [...filler, ...garbage, utxo(address, h)] } });
+    expect(code(r)).toBe('PLUTUS_DATUM_CODEC_UNAVAILABLE');
   });
 
   it('checks the seed first', async () => {

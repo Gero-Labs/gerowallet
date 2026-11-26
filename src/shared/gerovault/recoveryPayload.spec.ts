@@ -7,6 +7,7 @@ import { CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import {
   MAX_ADDRESS_BOOK_ENTRIES,
+  MAX_EXTERNAL_ATTESTATIONS,
   MAX_MANIFEST_BYTES,
   MAX_MANIFEST_REVISIONS,
   MAX_PROPOSAL_BYTES,
@@ -19,7 +20,7 @@ import {
 } from './recoveryPayload';
 import { vaultScript } from './scripts';
 import { ROLE, RoleKeys } from './types';
-import { backupContents, plutusContents, standardContents, standardVault, vectorPeople } from './__fixtures__/recoveryPackageVectors';
+import { ENDORSEMENT, EXTERNAL_ATTESTATION, backupContents, plutusContents, standardContents, standardVault, vectorPeople } from './__fixtures__/recoveryPackageVectors';
 
 /** An order-preserving CBOR tree, to write payloads the encoder never would. */
 type T =
@@ -107,6 +108,9 @@ function detail(bytes: unknown): string {
   return r.ok === true ? 'ACCEPTED' : r.detail ?? '';
 }
 
+const RLO = String.fromCharCode(0x202e);
+const UNASSIGNED = String.fromCharCode(0x0378);
+
 let people: RoleKeys[];
 let ownerKeyHash: Ed25519KeyHashHex;
 let standard: RecoveryPackageContents;
@@ -142,6 +146,9 @@ describe('round trip', () => {
     expect(p.proposalHistoryTruncated).toBe(false);
     expect(p.addressBookDropped).toBe(0);
     expect(p.addressBookTruncated).toBe(false);
+    expect(p.manifestsDropped).toBe(0);
+    expect(p.endorsements).toEqual(contents.endorsements ?? []);
+    expect(p.externalAttestations).toEqual(contents.externalAttestations ?? []);
     expect(p.manifests.map(({ version, cbor }) => ({ version, cbor }))).toEqual(contents.manifests);
     if (contents.vault.kind === 'native' && p.vault.kind === 'native') {
       expect(p.vault.payment.hash).toBe(contents.vault.payment.hash);
@@ -203,8 +210,8 @@ describe('strict decoding of untrusted bytes', () => {
   });
 
   it('refuses unknown and missing keys at every level', () => {
-    expect(refusal(bytesOf(put(standardTree, 12, int(0))))).toBe('PAYLOAD_INVALID');
-    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 15, int(0))))).toBe('PAYLOAD_INVALID');
+    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
     const vault = field(standardTree, 3);
     expect(refusal(bytesOf(put(standardTree, 3, put(vault, 9, int(0)))))).toBe('PAYLOAD_INVALID');
     const participants = field(standardTree, 5);
@@ -228,14 +235,14 @@ describe('strict decoding of untrusted bytes', () => {
   it('refuses the encodings the strict reader refuses', () => {
     const canonical = encodeRecoveryPayload(standard);
     const hex = bytesToHex(canonical);
-    // ac 00 01 01 01: twelve keys, version 1, network magic 1. Rewrite the magic with a one-byte argument.
-    expect(hex.startsWith('ac00010101')).toBe(true);
-    expect(detail(hexToBytes(`ac0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
+    // af 00 01 01 01: fifteen keys, version 1, network magic 1. Rewrite the magic with a one-byte argument.
+    expect(hex.startsWith('af00010101')).toBe(true);
+    expect(detail(hexToBytes(`af0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
     expect(detail(new Uint8Array([...canonical, 0]))).toBe('CBOR TRAILING_BYTES');
     expect(detail(canonical.subarray(0, canonical.length - 1))).toBe('CBOR TRUNCATED');
-    expect(detail(hexToBytes(`ac0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
+    expect(detail(hexToBytes(`af0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
     // Proposals (key 7) as an indefinite-length list.
-    const proposals = hex.indexOf('0780', hex.length - 24);
+    const proposals = hex.indexOf('0780', hex.length - 40);
     expect(detail(hexToBytes(`${hex.slice(0, proposals)}079fff${hex.slice(proposals + 4)}`))).toBe('CBOR INDEFINITE_LENGTH');
     // A tag around the export time.
     expect(detail(hexToBytes(hex.replace('021b000001a21526e400', '02c11b000001a21526e400')))).toBe('CBOR UNSUPPORTED_TYPE');
@@ -280,6 +287,20 @@ describe('strict decoding of untrusted bytes', () => {
     const withLabel = (text: string) => bytesOf(put(backupTree, 5, withItem(participants, 0, put(p0, 4, { t: 'text', v: text }))));
     expect(refusal(withLabel('x'.repeat(64)))).toBe('ACCEPTED');
     for (const bad of ['', 'x'.repeat(65), 'line\nbreak', 'nul\u0000']) expect(refusal(withLabel(bad))).toBe('PAYLOAD_INVALID');
+    // The reader needs no Unicode tables: format and unassigned code points are read as stored.
+    for (const stored of ['Alice' + RLO + 'ecila', 'new' + UNASSIGNED]) expect(refusal(withLabel(stored))).toBe('ACCEPTED');
+  });
+
+  it('refuses endorsements and external attestations of the wrong shape, and repeated ones', () => {
+    const endorsements = field(backupTree, 12);
+    const one = at(endorsements, 0);
+    expect(detail(bytesOf(put(backupTree, 12, { t: 'array', v: [one, one] })))).toBe('The same entry appears twice in the endorsements');
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withItem(one, 3, { t: 'bytes', v: new Uint8Array(32) })] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 12, { t: 'array', v: [withItem(one, 4, { t: 'bytes', v: new Uint8Array(63) })] })))).toBe('PAYLOAD_INVALID');
+    const attestation = at(field(backupTree, 13), 0);
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 1, { t: 'bytes', v: new Uint8Array(4097) })] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 0, int(256))] })))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(backupTree, 13, { t: 'array', v: [withItem(attestation, 1, { t: 'bytes', v: new Uint8Array(4096) })] })))).toBe('ACCEPTED');
   });
 
   it('refuses an exporter who is not a participant or is an external wallet', () => {
@@ -477,7 +498,7 @@ describe('fitting the history into one package', () => {
 
   it('leaves the oldest address book entries out beyond the count bound and counts them', () => {
     const book = Array.from({ length: MAX_ADDRESS_BOOK_ENTRIES + 6 }, (_, i) => entry(i));
-    const fitted = fitRecoveryHistory({ ...standard, addressBook: book });
+    const { contents: fitted } = fitRecoveryHistory({ ...standard, addressBook: book });
     expect(fitted.addressBook).toHaveLength(MAX_ADDRESS_BOOK_ENTRIES);
     expect(fitted.addressBook[0]).toEqual(book[6]);
     expect(fitted.addressBook[MAX_ADDRESS_BOOK_ENTRIES - 1]).toEqual(book[book.length - 1]);
@@ -485,7 +506,7 @@ describe('fitting the history into one package', () => {
     expect(fitted.proposalsDropped).toBe(0);
     const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
     expect(decoded).toMatchObject({ ok: true, package: { addressBookDropped: 6, addressBookTruncated: true, proposalHistoryTruncated: false } });
-    expect(fitRecoveryHistory({ ...standard, addressBook: book, addressBookDropped: 2 }).addressBookDropped).toBe(8);
+    expect(fitRecoveryHistory({ ...standard, addressBook: book, addressBookDropped: 2 }).contents.addressBookDropped).toBe(8);
   });
 
   it('leaves the oldest address book entries out to fit the size bound, after the proposals', () => {
@@ -497,7 +518,7 @@ describe('fitting the history into one package', () => {
     const book = Array.from({ length: MAX_ADDRESS_BOOK_ENTRIES }, (_, i) => entry(i));
     // A proposal that would fit the room alone, but not beside the address book.
     const proposals = [proposal(1, 15000)];
-    const fitted = fitRecoveryHistory({ ...standard, manifests, addressBook: book, proposals });
+    const { contents: fitted } = fitRecoveryHistory({ ...standard, manifests, addressBook: book, proposals });
     expect(fitted.manifests).toHaveLength(64);
     expect(fitted.addressBook.length).toBeGreaterThan(0);
     expect(fitted.addressBook.length).toBeLessThan(MAX_ADDRESS_BOOK_ENTRIES);
@@ -506,13 +527,13 @@ describe('fitting the history into one package', () => {
     // The address book took the room first, so the proposal was left out.
     expect(fitted.proposals).toEqual([]);
     expect(fitted.proposalsDropped).toBe(1);
-    expect(fitRecoveryHistory({ ...standard, manifests, proposals }).proposals).toEqual(proposals);
+    expect(fitRecoveryHistory({ ...standard, manifests, proposals }).contents.proposals).toEqual(proposals);
     expect(encodeRecoveryPayload(fitted).length).toBeLessThanOrEqual(MAX_RECOVERY_PAYLOAD_BYTES);
   });
 
   it('leaves the oldest proposals out beyond the count bound and counts them', () => {
     const many = Array.from({ length: MAX_PROPOSALS + 3 }, (_, i) => proposal(i));
-    const fitted = fitRecoveryHistory({ ...standard, proposals: many });
+    const { contents: fitted } = fitRecoveryHistory({ ...standard, proposals: many });
     expect(fitted.proposals).toHaveLength(MAX_PROPOSALS);
     expect(fitted.proposals[0]).toEqual(many[3]);
     expect(fitted.proposals[MAX_PROPOSALS - 1]).toEqual(many[many.length - 1]);
@@ -520,15 +541,15 @@ describe('fitting the history into one package', () => {
     const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
     expect(decoded).toMatchObject({ ok: true, package: { proposalsDropped: 3, proposalHistoryTruncated: true } });
     // Earlier drops add up.
-    expect(fitRecoveryHistory({ ...standard, proposals: many, proposalsDropped: 5 }).proposalsDropped).toBe(8);
-    expect(fitRecoveryHistory(standard)).toMatchObject({ proposals: [], proposalsDropped: 0 });
+    expect(fitRecoveryHistory({ ...standard, proposals: many, proposalsDropped: 5 }).contents.proposalsDropped).toBe(8);
+    expect(fitRecoveryHistory(standard)).toMatchObject({ contents: { proposals: [], proposalsDropped: 0 }, skipped: { manifests: 0, proposals: 0, addressBook: 0, participantLabels: 0 } });
   });
 
   it('leaves the oldest proposals out to fit the size bound, keeping every manifest revision', () => {
     const manifest = 'cd'.repeat(MAX_MANIFEST_BYTES);
     const manifests = Array.from({ length: 60 }, (_, i) => ({ version: i + 1, cbor: manifest }));
     const proposals = Array.from({ length: 40 }, (_, i) => proposal(i, MAX_PROPOSAL_BYTES));
-    const fitted = fitRecoveryHistory({ ...standard, manifests, proposals });
+    const { contents: fitted } = fitRecoveryHistory({ ...standard, manifests, proposals });
     expect(fitted.manifests).toHaveLength(60);
     expect(fitted.proposals.length).toBeGreaterThan(0);
     expect(fitted.proposals.length).toBeLessThan(40);
@@ -539,6 +560,61 @@ describe('fitting the history into one package', () => {
     // One more proposal would not have fitted.
     expect(() => encodeRecoveryPayload({ ...fitted, proposals: proposals.slice(39 - fitted.proposals.length) }))
       .toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
+  });
+
+  it('leaves out, and counts, entries that cannot be carried, keeping the newest copy of each', () => {
+    const contents: RecoveryPackageContents = {
+      ...standard,
+      manifests: [
+        { version: 3, cbor: 'a3' },
+        { version: 1, cbor: 'a1' },
+        { version: 2, cbor: 'NOT HEX' },
+        { version: 1, cbor: 'b1' },
+        { version: -1, cbor: 'a0' },
+        { version: 4, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES + 1) },
+      ],
+      proposals: [
+        proposal(1),
+        { id: proposal(2).id, cbor: 'ab'.repeat(MAX_PROPOSAL_BYTES + 1) },
+        { id: 'XY', cbor: '80' },
+        { ...proposal(1), cbor: 'cdcd' },
+        proposal(3),
+      ],
+      addressBook: [
+        entry(1),
+        { ...entry(1), label: 'Payee one, renamed' },
+        { address: 'addr_test1notanaddress', label: 'broken' },
+        { ...entry(2), label: 'x'.repeat(65) },
+        { ...entry(3), label: 'Alice' + RLO + 'ecila' },
+        { address: Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Mainnet, { type: Cardano.CredentialType.KeyHash, hash: Hash28ByteBase16('1c'.repeat(28)) }).toAddress().toBech32(), label: 'mainnet' },
+        { ...entry(4), label: 'Ame' + String.fromCharCode(0x301) + 'lie' },
+      ],
+      participants: [{ ...standard.participants[0], label: 'Bob' + RLO }, { ...standard.participants[1], label: 'Carol' }, standard.participants[2]],
+    };
+    const { contents: fitted, skipped } = fitRecoveryHistory(contents);
+    expect(skipped).toEqual({ manifests: 4, proposals: 3, addressBook: 5, participantLabels: 1 });
+    expect(fitted.manifests).toEqual([{ version: 1, cbor: 'b1' }, { version: 3, cbor: 'a3' }]);
+    expect(fitted.proposals).toEqual([{ ...proposal(1), cbor: 'cdcd' }, proposal(3)]);
+    expect(fitted.addressBook).toEqual([{ ...entry(1), label: 'Payee one, renamed' }, { ...entry(4), label: 'Am' + String.fromCharCode(0xe9) + 'lie' }]);
+    expect(fitted.participants[0].label).toBeUndefined();
+    expect(fitted.participants[1].label).toBe('Carol');
+    expect({ m: fitted.manifestsDropped, p: fitted.proposalsDropped, a: fitted.addressBookDropped }).toEqual({ m: 4, p: 3, a: 5 });
+    const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
+    expect(decoded).toMatchObject({ ok: true, package: { manifestsDropped: 4, proposalHistoryTruncated: true, addressBookTruncated: true } });
+  });
+
+  it('never leaves out endorsements or external attestations, merging repeated copies', () => {
+    const { contents: fitted } = fitRecoveryHistory({ ...backup, endorsements: [ENDORSEMENT, ENDORSEMENT], externalAttestations: [EXTERNAL_ATTESTATION, EXTERNAL_ATTESTATION] });
+    expect(fitted.endorsements).toEqual([ENDORSEMENT]);
+    expect(fitted.externalAttestations).toEqual([EXTERNAL_ATTESTATION]);
+    expect(() => fitRecoveryHistory({ ...backup, endorsements: [{ ...ENDORSEMENT, signature: 'ab' }] })).toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
+    // They count toward the bound like the manifests: a package that cannot hold them is refused.
+    const manifests = Array.from({ length: 63 }, (_, i) => ({ version: i + 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES) }));
+    const attestations = Array.from({ length: MAX_EXTERNAL_ATTESTATIONS }, (_, i) => ({ method: 1, proof: i.toString(16).padStart(4, '0') + 'ab'.repeat(4094) }));
+    expect(() => fitRecoveryHistory({ ...backup, manifests, externalAttestations: attestations })).toThrow(expect.objectContaining({
+      code: 'HISTORY_TOO_LARGE',
+      message: expect.stringContaining(`${MAX_EXTERNAL_ATTESTATIONS} external attestations`),
+    }));
   });
 
   it('refuses with the sizes when the manifests alone do not fit', () => {

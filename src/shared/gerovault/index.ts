@@ -45,6 +45,8 @@ export type {
   VaultDescription,
 } from './registration';
 export { CIP83_DEFAULT_PASSPHRASE, cip83Decrypt, cip83Encrypt } from './cip83';
+// Display labels: read, write and display rules (spec 5.3, 6.8).
+export { displayLabel, readLabel, writeLabel } from './labels';
 // Recovery package (GV-14): file format, passphrases, payload, export, restore and staleness.
 // `sealRecoveryFile` and its fixed salt and nonce for test vectors are deliberately not exported.
 export {
@@ -69,6 +71,9 @@ export type {
 } from './recoveryFormat';
 export {
   MAX_ADDRESS_BOOK_ENTRIES,
+  MAX_ENDORSEMENTS,
+  MAX_EXTERNAL_ATTESTATIONS,
+  MAX_EXTERNAL_ATTESTATION_BYTES,
   MAX_MANIFEST_REVISIONS,
   MAX_PACKAGE_PARTICIPANTS,
   MAX_PROPOSALS,
@@ -84,7 +89,10 @@ export type {
   AddressBookEntry,
   BackupTerms,
   DecodeRecoveryPayloadResult,
+  ExternalAttestationRecord,
   ExternalCosignerInput,
+  ExternalEndorsement,
+  FittedRecoveryHistory,
   ManifestRevision,
   NativeVaultRecord,
   OutputReference,
@@ -96,8 +104,12 @@ export type {
   RecoveryPackage,
   RecoveryPackageContents,
   RecoveryPayloadRefusalCode,
+  RecoverySkipped,
 } from './recoveryPayload';
 export {
+  ATTESTATION_TIMEOUT_MS,
+  MAX_CHAIN_REGISTRATIONS,
+  MAX_REVEALED_SCRIPTS,
   backupPathOpensAtMs,
   exportRecoveryPackage,
   openRecoveryPackage,

@@ -54,6 +54,7 @@ import {
   PlutusVaultRecord,
   RecoveryPackage,
   RecoveryPackageContents,
+  RecoverySkipped,
   decodeRecoveryPayload,
   encodeRecoveryPayload,
   fitRecoveryHistory,
@@ -62,7 +63,7 @@ import {
 import { DecodedRegistration, EXTERNAL_SCAN_MAX, RebuildParticipant, RegistrationInput, decodeRegistration, rebuildFromRegistration } from './registration';
 import { vaultAddresses } from './scripts';
 import { vaultId } from './vaultId';
-import { ROLE, RoleKeys, VaultAddresses, VaultNetwork, VaultPublicKeys, VaultScript, VaultScripts, VaultWarning } from './types';
+import { ROLE, RoleKeys, VaultAddresses, VaultNetwork, VaultPublicKeys, VaultScripts, VaultWarning } from './types';
 
 // ---------------------------------------------------------------------------------------------
 // Opening
@@ -223,12 +224,16 @@ function reread(pkg: RecoveryPackageContents): RecoveryPackage | undefined {
 
 export interface ExportedRecoveryPackage {
   readonly file: Uint8Array;
-  /** Proposals left out of the package, the oldest first, to fit it (earlier exports included). */
+  /** Proposals left out of the package, the oldest first, to fit it or because they could not be carried (earlier exports included). */
   readonly proposalsDropped: number;
   readonly proposalHistoryTruncated: boolean;
-  /** Address book entries left out, the oldest first (entries carry no usage time). */
+  /** Address book entries left out, likewise; entries carry no usage time, so the oldest added go first. */
   readonly addressBookDropped: number;
   readonly addressBookTruncated: boolean;
+  /** Manifest revisions left out because they could not be carried. */
+  readonly manifestsDropped: number;
+  /** What this export could not carry, by kind (part of the counts above). */
+  readonly skipped: RecoverySkipped;
 }
 
 /**
@@ -240,8 +245,9 @@ export interface ExportedRecoveryPackage {
  *   rebuild from their keys, roles, backup terms and external keys;
  * - `SEED_MISMATCH` when `roleKeys` do not derive the exporter's recorded keys at its index;
  * - `HISTORY_TOO_LARGE`, with the sizes, when the package does not fit even without any proposal
- *   or address book entry (every manifest revision is kept; the oldest proposals and address book
- *   entries are left out first, so neither ever makes an export fail);
+ *   or address book entry (every carriable manifest revision, endorsement and external attestation
+ *   is kept; the oldest proposals and address book entries are left out first, and an entry that
+ *   cannot be carried is left out and counted, so neither ever makes an export fail);
  * - `PACKAGE_CHECK_FAILED` if the sealed file does not open again with the passphrase to the same
  *   payload.
  */
@@ -253,7 +259,8 @@ export async function exportRecoveryPackage(
   const problem = recoveryPassphraseProblem(passphrase);
   if (problem) throw new GeroVaultError('INVALID_PASSPHRASE', `The passphrase is refused: ${problem}`);
   if (!validRoleKeys(roleKeys)) throw new GeroVaultError('INVALID_ROLE_KEY', 'The exporter\'s role keys are needed');
-  const payload = encodeRecoveryPayload(fitRecoveryHistory(contents));
+  const { contents: fitted, skipped } = fitRecoveryHistory(contents);
+  const payload = encodeRecoveryPayload(fitted);
   const decoded = decodeRecoveryPayload(payload);
   if (decoded.ok !== true) throw new GeroVaultError('INVALID_PACKAGE', `The payload does not decode: ${decoded.detail ?? decoded.code}`);
   const pkg = decoded.package;
@@ -274,6 +281,8 @@ export async function exportRecoveryPackage(
     proposalHistoryTruncated: pkg.proposalHistoryTruncated,
     addressBookDropped: pkg.addressBookDropped,
     addressBookTruncated: pkg.addressBookTruncated,
+    manifestsDropped: pkg.manifestsDropped,
+    skipped,
   });
 }
 
@@ -289,7 +298,9 @@ export interface RecoveryChainUtxo {
 
 /**
  * What the chain shows, from any provider, for the package's network. Untrusted: everything is
- * decoded, hashed and compared here, and for a native vault none of it is required.
+ * decoded, hashed and compared here, and for a native vault none of it is required. Only the first
+ * `MAX_CHAIN_REGISTRATIONS` registrations and `MAX_REVEALED_SCRIPTS` revealed scripts are read
+ * (`chainFactsTruncated` says so); entries that do not decode are ignored, never refused.
  * - `registrations`: CIP-0146 registrations found for the vault (by a discovery scan of the
  *   restoring participant's keys or by the package's script hashes), as `decodeRegistration` takes
  *   them. Anyone can publish one: one that does not decode is ignored.
@@ -307,31 +318,59 @@ export interface RecoveryChainFacts {
   readonly utxos?: readonly RecoveryChainUtxo[];
 }
 
-/** What an attestation verifier is asked: whether the manifest history holds the restorer's own attestation. */
+/**
+ * What an attestation verifier is asked: whether the manifest history holds the restorer's own
+ * owner attestation for this vault. The verifier must bind what it accepts to this vault: the
+ * attested binding must name this vault's identifier, and the verification digest must be the one
+ * computed from these scripts and participants (spec 5.3). An attestation copied from another vault
+ * must not verify. Its answer names the vault and the credential it verified, and restore compares
+ * both with its own.
+ */
 export interface OwnAttestationQuery {
   readonly network: VaultNetwork;
   readonly vaultId: string;
+  /** The rebuilt scripts: the vault the attestation must be bound to. */
+  readonly scripts: Pick<VaultScripts, 'payment' | 'stake'>;
+  /** The package's participants, claims from the package. */
+  readonly participants: readonly PackageParticipant[];
   readonly manifests: RecoveryPackage['manifests'];
   /** The restorer's vault keys at their own index, derived from their seed. */
   readonly vaultKeys: VaultPublicKeys;
   /** The hash of the restorer's payment vault key: their credential in the manifest. */
   readonly credential: Ed25519KeyHashHex;
+  /** Aborted when the restore stops waiting (`attestationTimeoutMs`, or the caller's own signal). */
+  readonly signal: AbortSignal;
 }
 
-export type OwnAttestationResult = { readonly verified: true; readonly acceptedAtMs: number } | { readonly verified: false };
+export type OwnAttestationResult =
+  | {
+      readonly verified: true;
+      readonly acceptedAtMs: number;
+      /** The vault and the credential the verified attestation is bound to. */
+      readonly vaultId: string;
+      readonly credential: Ed25519KeyHashHex;
+    }
+  | { readonly verified: false };
 
 /**
  * Verifies the restorer's own owner attestation in the manifest history, signed by their vault
- * key at their index. The verifier belongs to the manifest work (GV-22); until it is wired in,
- * no caller passes one and every restore takes the "no attestation" path.
+ * key at their index. The verifier belongs to the manifest work (GV-22); until it is wired in, no
+ * caller passes one and every restore takes the "no attestation" path.
  */
 export type OwnAttestationVerifier = (query: OwnAttestationQuery) => Promise<OwnAttestationResult>;
+
+/** How long a restore waits for the verifier by default, in milliseconds. */
+export const ATTESTATION_TIMEOUT_MS = 10000;
 
 export interface RestoreOptions {
   /** The restoring participant's own CIP-1854 role keys, derived from their seed. */
   readonly roleKeys: RoleKeys;
   readonly chain: RecoveryChainFacts;
   readonly verifyOwnAttestation?: OwnAttestationVerifier;
+  /** How long to wait for the verifier before taking the "no attestation" path; 10 s by default. */
+  readonly attestationTimeoutMs?: number;
+  /** Stops waiting for the verifier when aborted. */
+  readonly signal?: AbortSignal;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -365,7 +404,7 @@ export interface RestoredNativeCandidate {
   readonly scripts: VaultScripts;
   readonly addresses: VaultAddresses;
   readonly self: { readonly position: number; readonly index: number; readonly role: PackageRole };
-  /** Claims from the package; their keys rebuild the scripts, their labels are unverified. */
+  /** Claims from the package; their keys rebuild the scripts, their labels are unverified and shown only through `displayLabel`. */
   readonly participants: readonly PackageParticipant[];
   readonly backup?: BackupTerms & { /** The time of the slot; `undefined` when it cannot be computed. */ readonly opensAtMs?: number };
   /** The warnings the vault carries (`ALL_OWNERS_REQUIRED`), for the screen to show. */
@@ -373,9 +412,12 @@ export interface RestoredNativeCandidate {
   /** The scripts' key order is the one `buildVaultScripts` writes. */
   readonly canonicalOrder: boolean;
   readonly chainState: RecoveryChainState;
+  /** More chain facts were given than are read; the state and conflicts cover the first ones only. */
+  readonly chainFactsTruncated: boolean;
   /**
-   * Hashes of other scripts on chain that hold the restorer's key at this index. Shown, never a
-   * refusal: anyone who knows a public key can publish such a script.
+   * Hashes of other scripts on chain that hold either of the restorer's keys at this index,
+   * whatever role a registration declares for them. Shown, never a refusal: anyone who knows a
+   * public key can publish such a script.
    */
   readonly conflicts: readonly string[];
   readonly ownAttestation: OwnAttestationResult;
@@ -416,10 +458,9 @@ export type RestoreResult =
 // ---------------------------------------------------------------------------------------------
 // Restore: native chain state
 
-const MAX_CHAIN_REGISTRATIONS = 1024;
-const MAX_REVEALED_SCRIPTS = 256;
+export const MAX_CHAIN_REGISTRATIONS = 1024;
+export const MAX_REVEALED_SCRIPTS = 256;
 const MAX_REVEALED_SCRIPT_BYTES = 16384;
-const MAX_CHAIN_UTXOS = 1024;
 
 /** A script's hash over the bytes as given: `blake2b-224(tag || bytes)`, tag 0 for native, 3 for Plutus V3. */
 function scriptHash(tag: number, bytes: Uint8Array): string {
@@ -445,7 +486,9 @@ function revealedKeyHashes(hex: string): Set<string> {
   }
 }
 
-type ChainReading = { readonly ok: true; readonly state: RecoveryChainState; readonly conflicts: readonly string[] } | Refusal<'INVALID_INPUT'>;
+type ChainReading =
+  | { readonly ok: true; readonly state: RecoveryChainState; readonly conflicts: readonly string[]; readonly truncated: boolean }
+  | Refusal<'INVALID_INPUT'>;
 
 function readNativeChain(
   vault: VaultScripts,
@@ -454,37 +497,37 @@ function readNativeChain(
 ): ChainReading {
   const registrations = chain.registrations ?? [];
   const revealed = chain.revealedScripts ?? [];
-  if (!Array.isArray(registrations) || registrations.length > MAX_CHAIN_REGISTRATIONS) return refusal('INVALID_INPUT', 'registrations');
-  if (!Array.isArray(revealed) || revealed.length > MAX_REVEALED_SCRIPTS) return refusal('INVALID_INPUT', 'revealed scripts');
+  if (!Array.isArray(registrations)) return refusal('INVALID_INPUT', 'registrations');
+  if (!Array.isArray(revealed)) return refusal('INVALID_INPUT', 'revealed scripts');
   if ((chain.funded !== undefined && typeof chain.funded !== 'boolean') || (chain.used !== undefined && typeof chain.used !== 'boolean')) {
     return refusal('INVALID_INPUT', 'funded or used');
   }
+  const truncated = registrations.length > MAX_CHAIN_REGISTRATIONS || revealed.length > MAX_REVEALED_SCRIPTS;
   const ours = new Set<string>([vault.payment.hash, vault.stake.hash]);
   const conflicts = new Set<string>();
-  const holdsOwnKey = (s: VaultScript) =>
-    keyHashesIn(s.script).has(s.role === ROLE.PAYMENT ? own.payment : own.stake);
+  const holdsOwnKey = (keys: ReadonlySet<string>) => keys.has(own.payment) || keys.has(own.stake);
 
   let registered = false;
-  for (const input of registrations) {
+  for (const input of registrations.slice(0, MAX_CHAIN_REGISTRATIONS)) {
     // Hashes are recomputed from the published bytes; whatever does not decode is someone's noise.
     const decoded = decodeRegistration(input);
     if (decoded.ok !== true) continue;
     const r = decoded.registration;
     if (r.payment.hash === vault.payment.hash && (r.stake === undefined || r.stake.hash === vault.stake.hash)) registered = true;
-    for (const s of r.scripts) if (!ours.has(s.hash) && holdsOwnKey(s)) conflicts.add(s.hash);
+    // Both keys against every script, whatever role the registration declares for it.
+    for (const sc of r.scripts) if (!ours.has(sc.hash) && holdsOwnKey(keyHashesIn(sc.script))) conflicts.add(sc.hash);
   }
 
   let ran = false;
-  for (const hex of revealed) {
+  for (const hex of revealed.slice(0, MAX_REVEALED_SCRIPTS)) {
     const bytes = hexToBytes(hex);
-    if (!bytes || bytes.length === 0 || bytes.length > MAX_REVEALED_SCRIPT_BYTES) return refusal('INVALID_INPUT', 'a revealed script is not CBOR hex');
+    if (!bytes || bytes.length === 0 || bytes.length > MAX_REVEALED_SCRIPT_BYTES) continue;
     const hash = scriptHash(0, bytes);
     if (ours.has(hash)) {
       ran = true;
       continue;
     }
-    const keys = revealedKeyHashes(hex as string);
-    if (keys.has(own.payment) || keys.has(own.stake)) conflicts.add(hash);
+    if (holdsOwnKey(revealedKeyHashes(hex as string))) conflicts.add(hash);
   }
 
   const funded = chain.funded === true;
@@ -493,21 +536,42 @@ function readNativeChain(
     ok: true,
     state: Object.freeze({ registered, funded, used, neverSeen: !registered && !funded && !used }),
     conflicts: Object.freeze([...conflicts].sort()),
+    truncated,
   };
 }
 
 async function ownAttestation(
-  verify: OwnAttestationVerifier | undefined,
-  query: OwnAttestationQuery,
+  options: RestoreOptions,
+  query: Omit<OwnAttestationQuery, 'signal'>,
 ): Promise<OwnAttestationResult> {
+  const verify = options.verifyOwnAttestation;
   if (typeof verify !== 'function') return { verified: false };
+  const ms = Number.isSafeInteger(options.attestationTimeoutMs) && (options.attestationTimeoutMs as number) > 0
+    ? (options.attestationTimeoutMs as number)
+    : ATTESTATION_TIMEOUT_MS;
+  const controller = new AbortController();
+  const outer = options.signal;
+  const stop = () => controller.abort();
+  if (outer?.aborted) return { verified: false };
+  outer?.addEventListener?.('abort', stop);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const gaveUp = new Promise<OwnAttestationResult>(resolve => {
+    controller.signal.addEventListener('abort', () => resolve({ verified: false }));
+    timer = setTimeout(stop, ms);
+  });
   try {
-    const r = await verify(query);
+    const r = await Promise.race([verify({ ...query, signal: controller.signal }), gaveUp]);
+    // Only an answer bound to this vault and this restorer counts.
     return r?.verified === true && Number.isSafeInteger(r.acceptedAtMs) && r.acceptedAtMs >= 0
-      ? Object.freeze({ verified: true, acceptedAtMs: r.acceptedAtMs })
+      && r.vaultId === query.vaultId && r.credential === query.credential
+      ? Object.freeze({ verified: true, acceptedAtMs: r.acceptedAtMs, vaultId: r.vaultId, credential: r.credential })
       : { verified: false };
   } catch {
     return { verified: false };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    outer?.removeEventListener?.('abort', stop);
+    controller.abort();
   }
 }
 
@@ -516,12 +580,11 @@ async function ownAttestation(
 
 const STATE_ASSET_NAME = bytesToHex(new TextEncoder().encode('state'));
 
+/** Exactly one: the integer 1, the bigint 1, or the decimal string "1". */
 function isOne(quantity: unknown): boolean {
-  try {
-    return (typeof quantity === 'bigint' || typeof quantity === 'number' || typeof quantity === 'string') && BigInt(quantity) === 1n;
-  } catch {
-    return false;
-  }
+  if (typeof quantity === 'bigint') return quantity === 1n;
+  if (typeof quantity === 'number') return Number.isSafeInteger(quantity) && quantity === 1;
+  return typeof quantity === 'string' && quantity === '1';
 }
 
 function addressBytes(bech: unknown): string | undefined {
@@ -534,7 +597,7 @@ function addressBytes(bech: unknown): string | undefined {
 
 function restorePlutus(pkg: PlutusPackage, chain: RecoveryChainFacts): RestoreResult {
   const utxos = chain.utxos ?? [];
-  if (!Array.isArray(utxos) || utxos.length > MAX_CHAIN_UTXOS) return refusal('INVALID_INPUT', 'utxos');
+  if (!Array.isArray(utxos)) return refusal('INVALID_INPUT', 'utxos');
   const h = Hash28ByteBase16(scriptHash(3, hexToBytes(pkg.vault.validator) as Uint8Array));
   const credential: Cardano.Credential = { type: Cardano.CredentialType.ScriptHash, hash: h };
   const networkId = pkg.network === 'mainnet' ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
@@ -547,9 +610,11 @@ function restorePlutus(pkg: PlutusPackage, chain: RecoveryChainFacts): RestoreRe
     spendOnly: true,
   });
   const fullBytes = full.toBytes();
-  // A state token under any other policy, or at any other address, is never accepted (spec 4.2.1).
-  const state = utxos.find(u => addressBytes(u?.address) === fullBytes && Array.isArray(u.assets)
-    && u.assets.some(a => a?.policyId === h && a.assetName === STATE_ASSET_NAME && isOne(a.quantity)));
+  // Only the state token is looked for, however many UTxOs there are. A state token under any
+  // other policy, or at any other address, is never accepted (spec 4.2.1).
+  const holdsState = (u: RecoveryChainUtxo | undefined) => Array.isArray(u?.assets)
+    && (u as RecoveryChainUtxo).assets.some(a => a?.policyId === h && a.assetName === STATE_ASSET_NAME && isOne(a.quantity));
+  const state = utxos.find(u => holdsState(u) && addressBytes(u.address) === fullBytes);
   if (!state) return { ...refusal('PLUTUS_VAULT_NOT_FOUND'), plutus };
   return { ...refusal('PLUTUS_DATUM_CODEC_UNAVAILABLE', 'the state datum check needs the GV-64 datum codec'), plutus };
 }
@@ -568,7 +633,7 @@ function restorePlutus(pkg: PlutusPackage, chain: RecoveryChainFacts): RestoreRe
  * 5. native: the scripts rebuild from the package's keys and the seed's own, in the package's key
  *    order, with roles, backup terms and external keys agreeing (`PACKAGE_INCONSISTENT`); then the
  *    chain state and any conflicts are read for display, and the restorer's own attestation is
- *    looked for through `verifyOwnAttestation`.
+ *    looked for through `verifyOwnAttestation`, for at most `attestationTimeoutMs`.
  */
 export async function restoreVaultFromPackage(pkg: RecoveryPackageContents, options: RestoreOptions): Promise<RestoreResult> {
   try {
@@ -590,9 +655,11 @@ export async function restoreVaultFromPackage(pkg: RecoveryPackageContents, opti
     if (chain.ok !== true) return chain;
 
     const id = vaultId(rebuilt.vault, fresh.network);
-    const attestation = await ownAttestation(options.verifyOwnAttestation, {
+    const attestation = await ownAttestation(options, {
       network: fresh.network,
       vaultId: id,
+      scripts: { payment: rebuilt.vault.payment, stake: rebuilt.vault.stake },
+      participants: fresh.participants,
       manifests: fresh.manifests,
       vaultKeys: own,
       credential: ownHashes.payment,
@@ -613,6 +680,7 @@ export async function restoreVaultFromPackage(pkg: RecoveryPackageContents, opti
       warnings: rebuilt.vault.warnings,
       canonicalOrder: rebuilt.canonicalOrder,
       chainState: chain.state,
+      chainFactsTruncated: chain.truncated,
       conflicts: chain.conflicts,
       ownAttestation: attestation,
       depositsBlocked: !attestation.verified,

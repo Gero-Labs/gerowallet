@@ -18,8 +18,11 @@
  *     7: [* proposal-record],        ; proposal history, oldest first
  *     8: [* address-book-entry],     ; address book, oldest entry first
  *     9: [* output-reference],       ; reference-script UTxOs
- *     10: uint,                      ; how many of the oldest proposals were left out to fit, 0 if none
- *     11: uint,                      ; how many of the oldest address book entries were left out, 0 if none
+ *     10: uint,                      ; proposals left out (the oldest, to fit, or not carriable)
+ *     11: uint,                      ; address book entries left out, likewise
+ *     12: [* endorsement],           ; the vault's external endorsements, never left out
+ *     13: [* external-attestation],  ; the external attestations they cover, never left out
+ *     14: uint,                      ; manifest revisions left out because they could not be carried
  *   }
  *   native-vault = {
  *     0: 0,
@@ -54,6 +57,21 @@
  *   proposal-record    = [bstr, bstr]                    ; proposal id, the proposal's own encoding
  *   address-book-entry = [bstr, tstr]                    ; Shelley payment address bytes, label
  *   output-reference   = [bstr .size 32, uint]           ; transaction id, output index
+ *   endorsement = [
+ *     bstr .size 32,                 ; verification digest
+ *     bstr .size 28,                 ; the external cosigner's credential
+ *     bstr .size 32,                 ; hash of the external attestation it covers
+ *     bstr .size 16,                 ; the endorsing device's id
+ *     bstr .size 64,                 ; that device's Ed25519 signature
+ *   ]
+ *   external-attestation = [uint, bstr]                  ; method, proof (at most 4096 bytes)
+ *
+ * Endorsements and external attestations are carried opaque: their meaning and their checks
+ * belong to the manifest code (GV-60, GV-61). They are small and never left out; a package that
+ * cannot hold them is refused like one that cannot hold its manifests.
+ *
+ * Labels follow `labels.ts`: the decoder applies the read rule (well-formed, at most 64 bytes, no
+ * control character) and refuses an empty label, and an export applies the write rule.
  *
  * Owners and backup holders appear in native vaults, owners and guardians in Plutus vaults.
  * Native participants carry both vault keys and may be external wallets; Plutus participants
@@ -65,10 +83,11 @@
  * of the validator bytes, which a restore computes and checks against the chain.
  *
  * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
- * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision is
- * kept. When the rest does not fit, the oldest proposals and the oldest address book entries are
- * left out, and keys 10 and 11 count them (`fitRecoveryHistory`). Address book entries carry no
- * usage time, so "oldest" means added first.
+ * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision that
+ * can be carried is kept. When the rest does not fit, the oldest proposals and the oldest address
+ * book entries are left out, and keys 10 and 11 count them (`fitRecoveryHistory`). Address book
+ * entries carry no usage time, so "oldest" means added first. The counts are claims from the
+ * writer: no reader can tell from them that a history is complete.
  *
  * The decoder takes untrusted bytes and never throws. It uses the strict bounded reader of
  * `cbor.ts`, refuses unknown keys and anything out of bounds, and requires the bytes to be
@@ -78,13 +97,14 @@
  * client.
  */
 import { Cardano } from '@cardano-sdk/core';
-import { Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
+import { Ed25519KeyHashHex, Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { bech32 } from 'bech32';
 import { CborError, CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX } from './keys';
+import { readLabel, writeLabel } from './labels';
 import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import { decodeRegistration } from './registration';
 import { NETWORK_MAGIC } from './vaultId';
@@ -98,13 +118,16 @@ export const MAX_MANIFEST_REVISIONS = 16384;
 export const MAX_PROPOSALS = 10000;
 export const MAX_ADDRESS_BOOK_ENTRIES = 1024;
 export const MAX_REFERENCE_SCRIPTS = 16;
+export const MAX_ENDORSEMENTS = 256;
+export const MAX_EXTERNAL_ATTESTATIONS = 64;
+/** An external attestation proof is at most 4 KiB (the manifest codec allows up to that). */
+export const MAX_EXTERNAL_ATTESTATION_BYTES = 4096;
 /** A manifest revision is at most 256 KiB, the manifest codec's own bound. */
 export const MAX_MANIFEST_BYTES = 262144;
 export const MAX_PROPOSAL_BYTES = 65536;
 const MAX_SCRIPT_BYTES = 16384;
 const MAX_VALIDATOR_BYTES = 65536;
 const MAX_PROPOSAL_ID_BYTES = 64;
-const MAX_TEXT_BYTES = 64;
 const MAX_TEMPLATE_VERSION = 0xffffffff;
 const MAX_OUTPUT_INDEX = 0xffff;
 const PAYLOAD_LIMITS = { maxDepth: 6, maxItems: 131072 };
@@ -186,6 +209,26 @@ export interface AddressBookEntry {
   readonly label: string;
 }
 
+/** An endorsement of an external cosigner's attestation by another owner's device (GV-61), opaque here. */
+export interface ExternalEndorsement {
+  /** 32 bytes, lowercase hex. */
+  readonly verificationDigest: string;
+  readonly externalCredential: Ed25519KeyHashHex;
+  /** 32 bytes, lowercase hex. */
+  readonly externalAttestationHash: string;
+  /** 16 bytes, lowercase hex. */
+  readonly endorserDeviceId: string;
+  /** The endorsing device's Ed25519 signature, 64 bytes, lowercase hex. */
+  readonly signature: string;
+}
+
+/** An external cosigner's attestation as the manifest code encodes it, opaque here. */
+export interface ExternalAttestationRecord {
+  readonly method: number;
+  /** Lowercase hex, 1 to 4096 bytes. */
+  readonly proof: string;
+}
+
 /** What `exportRecoveryPackage` writes. */
 export interface RecoveryPackageContents {
   readonly network: VaultNetwork;
@@ -204,6 +247,10 @@ export interface RecoveryPackageContents {
   readonly proposalsDropped?: number;
   /** Address book entries already left out of `addressBook`, counted from the oldest; 0 when absent. */
   readonly addressBookDropped?: number;
+  /** Manifest revisions already left out because they could not be carried; 0 when absent. */
+  readonly manifestsDropped?: number;
+  readonly endorsements?: readonly ExternalEndorsement[];
+  readonly externalAttestations?: readonly ExternalAttestationRecord[];
 }
 
 /** A decoded payload. Its vault facts are claims until a restore checks them. */
@@ -211,12 +258,20 @@ export interface RecoveryPackage extends RecoveryPackageContents {
   readonly version: number;
   /** Each revision with its hash: blake2b-256 over the tag and its canonical CBOR (spec 5.2). */
   readonly manifests: readonly (ManifestRevision & { readonly hash: string })[];
+  /**
+   * The counts below are claims from the package's writer, as the history itself is: a writer that
+   * left entries out without counting them is possible, so a screen never says "complete history"
+   * from a zero, only "N entries were left out" from a count above zero.
+   */
   readonly proposalsDropped: number;
-  /** Some of the oldest proposals were left out to fit the package. */
+  /** The writer says some proposals were left out. */
   readonly proposalHistoryTruncated: boolean;
   readonly addressBookDropped: number;
-  /** Some of the oldest address book entries were left out to fit the package. */
+  /** The writer says some address book entries were left out. */
   readonly addressBookTruncated: boolean;
+  readonly manifestsDropped: number;
+  readonly endorsements: readonly ExternalEndorsement[];
+  readonly externalAttestations: readonly ExternalAttestationRecord[];
 }
 
 export type RecoveryPayloadRefusalCode = 'UNKNOWN_PAYLOAD_VERSION' | 'PAYLOAD_INVALID';
@@ -310,16 +365,11 @@ function boundedHex(hex: unknown, max: number, what: string): Uint8Array {
   return hexToBytes(hex) as Uint8Array;
 }
 
-const utf8Length = (s: string) => new TextEncoder().encode(s).length;
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
-const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
-
-function label(value: unknown, what: string): string {
-  if (typeof value !== 'string' || value.length === 0 || LONE_SURROGATE.test(value) || CONTROL.test(value)
-    || utf8Length(value) > MAX_TEXT_BYTES) {
-    invalid(`${what} is 1 to ${MAX_TEXT_BYTES} bytes of well-formed text without control characters`);
-  }
-  return value as string;
+/** The read rule of `labels.ts`, and not empty: an absent label is written as no key at all. */
+function storedLabel(value: unknown, what: string): string {
+  const text = readLabel(value);
+  if (text === undefined || text.length === 0) invalid(`${what} is 1 to 64 bytes of well-formed text without control characters`);
+  return text as string;
 }
 
 /** Decodes the two scripts exactly as a registration's are decoded: canonical, hashed over their bytes. */
@@ -418,7 +468,7 @@ function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
       invalid('A Plutus vault participant has no stake vault key');
     }
     const external = p.external === undefined ? undefined : externalKey(p.external);
-    const text = p.label === undefined ? undefined : cText(label(p.label, 'A participant label'));
+    const text = p.label === undefined ? undefined : cText(storedLabel(p.label, 'A participant label'));
     return cMap({ 0: cUint(code), 1: cBytes(payment), 2: stake ? cBytes(stake) : undefined, 3: external, 4: text });
   }));
 }
@@ -476,7 +526,7 @@ function addressBytes(address: unknown, network: VaultNetwork): Uint8Array {
 function addressBookEntryBytes(e: AddressBookEntry, network: VaultNetwork): { bytes: Uint8Array; address: string } {
   if (!isObject(e)) invalid('An address book entry is a record');
   const address = addressBytes(e.address, network);
-  return { bytes: cArray([cBytes(address), cText(label(e.label, 'An address book label'))]), address: bytesToHex(address) };
+  return { bytes: cArray([cBytes(address), cText(storedLabel(e.label, 'An address book label'))]), address: bytesToHex(address) };
 }
 
 function addressBookBytes(entries: readonly AddressBookEntry[], network: VaultNetwork): Uint8Array {
@@ -500,23 +550,45 @@ function referenceScriptsBytes(refs: readonly OutputReference[]): Uint8Array {
   }));
 }
 
-/**
- * Encodes a payload. Throws `GeroVaultError('INVALID_PACKAGE')` naming the first rule the
- * contents break, a payload over the file bound included (`fitRecoveryHistory` makes the history
- * fit first).
- */
-export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8Array {
+function endorsementBytes(e: ExternalEndorsement): Uint8Array {
+  if (!isObject(e)) invalid('An endorsement is a record');
+  return cArray([
+    cBytes(hexBytes(e.verificationDigest, LOWER_HEX(32), 'An endorsement verification digest')),
+    cBytes(hexBytes(e.externalCredential, LOWER_HEX(28), 'An endorsement external credential')),
+    cBytes(hexBytes(e.externalAttestationHash, LOWER_HEX(32), 'An endorsement attestation hash')),
+    cBytes(hexBytes(e.endorserDeviceId, LOWER_HEX(16), 'An endorsement device id')),
+    cBytes(hexBytes(e.signature, LOWER_HEX(64), 'An endorsement signature')),
+  ]);
+}
+
+function externalAttestationBytes(a: ExternalAttestationRecord): Uint8Array {
+  if (!isObject(a) || !isUint(a.method, 255)) invalid('An external attestation has a method from 0 to 255');
+  return cArray([cUint(a.method), cBytes(boundedHex(a.proof, MAX_EXTERNAL_ATTESTATION_BYTES, 'An external attestation proof'))]);
+}
+
+/** A list of distinct items, each encoded. */
+function distinctList<T>(items: readonly T[] | undefined, max: number, what: string, encode: (x: T) => Uint8Array): Uint8Array {
+  const seen = new Set<string>();
+  return cArray(list(items ?? [], max, what).map(x => {
+    const bytes = encode(x);
+    const key = bytesToHex(bytes);
+    if (seen.has(key)) invalid(`The same entry appears twice in ${what.toLowerCase()}`);
+    seen.add(key);
+    return bytes;
+  }));
+}
+
+/** The payload's bytes with no bound on their total size. */
+function encodeContents(contents: RecoveryPackageContents): Uint8Array {
   if (!isObject(contents)) invalid('No contents');
   const magic = Object.prototype.hasOwnProperty.call(NETWORK_MAGIC, contents.network) ? NETWORK_MAGIC[contents.network] : undefined;
   if (magic === undefined) invalid('A vault network is mainnet, preprod or preview');
   if (!isUint(contents.exportedAtMs)) invalid('The export time is Unix milliseconds');
-  const dropped = contents.proposalsDropped ?? 0;
-  if (!isUint(dropped)) invalid('The count of proposals left out is an unsigned integer');
-  const bookDropped = contents.addressBookDropped ?? 0;
-  if (!isUint(bookDropped)) invalid('The count of address book entries left out is an unsigned integer');
+  const counts = [contents.proposalsDropped, contents.addressBookDropped, contents.manifestsDropped].map(n => n ?? 0);
+  if (!counts.every(n => isUint(n))) invalid('A count of entries left out is an unsigned integer');
   const vault = vaultBytes(contents.vault);
   const participants = participantsBytes(contents);
-  const out = cMap({
+  return cMap({
     0: cUint(RECOVERY_PAYLOAD_VERSION),
     1: cUint(magic),
     2: cUint(contents.exportedAtMs),
@@ -527,58 +599,158 @@ export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8A
     7: proposalsBytes(contents.proposals),
     8: addressBookBytes(contents.addressBook, contents.network),
     9: referenceScriptsBytes(contents.referenceScripts),
-    10: cUint(dropped),
-    11: cUint(bookDropped),
+    10: cUint(counts[0]),
+    11: cUint(counts[1]),
+    12: distinctList(contents.endorsements, MAX_ENDORSEMENTS, 'The endorsements', endorsementBytes),
+    13: distinctList(contents.externalAttestations, MAX_EXTERNAL_ATTESTATIONS, 'The external attestations', externalAttestationBytes),
+    14: cUint(counts[2]),
   });
+}
+
+/**
+ * Encodes a payload. Throws `GeroVaultError('INVALID_PACKAGE')` naming the first rule the
+ * contents break, a payload over the file bound included (`fitRecoveryHistory` makes the history
+ * fit first).
+ */
+export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8Array {
+  const out = encodeContents(contents);
   if (out.length > MAX_RECOVERY_PAYLOAD_BYTES) invalid(`The payload is ${out.length} bytes, over the bound of ${MAX_RECOVERY_PAYLOAD_BYTES}`);
   return out;
 }
 
+/** What an export could not carry and left out, beyond what it left out to fit. */
+export interface RecoverySkipped {
+  /** Malformed or oversized revisions, and earlier copies of a repeated version. */
+  readonly manifests: number;
+  /** Malformed or oversized proposals, and earlier copies of a repeated id. */
+  readonly proposals: number;
+  /** Entries with an address off the network or a label the write rule refuses, and earlier copies of an address. */
+  readonly addressBook: number;
+  /** Participant labels the write rule refuses: the participant stays, without the label. */
+  readonly participantLabels: number;
+}
+
+export interface FittedRecoveryHistory {
+  readonly contents: RecoveryPackageContents;
+  readonly skipped: RecoverySkipped;
+}
+
+const attempt = <T>(f: () => T): T | undefined => {
+  try {
+    return f();
+  } catch (e) {
+    if (e instanceof GeroVaultError) return undefined;
+    throw e;
+  }
+};
+
+/** The entries `encode` accepts, the last copy of each key kept in place. */
+function newestValid<T>(items: readonly T[], keyOf: (x: T) => string | undefined): T[] {
+  const last = new Map<string, number>();
+  items.forEach((x, i) => {
+    const key = keyOf(x);
+    if (key !== undefined) last.set(key, i);
+  });
+  return items.filter((x, i) => {
+    const key = keyOf(x);
+    return key !== undefined && last.get(key) === i;
+  });
+}
+
 /**
- * Makes the history fit one package without losing a manifest revision, so that an export never
- * fails for the size of its proposal history or its address book:
- * - at most `MAX_ADDRESS_BOOK_ENTRIES` address book entries and `MAX_PROPOSALS` proposals are kept;
- * - the room left after everything else goes to the address book first (it is small and serves
- *   every spend), then to the proposals;
- * - in each, the newest are kept and the oldest left out; entries carry no usage time, so the
- *   address book's oldest are those added first;
- * - `addressBookDropped` and `proposalsDropped` count what was left out, earlier exports included.
+ * Prepares contents for an export so that no single history or address book entry, and no size of
+ * either, ever makes it fail:
+ * - entries that cannot be carried are left out and counted in `skipped`: a manifest revision,
+ *   proposal or address book entry that is malformed, oversized or (an address) off the vault's
+ *   network, or whose label the write rule refuses, and every earlier copy of a repeated manifest
+ *   version, proposal id or address (the newest is kept); a participant label the write rule
+ *   refuses is left off its participant; labels are written in their NFC form;
+ * - then the history is fitted: every manifest revision left is kept; at most
+ *   `MAX_ADDRESS_BOOK_ENTRIES` address book entries and `MAX_PROPOSALS` proposals are kept; the room
+ *   left after everything else goes to the address book first (it is small and serves every spend),
+ *   then to the proposals; in each the newest are kept;
+ * - `manifestsDropped`, `addressBookDropped` and `proposalsDropped` count everything left out,
+ *   earlier exports included.
+ * Endorsements and external attestations are never left out; repeated copies are merged.
  * Throws `GeroVaultError('HISTORY_TOO_LARGE')`, with the sizes, when the package does not fit even
  * without any proposal or address book entry, and `INVALID_PACKAGE` for contents that break any
- * other rule.
+ * rule outside the history.
  */
-export function fitRecoveryHistory(contents: RecoveryPackageContents): RecoveryPackageContents {
+export function fitRecoveryHistory(contents: RecoveryPackageContents): FittedRecoveryHistory {
   if (!isObject(contents)) invalid('No contents');
-  const proposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
-  const book = list(contents.addressBook, Number.MAX_SAFE_INTEGER, 'The address book');
-  const manifests = Array.isArray(contents.manifests) ? contents.manifests : invalid('The manifest history is a list');
+  const network = contents.network;
+  if (!Object.prototype.hasOwnProperty.call(NETWORK_MAGIC, network)) invalid('A vault network is mainnet, preprod or preview');
+  const counts = [contents.proposalsDropped, contents.addressBookDropped, contents.manifestsDropped].map(n => n ?? 0);
+  if (!counts.every(n => isUint(n))) invalid('A count of entries left out is an unsigned integer');
+  const [earlierProposals, earlierBook, earlierManifests] = counts;
+
+  const rawManifests = list(contents.manifests, Number.MAX_SAFE_INTEGER, 'The manifest history');
+  const manifests = newestValid(rawManifests, m => (attempt(() => manifestsBytes([m])) ? String(m.version) : undefined))
+    .sort((a, b) => a.version - b.version);
   if (manifests.length > MAX_MANIFEST_REVISIONS) {
     throw new GeroVaultError('HISTORY_TOO_LARGE', `The manifest history has ${manifests.length} revisions; a package holds at most ${MAX_MANIFEST_REVISIONS}`);
   }
-  const earlier = contents.proposalsDropped ?? 0;
-  if (!isUint(earlier)) invalid('The count of proposals left out is an unsigned integer');
-  const earlierBook = contents.addressBookDropped ?? 0;
-  if (!isUint(earlierBook)) invalid('The count of address book entries left out is an unsigned integer');
-  const without = {
+  const rawProposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
+  const proposals = newestValid(rawProposals, p => (attempt(() => proposalBytes(p)) ? p.id : undefined));
+  const rawBook = list(contents.addressBook, Number.MAX_SAFE_INTEGER, 'The address book');
+  const written = rawBook.map(e => {
+    const labelText = isObject(e) ? attempt(() => writeLabel(e.label)) : undefined;
+    return labelText === undefined ? undefined : { ...e, label: labelText };
+  });
+  const book = newestValid(written, e => (e ? attempt(() => addressBookEntryBytes(e, network))?.address : undefined)) as AddressBookEntry[];
+  let participantLabels = 0;
+  const participants = Array.isArray(contents.participants)
+    ? contents.participants.map(p => {
+      if (!isObject(p) || p.label === undefined) return p;
+      const text = attempt(() => writeLabel(p.label));
+      if (text !== undefined) return { ...p, label: text };
+      participantLabels++;
+      const { label: _dropped, ...rest } = p;
+      return rest;
+    })
+    : contents.participants;
+  const unique = <T>(items: readonly T[] | undefined, encode: (x: T) => Uint8Array): T[] => {
+    const seen = new Set<string>();
+    return (Array.isArray(items) ? items : []).filter(x => {
+      const key = bytesToHex(encode(x));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const endorsements = unique(contents.endorsements, endorsementBytes);
+  const externalAttestations = unique(contents.externalAttestations, externalAttestationBytes);
+  const skipped: RecoverySkipped = Object.freeze({
+    manifests: rawManifests.length - manifests.length,
+    proposals: rawProposals.length - proposals.length,
+    addressBook: rawBook.length - book.length,
+    participantLabels,
+  });
+
+  const clean: RecoveryPackageContents = {
     ...contents,
+    participants,
+    manifests,
+    endorsements,
+    externalAttestations,
+    manifestsDropped: earlierManifests + skipped.manifests,
+  };
+  const base = encodeContents({
+    ...clean,
     proposals: [],
     addressBook: [],
-    proposalsDropped: earlier + proposals.length,
-    addressBookDropped: earlierBook + book.length,
-  };
-  let base: Uint8Array;
-  try {
-    base = encodeRecoveryPayload(without);
-  } catch (e) {
-    if (e instanceof GeroVaultError && e.message.startsWith('The payload is')) {
-      const manifestBytes = manifests.reduce((n, m) => n + (typeof m?.cbor === 'string' ? m.cbor.length / 2 : 0), 0);
-      throw new GeroVaultError(
-        'HISTORY_TOO_LARGE',
-        `The package is over ${MAX_RECOVERY_PAYLOAD_BYTES} bytes without any proposal or address book entry: `
-          + `its ${manifests.length} manifest revisions are ${manifestBytes} bytes`,
-      );
-    }
-    throw e;
+    proposalsDropped: earlierProposals + rawProposals.length,
+    addressBookDropped: earlierBook + rawBook.length,
+  });
+  if (base.length > MAX_RECOVERY_PAYLOAD_BYTES) {
+    const bytes = (items: readonly { readonly cbor?: string; readonly proof?: string }[]) =>
+      items.reduce((n, m) => n + ((m.cbor ?? m.proof ?? '').length / 2), 0);
+    throw new GeroVaultError(
+      'HISTORY_TOO_LARGE',
+      `The package is ${base.length} bytes, over ${MAX_RECOVERY_PAYLOAD_BYTES}, without any proposal or address book entry: `
+        + `its ${manifests.length} manifest revisions are ${bytes(manifests)} bytes, `
+        + `its ${endorsements.length} endorsements and ${externalAttestations.length} external attestations ${endorsements.length * 172 + bytes(externalAttestations)} bytes`,
+    );
   }
   // Room for both lists: their heads and their counts grow by at most 8 bytes each.
   let room = MAX_RECOVERY_PAYLOAD_BYTES - base.length - 32;
@@ -592,15 +764,18 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): RecoveryP
     }
     return kept;
   };
-  const keptBook = newest(book, MAX_ADDRESS_BOOK_ENTRIES, e => addressBookEntryBytes(e, contents.network).bytes.length);
+  const keptBook = newest(book, MAX_ADDRESS_BOOK_ENTRIES, e => addressBookEntryBytes(e, network).bytes.length);
   const keptProposals = newest(proposals, MAX_PROPOSALS, p => proposalBytes(p).length);
-  return {
-    ...contents,
-    proposals: proposals.slice(proposals.length - keptProposals),
-    addressBook: book.slice(book.length - keptBook),
-    proposalsDropped: earlier + proposals.length - keptProposals,
-    addressBookDropped: earlierBook + book.length - keptBook,
-  };
+  return Object.freeze({
+    contents: {
+      ...clean,
+      proposals: proposals.slice(proposals.length - keptProposals),
+      addressBook: book.slice(book.length - keptBook),
+      proposalsDropped: earlierProposals + rawProposals.length - keptProposals,
+      addressBookDropped: earlierBook + rawBook.length - keptBook,
+    },
+    skipped,
+  });
 }
 
 /** The tagged manifest hash, blake2b-256 over the tag and the canonical CBOR; `undefined` for anything but lowercase hex. */
@@ -750,7 +925,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   if (version !== BigInt(RECOVERY_PAYLOAD_VERSION)) {
     throw new PayloadRefusal(version === undefined ? 'PAYLOAD_INVALID' : 'UNKNOWN_PAYLOAD_VERSION', String(version ?? 'missing'));
   }
-  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   const network = MAGIC_TO_NETWORK.get(uintOf(f.get(1), 'network magic', 0xffffffff)) ?? bad('unknown network');
   const self = fields(f.get(4) as CborItem, 'self', [0, 1]);
   const contents: RecoveryPackageContents = {
@@ -774,6 +949,21 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     referenceScripts: Object.freeze(arrayOf(f.get(9), 'reference scripts', MAX_REFERENCE_SCRIPTS).map(r => decodeOutputReference(r, 'reference script'))),
     proposalsDropped: uintOf(f.get(10), 'proposals left out'),
     addressBookDropped: uintOf(f.get(11), 'address book entries left out'),
+    endorsements: Object.freeze(arrayOf(f.get(12), 'endorsements', MAX_ENDORSEMENTS).map(e => {
+      const [digest, credential, attestation, device, signature] = tuple(e, 'endorsement', 5);
+      return Object.freeze({
+        verificationDigest: hexOf(bytesOf(digest, 'verification digest', 32, 32)),
+        externalCredential: Ed25519KeyHashHex(hexOf(bytesOf(credential, 'external credential', 28, 28))),
+        externalAttestationHash: hexOf(bytesOf(attestation, 'attestation hash', 32, 32)),
+        endorserDeviceId: hexOf(bytesOf(device, 'device id', 16, 16)),
+        signature: hexOf(bytesOf(signature, 'signature', 64, 64)),
+      });
+    })),
+    externalAttestations: Object.freeze(arrayOf(f.get(13), 'external attestations', MAX_EXTERNAL_ATTESTATIONS).map(a => {
+      const [method, proof] = tuple(a, 'external attestation', 2);
+      return Object.freeze({ method: uintOf(method, 'attestation method', 255), proof: hexOf(bytesOf(proof, 'attestation proof', 1, MAX_EXTERNAL_ATTESTATION_BYTES)) });
+    })),
+    manifestsDropped: uintOf(f.get(14), 'manifest revisions left out'),
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
@@ -788,6 +978,9 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     proposalHistoryTruncated: dropped > 0,
     addressBookDropped: bookDropped,
     addressBookTruncated: bookDropped > 0,
+    manifestsDropped: contents.manifestsDropped ?? 0,
+    endorsements: contents.endorsements ?? [],
+    externalAttestations: contents.externalAttestations ?? [],
   });
 }
 

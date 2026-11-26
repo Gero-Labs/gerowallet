@@ -12,14 +12,14 @@
  * - `backup`: preprod, owners the published key and cosigner 1 (threshold 2), cosigner 1 recorded
  *   as an external wallet that supplied its role keys, backup holder cosigner 2 (threshold 1, from
  *   slot 200000000, which on preprod is 2028-10-20T19:33:20Z), exported by the backup holder,
- *   every section filled. Payload pinned.
+ *   every section filled, with an opaque endorsement and external attestation. Payload pinned.
  * - `plutus`: preview, owners the published key and cosigner 1, guardian cosigner 2 at index 7, a
  *   seed reference, template version 1 and stand-in validator bytes. Payload pinned.
  * - `PASSPHRASE_VECTORS`: the normalisation every client applies, and what the writer and the
  *   reader accept.
  */
 import { Cardano } from '@cardano-sdk/core';
-import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
 import { BECH32_PREFIX, deriveRoleKeys, deriveVaultPublicKeys } from '../keys';
 import { buildVaultFromParticipants } from '../scripts';
@@ -92,6 +92,16 @@ export const ADDRESS_BOOK_ADDRESS = Cardano.EnterpriseAddress.fromCredentials(Ca
   hash: Hash28ByteBase16('1c'.repeat(28)),
 }).toAddress().toBech32();
 
+/** Opaque stand-ins: the manifest code defines and checks them (GV-61). */
+export const ENDORSEMENT = Object.freeze({
+  verificationDigest: '11'.repeat(32),
+  externalCredential: Ed25519KeyHashHex('22'.repeat(28)),
+  externalAttestationHash: '33'.repeat(32),
+  endorserDeviceId: '44'.repeat(16),
+  signature: '55'.repeat(64),
+});
+export const EXTERNAL_ATTESTATION = Object.freeze({ method: 1, proof: '84a40081825820' });
+
 export async function backupContents(people: readonly RoleKeys[]): Promise<RecoveryPackageContents> {
   const vault = await backupVault(people);
   const [owner0, owner1, holder] = await Promise.all([
@@ -113,6 +123,8 @@ export async function backupContents(people: readonly RoleKeys[]): Promise<Recov
     proposals: [{ id: '5a'.repeat(32), cbor: '8301020c' }],
     addressBook: [{ address: ADDRESS_BOOK_ADDRESS, label: 'Payroll' }],
     referenceScripts: [{ txId: 'be'.repeat(32), index: 0 }],
+    endorsements: [ENDORSEMENT],
+    externalAttestations: [EXTERNAL_ATTESTATION],
   };
 }
 
@@ -149,18 +161,30 @@ export const PASSPHRASE_VECTORS: readonly {
   { name: 'ASCII spaces', input: 'correct horse battery staple', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
   { name: 'a no-break space reads as an ASCII space', input: 'correct\u00A0horse battery staple', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
   { name: 'an ideographic space reads as an ASCII space', input: 'correct\u3000horse battery staple', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
-  { name: 'a trailing newline is trimmed', input: 'correct horse battery staple\n', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
-  { name: 'leading tab and trailing CR LF are trimmed', input: '\tcorrect horse battery staple\r\n', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
-  { name: 'a tab inside is kept, refused by the writer only', input: 'correct\thorse battery staple', normalised: 'correct\thorse battery staple', writer: 'CONTROL_CHARACTER', reader: 'accepts' },
+  { name: 'a trailing newline is trimmed', input: 'correct horse battery staple\u000A', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
+  { name: 'leading tab and trailing CR LF are trimmed', input: '\u0009correct horse battery staple\u000D\u000A', normalised: 'correct horse battery staple', writer: 'accepts', reader: 'accepts' },
+  { name: 'a tab inside is kept, refused by the writer only', input: 'correct\u0009horse battery staple', normalised: 'correct\u0009horse battery staple', writer: 'CONTROL_CHARACTER', reader: 'accepts' },
   { name: 'NUL is refused by the writer', input: 'correct horse\u0000battery staple', normalised: 'correct horse\u0000battery staple', writer: 'CONTROL_CHARACTER', reader: 'accepts' },
   { name: 'decomposed text reads as composed (NFC)', input: 'cafe\u0301 cre\u0300me bru\u0302le\u0301e', normalised: 'caf\u00E9 cr\u00E8me br\u00FBl\u00E9e', writer: 'accepts', reader: 'accepts' },
-  { name: 'generated, as shown', input: GENERATED_EXAMPLE, normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, as shown', input: '7KQ2-M9XD-4TRB-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
   { name: 'generated, typed lowercase without hyphens', input: '7kq2m9xd4trbh8wn', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
-  { name: 'generated, pasted with a trailing newline', input: `${GENERATED_EXAMPLE}\n`, normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, pasted with a trailing newline', input: '7KQ2-M9XD-4TRB-H8WN\u000A', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, pasted with CR LF', input: '7KQ2-M9XD-4TRB-H8WN\u000D\u000A', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, pasted with a trailing line separator U+2028', input: '7KQ2-M9XD-4TRB-H8WN\u2028', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
   { name: 'generated, typed with spaces and a no-break space', input: '7KQ2 M9XD\u00A04TRB H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, a tab between groups', input: '7KQ2\u0009M9XD-4TRB-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, U+2011 between groups', input: '7KQ2\u2011M9XD\u20114TRB\u2011H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, an en dash (U+2013) and a minus sign (U+2212) between groups', input: '7KQ2\u2013M9XD\u22124TRB\u2013H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, small hyphen-minus U+FE63 and small dash U+FE58 between groups', input: '7KQ2\uFE63M9XD\uFE584TRB-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, a soft hyphen and a zero-width space inside a group', input: '7KQ\u00AD2-M9X\u200BD-4TRB-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, a byte order mark and a word joiner inside', input: '\uFEFF7KQ2-M9\u2060XD-4TRB-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'generated, fullwidth digits and letters with a fullwidth hyphen', input: '\uFF17\uFF2B\uFF31\uFF12\uFF0D\uFF2D\uFF19\uFF38\uFF24-\uFF14\uFF54\uFF52\uFF42-H8WN', normalised: '7KQ2M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
   { name: 'generated, lookalikes O, I and L', input: 'oil2-m9xd-4trb-h8wn', normalised: '0112M9XD4TRBH8WN', writer: 'accepts', reader: 'accepts' },
-  { name: 'a user\'s own 16 alphanumerics match the generated pattern and are folded', input: 'GoldenMapleTree7', normalised: 'G01DENMAP1ETREE7', writer: 'accepts', reader: 'accepts' },
+  { name: 'a long s (U+017F) in place of a letter is used as typed', input: '7KQ2-M9XD-4TRB-H8W\u017F', normalised: '7KQ2-M9XD-4TRB-H8W\u017F', writer: 'accepts', reader: 'accepts' },
+  { name: 'a dotless i (U+0131) in place of a letter is used as typed', input: 'o\u0131l2-m9xd-4trb-h8wn', normalised: 'o\u0131l2-m9xd-4trb-h8wn', writer: 'accepts', reader: 'accepts' },
   { name: 'a U does not match the generated pattern', input: 'UKQ2-M9XD-4TRB-H8WN', normalised: 'UKQ2-M9XD-4TRB-H8WN', writer: 'accepts', reader: 'accepts' },
+  { name: 'a user\'s own 16 alphanumerics match the generated pattern and are folded', input: 'GoldenMapleTree7', normalised: 'G01DENMAP1ETREE7', writer: 'accepts', reader: 'accepts' },
+  { name: 'a user\'s own passphrase with U+2011 is left unchanged', input: 'my\u2011own pass phrase', normalised: 'my\u2011own pass phrase', writer: 'accepts', reader: 'accepts' },
   { name: '16 code points', input: 'sixteen code pts', normalised: 'sixteen code pts', writer: 'accepts', reader: 'accepts' },
   { name: '15 code points', input: 'fifteen code pt', normalised: 'fifteen code pt', writer: 'TOO_SHORT', reader: 'accepts' },
   { name: '16 code points, two of them outside the BMP', input: 'fourteen chars\u{1F510}\u{1F511}', normalised: 'fourteen chars\u{1F510}\u{1F511}', writer: 'accepts', reader: 'accepts' },

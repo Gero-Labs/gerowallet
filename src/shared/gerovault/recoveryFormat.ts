@@ -100,9 +100,17 @@ const GENERATED_LENGTH = 16;
 /** The Zs separators other than U+0020: U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000. */
 const OTHER_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
 const EDGE_SPACE = /^[\u0020\u0009\u000A\u000D]+|[\u0020\u0009\u000A\u000D]+$/g;
-/** The generated pattern once hyphens and U+0020 are removed: 16 ASCII digits or letters other than U, either case. */
-const GENERATED = /^[0-9A-TV-Z]{16}$/i;
-const SEPARATORS = /[- ]/g;
+/** The probe's step 2: fullwidth U+FF01 to U+FF5E. */
+const FULLWIDTH = /[\uFF01-\uFF5E]/g;
+/**
+ * The probe's step 3: hyphens and dashes (U+002D, U+2010 to U+2015, U+2212, U+FE58, U+FE63), the soft
+ * hyphen U+00AD, the invisible U+200B, U+200C, U+200D, U+2060 and U+FEFF, U+0020, U+0009, U+000A,
+ * U+000D, U+2028, U+2029 and the other Zs separators.
+ */
+const PROBE_REMOVED = /[\u002D\u2010-\u2015\u2212\uFE58\uFE63\u00AD\u200B\u200C\u200D\u2060\uFEFF\u0020\u0009\u000A\u000D\u2028\u2029\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+const ASCII_LOWER = /[a-z]/g;
+/** The probe's step 5: 16 characters of the Crockford alphabet or O, I and L, uppercase ASCII only. */
+const GENERATED = /^[0-9A-TV-Z]{16}$/;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
@@ -120,29 +128,36 @@ export function generateRecoveryPassphrase(): string {
 }
 
 /**
- * The one normalisation every client applies, writer and reader alike, in this order:
- * 1. Unicode NFC;
- * 2. the Zs separators other than U+0020 become U+0020;
- * 3. leading and trailing U+0020, U+0009, U+000A and U+000D are trimmed;
- * 4. only if the result matches the generated pattern: uppercase it, remove every hyphen and
- *    U+0020, then O becomes 0, and I and L become 1.
+ * The one normalisation every client applies, writer and reader alike.
  *
- * The generated pattern, exactly: after removing every hyphen (U+002D) and U+0020, exactly 16
- * characters, each from the Crockford alphabet or its lookalikes in either case. The Crockford
- * alphabet is `0123456789ABCDEFGHJKMNPQRSTVWXYZ`; its lookalikes are O, I and L. So each of the 16
- * is an ASCII digit or an ASCII letter other than U, upper or lower case. Hyphens and spaces may
- * stand anywhere and in any number. No other character is removed.
+ * First the generated-pattern probe, on the raw input before anything else:
+ * 1. work on a copy;
+ * 2. map the fullwidth forms U+FF01 to U+FF5E to U+0021 to U+007E;
+ * 3. remove every U+002D, U+2010 to U+2015, U+2212, U+FE58, U+FE63, U+00AD, U+200B, U+200C, U+200D,
+ *    U+2060, U+FEFF, U+0020, U+0009, U+000A, U+000D, U+2028, U+2029, and every other Zs separator
+ *    (U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000);
+ * 4. map a to z to A to Z, and nothing else: no Unicode or locale case mapping, so U+017F (long s)
+ *    and U+0131 (dotless i) stay as they are;
+ * 5. the copy matches if it is exactly 16 characters, each from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`
+ *    or O, I or L;
+ * 6. on a match, O becomes 0, and I and L become 1: that is the passphrase;
+ * 7. on no match, the copy is discarded and the original goes on to the steps below.
  *
- * Step 4 comes last so that a generated passphrase pasted with a trailing newline or typed with a
- * no-break space still opens. A user's own passphrase that happens to match the pattern is folded
- * the same way (for example `GoldenMapleTree7` becomes `G01DENMAP1ETREE7`). Every other passphrase
- * is used as typed after step 3.
+ * Then, for a passphrase that did not match: Unicode NFC; the Zs separators other than U+0020
+ * become U+0020; leading and trailing U+0020, U+0009, U+000A and U+000D are trimmed.
+ *
+ * So a generated passphrase opens however it was copied (lowercase, without hyphens, with other
+ * dashes, fullwidth, with a soft hyphen, a zero-width space or a trailing newline), and a user's own
+ * passphrase that happens to match is folded the same way (`GoldenMapleTree7` becomes
+ * `G01DENMAP1ETREE7`). Every other passphrase keeps its characters, hyphens and dashes included.
  */
 export function normalizeRecoveryPassphrase(passphrase: string): string {
-  const trimmed = passphrase.normalize('NFC').replace(OTHER_SPACES, ' ').replace(EDGE_SPACE, '');
-  const compact = trimmed.replace(SEPARATORS, '');
-  if (!GENERATED.test(compact)) return trimmed;
-  return compact.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
+  const probe = passphrase
+    .replace(FULLWIDTH, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(PROBE_REMOVED, '')
+    .replace(ASCII_LOWER, c => String.fromCharCode(c.charCodeAt(0) - 0x20));
+  if (GENERATED.test(probe)) return probe.replace(/O/g, '0').replace(/[IL]/g, '1');
+  return passphrase.normalize('NFC').replace(OTHER_SPACES, ' ').replace(EDGE_SPACE, '');
 }
 
 /** Why the writer refuses a passphrase, or `undefined` when it accepts it. */
