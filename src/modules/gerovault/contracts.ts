@@ -309,8 +309,9 @@ export interface VaultVkeyWitness {
  *
  * The importer accepts it only when `bundleHash` is its own bundle's, every `vkey` is a key of
  * this vault's scripts belonging to the participant `signerKeyHash` names, and every signature
- * verifies over `txId`. The final transaction is the body, the collected vkey witnesses and both
- * native scripts from the vault record.
+ * verifies over `txId`. The final transaction is the body, the collected vkey witnesses and the
+ * native scripts the body needs, from the vault record: a plain spend carries the payment script
+ * only, since the ledger refuses a script witness the transaction does not need.
  */
 export interface VaultWitnessFile {
   readonly type: typeof WITNESS_FILE_TYPE;
