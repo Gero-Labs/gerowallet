@@ -16,9 +16,10 @@
  *     5: [+ participant],            ; every participant, the exporter included
  *     6: [* manifest-revision],      ; manifest history, every revision, versions strictly ascending
  *     7: [* proposal-record],        ; proposal history, oldest first
- *     8: [* address-book-entry],
+ *     8: [* address-book-entry],     ; address book, oldest entry first
  *     9: [* output-reference],       ; reference-script UTxOs
  *     10: uint,                      ; how many of the oldest proposals were left out to fit, 0 if none
+ *     11: uint,                      ; how many of the oldest address book entries were left out, 0 if none
  *   }
  *   native-vault = {
  *     0: 0,
@@ -65,8 +66,9 @@
  *
  * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
  * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision is
- * kept; when the history does not fit, the oldest proposals are left out first and key 10 counts
- * them (`fitRecoveryHistory`).
+ * kept. When the rest does not fit, the oldest proposals and the oldest address book entries are
+ * left out, and keys 10 and 11 count them (`fitRecoveryHistory`). Address book entries carry no
+ * usage time, so "oldest" means added first.
  *
  * The decoder takes untrusted bytes and never throws. It uses the strict bounded reader of
  * `cbor.ts`, refuses unknown keys and anything out of bounds, and requires the bytes to be
@@ -195,10 +197,13 @@ export interface RecoveryPackageContents {
   readonly manifests: readonly ManifestRevision[];
   /** Oldest first: the start of the list is what is left out when the history does not fit. */
   readonly proposals: readonly ProposalRecord[];
+  /** Oldest entry first (entries carry no usage time): the start is what is left out first. */
   readonly addressBook: readonly AddressBookEntry[];
   readonly referenceScripts: readonly OutputReference[];
   /** Proposals already left out of `proposals`, counted from the oldest; 0 when absent. */
   readonly proposalsDropped?: number;
+  /** Address book entries already left out of `addressBook`, counted from the oldest; 0 when absent. */
+  readonly addressBookDropped?: number;
 }
 
 /** A decoded payload. Its vault facts are claims until a restore checks them. */
@@ -209,6 +214,9 @@ export interface RecoveryPackage extends RecoveryPackageContents {
   readonly proposalsDropped: number;
   /** Some of the oldest proposals were left out to fit the package. */
   readonly proposalHistoryTruncated: boolean;
+  readonly addressBookDropped: number;
+  /** Some of the oldest address book entries were left out to fit the package. */
+  readonly addressBookTruncated: boolean;
 }
 
 export type RecoveryPayloadRefusalCode = 'UNKNOWN_PAYLOAD_VERSION' | 'PAYLOAD_INVALID';
@@ -465,15 +473,19 @@ function addressBytes(address: unknown, network: VaultNetwork): Uint8Array {
   return hexToBytes(parsed.toBytes()) as Uint8Array;
 }
 
+function addressBookEntryBytes(e: AddressBookEntry, network: VaultNetwork): { bytes: Uint8Array; address: string } {
+  if (!isObject(e)) invalid('An address book entry is a record');
+  const address = addressBytes(e.address, network);
+  return { bytes: cArray([cBytes(address), cText(label(e.label, 'An address book label'))]), address: bytesToHex(address) };
+}
+
 function addressBookBytes(entries: readonly AddressBookEntry[], network: VaultNetwork): Uint8Array {
   const seen = new Set<string>();
   return cArray(list(entries, MAX_ADDRESS_BOOK_ENTRIES, 'The address book').map(e => {
-    if (!isObject(e)) invalid('An address book entry is a record');
-    const bytes = addressBytes(e.address, network);
-    const hex = bytesToHex(bytes);
-    if (seen.has(hex)) invalid('The same address appears twice in the address book');
-    seen.add(hex);
-    return cArray([cBytes(bytes), cText(label(e.label, 'An address book label'))]);
+    const { bytes, address } = addressBookEntryBytes(e, network);
+    if (seen.has(address)) invalid('The same address appears twice in the address book');
+    seen.add(address);
+    return bytes;
   }));
 }
 
@@ -500,6 +512,8 @@ export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8A
   if (!isUint(contents.exportedAtMs)) invalid('The export time is Unix milliseconds');
   const dropped = contents.proposalsDropped ?? 0;
   if (!isUint(dropped)) invalid('The count of proposals left out is an unsigned integer');
+  const bookDropped = contents.addressBookDropped ?? 0;
+  if (!isUint(bookDropped)) invalid('The count of address book entries left out is an unsigned integer');
   const vault = vaultBytes(contents.vault);
   const participants = participantsBytes(contents);
   const out = cMap({
@@ -514,27 +528,44 @@ export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8A
     8: addressBookBytes(contents.addressBook, contents.network),
     9: referenceScriptsBytes(contents.referenceScripts),
     10: cUint(dropped),
+    11: cUint(bookDropped),
   });
   if (out.length > MAX_RECOVERY_PAYLOAD_BYTES) invalid(`The payload is ${out.length} bytes, over the bound of ${MAX_RECOVERY_PAYLOAD_BYTES}`);
   return out;
 }
 
 /**
- * Makes the history fit one package without losing a manifest revision: the oldest proposals are
- * left out first, at most `MAX_PROPOSALS` are kept, and `proposalsDropped` counts what was left out.
+ * Makes the history fit one package without losing a manifest revision, so that an export never
+ * fails for the size of its proposal history or its address book:
+ * - at most `MAX_ADDRESS_BOOK_ENTRIES` address book entries and `MAX_PROPOSALS` proposals are kept;
+ * - the room left after everything else goes to the address book first (it is small and serves
+ *   every spend), then to the proposals;
+ * - in each, the newest are kept and the oldest left out; entries carry no usage time, so the
+ *   address book's oldest are those added first;
+ * - `addressBookDropped` and `proposalsDropped` count what was left out, earlier exports included.
  * Throws `GeroVaultError('HISTORY_TOO_LARGE')`, with the sizes, when the package does not fit even
- * without any proposal, and `INVALID_PACKAGE` for contents that break any other rule.
+ * without any proposal or address book entry, and `INVALID_PACKAGE` for contents that break any
+ * other rule.
  */
 export function fitRecoveryHistory(contents: RecoveryPackageContents): RecoveryPackageContents {
   if (!isObject(contents)) invalid('No contents');
   const proposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
+  const book = list(contents.addressBook, Number.MAX_SAFE_INTEGER, 'The address book');
   const manifests = Array.isArray(contents.manifests) ? contents.manifests : invalid('The manifest history is a list');
   if (manifests.length > MAX_MANIFEST_REVISIONS) {
     throw new GeroVaultError('HISTORY_TOO_LARGE', `The manifest history has ${manifests.length} revisions; a package holds at most ${MAX_MANIFEST_REVISIONS}`);
   }
   const earlier = contents.proposalsDropped ?? 0;
   if (!isUint(earlier)) invalid('The count of proposals left out is an unsigned integer');
-  const without = { ...contents, proposals: [], proposalsDropped: earlier + proposals.length };
+  const earlierBook = contents.addressBookDropped ?? 0;
+  if (!isUint(earlierBook)) invalid('The count of address book entries left out is an unsigned integer');
+  const without = {
+    ...contents,
+    proposals: [],
+    addressBook: [],
+    proposalsDropped: earlier + proposals.length,
+    addressBookDropped: earlierBook + book.length,
+  };
   let base: Uint8Array;
   try {
     base = encodeRecoveryPayload(without);
@@ -543,21 +574,33 @@ export function fitRecoveryHistory(contents: RecoveryPackageContents): RecoveryP
       const manifestBytes = manifests.reduce((n, m) => n + (typeof m?.cbor === 'string' ? m.cbor.length / 2 : 0), 0);
       throw new GeroVaultError(
         'HISTORY_TOO_LARGE',
-        `The package is over ${MAX_RECOVERY_PAYLOAD_BYTES} bytes without any proposal: its ${manifests.length} manifest revisions are ${manifestBytes} bytes`,
+        `The package is over ${MAX_RECOVERY_PAYLOAD_BYTES} bytes without any proposal or address book entry: `
+          + `its ${manifests.length} manifest revisions are ${manifestBytes} bytes`,
       );
     }
     throw e;
   }
-  // Room for the proposals: the list head and the count grow by at most 8 bytes each.
-  let room = MAX_RECOVERY_PAYLOAD_BYTES - base.length - 16;
-  let kept = 0;
-  for (let i = proposals.length - 1; i >= 0 && kept < MAX_PROPOSALS; i--) {
-    const size = proposalBytes(proposals[i]).length;
-    if (size > room) break;
-    room -= size;
-    kept++;
-  }
-  return { ...contents, proposals: proposals.slice(proposals.length - kept), proposalsDropped: earlier + proposals.length - kept };
+  // Room for both lists: their heads and their counts grow by at most 8 bytes each.
+  let room = MAX_RECOVERY_PAYLOAD_BYTES - base.length - 32;
+  const newest = <X>(items: readonly X[], max: number, size: (x: X) => number): number => {
+    let kept = 0;
+    for (let i = items.length - 1; i >= 0 && kept < max; i--) {
+      const n = size(items[i]);
+      if (n > room) break;
+      room -= n;
+      kept++;
+    }
+    return kept;
+  };
+  const keptBook = newest(book, MAX_ADDRESS_BOOK_ENTRIES, e => addressBookEntryBytes(e, contents.network).bytes.length);
+  const keptProposals = newest(proposals, MAX_PROPOSALS, p => proposalBytes(p).length);
+  return {
+    ...contents,
+    proposals: proposals.slice(proposals.length - keptProposals),
+    addressBook: book.slice(book.length - keptBook),
+    proposalsDropped: earlier + proposals.length - keptProposals,
+    addressBookDropped: earlierBook + book.length - keptBook,
+  };
 }
 
 /** The tagged manifest hash, blake2b-256 over the tag and the canonical CBOR; `undefined` for anything but lowercase hex. */
@@ -707,7 +750,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   if (version !== BigInt(RECOVERY_PAYLOAD_VERSION)) {
     throw new PayloadRefusal(version === undefined ? 'PAYLOAD_INVALID' : 'UNKNOWN_PAYLOAD_VERSION', String(version ?? 'missing'));
   }
-  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   const network = MAGIC_TO_NETWORK.get(uintOf(f.get(1), 'network magic', 0xffffffff)) ?? bad('unknown network');
   const self = fields(f.get(4) as CborItem, 'self', [0, 1]);
   const contents: RecoveryPackageContents = {
@@ -730,17 +773,21 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     })),
     referenceScripts: Object.freeze(arrayOf(f.get(9), 'reference scripts', MAX_REFERENCE_SCRIPTS).map(r => decodeOutputReference(r, 'reference script'))),
     proposalsDropped: uintOf(f.get(10), 'proposals left out'),
+    addressBookDropped: uintOf(f.get(11), 'address book entries left out'),
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
   if (canonical.length !== bytes.length || !canonical.every((b, i) => b === bytes[i])) bad('not the canonical encoding');
   const dropped = contents.proposalsDropped ?? 0;
+  const bookDropped = contents.addressBookDropped ?? 0;
   return Object.freeze({
     version: RECOVERY_PAYLOAD_VERSION,
     ...contents,
     manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestRevisionHash(m.cbor) as string }))),
     proposalsDropped: dropped,
     proposalHistoryTruncated: dropped > 0,
+    addressBookDropped: bookDropped,
+    addressBookTruncated: bookDropped > 0,
   });
 }
 

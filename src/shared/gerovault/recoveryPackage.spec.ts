@@ -20,7 +20,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import * as library from './index';
 import { deriveRoleKeys, deriveVaultPublicKeys, vaultKeyHashes } from './keys';
 import { sealRecoveryFile } from './recoveryFormat';
-import { MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHash } from './recoveryPayload';
+import { MAX_ADDRESS_BOOK_ENTRIES, MAX_PROPOSALS, RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestRevisionHash } from './recoveryPayload';
 import {
   OwnAttestationQuery,
   RecoveryChainFacts,
@@ -123,6 +123,7 @@ describe('export', () => {
     const { file, proposalsDropped, proposalHistoryTruncated } = await exportRecoveryPackage(contents, PASS, people[0]);
     expect(kdf).toHaveBeenCalledTimes(2);
     expect({ proposalsDropped, proposalHistoryTruncated }).toEqual({ proposalsDropped: 0, proposalHistoryTruncated: false });
+    expect(await exportRecoveryPackage(contents, PASS, people[0])).toMatchObject({ addressBookDropped: 0, addressBookTruncated: false });
     const again = await exportRecoveryPackage(contents, PASS, people[0]);
     expect(Buffer.from(again.file).equals(Buffer.from(file))).toBe(false);
     const result = await openRecoveryPackage(file, PASS);
@@ -201,6 +202,23 @@ describe('export', () => {
     expect(result.package.proposalHistoryTruncated).toBe(true);
   });
 
+  it('never fails for the address book: the oldest entries go first and the package says so', async () => {
+    const contents = await standardContents(people);
+    const addressBook = Array.from({ length: MAX_ADDRESS_BOOK_ENTRIES + 4 }, (_, i) => ({
+      address: Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+        type: Cardano.CredentialType.KeyHash,
+        hash: Hash28ByteBase16(i.toString(16).padStart(56, '0')),
+      }).toAddress().toBech32(),
+      label: `Payee ${i}`,
+    }));
+    const exported = await exportRecoveryPackage({ ...contents, addressBook }, PASS, people[0]);
+    expect(exported).toMatchObject({ addressBookDropped: 4, addressBookTruncated: true, proposalHistoryTruncated: false });
+    const result = await openRecoveryPackage(exported.file, PASS);
+    if (result.ok !== true) throw new Error(result.code);
+    expect(result.package.addressBook[0]).toEqual(addressBook[4]);
+    expect(result.package.addressBookTruncated).toBe(true);
+  });
+
   it('exports a Plutus package for its owner or guardian: the seed is checked, the payment key only', async () => {
     const contents = await plutusContents(people);
     const pkg = await opened(contents);
@@ -236,7 +254,7 @@ describe('open', () => {
   it('refuses an authenticated payload that is invalid or of a later version', async () => {
     const valid = encodeRecoveryPayload(await standardContents(people));
     const later = Uint8Array.from(valid);
-    expect(later[2]).toBe(0x01); // ab 00 01: the payload version
+    expect(later[2]).toBe(0x01); // ac 00 01: the payload version
     later[2] = 0x02;
     const r1 = await openRecoveryPackage(await sealRecoveryFile(later, PASS), PASS);
     expect(r1).toMatchObject({ ok: false, code: 'UNKNOWN_PAYLOAD_VERSION' });

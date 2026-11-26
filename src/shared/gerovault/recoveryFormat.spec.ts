@@ -111,7 +111,7 @@ describe('passphrases', () => {
 
   it('opens a file sealed with ASCII spaces with a no-break space, and a generated one however it is typed', async () => {
     const spaces = await seal(PAYLOAD, 'correct horse battery staple');
-    expect(await code(spaces, 'correct horse battery staple')).toBe('OPENED');
+    expect(await code(spaces, 'correct\u00A0horse\u2009battery staple')).toBe('OPENED');
     const generated = await seal(PAYLOAD, GENERATED_EXAMPLE);
     for (const typed of ['7kq2m9xd4trbh8wn', '7KQ2-M9XD-4TRB-H8WN\n', ' 7kq2 m9xd 4trb h8wn ', '7KQ2-M9XD-4TRB-H8WN\r\n']) {
       expect(await code(generated, typed)).toBe('OPENED');
@@ -196,7 +196,7 @@ describe('opening', () => {
   it('refuses only an empty passphrase without deriving, and non-string input', async () => {
     const file = await seal();
     kdf.mockClear();
-    for (const empty of ['', ' \t\r\n ', ' ']) expect(await code(file, empty)).toBe('WRONG_PASSPHRASE');
+    for (const empty of ['', ' \t\r\n ', '\u00A0']) expect(await code(file, empty)).toBe('WRONG_PASSPHRASE');
     expect(await code(file, 42)).toBe('INVALID_INPUT');
     expect(await code('not bytes')).toBe('INVALID_INPUT');
     expect(kdf).not.toHaveBeenCalled();

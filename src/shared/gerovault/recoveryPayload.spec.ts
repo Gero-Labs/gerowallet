@@ -6,6 +6,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import {
+  MAX_ADDRESS_BOOK_ENTRIES,
   MAX_MANIFEST_BYTES,
   MAX_MANIFEST_REVISIONS,
   MAX_PROPOSAL_BYTES,
@@ -139,6 +140,8 @@ describe('round trip', () => {
     expect(p.referenceScripts).toEqual(contents.referenceScripts);
     expect(p.proposalsDropped).toBe(0);
     expect(p.proposalHistoryTruncated).toBe(false);
+    expect(p.addressBookDropped).toBe(0);
+    expect(p.addressBookTruncated).toBe(false);
     expect(p.manifests.map(({ version, cbor }) => ({ version, cbor }))).toEqual(contents.manifests);
     if (contents.vault.kind === 'native' && p.vault.kind === 'native') {
       expect(p.vault.payment.hash).toBe(contents.vault.payment.hash);
@@ -200,8 +203,8 @@ describe('strict decoding of untrusted bytes', () => {
   });
 
   it('refuses unknown and missing keys at every level', () => {
-    expect(refusal(bytesOf(put(standardTree, 11, int(0))))).toBe('PAYLOAD_INVALID');
-    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 12, int(0))))).toBe('PAYLOAD_INVALID');
+    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
     const vault = field(standardTree, 3);
     expect(refusal(bytesOf(put(standardTree, 3, put(vault, 9, int(0)))))).toBe('PAYLOAD_INVALID');
     const participants = field(standardTree, 5);
@@ -225,12 +228,12 @@ describe('strict decoding of untrusted bytes', () => {
   it('refuses the encodings the strict reader refuses', () => {
     const canonical = encodeRecoveryPayload(standard);
     const hex = bytesToHex(canonical);
-    // ab 00 01 01 01: version 1, network magic 1. Rewrite the magic with a one-byte argument.
-    expect(hex.startsWith('ab00010101')).toBe(true);
-    expect(detail(hexToBytes(`ab0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
+    // ac 00 01 01 01: twelve keys, version 1, network magic 1. Rewrite the magic with a one-byte argument.
+    expect(hex.startsWith('ac00010101')).toBe(true);
+    expect(detail(hexToBytes(`ac0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
     expect(detail(new Uint8Array([...canonical, 0]))).toBe('CBOR TRAILING_BYTES');
     expect(detail(canonical.subarray(0, canonical.length - 1))).toBe('CBOR TRUNCATED');
-    expect(detail(hexToBytes(`ab0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
+    expect(detail(hexToBytes(`ac0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
     // Proposals (key 7) as an indefinite-length list.
     const proposals = hex.indexOf('0780', hex.length - 24);
     expect(detail(hexToBytes(`${hex.slice(0, proposals)}079fff${hex.slice(proposals + 4)}`))).toBe('CBOR INDEFINITE_LENGTH');
@@ -242,6 +245,7 @@ describe('strict decoding of untrusted bytes', () => {
     expect(refusal(bytesOf(put(standardTree, 1, int(3))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 2, int(-1))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 10, int(-1))))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 11, int(-1))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 4, put(field(standardTree, 4), 1, int(0x80000000)))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 4, put(field(standardTree, 4), 0, int(3)))))).toBe('PAYLOAD_INVALID');
     const ref = at(field(plutusTree, 9), 0);
@@ -374,7 +378,7 @@ describe('strict decoding of untrusted bytes', () => {
       switch (rand() % (depth > 3 ? 3 : 5)) {
         case 0: return int(pick([0n, 1n, 2n, 23n, 24n, 255n, 256n, 65535n, 65536n, 0xffffffffn, 2n ** 53n, 2n ** 64n - 1n, -1n, BigInt(rand())]));
         case 1: return { t: 'bytes', v: Uint8Array.from({ length: pick([0, 1, 28, 29, 32, 33, 64, 65, rand() % 100]) }, () => rand() & 0xff) };
-        case 2: return { t: 'text', v: pick(['', 'a', 'x'.repeat(64), 'x'.repeat(65), 'é', '\u{1F600}']) };
+        case 2: return { t: 'text', v: pick(['', 'a', 'x'.repeat(64), 'x'.repeat(65), '\u00E9', '\u{1F600}']) };
         case 3: return { t: 'array', v: Array.from({ length: rand() % 4 }, () => random(depth + 1)) };
         default: return { t: 'map', v: Array.from({ length: rand() % 4 }, (_, i) => [int(i), random(depth + 1)] as [T, T]) };
       }
@@ -430,6 +434,7 @@ describe('encoder', () => {
     throwsInvalid({ ...standard, exportedAtMs: -1 });
     throwsInvalid({ ...standard, exportedAtMs: 1.5 });
     throwsInvalid({ ...standard, proposalsDropped: -1 });
+    throwsInvalid({ ...standard, addressBookDropped: 1.5 });
     throwsInvalid({ ...standard, vault: { ...standard.vault, kind: 'other' } });
     throwsInvalid({ ...standard, vault: 'native' });
     throwsInvalid({ ...standard, self: { position: 0, index: -1 } });
@@ -461,6 +466,49 @@ describe('encoder', () => {
 
 describe('fitting the history into one package', () => {
   const proposal = (i: number, bytes = 4) => ({ id: i.toString(16).padStart(8, '0'), cbor: 'ab'.repeat(bytes) });
+  /** A distinct enterprise address on preprod for each i. */
+  const entry = (i: number) => ({
+    address: Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16(i.toString(16).padStart(56, '0')),
+    }).toAddress().toBech32(),
+    label: `Payee ${i}`,
+  });
+
+  it('leaves the oldest address book entries out beyond the count bound and counts them', () => {
+    const book = Array.from({ length: MAX_ADDRESS_BOOK_ENTRIES + 6 }, (_, i) => entry(i));
+    const fitted = fitRecoveryHistory({ ...standard, addressBook: book });
+    expect(fitted.addressBook).toHaveLength(MAX_ADDRESS_BOOK_ENTRIES);
+    expect(fitted.addressBook[0]).toEqual(book[6]);
+    expect(fitted.addressBook[MAX_ADDRESS_BOOK_ENTRIES - 1]).toEqual(book[book.length - 1]);
+    expect(fitted.addressBookDropped).toBe(6);
+    expect(fitted.proposalsDropped).toBe(0);
+    const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
+    expect(decoded).toMatchObject({ ok: true, package: { addressBookDropped: 6, addressBookTruncated: true, proposalHistoryTruncated: false } });
+    expect(fitRecoveryHistory({ ...standard, addressBook: book, addressBookDropped: 2 }).addressBookDropped).toBe(8);
+  });
+
+  it('leaves the oldest address book entries out to fit the size bound, after the proposals', () => {
+    // Manifests that leave about 21 KB, less than 1 024 entries need.
+    const manifests = [
+      ...Array.from({ length: 63 }, (_, i) => ({ version: i + 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES) })),
+      { version: 64, cbor: 'cd'.repeat(240000) },
+    ];
+    const book = Array.from({ length: MAX_ADDRESS_BOOK_ENTRIES }, (_, i) => entry(i));
+    // A proposal that would fit the room alone, but not beside the address book.
+    const proposals = [proposal(1, 15000)];
+    const fitted = fitRecoveryHistory({ ...standard, manifests, addressBook: book, proposals });
+    expect(fitted.manifests).toHaveLength(64);
+    expect(fitted.addressBook.length).toBeGreaterThan(0);
+    expect(fitted.addressBook.length).toBeLessThan(MAX_ADDRESS_BOOK_ENTRIES);
+    expect(fitted.addressBook[fitted.addressBook.length - 1]).toEqual(book[book.length - 1]);
+    expect(fitted.addressBookDropped).toBe(MAX_ADDRESS_BOOK_ENTRIES - fitted.addressBook.length);
+    // The address book took the room first, so the proposal was left out.
+    expect(fitted.proposals).toEqual([]);
+    expect(fitted.proposalsDropped).toBe(1);
+    expect(fitRecoveryHistory({ ...standard, manifests, proposals }).proposals).toEqual(proposals);
+    expect(encodeRecoveryPayload(fitted).length).toBeLessThanOrEqual(MAX_RECOVERY_PAYLOAD_BYTES);
+  });
 
   it('leaves the oldest proposals out beyond the count bound and counts them', () => {
     const many = Array.from({ length: MAX_PROPOSALS + 3 }, (_, i) => proposal(i));

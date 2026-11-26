@@ -98,9 +98,9 @@ export const RECOVERY_PASSPHRASE_MIN_CODE_POINTS = 16;
 const GENERATED_LENGTH = 16;
 
 /** The Zs separators other than U+0020: U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000. */
-const OTHER_SPACES = /[   -   　]/g;
-const EDGE_SPACE = /^[ \u0009\u000A\u000D]+|[ \u0009\u000A\u000D]+$/g;
-/** The generated pattern: 16 characters of the alphabet or its lookalikes (any letter but U). */
+const OTHER_SPACES = /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g;
+const EDGE_SPACE = /^[\u0020\u0009\u000A\u000D]+|[\u0020\u0009\u000A\u000D]+$/g;
+/** The generated pattern once hyphens and U+0020 are removed: 16 ASCII digits or letters other than U, either case. */
 const GENERATED = /^[0-9A-TV-Z]{16}$/i;
 const SEPARATORS = /[- ]/g;
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
@@ -124,11 +124,19 @@ export function generateRecoveryPassphrase(): string {
  * 1. Unicode NFC;
  * 2. the Zs separators other than U+0020 become U+0020;
  * 3. leading and trailing U+0020, U+0009, U+000A and U+000D are trimmed;
- * 4. only if the result, without hyphens and spaces, is 16 characters of the generated pattern
- *    (Crockford's alphabet or its lookalikes, in any case): uppercase, hyphens and spaces removed,
- *    O becomes 0, I and L become 1.
+ * 4. only if the result matches the generated pattern: uppercase it, remove every hyphen and
+ *    U+0020, then O becomes 0, and I and L become 1.
+ *
+ * The generated pattern, exactly: after removing every hyphen (U+002D) and U+0020, exactly 16
+ * characters, each from the Crockford alphabet or its lookalikes in either case. The Crockford
+ * alphabet is `0123456789ABCDEFGHJKMNPQRSTVWXYZ`; its lookalikes are O, I and L. So each of the 16
+ * is an ASCII digit or an ASCII letter other than U, upper or lower case. Hyphens and spaces may
+ * stand anywhere and in any number. No other character is removed.
+ *
  * Step 4 comes last so that a generated passphrase pasted with a trailing newline or typed with a
- * no-break space still opens. Every other passphrase is used as typed after step 3.
+ * no-break space still opens. A user's own passphrase that happens to match the pattern is folded
+ * the same way (for example `GoldenMapleTree7` becomes `G01DENMAP1ETREE7`). Every other passphrase
+ * is used as typed after step 3.
  */
 export function normalizeRecoveryPassphrase(passphrase: string): string {
   const trimmed = passphrase.normalize('NFC').replace(OTHER_SPACES, ' ').replace(EDGE_SPACE, '');

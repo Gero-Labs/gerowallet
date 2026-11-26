@@ -4,7 +4,7 @@
  * a spend through any provider, with every Gero service unavailable (the vendor-independence
  * release gate, spec 14).
  *
- * - Export makes the history fit, checks that the exporting seed's keys are the exporter's entry
+ * - Export makes the history and the address book fit, checks that the exporting seed's keys are the exporter's entry
  *   and that the native scripts rebuild from the package's keys, seals the file
  *   (`recoveryFormat.ts`), then opens it once with the passphrase and compares the plaintext.
  * - Restore re-reads the package through its canonical bytes, checks that the restoring seed's
@@ -226,6 +226,9 @@ export interface ExportedRecoveryPackage {
   /** Proposals left out of the package, the oldest first, to fit it (earlier exports included). */
   readonly proposalsDropped: number;
   readonly proposalHistoryTruncated: boolean;
+  /** Address book entries left out, the oldest first (entries carry no usage time). */
+  readonly addressBookDropped: number;
+  readonly addressBookTruncated: boolean;
 }
 
 /**
@@ -237,7 +240,8 @@ export interface ExportedRecoveryPackage {
  *   rebuild from their keys, roles, backup terms and external keys;
  * - `SEED_MISMATCH` when `roleKeys` do not derive the exporter's recorded keys at its index;
  * - `HISTORY_TOO_LARGE`, with the sizes, when the package does not fit even without any proposal
- *   (every manifest revision is kept; the oldest proposals are left out first);
+ *   or address book entry (every manifest revision is kept; the oldest proposals and address book
+ *   entries are left out first, so neither ever makes an export fail);
  * - `PACKAGE_CHECK_FAILED` if the sealed file does not open again with the passphrase to the same
  *   payload.
  */
@@ -264,7 +268,13 @@ export async function exportRecoveryPackage(
   if (reopened.ok !== true || reopened.payload.length !== payload.length || !reopened.payload.every((b, i) => b === payload[i])) {
     throw new GeroVaultError('PACKAGE_CHECK_FAILED', 'The package does not open again with its passphrase');
   }
-  return Object.freeze({ file, proposalsDropped: pkg.proposalsDropped, proposalHistoryTruncated: pkg.proposalHistoryTruncated });
+  return Object.freeze({
+    file,
+    proposalsDropped: pkg.proposalsDropped,
+    proposalHistoryTruncated: pkg.proposalHistoryTruncated,
+    addressBookDropped: pkg.addressBookDropped,
+    addressBookTruncated: pkg.addressBookTruncated,
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
