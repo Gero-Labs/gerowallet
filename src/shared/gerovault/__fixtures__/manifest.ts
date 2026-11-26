@@ -10,6 +10,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { buildSignatureAndCoseKey } from '../../utils/converter';
 import { ATTESTATION_METHOD, AttestedDigest, OwnerAttestation, assembleExpiredTx, canonicalAttestation, cip8Proof, expiredTxBodyHash } from '../attestation';
+import { CborWritable, encodeCanonicalCbor } from '../canonicalCbor';
 import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes } from '../keys';
 import {
   ExternalEntry,
@@ -108,7 +109,23 @@ export function expiredTxAttestation(signer: Ed25519PrivateKey, credential: stri
 
 export type TestMethod = 'cip8' | 'expiredTx';
 
-/** An attestation of `subject` by the participant's vault payment key, in the stored form (CIP-8 by default). */
+/**
+ * A CIP-8 attestation of `digest` in the stored form, whose protected header signs an `address`
+ * of `addressBytes` bytes (and the same bytes as `kid` when asked): the padding a signer controls.
+ */
+export function paddedCip8Attestation(participant: TestParticipant, digest: string, addressBytes: number, withKid = false): OwnerAttestation {
+  const address = new Uint8Array(addressBytes).fill(1);
+  const headers = new Map<number | string, CborWritable>([[1, -8], ['address', address], ...(withKid ? [[4, address] as [number, Uint8Array]] : [])]);
+  const protectedBytes = encodeCanonicalCbor(headers);
+  const payload = Uint8Array.from(Buffer.from(digest, 'hex'));
+  const sigStructure = encodeCanonicalCbor(['Signature1', protectedBytes, new Uint8Array(0), payload]);
+  const signature = Uint8Array.from(Buffer.from(participant.signer.sign(HexBlob(hex(sigStructure))).hex(), 'hex'));
+  const sign1 = encodeCanonicalCbor([protectedBytes, new Map<number, CborWritable>(), payload, signature]);
+  const key = encodeCanonicalCbor(new Map<number, CborWritable>([[1, 1], [3, -8], [-1, 6], [-2, Uint8Array.from(Buffer.from(participant.signer.toPublic().hex(), 'hex'))]]));
+  return { method: ATTESTATION_METHOD.CIP8, proof: cip8Proof(hex(sign1), hex(key)) };
+}
+
+/** `subject` signed with the participant's vault payment key, in the stored form (CIP-8 by default). */
 export function attestationBy(participant: TestParticipant, subject: AttestedDigest, method: TestMethod = 'cip8'): OwnerAttestation {
   return method === 'expiredTx'
     ? expiredTxAttestation(participant.signer, participant.credential, subject)

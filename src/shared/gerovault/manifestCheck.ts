@@ -5,16 +5,17 @@
  * that its participants are exactly the keys of the scripts it carries, each in the branch of their
  * role. On top of that, before `VAULT_ACK`:
  *
- * - the device's own entry must hold the vault keys it derives locally at its own index, in the
- *   role it agreed to, and its own binding when it expects one;
+ * - the device's own entry must hold exactly the vault keys this device computes for itself from
+ *   its own index, in the role it agreed to, with its own binding when it expects one;
  * - every signature must verify (strict Ed25519): each binding's `deviceSig`, each participant
  *   binding's attestation, each tombstone's removal attestation, each viewer binding's
- *   `admittedBy`, and each external entry's `importSig` by the importing owner's payment key;
- * - the manifest must agree with this device's accepted history of the vault: the same hash at a
- *   version already accepted (a redelivery), or the next version extending the latest accepted
- *   revision (`checkManifestRevision`: removals attested, tombstones kept or dropped oldest first,
- *   authorisations of unchanged bodies carried forward). A different manifest at an accepted version, or one that
- *   does not extend the latest revision, is a fork: both are refused and every owner alerted;
+ *   `admittedBy`, and each external entry's `importSig`;
+ * - the manifest must fit what this device has already accepted for the vault: either it has the
+ *   hash already stored for its version (a redelivery), or it is the next version and builds on
+ *   the newest accepted revision (`checkManifestRevision`: removals signed, tombstones kept or
+ *   dropped in order, authorisations of unchanged bodies carried forward). Anything else at a known
+ *   version, or a next version built on something else, counts as a fork: nothing is accepted and
+ *   the owners are warned;
  * - a binding whose body changed, or a device that comes back after being removed, must carry a
  *   `bindingVersion` above the highest this device ever saw for that device id, tombstones
  *   included, so an old binding (an old key agreement key) cannot be replayed. The marks come from
@@ -30,7 +31,7 @@
  * authorised now. Removing a viewer or changing an external label needs the owners' threshold
  * attestations of the revision (GV-22 #1690), which this module cannot check yet: such a result
  * has `attestationsVerified: false`, the revision is not accepted (`acceptRevision` refuses it),
- * the vault stays at its last accepted revision and no `VAULT_ACK` is sent on it.
+ * the device keeps the vault at the revision it accepted before, and sends no `VAULT_ACK` for it.
  *
  * An acknowledgement is branded: only this module creates one, so the funding gate never takes a
  * hand-made result. It lives in memory only; after a restart the stored manifest is checked again.
@@ -158,7 +159,7 @@ export interface ManifestAck {
   /** A revision this device accepted already. */
   readonly redelivery: boolean;
   /**
-   * Whether this revision is the latest accepted one: a redelivery of the latest revision, or the
+   * Whether this is the newest revision the device has accepted: a redelivery of that one, or the
    * next revision with every change authorised. The funding gate requires it.
    */
   readonly latest: boolean;
@@ -291,6 +292,11 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       if (atVersion !== hash) return refuse(manifest.version === 1 ? 'VAULT_ALREADY_ACCEPTED' : 'MANIFEST_FORK', { alert: true });
       redelivery = true;
     } else if (!latest) {
+      // Nothing comes before version 1, so nothing is carried forward into it. If one body has two
+      // valid authorisations (say a CIP-8 and an expired-transaction attestation of one binding),
+      // there are two version 1 manifests with different hashes, and a device that meets both
+      // raises the fork alert. The second needs the signer's own key, so a relay cannot make it
+      // alone; the spec discloses this residual (section 12).
       if (manifest.version !== 1) return refuse('UNKNOWN_VAULT');
     } else if (manifest.version < latest.version) {
       return refuse('STALE_REVISION');
@@ -351,8 +357,9 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
       return refuse('INVALID_INPUT');
     }
 
-    // Every signature. A tombstone carried unchanged from the latest accepted revision was verified
-    // when that revision was accepted; a manifest can hold hundreds of them.
+    // Every signature. A manifest can hold hundreds of tombstones, so their removals are verified
+    // once: a redelivery has the hash of a revision accepted earlier, and a tombstone carried
+    // unchanged from the latest accepted revision was verified when that revision was accepted.
     const tombstoneKey = (credential: string, t: DeviceTombstone) =>
       JSON.stringify([credential, t.deviceId, t.bindingVersion, t.removedIn, t.removal.method, t.removal.proof]);
     const verifiedTombstones = new Set(!redelivery && latest
@@ -365,7 +372,7 @@ export async function checkManifestBeforeAck(input: ManifestAckInput): Promise<M
         if (check.ok === false) return refuse('ATTESTATION_INVALID', { credential: entry.credential, attestation: check.code });
       }
       for (const tombstone of entry.removedDevices) {
-        if (verifiedTombstones.has(tombstoneKey(entry.credential, tombstone))) continue;
+        if (redelivery || verifiedTombstones.has(tombstoneKey(entry.credential, tombstone))) continue;
         const check = await verifyAttestation(tombstone.removal, entry.credential, { kind: 'removal', digest: deviceRemovalDigest(manifest.vaultId, tombstone) });
         if (check.ok === false) return refuse('REMOVAL_INVALID', { credential: entry.credential, attestation: check.code });
       }

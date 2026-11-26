@@ -15,6 +15,7 @@ import {
   decodeManifest,
   deviceBinding,
   deviceIdOf,
+  deviceRemovalDigest,
   deviceStanding,
   deviceTombstone,
   encodeManifest,
@@ -34,6 +35,7 @@ import {
   TestParticipant,
   VECTOR_REVISED_AT,
   cip8Attestation,
+  paddedCip8Attestation,
   removalBy,
   signedBinding,
   signedExternal,
@@ -288,7 +290,7 @@ describe('the revision chain and the history index', () => {
     expect(() => acceptRevision(undefined, v2, ackV2)).toThrow(expect.objectContaining({ message: expect.stringContaining('VERSION_NOT_NEXT') }));
   });
 
-  it('raises the fork alert on a different manifest at any accepted version, version 1 included', async () => {
+  it('raises the fork alert for another manifest at a version already accepted, the first one too', async () => {
     const other = normalizeManifest({ ...base, roles: { ...base.roles, viewers: [] } });
     const h1 = await historyOf([base]);
     expect(await check(other, owner(0), { accepted: [h1] })).toEqual({ ok: false, code: 'VAULT_ALREADY_ACCEPTED', alert: true });
@@ -304,7 +306,7 @@ describe('the revision chain and the history index', () => {
     expect(await check(base, owner(0), { accepted: [forked] })).toEqual({ ok: false, code: 'MANIFEST_FORK', alert: true });
   });
 
-  it('never makes a second vault from a duplicate registration of an accepted vault\'s scripts', async () => {
+  it('opens no second vault for the scripts of an accepted one, registered twice', async () => {
     const regs = [encodeRegistration(vault, { name: 'Treasury' }), encodeRegistration(vault, { name: 'Published again by someone else' })]
       .map(e => decodeRegistration({ metadata: { cbor: e.offChain.metadata }, nativeScripts: { cbor: e.offChain.native_scripts } }))
       .map(d => (d.ok === true ? d.registration : undefined));
@@ -470,6 +472,11 @@ describe('device removal on the acknowledging device', () => {
     });
     expect(await check(forged, owner(1), { accepted: [await historyOf([base])] }))
       .toEqual({ ok: false, code: 'REMOVAL_INVALID', credential: people[0].credential, attestation: 'WRONG_KEY' });
+    // A redelivery has the hash of a revision this device accepted, and its tombstones were checked
+    // then: they are not checked again. (The index here was written by hand to show it.)
+    const h1 = await historyOf([base]);
+    const stored: AcceptedVault = { ...h1, revisions: [...h1.revisions, { version: 2, manifestHash: manifestHash(forged) }], latest: forged };
+    expect(await check(forged, owner(1), { accepted: [stored] })).toMatchObject({ ok: true, redelivery: true });
   });
 
   it('refuses a replayed removal against a re-added binding', async () => {
@@ -522,10 +529,11 @@ describe('tombstones never stop a vault', () => {
   let full: VaultManifest;
   let index0: AcceptedVault;
   let index1: AcceptedVault;
+  let many: DeviceTombstone[];
 
   beforeAll(async () => {
     // Owner 1 removed test device 1 first (it admitted the viewer); owner 3 then removed 800 devices.
-    const many: DeviceTombstone[] = [];
+    many = [];
     for (let i = 0; i < CHURN; i++) {
       const pub = (await testDevice(1000 + i)).ed25519Pub;
       const deviceId = deviceIdOf(pub);
@@ -610,6 +618,62 @@ describe('tombstones never stop a vault', () => {
       await removeDevice(1, added.deviceId);
     }
     expect(history.revisions.map(r => r.version)).toEqual(Array.from({ length: 7 }, (_, i) => CHURN + 3 + i));
+  }, 120_000);
+
+  it('gives a padded removal no room to push out another participant\'s tombstones', async () => {
+    // Owner 2 removes its device with the largest removal it may sign: the binding it frees is larger.
+    const phone = full.roles.owners.find(e => e.credential === people[1].credential).devices[0];
+    const padded = paddedCip8Attestation(people[1], deviceRemovalDigest(id, phone), 57);
+    const next = nextRevisionRemovingDevice(full, { deviceId: phone.deviceId, removal: padded, revisedAt: T + 3 });
+    expect(tombstonesOfOwner(next, 2)).toEqual(tombstonesOfOwner(full, 2));
+    expect(await check(next, owner(0), { accepted: [index1] })).toMatchObject({ ok: true, attestationsVerified: true });
+    // A longer address is refused before it can take any room.
+    const longer = paddedCip8Attestation(people[1], deviceRemovalDigest(id, phone), 58);
+    expect(() => nextRevisionRemovingDevice(full, { deviceId: phone.deviceId, removal: longer, revisedAt: T + 3 }))
+      .toThrow(expect.objectContaining({ code: 'INVALID_DEVICE_BINDING' }));
+  });
+
+  it('makes the participant who holds the most tombstones give up theirs first, even when another\'s are older', async () => {
+    // Owner 2 removed 40 devices first; owner 3 then removed 800. Owner 2's tombstones are the oldest.
+    const early: DeviceTombstone[] = [];
+    for (let i = 0; i < 40; i++) {
+      const pub = (await testDevice(3000 + i)).ed25519Pub;
+      const deviceId = deviceIdOf(pub);
+      early.push({ deviceId, ed25519Pub: pub, bindingVersion: 1, removedIn: 3 + i, removal: removalBy(people[1], id, { deviceId, bindingVersion: 1 }) });
+    }
+    const late = many.map(t => ({ ...t, removedIn: t.removedIn + 40 }));
+    const crowded = normalizeManifest({
+      ...churned,
+      version: CHURN + 43,
+      roles: {
+        ...churned.roles,
+        owners: churned.roles.owners.map(e => (e.credential === people[1].credential ? { ...e, removedDevices: early }
+          : e.credential === people[2].credential ? { ...e, removedDevices: late } : e)),
+      },
+    });
+    const fitted = nextManifestRevision(crowded, { roles: {}, revisedAt: T + 2 });
+    expect(bytesOf(fitted)).toBeLessThanOrEqual(MAX_MANIFEST_BYTES);
+    expect(tombstonesOfOwner(fitted, 1)).toEqual(tombstonesOfOwner(crowded, 1));
+    expect(tombstonesOfOwner(fitted, 2).length).toBeLessThan(late.length);
+    expect(checkManifestRevision(crowded, fitted)).toEqual({ ok: true });
+    // Dropping the oldest overall (owner 2's) in place of owner 3's is refused.
+    const oldestFirst = { ...fitted, roles: { ...fitted.roles, owners: fitted.roles.owners.map(e => {
+      if (e.credential === people[1].credential) return { ...e, removedDevices: e.removedDevices.filter(t => t.removedIn !== 3) };
+      if (e.credential === people[2].credential) {
+        const dropped = late.filter(t => !e.removedDevices.some(x => x.deviceId === t.deviceId)).sort((x, y) => y.removedIn - x.removedIn)[0];
+        return { ...e, removedDevices: [...e.removedDevices, dropped] };
+      }
+      return e;
+    }) } } as VaultManifest;
+    expect(checkManifestRevision(crowded, oldestFirst)).toEqual({ ok: false, code: 'TOMBSTONE_DROPPED' });
+    // When owner 3 keeps removing devices, owner 2 keeps every tombstone.
+    const own3 = await signedBinding({ vaultId: id, role: 'owner', participant: people[2], device: 71 });
+    const bound = nextManifestRevision(fitted, { roles: { owners: fitted.roles.owners.map(e => (e.credential === people[2].credential ? { ...e, devices: [own3] } : e)) }, revisedAt: T + 3 });
+    const removed = nextRevisionRemovingDevice(bound, { deviceId: own3.deviceId, removal: paddedCip8Attestation(people[2], deviceRemovalDigest(id, own3), 57), revisedAt: T + 4 });
+    const byId = (list: readonly DeviceTombstone[]) => [...list].sort((x, y) => (x.deviceId < y.deviceId ? -1 : 1));
+    expect(tombstonesOfOwner(bound, 1)).toEqual(byId(early));
+    expect(tombstonesOfOwner(removed, 1)).toEqual(byId(early));
+    expect(checkManifestRevision(bound, removed)).toEqual({ ok: true });
   }, 120_000);
 
   it('still refuses a re-add at a dropped tombstone\'s version, through the history marks', async () => {

@@ -53,6 +53,7 @@ import {
   TestParticipant,
   VECTOR_REVISED_AT,
   attestationBy,
+  paddedCip8Attestation,
   removalBy,
   signedBinding,
   signedExternal,
@@ -709,7 +710,7 @@ describe('device removal', () => {
     expect(checkManifestRevision(removed, moved)).toEqual({ ok: false, code: 'TOMBSTONE_INVALID' });
   });
 
-  it('keeps one tombstone per device id, the latest', async () => {
+  it('keeps only the newest tombstone of a device', async () => {
     const back = await signedBinding({ vaultId: id, role: 'owner', participant: people[0], device: 1, label: 'Laptop', bindingVersion: 2 });
     const readded = nextManifestRevision(removed, { roles: { owners: ownersChanged(removed, 0, { devices: [back] }) }, revisedAt: LATER });
     const again = nextRevisionRemovingDevice(readded, { deviceId: laptop.deviceId, removal: removalBy(people[0], id, back), revisedAt: LATER });
@@ -758,6 +759,10 @@ describe('device removal', () => {
     ['TOMBSTONE_INVALID', (p: P) => { at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['method'] = 7; }],
     ['TOMBSTONE_INVALID', (p: P) => {
       at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['proof'] = b(walletCip8Attestation(people[0].signer, people[0].credential, deviceRemovalDigest(id, laptop)).proof);
+    }],
+    ['TOMBSTONE_INVALID', (p: P) => {
+      // A removal padded through a signed address longer than any Cardano address.
+      at(ownerOf(p, 0), 'removedDevices', 0, 'removal')['proof'] = b(paddedCip8Attestation(people[0], deviceRemovalDigest(id, laptop), 58).proof);
     }],
     ['DUPLICATE_DEVICE', (p: P) => { const t = list(ownerOf(p, 0), 'removedDevices'); t.push(structuredClone(t[0])); }],
     ['DUPLICATE_DEVICE', (p: P) => { const t = list(ownerOf(p, 0), 'removedDevices'); t.push({ ...(structuredClone(t[0]) as P), bindingVersion: 16 }); }],

@@ -19,6 +19,9 @@ import {
   expiredTxBody,
   expiredTxBodyHash,
   ingestAttestation,
+  MAX_PROTECTED_HEADER_BYTES,
+  MAX_SIGNED_ADDRESS_BYTES,
+  MAX_SIGNED_BODY_BYTES,
   isCanonicalAttestation,
   isUsableEd25519Key,
   verifyAttestation,
@@ -26,7 +29,7 @@ import {
 } from './attestation';
 import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 import { readCbor } from './cbor';
-import { TestParticipant, cip8Attestation, expiredTxAttestation, testParticipants, walletCip8Attestation } from './__fixtures__/manifest';
+import { TestParticipant, cip8Attestation, expiredTxAttestation, paddedCip8Attestation, testParticipants, walletCip8Attestation } from './__fixtures__/manifest';
 
 /**
  * PROVISIONAL vectors (GV-07): the expired transaction body and auxiliary data for test
@@ -144,7 +147,7 @@ describe('CIP-8 attestations', () => {
     });
   });
 
-  it('refuse a key that does not hash to the credential', async () => {
+  it('refuse a key whose hash is not the credential', async () => {
     expect(await codeOf(cip8Attestation(people[1].signer, people[1].credential, DIGEST), people[0])).toBe('WRONG_KEY');
   });
 
@@ -359,9 +362,53 @@ describe('an expired transaction body as the wallet signed it', () => {
     ['MALFORMED_PROOF', 'a key twice', () => `a7${canonicalBody().slice(2)}0301`],
     ['MALFORMED_PROOF', 'a body that is not a map', () => '80'],
     ['SUBMITTABLE', 'a later time to live', () => canonicalBody().replace(AFTER_INPUT, '01800200031a0bebc2000758')],
+    // A decoder reads 1.0 and 0.0 as the integers 1 and 0: floats and simple values are refused outright.
+    ['BODY_SHAPE', 'a time to live of 1.0 as a half float', () => canonicalBody().replace(AFTER_INPUT, '0180020003f93c000758')],
+    ['BODY_SHAPE', 'a fee of 0.0 as a half float', () => canonicalBody().replace(AFTER_INPUT, '018002f9000003010758')],
+    ['BODY_SHAPE', 'a map key 0.0', () => canonicalBody().replace(/^a600/, 'a6f90000')],
+    ['BODY_SHAPE', 'a value true', () => canonicalBody().replace(AFTER_INPUT, '01800200' + '03f5' + '0758')],
+    // Empty chunks of an indefinite byte string mean nothing but take room: past the bound, refused.
+    ['BODY_SHAPE', 'a transaction id padded with empty chunks', () => canonicalBody().replace(/^a60081825820((?:00){32})/, `a60081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`)],
     ['WRONG_SIGNER', 'two required signers in a set', () => canonicalBody().replace(/0e81581c([0-9a-f]{56})$/, `0ed9010282581c$1581c${'00'.repeat(28)}`)],
   ] as [string, string, () => string][])('refuses %s: %s, however it is written', async (code, _what, make) => {
     expect(await codeOf(signedAs(make()), people[0])).toBe(code);
+  });
+});
+
+describe('the parts a signer could inflate are bounded', () => {
+  const removal: AttestedDigest = { kind: 'removal', digest: DIGEST };
+  const stored = (a: OwnerAttestation) => (isCanonicalAttestation(a) ? 'stored form' : 'refused');
+
+  it('take a signed address of up to 57 bytes, and refuse a longer one at ingest and when stored', async () => {
+    const longest = paddedCip8Attestation(people[0], DIGEST, MAX_SIGNED_ADDRESS_BYTES);
+    expect(await codeOf(longest, people[0], removal)).toBe('ok');
+    expect(stored(longest)).toBe('stored form');
+    const longer = paddedCip8Attestation(people[0], DIGEST, MAX_SIGNED_ADDRESS_BYTES + 1);
+    expect(await codeOf(longer, people[0], removal)).toBe('UNSUPPORTED_HEADER');
+    expect(await ingested(longer, people[0], removal)).toBe('UNSUPPORTED_HEADER');
+    expect(stored(longer)).toBe('refused');
+    // The largest CIP-8 proof is a few hundred bytes, far from the 2 KiB proof bound.
+    expect(longest.proof.length / 2).toBeLessThan(300);
+  });
+
+  it('refuse a protected header over 128 bytes, a kid and an address of 57 bytes together among them', async () => {
+    const both = paddedCip8Attestation(people[0], DIGEST, MAX_SIGNED_ADDRESS_BYTES, true);
+    const header = (cborgDecode(parts(both.proof)[0]) as Uint8Array[])[0];
+    expect(header.length).toBeGreaterThan(MAX_PROTECTED_HEADER_BYTES);
+    expect(await codeOf(both, people[0], removal)).toBe('UNSUPPORTED_HEADER');
+    expect(stored(both)).toBe('refused');
+    // An enterprise address (29 bytes), signed as kid and address both, fits.
+    expect(await codeOf(paddedCip8Attestation(people[0], DIGEST, 29, true), people[0], removal)).toBe('ok');
+  });
+
+  it('refuse an expired transaction body over 512 bytes', async () => {
+    const body = expiredTxBody(people[0].credential, binding);
+    expect(body.length / 2).toBeLessThan(MAX_SIGNED_BODY_BYTES);
+    const padded = body.replace(/^a60081825820((?:00){32})/, `a60081825f${'40'.repeat(MAX_SIGNED_BODY_BYTES)}5820$1ff`);
+    const signature = people[0].signer.sign(HexBlob(sdkBlake2b.hash(HexBlob(padded), 32))).hex();
+    const proof = { method: 1, proof: assembleExpiredTx(people[0].credential, binding, people[0].signer.toPublic().hex(), signature, padded) };
+    expect(await codeOf(proof, people[0])).toBe('BODY_SHAPE');
+    expect(canonicalAttestation(proof)).toEqual({ ok: false, code: 'BODY_SHAPE' });
   });
 });
 

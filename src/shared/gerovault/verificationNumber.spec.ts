@@ -146,7 +146,7 @@ describe('the verification number', () => {
     expect(verificationNumber(manifest)).toEqual(groups);
   });
 
-  it('is 40 digits in 8 groups of 5, with no wordlist anywhere in the module', () => {
+  it('is eight groups of five digits, and the module holds no wordlist', () => {
     expect(verificationNumber(manifest)).toHaveLength(8);
     for (const group of verificationNumber(manifest)) expect(group).toMatch(/^\d{5}$/);
     expect(verificationNumberGroups('00'.repeat(40))).toEqual(Array(8).fill('00000'));
@@ -522,11 +522,11 @@ describe('external cosigners: their own attestation, received directly or endors
     expect(await fundingVerified(ext, ack1, [numberVerification(ext, people[0].credential, T), { ...record, proof: forged } as CosignerVerification])).toBe(false);
   });
 
-  it('discloses its residual: an importer who substitutes a key they hold can sign for it', async () => {
+  it('shows its residual: an importer who swaps in a key of their own can sign for it', async () => {
     // The importer (owner 1) puts in keys it controls (participant 4) instead of the external's,
     // signs the attestation itself and hands the file to owner 2. Nothing in software can tell
-    // the difference; what protects owner 2 is taking the file from the external person
-    // themself, never by way of owner 1 (spec 12; the wallet's screen says so).
+    // the difference; what protects owner 2 is getting the file from the cosigner in person,
+    // never through owner 1 (spec 12; the wallet's screen says so).
     const subVault = await buildVaultFromParticipants({ template: { kind: 'standard', threshold: 2 }, owners: ownersOf([people[0].vaultKeys, people[1].vaultKeys, people[3].vaultKeys]) });
     const subId = vaultId(subVault, 'preprod');
     const sub = newManifest({

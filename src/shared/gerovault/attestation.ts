@@ -13,18 +13,22 @@
  *   `{ 1: 1, 3: -8, -1: 6, -2: key }`. It verifies when the key hashes to the participant's
  *   credential, the payload is exactly the digest, and the signature verifies over the
  *   Sig_structure (RFC 8152 section 4.4).
- * - method 1, an expired transaction: `proof` is a complete signed transaction that can never be
- *   submitted. Its body means exactly
+ * - method 1, an expired transaction: `proof` is a full signed transaction that no node would ever
+ *   accept. Its body means exactly
  *     { 0: [[32 zero bytes, 0]], 1: [], 2: 0, 3: 1, 7: auxiliary data hash, 14: [credential] }
  *   (an input that cannot exist, no outputs, no fee, a time to live of slot 1, the credential as
  *   the one required signer), its witness set is exactly one vkey witness by the vault payment
  *   key, and its auxiliary data is exactly `{ 18541: { k: digest } }`, where `k` names what is
  *   attested: 0 a binding, 1 a verification digest, 2 a device removal, 3 an external import,
  *   4 an endorsement. Label 1854 is never used, because CIP-0146 wallets scan it for vault
- *   registrations. The body is kept as the bytes the wallet signed, so a wallet that writes the
- *   input set and the signer set with the set tag 258, or in another key order, still verifies;
- *   what it means is checked, not how it is written. The wrapper, the witness set and the
- *   auxiliary data are stored as canonical CBOR (definite lengths, no set tags).
+ *   registrations. The body stays byte for byte as signed, so a wallet that tags the input set
+ *   and the signer set with 258, or orders the keys its own way, still verifies; its meaning is
+ *   checked, not its spelling, and it holds no float or simple value. The wrapper, the witness set
+ *   and the auxiliary data are stored as canonical CBOR (definite lengths, no set tags).
+ *
+ * The parts a signer could inflate are bounded, at ingest and when a stored proof is read: the
+ * protected header (`MAX_PROTECTED_HEADER_BYTES`), the address or `kid` signed in it
+ * (`MAX_SIGNED_ADDRESS_BYTES`), and the expired transaction's body (`MAX_SIGNED_BODY_BYTES`).
  *
  * `ingestAttestation` takes what a wallet returns (a COSE_Key with a `kid` or no `alg` or in
  * another order, an unprotected `{ hashed: false }`, a tagged COSE_Sign1, a witness set with set
@@ -52,6 +56,14 @@ import { CborWritable, encodeCanonicalCbor } from './canonicalCbor';
 export const ATTESTATION_LABEL = 18541;
 export const ATTESTATION_METHOD = Object.freeze({ CIP8: 0, EXPIRED_TX: 1 } as const);
 export const MAX_ATTESTATION_BYTES = 2048;
+/**
+ * Bounds on the parts of a proof a signer chooses, so that no stored proof is much larger than an
+ * honest one: the CIP-8 protected header, the address (or `kid`) signed in it (a Cardano base
+ * address is 57 bytes), and the expired transaction's body.
+ */
+export const MAX_PROTECTED_HEADER_BYTES = 128;
+export const MAX_SIGNED_ADDRESS_BYTES = 57;
+export const MAX_SIGNED_BODY_BYTES = 512;
 
 export interface OwnerAttestation {
   /** `ATTESTATION_METHOD.CIP8` or `ATTESTATION_METHOD.EXPIRED_TX`. */
@@ -281,14 +293,16 @@ const canonicalCoseKey = (x: Uint8Array) => encodeCanonicalCbor(new Map<number, 
 const canonicalSign1 = (protectedBytes: Uint8Array, payload: Uint8Array, signature: Uint8Array) =>
   encodeCanonicalCbor([protectedBytes, new Map<number, CborWritable>(), payload, signature]);
 
-/** The signed protected header: alg EdDSA, and optionally a kid and the CIP-30 address. */
+/** The signed protected header: alg EdDSA, and optionally a kid and the CIP-30 address, each bounded. */
 function protectedHeader(protectedBytes: Uint8Array): { readonly signedId?: Uint8Array } {
+  if (protectedBytes.length > MAX_PROTECTED_HEADER_BYTES) refuse('UNSUPPORTED_HEADER');
   const headers = entries(parse(protectedBytes).value, 'UNSUPPORTED_HEADER');
   for (const label of headers.keys()) if (label !== 1 && label !== 4 && label !== 'address') refuse('UNSUPPORTED_HEADER');
   if (!isInt(headers.get(1), -8n)) refuse('UNSUPPORTED_HEADER');
   for (const label of [4, 'address']) if (headers.has(label) && headers.get(label).type !== 'bytes') refuse('UNSUPPORTED_HEADER');
   const kid = headers.has(4) ? bytesOf(headers.get(4)) : undefined;
   const address = headers.has('address') ? bytesOf(headers.get('address')) : undefined;
+  if ((kid?.length ?? 0) > MAX_SIGNED_ADDRESS_BYTES || (address?.length ?? 0) > MAX_SIGNED_ADDRESS_BYTES) refuse('UNSUPPORTED_HEADER');
   if (kid && address && !sameBytes(kid, address)) refuse('UNSUPPORTED_HEADER');
   return { signedId: address ?? kid };
 }
@@ -372,31 +386,35 @@ function head(bytes: Uint8Array, at: number): { readonly major: number; readonly
   return { major, n, next: at + 1 + size };
 }
 
-/** Where the CBOR item at `at` ends, however it is written (indefinite lengths and tags included). */
-function itemEnd(bytes: Uint8Array, at: number, depth = 0): number {
+/**
+ * Where the CBOR item at `at` ends, however it is written (indefinite lengths and tags included).
+ * With `noSimple`, a float or simple value anywhere in it (major type 7) is refused.
+ */
+function itemEnd(bytes: Uint8Array, at: number, depth = 0, noSimple = false): number {
   if (depth > SCAN_DEPTH) return refuse('MALFORMED_PROOF');
   const { major, n, next } = head(bytes, at);
   if (n < 0 && (major < 2 || major > 5)) return refuse('MALFORMED_PROOF');
+  if (major === 7 && noSimple) return refuse('BODY_SHAPE');
   if (major === 0 || major === 1 || major === 7) return next;
-  if (major === 6) return itemEnd(bytes, next, depth + 1);
+  if (major === 6) return itemEnd(bytes, next, depth + 1, noSimple);
   let p = next;
   if (major === 2 || major === 3) {
     if (n >= 0) return n <= bytes.length - p ? p + n : refuse('MALFORMED_PROOF');
     while (bytes[p] !== 0xff) {
       const chunk = head(bytes, p);
       if (chunk.major !== major || chunk.n < 0) refuse('MALFORMED_PROOF');
-      p = itemEnd(bytes, p, depth + 1);
+      p = itemEnd(bytes, p, depth + 1, noSimple);
     }
     return p + 1;
   }
   const per = major === 5 ? 2 : 1;
   if (n >= 0) {
     if (n * per > bytes.length - p) refuse('MALFORMED_PROOF');
-    for (let i = 0; i < n * per; i++) p = itemEnd(bytes, p, depth + 1);
+    for (let i = 0; i < n * per; i++) p = itemEnd(bytes, p, depth + 1, noSimple);
     return p;
   }
   let count = 0;
-  for (; bytes[p] !== 0xff; count++) p = itemEnd(bytes, p, depth + 1);
+  for (; bytes[p] !== 0xff; count++) p = itemEnd(bytes, p, depth + 1, noSimple);
   return count % per === 0 ? p + 1 : refuse('MALFORMED_PROOF');
 }
 
@@ -422,8 +440,14 @@ class TaggedSet {
   constructor(readonly items: unknown) {}
 }
 
-/** A signed body as the wallet wrote it, decoded: any lengths, integer widths and key order; tag 258 only. */
+/**
+ * A signed body as the wallet wrote it, decoded: any lengths, integer widths and key order, and tag
+ * 258 only. It holds integers, byte strings, arrays and maps: a float or simple value anywhere is
+ * refused, since a decoder would read `1.0` as the integer 1. At most `MAX_SIGNED_BODY_BYTES`.
+ */
 function signedBody(bytes: Uint8Array): Map<unknown, unknown> {
+  if (bytes.length > MAX_SIGNED_BODY_BYTES) refuse('BODY_SHAPE');
+  if (itemEnd(bytes, 0, 0, true) !== bytes.length) refuse('MALFORMED_PROOF');
   const tags: ((inner: unknown) => unknown)[] = [];
   tags[258] = inner => new TaggedSet(inner);
   let body: unknown;
@@ -565,7 +589,7 @@ function proofBytes(attestation: OwnerAttestation): Uint8Array {
 
 /**
  * The canonical stored form of an attestation a wallet returned, after the layout checks (a CIP-8
- * `kid` must repeat the signed address) but before any signature check: `ingestAttestation` does
+ * `kid` has to equal the address that was signed) but before any signature check: `ingestAttestation` does
  * both. Never throws.
  */
 export function canonicalAttestation(attestation: OwnerAttestation):

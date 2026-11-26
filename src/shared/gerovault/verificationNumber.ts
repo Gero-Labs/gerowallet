@@ -2,32 +2,31 @@
  * The verification ceremony and the funding gate (spec 5.3, 6.1; GV-61 #1729).
  *
  * Before anyone funds a vault, its cosigners compare the vault's keys with each other outside the
- * relay. What they compare is the verification set: the network, the two scripts, and every
- * participant with a script key as `{ credential, vaultKeys }`. Device bindings, viewers and
+ * relay. What they compare is the verification set: the network, the two scripts, and the
+ * credential and vault keys of everyone who holds a script key. Device bindings, viewers and
  * labels are not in it (each revision's signatures cover those), so only a change of keys or
  * scripts asks for the ceremony again.
  *
- * - The verification number: 40 decimal digits in 8 groups of 5, read aloud by voice or video.
- *   `d = blake2b(dkLen 40)( "gero-vault/v1|verification-number|" || canonical CBOR of the set )`,
- *   and group i (0 to 7) is the big-endian integer of `d[5i .. 5i+5]` modulo 100000, written with
- *   leading zeros: about 132.9 bits. They are digits, not words, so nobody ever reads a list of
+ * - The verification number, read out over a call: eight groups of five digits, forty in all.
+ *   `d = blake2b(dkLen 40)( "gero-vault/v1|verification-number|" || canonical CBOR of the set )`;
+ *   each group takes the next five bytes of `d` as a big-endian number, reduced modulo 100000 and
+ *   padded to five digits. That carries about 132.9 bits. They are digits, not words, so nobody ever reads a list of
  *   words to another person, and the screen tells users plainly that these are not recovery words.
  * - The QR, scanned in person: `gero-vault/v1|VERIFY|<network>|<vaultId>|<verificationDigest>`,
  *   with the full 256-bit `blake2b-256( "gero-vault/v1|verification|" || canonical CBOR of the set )`.
  * - An external cosigner, who has no Gero device, signs the verification digest with their vault
  *   payment key in an expired transaction (`attestation.ts`, method 1). It counts only when an
- *   owner who did not import that cosigner's keys takes the file from the external person
- *   themself; a copy handed on by the importer proves nothing, because an importer who put in a
- *   key of their own can also sign for it. Software cannot tell where a file came from, so this
- *   is a rule for people, and the screen states it. The receiving owner's device records the
- *   receipt for itself, and the owner endorses it for everyone else: an endorsement is attested by
- *   the receiving owner's vault payment key over the verification digest, the external's
- *   credential, the attestation's hash and the endorser's credential. It is stored per vault, not
- *   in the manifest, and it does not depend on any device, so removing the device that received
- *   the file leaves it valid.
+ *   owner other than the one who imported that cosigner gets the file straight from them; a copy
+ *   passed on by the importer proves nothing, since an importer who slipped in a key of their own
+ *   can sign with it too. Software cannot see where a file came from, so this is a rule for people,
+ *   and the screen says so. The owner who got the file keeps a record on their own device and
+ *   vouches for it to everyone else with an endorsement: their payment key signs the verification
+ *   digest, the cosigner's credential, the hash of the file and their own credential. Endorsements
+ *   are kept per vault, outside the manifest, and involve no device, so losing or removing the
+ *   device that took the file changes nothing.
  *
- * Checks through a data provider (an ADA Handle, a known address, a shared vault) are recorded and
- * shown as resolved by a provider; they never verify anyone. There is no value threshold.
+ * Answers from a data provider (an ADA Handle, a known address, a shared vault) are kept and shown
+ * as provider results; they never count as verification. No amount lowers the bar.
  *
  * PROVISIONAL: the tags, the QR payload and the vectors are fixed with the other clients' vectors
  * (GV-07 #1675).
@@ -271,10 +270,10 @@ const PROVIDER_CHECKS: readonly ProviderCheck[] = ['adaHandle', 'knownAddress', 
  * How this device verified one cosigner, kept in its own vault record. Number, QR and external
  * records are bound to the verification digest they compared.
  *
- * Every record is local to the device that made it and is never synced, the `external` receipt
- * most of all: it says that this device's owner took the file from the external person, which
- * only this device can say. That fact reaches the other devices only as an endorsement (the
- * `endorsed` record), which they verify themselves.
+ * Every record stays on the device that made it and is never synced. That matters most for the
+ * `external` record: it says this device's owner got the file from the cosigner in person, and
+ * only this device can say that. Other devices learn it only from an endorsement (the `endorsed`
+ * record), which they check themselves.
  */
 export type CosignerVerification =
   | {
@@ -348,7 +347,7 @@ function ackMatches(m: VaultManifest, ack: ManifestAck): boolean {
   return isManifestAck(ack) && ack.vaultId === m.vaultId && ack.manifestHash === manifestHash(m);
 }
 
-/** The importer is the only Gero owner, counting the owners slot alone: then the attestation alone suffices. */
+/** No owner but the importer (backup holders do not count): then the cosigner's file is enough on its own. */
 function importerIsOnlyOwner(m: VaultManifest, importedBy: string): boolean {
   return m.roles.owners.every(e => e.credential === importedBy);
 }
@@ -518,12 +517,11 @@ export async function cosignerVerificationStatus(
  *   revision (`ack.latest`): a superseded revision, or one not accepted, never opens funding;
  * - every owner and backup holder, this device's own participant included, has a device binding
  *   whose owner attestation verified (`ack.unattested` is empty);
- * - every other Gero cosigner is verified by the number or the QR for this verification set;
- * - every external cosigner is verified by their own attestation: received directly by this
- *   device's owner when that owner is not their importer, or endorsed by an owner other than
- *   their importer, or alone when their importer is the only owner. When the importer changes
- *   (they left the owners slot and another owner imported again), this is evaluated afresh, and
- *   deposits stay closed until an owner other than the new importer endorses.
+ * - each other Gero cosigner has a number or QR check that matches this verification set;
+ * - each external cosigner's own signed file is accounted for: this device's owner got it in
+ *   person and did not import them, or another owner who did not import them endorsed it, or the
+ *   importer is the only owner. Everything is read against this manifest's importer, so after a
+ *   new importer takes over, deposits wait for an endorsement by somebody else.
  * It takes no amount: there is no value below which the ceremony may be skipped. Never throws.
  */
 export async function fundingVerified(manifest: VaultManifest, ack: ManifestAck, records: readonly CosignerVerification[]): Promise<boolean> {
