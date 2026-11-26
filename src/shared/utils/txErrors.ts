@@ -18,6 +18,7 @@ import {
   SUBMIT_API_STORAGE_MESSAGE,
   TREZOR_GOVERNANCE_REFUSAL_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
+  VAULT_SIGN_REFUSAL_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 import { marketSignRefusalKey } from '@/shared/utils/nftMarketSignRefusal';
@@ -164,6 +165,7 @@ export function signRefusalText(message: string, options: FriendlyTxErrorOptions
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
   if (message === MARKED_TO_FAIL_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.markedToFailRefused') as string;
   if (message === TREZOR_GOVERNANCE_REFUSAL_MESSAGE) return i18n.t('errors.trezorGovernanceRefused') as string;
+  if (message === VAULT_SIGN_REFUSAL_MESSAGE) return i18n.t('errors.vaultSignRefused') as string;
   // A dApp's market transaction reaches the market's refusal when the approval it was previewed under
   // has run out (`marketApproval`; useNftMarketFlow maps the same text for Gero's own market flows).
   // Any other screen (a plain Send to a listing script, staking, ...) gets the honest "only from the
