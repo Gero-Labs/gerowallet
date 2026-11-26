@@ -92,3 +92,17 @@ describe('SolanaCollectibles', () => {
     expect(w.find(`[data-test="sol-collection-${C}"]`).exists()).toBe(false);
   });
 });
+
+describe('SolanaCollectibles: compressed and Core NFTs', () => {
+  it('lists them with the token NFTs and names their kind', async () => {
+    const store = walletStore as unknown as { solana: unknown; solanaNfts: unknown; solanaAssets: unknown };
+    store.solana = { tokens: [] };
+    store.solanaNfts = {};
+    store.solanaAssets = [{ ...nft(A, { name: 'Leaf #1', collection: { address: COLL, verified: true } }), kind: 'compressed' }];
+    const w = render();
+    await w.find(`[data-test="sol-collection-${COLL}"]`).trigger('click');
+    expect(w.find('[data-test="sol-nft-kind"]').text()).toBe('solana.nft.compressed');
+    expect(w.find('[data-test="sol-nft-send"]').exists()).toBe(true);
+    store.solanaAssets = [];
+  });
+});
