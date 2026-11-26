@@ -10,9 +10,9 @@
  * - a manifest decodes, describes this vault and never goes back to an older revision;
  * - every verification record names a participant.
  *
- * This wallet's own index cannot be checked here (it needs the account key), but index 0 is refused
- * for now (see `addCandidate`). Every failure is a `VaultStoreError`, and a database that cannot be
- * read throws, never answers "no vaults".
+ * This wallet's own index cannot be checked here (it needs the account key). Every failure is a
+ * `VaultStoreError`, and a database that cannot be read throws, never answers "no vaults". The dApp
+ * signing guard reads these rows (knownVaults.ts), so a stored vault, at any index, is refused there.
  */
 import { Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -224,9 +224,6 @@ async function addCandidate(walletId: number, input: VaultCandidateInput): Promi
   if (!NETWORKS.includes(input.network)) invalid('A vault network is mainnet, preprod or preview');
   if (!ORIGINS.includes(input.origin)) invalid('A vault was created, imported or restored');
   if (!isVaultIndex(input.ownIndex)) invalid('This wallet\'s index is a CIP-1854 soft index');
-  // Index 0 is the one 1854 key the generic signers may still use (vaultSignGuard.ts, rule 1). Until
-  // knownVaultScriptHashes() reads this store, a vault at 0 would rely on rule 2 alone, which is empty.
-  if (input.ownIndex === 0) invalid('Index 0 is left to the wallet\'s existing multisig key');
   assertVaultId(input.vaultId);
   const payment = readScript(ROLE.PAYMENT, input.paymentScriptCbor, 'payment');
   const stake = readScript(ROLE.STAKE, input.stakeScriptCbor, 'stake');

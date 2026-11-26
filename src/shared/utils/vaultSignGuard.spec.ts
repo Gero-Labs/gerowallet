@@ -12,9 +12,11 @@ vi.mock('@/shared/utils/knownVaults', () => ({ knownVaultScriptHashes: knownVaul
 
 import {
   assertGenericSigningPaths,
+  assertMultisigPathsAllowed,
   assertNoVaultSignature,
   findVaultTouch,
   isGenericSigningPath,
+  isVaultIndexZeroPath,
   isVaultSignRefusal,
   plannedSigningPaths,
 } from './vaultSignGuard';
@@ -229,5 +231,47 @@ describe('assertNoVaultSignature', () => {
     const vaultKey: Keys = { ...keys, payment: [{ ...keys.payment[0], path: "m/1854'/1815'/0'/0/1" }] };
     await expect(assertNoVaultSignature(tx({}), vaultKey, utxos)).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
     expect(knownVaults).not.toHaveBeenCalled();
+  });
+
+  it('refuses a plan naming the 0/0 multisig key once a stored vault holds a wallet\'s index 0', async () => {
+    const multisig00: Keys = { ...keys, payment: [{ ...keys.payment[0], path: "m/1854'/1815'/0'/0/0" }] };
+    await expect(assertNoVaultSignature(tx({}), multisig00, [utxo(WALLET_IN, WALLET_ADDRESS)])).resolves.toBeUndefined();
+    knownVaults.mockResolvedValue({ ...NO_VAULTS, ownIndexZero: true });
+    await expect(assertNoVaultSignature(tx({}), multisig00, [utxo(WALLET_IN, WALLET_ADDRESS)])).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    await expect(assertNoVaultSignature(tx({}), keys, [utxo(WALLET_IN, WALLET_ADDRESS)])).resolves.toBeUndefined();
+  });
+});
+
+describe('rule 1 with a stored vault at index 0', () => {
+  beforeEach(() => {
+    knownVaults.mockReset();
+    knownVaults.mockResolvedValue(NO_VAULTS);
+  });
+
+  it('names only the 0/0 multisig key of account 0\'', () => {
+    expect(isVaultIndexZeroPath("m/1854'/1815'/0'/0/0")).toBe(true);
+    expect(isVaultIndexZeroPath([1854 + H, 1815 + H, H, 0, 0])).toBe(true);
+    for (const path of ["m/1854'/1815'/1'/0/0", "m/1852'/1815'/0'/0/0", "m/1854'/1815'/0'/0/1", [1854 + H, 1815 + H, H + 1, 0, 0]]) {
+      expect(isVaultIndexZeroPath(path)).toBe(false);
+    }
+  });
+
+  it('lets the multisig paths a device adds through while no stored vault holds index 0', async () => {
+    await expect(assertMultisigPathsAllowed([[1854 + H, 1815 + H, H, 0, 0]])).resolves.toBeUndefined();
+    knownVaults.mockResolvedValue({ ...NO_VAULTS, ownIndexZero: false });
+    await expect(assertMultisigPathsAllowed(["m/1854'/1815'/0'/0/0"])).resolves.toBeUndefined();
+  });
+
+  it('refuses 0/0 of account 0\' once one does, and another account\'s 0/0 still passes', async () => {
+    knownVaults.mockResolvedValue({ ...NO_VAULTS, ownIndexZero: true });
+    await expect(assertMultisigPathsAllowed([[1854 + H, 1815 + H, H, 0, 0]])).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    await expect(assertMultisigPathsAllowed(["m/1854'/1815'/1'/0/0"])).resolves.toBeUndefined();
+  });
+
+  it('refuses other vault keys without asking the provider, and refuses when it cannot answer', async () => {
+    await expect(assertMultisigPathsAllowed(["m/1854'/1815'/0'/0/1"])).rejects.toThrow(VAULT_SIGN_REFUSAL_MESSAGE);
+    expect(knownVaults).not.toHaveBeenCalled();
+    knownVaults.mockRejectedValue(new Error('vault store unreadable'));
+    await expect(assertMultisigPathsAllowed(["m/1854'/1815'/0'/0/0"])).rejects.toThrow('vault store unreadable');
   });
 });

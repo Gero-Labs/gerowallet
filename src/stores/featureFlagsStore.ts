@@ -9,7 +9,8 @@ const CIP45_DEFAULT_ENABLED =
 
 // Local test builds only: VITE_GEROVAULT_FORCE_ON=true at build time turns GeroVault on whatever
 // the flag service says, so a test extension can open the vault screens while the remote flag
-// stays off for everyone. Release builds never set it (scripts/write-production-env.mjs).
+// stays off for everyone. Release builds never set it (scripts/write-production-env.mjs), and
+// scripts/check-release-artifact.mjs refuses a candidate built with it on.
 // Read as a plain `import.meta.env[...]`: the build replaces it with the value, and vitest
 // does not see through a cast of `import.meta`.
 const GEROVAULT_FORCED_ON = import.meta.env['VITE_GEROVAULT_FORCE_ON'] === 'true';

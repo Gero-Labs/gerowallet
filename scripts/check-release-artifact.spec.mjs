@@ -66,9 +66,17 @@ describe('release artifact gate', () => {
     ['index.html', '<script>runCode()</script>'],
     ['assets/app.js', 'import("https://example.org/code.js")'],
     ['old-release.zip', 'stale archive'],
+    ['assets/app.js', 'const GEROVAULT_FORCED_ON = true;'],
+    ['background/index.js', 'var env = { "VITE_GEROVAULT_FORCE_ON": "true" };'],
   ])('rejects malformed executable or stale packaged content in %s', (file, content) => {
     write(file, content);
     expect(inspectReleaseArtifact(directory, options).ok).toBe(false);
+  });
+
+  it('accepts the GeroVault test switch off, folded or read at run time', () => {
+    write('assets/app.js', 'const GEROVAULT_FORCED_ON = false;');
+    write('background/index.js', 'const GEROVAULT_FORCED_ON = __vite_import_meta_env__["VITE_GEROVAULT_FORCE_ON"] === "true";');
+    expect(inspectReleaseArtifact(directory, options).problems).toEqual([]);
   });
 
   it('reports identity as unverified unless an expected release ID is supplied', () => {
