@@ -1,9 +1,11 @@
 /**
  * Which chain reader the spend screens use. A host (or a test) provides a factory with
- * `provide(VAULT_CHAIN_READER_KEY, factory)`; without one the screens use the default below.
- * The screens only ever see the `VaultChainReader` interface of `contracts.ts`.
+ * `provide(VAULT_CHAIN_READER_KEY, factory)`; without one the screens use the wallet's own reader
+ * (`createVaultChainReader`: Nexus address reads, `backendSource` for creating transactions, the
+ * background's submit). The screens only ever see the `VaultChainReader` interface of `contracts.ts`.
  */
 import { inject, type InjectionKey } from 'vue';
+import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
 import type { VaultChainReader } from '@/modules/gerovault/contracts';
 import type { VaultNetwork } from '@/shared/gerovault';
 
@@ -12,17 +14,24 @@ export type VaultChainReaderFactory = (network: VaultNetwork) => VaultChainReade
 
 export const VAULT_CHAIN_READER_KEY: InjectionKey<VaultChainReaderFactory> = Symbol('gerovaultChainReader');
 
-/** No reader yet: the screens say that sending is not available rather than guess one. */
-const noReader: VaultChainReaderFactory = () => null;
+const readers = new Map<VaultNetwork, VaultChainReader>();
 
-let defaultFactory: VaultChainReaderFactory = noReader;
-
-/** Sets the factory used when no component provides one (the app's own reader, once wired). */
-export function setDefaultVaultChainReader(factory: VaultChainReaderFactory): void {
-  defaultFactory = factory;
-}
+/** The wallet's reader for each network, made once per page. */
+const walletReaders: VaultChainReaderFactory = network => {
+  let reader = readers.get(network);
+  if (!reader) {
+    try {
+      reader = createVaultChainReader(network);
+    } catch {
+      // A network the reader does not know: the screens say sending is not available.
+      return null;
+    }
+    readers.set(network, reader);
+  }
+  return reader;
+};
 
 /** The factory in effect for the calling component. Call it in `setup`. */
 export function useVaultChainReaderFactory(): VaultChainReaderFactory {
-  return inject(VAULT_CHAIN_READER_KEY, () => defaultFactory, true);
+  return inject(VAULT_CHAIN_READER_KEY, () => walletReaders, true);
 }

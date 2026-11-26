@@ -2879,6 +2879,7 @@ export default {
   'gerovault.spend.error.keyMismatch': 'This wallet\'s key is not the key the vault holds for it. Nothing was signed.',
   'gerovault.spend.error.generic': 'Something went wrong. Nothing was signed or sent.',
   'gerovault.spend.error.submit': 'The network did not accept the transaction.',
+  'gerovault.spend.error.submitUnconfirmed': 'The wallet could not confirm that the network received the transaction. Check the vault\'s history before you submit it again.',
   'gerovault.spend.sheet.title': 'Check before signing',
   'gerovault.spend.sheet.proven': 'Checked on this device: all {count} inputs are proven from the transactions that created them.',
   'gerovault.spend.sheet.refused': 'This transaction cannot be signed:',

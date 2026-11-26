@@ -3136,6 +3136,7 @@ export default {
   'gerovault.spend.error.keyMismatch': 'Der Schlüssel dieser Wallet ist nicht der Schlüssel, den der Tresor für sie hält. Es wurde nichts signiert.',
   'gerovault.spend.error.generic': 'Etwas ist schiefgelaufen. Es wurde nichts signiert oder gesendet.',
   'gerovault.spend.error.submit': 'Das Netzwerk hat die Transaktion nicht angenommen.',
+  'gerovault.spend.error.submitUnconfirmed': 'Die Wallet konnte nicht bestätigen, dass das Netzwerk die Transaktion erhalten hat. Prüfen Sie den Verlauf des Tresors, bevor Sie sie erneut einreichen.',
   'gerovault.spend.sheet.title': 'Vor dem Signieren prüfen',
   'gerovault.spend.sheet.proven': 'Auf diesem Gerät geprüft: Alle {count} Eingaben sind durch die Transaktionen belegt, die sie erzeugt haben.',
   'gerovault.spend.sheet.refused': 'Diese Transaktion kann nicht signiert werden:',

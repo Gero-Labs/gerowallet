@@ -2815,6 +2815,7 @@ export default {
   'gerovault.spend.error.keyMismatch': 'La clave de esta billetera no es la clave que la bóveda tiene para ella. No se firmó nada.',
   'gerovault.spend.error.generic': 'Algo salió mal. No se firmó ni se envió nada.',
   'gerovault.spend.error.submit': 'La red no aceptó la transacción.',
+  'gerovault.spend.error.submitUnconfirmed': 'La billetera no pudo confirmar que la red recibió la transacción. Revisa el historial de la bóveda antes de enviarla de nuevo.',
   'gerovault.spend.sheet.title': 'Revisa antes de firmar',
   'gerovault.spend.sheet.proven': 'Verificado en este dispositivo: las {count} entradas están probadas por las transacciones que las crearon.',
   'gerovault.spend.sheet.refused': 'Esta transacción no se puede firmar:',

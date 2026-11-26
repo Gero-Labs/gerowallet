@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 import DetailsToggle from '@/shared/components/DetailsToggle.vue';
@@ -297,6 +298,9 @@ async function submit(): Promise<void> {
   } catch (error) {
     if (error instanceof VaultSpendError) {
       submitError.value = describe(error);
+    } else if (error instanceof Error && error.message === TX_SUBMIT_UNCONFIRMED_MESSAGE) {
+      // The broadcast may have worked: say so rather than invite a second submission blindly.
+      submitError.value = t('gerovault.spend.error.submitUnconfirmed');
     } else {
       submitError.value = t('gerovault.spend.error.submit');
       submitDetail.value = error instanceof Error ? error.message : null;
