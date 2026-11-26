@@ -4,7 +4,18 @@ import { Cardano } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex, Hash28ByteBase16, blake2b as sdkBlake2b } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
-import { decodeRecoveryPayload, encodeRecoveryPayload, manifestHash, RecoveryPackageContents } from './recoveryPayload';
+import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
+import {
+  MAX_MANIFEST_BYTES,
+  MAX_MANIFEST_REVISIONS,
+  MAX_PROPOSAL_BYTES,
+  MAX_PROPOSALS,
+  RecoveryPackageContents,
+  decodeRecoveryPayload,
+  encodeRecoveryPayload,
+  fitRecoveryHistory,
+  manifestRevisionHash,
+} from './recoveryPayload';
 import { vaultScript } from './scripts';
 import { ROLE, RoleKeys } from './types';
 import { backupContents, plutusContents, standardContents, standardVault, vectorPeople } from './__fixtures__/recoveryPackageVectors';
@@ -82,7 +93,7 @@ const withItem = (a: T, i: number, value: T): T => {
   return { t: 'array', v: a.v.map((x, j) => (j === i ? value : x)) };
 };
 
-const LIMITS = { maxDepth: 16, maxItems: 100000 };
+const LIMITS = { maxDepth: 16, maxItems: 1000000 };
 const treeOf = (bytes: Uint8Array) => tree(readCbor(bytes, LIMITS));
 
 function refusal(bytes: unknown): string {
@@ -118,36 +129,51 @@ describe('round trip', () => {
     const contents = { standard, backup, plutus }[name];
     const decoded = decodeRecoveryPayload(encodeRecoveryPayload(contents));
     if (decoded.ok !== true) throw new Error(`${decoded.code} ${decoded.detail}`);
-    const { version, manifests, ...rest } = decoded.package;
-    expect(version).toBe(1);
-    expect(rest.network).toBe(contents.network);
-    expect(rest.self).toEqual(contents.self);
-    expect(rest.participants).toEqual(contents.participants);
-    expect(rest.addressBook).toEqual(contents.addressBook);
-    expect(rest.proposals).toEqual(contents.proposals);
-    expect(rest.referenceScripts).toEqual(contents.referenceScripts);
-    expect(manifests.map(({ version: v, cbor }) => ({ version: v, cbor }))).toEqual(contents.manifests);
-    if (contents.vault.kind === 'native' && rest.vault.kind === 'native') {
-      expect(rest.vault.payment.hash).toBe(contents.vault.payment.hash);
-      expect(rest.vault.stake.cbor).toBe(contents.vault.stake.cbor);
-      expect(rest.vault.backup).toEqual(contents.vault.backup);
+    const p = decoded.package;
+    expect(p.version).toBe(1);
+    expect(p.network).toBe(contents.network);
+    expect(p.self).toEqual(contents.self);
+    expect(p.participants).toEqual(contents.participants);
+    expect(p.addressBook).toEqual(contents.addressBook);
+    expect(p.proposals).toEqual(contents.proposals);
+    expect(p.referenceScripts).toEqual(contents.referenceScripts);
+    expect(p.proposalsDropped).toBe(0);
+    expect(p.proposalHistoryTruncated).toBe(false);
+    expect(p.manifests.map(({ version, cbor }) => ({ version, cbor }))).toEqual(contents.manifests);
+    if (contents.vault.kind === 'native' && p.vault.kind === 'native') {
+      expect(p.vault.payment.hash).toBe(contents.vault.payment.hash);
+      expect(p.vault.stake.cbor).toBe(contents.vault.stake.cbor);
+      expect(p.vault.backup).toEqual(contents.vault.backup);
     } else {
-      expect(rest.vault).toEqual(contents.vault);
+      expect(p.vault).toEqual(contents.vault);
     }
   });
 
-  it('gives each manifest revision its blake2b-256 hash', () => {
+  it('gives each manifest revision its tagged blake2b-256 hash', () => {
     const decoded = decodeRecoveryPayload(encodeRecoveryPayload(backup));
     if (decoded.ok !== true) throw new Error(decoded.code);
+    const tag = Buffer.from('gero-vault/v1|manifest|', 'utf8').toString('hex');
     for (const m of decoded.package.manifests) {
-      expect(m.hash).toBe(sdkBlake2b.hash(HexBlob(m.cbor), 32));
-      expect(manifestHash(m.cbor)).toBe(m.hash);
+      expect(m.hash).toBe(sdkBlake2b.hash(HexBlob(`${tag}${m.cbor}`), 32));
+      expect(manifestRevisionHash(m.cbor)).toBe(m.hash);
     }
+    expect(manifestRevisionHash('AB')).toBeUndefined();
+    expect(manifestRevisionHash('abc')).toBeUndefined();
+    expect(manifestRevisionHash(42)).toBeUndefined();
   });
 
   it('writes map keys in canonical order whatever order the contents list them in', () => {
     const shuffled = { referenceScripts: standard.referenceScripts, ...standard, network: standard.network };
     expect(bytesToHex(encodeRecoveryPayload(shuffled))).toBe(bytesToHex(encodeRecoveryPayload(standard)));
+  });
+
+  it('does not alias its input: changing the bytes after decoding changes nothing', () => {
+    const bytes = encodeRecoveryPayload(backup);
+    const decoded = decodeRecoveryPayload(bytes);
+    if (decoded.ok !== true) throw new Error(decoded.code);
+    const snapshot = JSON.stringify(decoded.package);
+    bytes.fill(0);
+    expect(JSON.stringify(decoded.package)).toBe(snapshot);
   });
 });
 
@@ -161,21 +187,33 @@ describe('versions', () => {
 });
 
 describe('strict decoding of untrusted bytes', () => {
-  it('refuses what is not a payload', () => {
+  it('refuses what is not a payload, readable bytes or not, without throwing', () => {
+    const bytes = encodeRecoveryPayload(standard);
     expect(refusal('aa00')).toBe('PAYLOAD_INVALID');
     expect(refusal(new Uint8Array(0))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf({ t: 'array', v: [int(1)] }))).toBe('PAYLOAD_INVALID');
+    for (const input of [null, bytes.buffer, new DataView(bytes.buffer), Object.create(Uint8Array.prototype), new Proxy(Uint8Array.from(bytes), {})]) {
+      expect(() => decodeRecoveryPayload(input)).not.toThrow();
+      expect(refusal(input)).toBe('PAYLOAD_INVALID');
+    }
+    expect(refusal(Buffer.from(bytes))).toBe('ACCEPTED');
   });
 
   it('refuses unknown and missing keys at every level', () => {
-    expect(refusal(bytesOf(put(standardTree, 10, int(0))))).toBe('PAYLOAD_INVALID');
-    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 11, int(0))))).toBe('PAYLOAD_INVALID');
+    for (const key of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) expect(refusal(bytesOf(drop(standardTree, key)))).toBe('PAYLOAD_INVALID');
     const vault = field(standardTree, 3);
     expect(refusal(bytesOf(put(standardTree, 3, put(vault, 9, int(0)))))).toBe('PAYLOAD_INVALID');
     const participants = field(standardTree, 5);
     const p0 = at(participants, 0);
-    expect(refusal(bytesOf(put(standardTree, 5, withItem(participants, 0, put(p0, 4, int(0))))))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 5, withItem(participants, 0, put(p0, 5, int(0))))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 4, put(field(standardTree, 4), 2, int(0)))))).toBe('PAYLOAD_INVALID');
+    // The backup terms are a threshold and a slot only: a date beside them is an unknown key.
+    const terms = field(field(backupTree, 3), 3);
+    expect(detail(bytesOf(put(backupTree, 3, put(field(backupTree, 3), 3, put(terms, 2, int(1858852800000))))))).toBe('backup terms has an unknown key');
+    // A Plutus vault carries no recorded hash beside its validator.
+    expect(detail(bytesOf(put(plutusTree, 3, put(field(plutusTree, 3), 4, { t: 'bytes', v: new Uint8Array(28) }))))).toBe('plutus vault has an unknown key');
+    expect(detail(bytesOf(put(plutusTree, 3, drop(field(plutusTree, 3), 3))))).toBe('plutus vault lacks key 3');
   });
 
   it('refuses keys out of canonical order, so one payload has one encoding', () => {
@@ -187,14 +225,14 @@ describe('strict decoding of untrusted bytes', () => {
   it('refuses the encodings the strict reader refuses', () => {
     const canonical = encodeRecoveryPayload(standard);
     const hex = bytesToHex(canonical);
-    // aa 00 01 01 01: version 1, network magic 1. Rewrite the magic with a one-byte argument.
-    expect(hex.startsWith('aa00010101')).toBe(true);
-    expect(detail(hexToBytes(`aa0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
+    // ab 00 01 01 01: version 1, network magic 1. Rewrite the magic with a one-byte argument.
+    expect(hex.startsWith('ab00010101')).toBe(true);
+    expect(detail(hexToBytes(`ab0001011801${hex.slice(10)}`))).toBe('CBOR NON_MINIMAL');
     expect(detail(new Uint8Array([...canonical, 0]))).toBe('CBOR TRAILING_BYTES');
     expect(detail(canonical.subarray(0, canonical.length - 1))).toBe('CBOR TRUNCATED');
-    expect(detail(hexToBytes(`aa0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
+    expect(detail(hexToBytes(`ab0001010001${hex.slice(10)}`))).toBe('CBOR DUPLICATE_MAP_KEY');
     // Proposals (key 7) as an indefinite-length list.
-    const proposals = hex.indexOf('0780', hex.length - 20);
+    const proposals = hex.indexOf('0780', hex.length - 24);
     expect(detail(hexToBytes(`${hex.slice(0, proposals)}079fff${hex.slice(proposals + 4)}`))).toBe('CBOR INDEFINITE_LENGTH');
     // A tag around the export time.
     expect(detail(hexToBytes(hex.replace('021b000001a21526e400', '02c11b000001a21526e400')))).toBe('CBOR UNSUPPORTED_TYPE');
@@ -203,6 +241,7 @@ describe('strict decoding of untrusted bytes', () => {
   it('refuses unknown networks and values out of range', () => {
     expect(refusal(bytesOf(put(standardTree, 1, int(3))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 2, int(-1))))).toBe('PAYLOAD_INVALID');
+    expect(refusal(bytesOf(put(standardTree, 10, int(-1))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 4, put(field(standardTree, 4), 1, int(0x80000000)))))).toBe('PAYLOAD_INVALID');
     expect(refusal(bytesOf(put(standardTree, 4, put(field(standardTree, 4), 0, int(3)))))).toBe('PAYLOAD_INVALID');
     const ref = at(field(plutusTree, 9), 0);
@@ -222,9 +261,21 @@ describe('strict decoding of untrusted bytes', () => {
     const pp = field(plutusTree, 5);
     const withPlutus = (i: number, p: T) => bytesOf(put(plutusTree, 5, withItem(pp, i, p)));
     expect(detail(withPlutus(0, put(at(pp, 0), 0, int(1))))).toBe('A Plutus vault has no backup holders');
-    expect(detail(withPlutus(0, put(at(pp, 0), 2, field(at(field(standardTree, 5), 0), 2))))).toBe('A Plutus vault participant has no stake vault key');
+    for (const i of [0, 2]) {
+      expect(detail(withPlutus(i, put(at(pp, i), 2, field(p0, 2))))).toBe('A Plutus vault participant has no stake vault key');
+    }
     const external = field(at(field(backupTree, 5), 1), 3);
     expect(detail(withPlutus(2, put(at(pp, 2), 3, external)))).toBe('A guardian signs with a Gero wallet');
+    // An external owner of a Plutus vault is allowed.
+    expect(refusal(withPlutus(1, put(at(pp, 1), 3, external)))).toBe('ACCEPTED');
+  });
+
+  it('refuses labels that are empty, too long or carry control characters', () => {
+    const participants = field(backupTree, 5);
+    const p0 = at(participants, 0);
+    const withLabel = (text: string) => bytesOf(put(backupTree, 5, withItem(participants, 0, put(p0, 4, { t: 'text', v: text }))));
+    expect(refusal(withLabel('x'.repeat(64)))).toBe('ACCEPTED');
+    for (const bad of ['', 'x'.repeat(65), 'line\nbreak', 'nul\u0000']) expect(refusal(withLabel(bad))).toBe('PAYLOAD_INVALID');
   });
 
   it('refuses an exporter who is not a participant or is an external wallet', () => {
@@ -311,30 +362,148 @@ describe('strict decoding of untrusted bytes', () => {
       else expect(['PAYLOAD_INVALID', 'UNKNOWN_PAYLOAD_VERSION']).toContain(result.code);
     }
   });
+
+  it('survives structural mutations: whatever it accepts round-trips and does not alias the input', () => {
+    let seed = 0xc0ffee;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed;
+    };
+    const pick = <X>(a: readonly X[]): X => a[rand() % a.length];
+    const random = (depth: number): T => {
+      switch (rand() % (depth > 3 ? 3 : 5)) {
+        case 0: return int(pick([0n, 1n, 2n, 23n, 24n, 255n, 256n, 65535n, 65536n, 0xffffffffn, 2n ** 53n, 2n ** 64n - 1n, -1n, BigInt(rand())]));
+        case 1: return { t: 'bytes', v: Uint8Array.from({ length: pick([0, 1, 28, 29, 32, 33, 64, 65, rand() % 100]) }, () => rand() & 0xff) };
+        case 2: return { t: 'text', v: pick(['', 'a', 'x'.repeat(64), 'x'.repeat(65), 'é', '\u{1F600}']) };
+        case 3: return { t: 'array', v: Array.from({ length: rand() % 4 }, () => random(depth + 1)) };
+        default: return { t: 'map', v: Array.from({ length: rand() % 4 }, (_, i) => [int(i), random(depth + 1)] as [T, T]) };
+      }
+    };
+    const clone = (x: T): T =>
+      x.t === 'array' ? { t: 'array', v: x.v.map(clone) }
+        : x.t === 'map' ? { t: 'map', v: x.v.map(([a, b]) => [clone(a), clone(b)] as [T, T]) }
+          : x.t === 'bytes' ? { t: 'bytes', v: Uint8Array.from(x.v) } : { ...x };
+    const nodes = (x: T, set: (n: T) => void, out: { node: T; set: (n: T) => void }[] = []) => {
+      out.push({ node: x, set });
+      if (x.t === 'array') x.v.forEach((c, i) => nodes(c, n => { x.v[i] = n; }, out));
+      if (x.t === 'map') x.v.forEach(e => { nodes(e[0], n => { e[0] = n; }, out); nodes(e[1], n => { e[1] = n; }, out); });
+      return out;
+    };
+    const trees = [standardTree, backupTree, plutusTree];
+    for (let round = 0; round < 3000; round++) {
+      const holder = { root: clone(trees[round % 3]) };
+      const all = nodes(holder.root, n => { holder.root = n; });
+      for (let s = 0; s <= rand() % 3; s++) {
+        const { node, set } = pick(all);
+        switch (rand() % 8) {
+          case 0: set(random(2)); break;
+          case 1: if (node.t === 'int') set(int(node.v + BigInt(pick([1, -1, 255, 1000000])))); break;
+          case 2: if (node.t === 'bytes' && node.v.length) { const b = Uint8Array.from(node.v); b[rand() % b.length] ^= 1 << (rand() % 8); set({ t: 'bytes', v: b }); } break;
+          case 3: if (node.t === 'array' && node.v.length) node.v.push(clone(pick(node.v))); break;
+          case 4: if (node.t === 'array' && node.v.length) node.v.splice(rand() % node.v.length, 1); break;
+          case 5: if (node.t === 'map' && node.v.length) node.v.splice(rand() % node.v.length, 1); break;
+          case 6: if (node.t === 'map') node.v.push([int(rand() % 70), random(3)]); break;
+          default: if (node.t === 'map' && node.v.length > 1) { const i = rand() % node.v.length; const j = rand() % node.v.length; [node.v[i], node.v[j]] = [node.v[j], node.v[i]]; } break;
+        }
+      }
+      const bytes = bytesOf(holder.root);
+      let r: ReturnType<typeof decodeRecoveryPayload>;
+      expect(() => { r = decodeRecoveryPayload(bytes); }).not.toThrow();
+      r = decodeRecoveryPayload(bytes);
+      if (r.ok === true) {
+        expect(bytesToHex(encodeRecoveryPayload(r.package))).toBe(bytesToHex(bytes));
+        const snapshot = JSON.stringify(r.package);
+        bytes.fill(0);
+        expect(JSON.stringify(r.package)).toBe(snapshot);
+      }
+    }
+  });
 });
 
 describe('encoder', () => {
   const throwsInvalid = (contents: unknown) =>
     expect(() => encodeRecoveryPayload(contents as RecoveryPackageContents)).toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
 
-  it('refuses contents that break a rule, naming it', () => {
+  it('refuses contents that break a rule, naming it, and never throws anything but its own error', () => {
     throwsInvalid(undefined);
     throwsInvalid({ ...standard, network: 'sanchonet' });
     throwsInvalid({ ...standard, exportedAtMs: -1 });
     throwsInvalid({ ...standard, exportedAtMs: 1.5 });
+    throwsInvalid({ ...standard, proposalsDropped: -1 });
     throwsInvalid({ ...standard, vault: { ...standard.vault, kind: 'other' } });
+    throwsInvalid({ ...standard, vault: 'native' });
     throwsInvalid({ ...standard, self: { position: 0, index: -1 } });
+    throwsInvalid({ ...standard, self: undefined });
     throwsInvalid({ ...standard, participants: [{ ...standard.participants[0], payment: standard.participants[0].payment.toUpperCase() }, ...standard.participants.slice(1)] });
+    throwsInvalid({ ...standard, participants: [{ ...standard.participants[0], external: 'acct_shared_xvk1abc' }, ...standard.participants.slice(1)] });
+    throwsInvalid({ ...standard, participants: [standard.participants[0], { ...standard.participants[1], external: 'acct_shared_xvk1abc' }, standard.participants[2]] });
+    throwsInvalid({ ...standard, participants: [null, ...standard.participants.slice(1)] });
     throwsInvalid({ ...standard, manifests: [{ version: 0, cbor: '' }] });
+    throwsInvalid({ ...standard, manifests: [{ version: 1, cbor: 'AB' }] });
+    throwsInvalid({ ...standard, manifests: [{ version: 1, cbor: 'ab'.repeat(MAX_MANIFEST_BYTES + 1) }] });
     throwsInvalid({ ...standard, proposals: [{ id: 'zz', cbor: '00' }] });
+    throwsInvalid({ ...standard, proposals: [{ id: 'aa', cbor: 'ab'.repeat(MAX_PROPOSAL_BYTES + 1) }] });
+    throwsInvalid({ ...standard, proposals: [null] });
     throwsInvalid({ ...standard, addressBook: [{ address: 'addr_test1notanaddress', label: 'x' }] });
     throwsInvalid({ ...standard, referenceScripts: [{ txId: 'ab'.repeat(32), index: 1.5 }] });
+    throwsInvalid({ ...standard, referenceScripts: ['ab'] });
     throwsInvalid({ ...plutus, vault: { ...plutus.vault, templateVersion: 2 ** 32 } });
-    throwsInvalid({ ...plutus, vault: { ...plutus.vault, scriptHash: 'ab' } });
+    throwsInvalid({ ...plutus, vault: { ...plutus.vault, validator: undefined } });
+    throwsInvalid({ ...plutus, vault: { ...plutus.vault, validator: 'XY' } });
+    throwsInvalid({ ...backup, vault: { ...backup.vault, backup: 'soon' } });
   });
 
   it('refuses a script record whose hash is not its bytes', () => {
     if (standard.vault.kind !== 'native' || backup.vault.kind !== 'native') throw new Error('native');
     throwsInvalid({ ...standard, vault: { ...standard.vault, payment: { ...standard.vault.payment, hash: backup.vault.payment.hash } } });
+  });
+});
+
+describe('fitting the history into one package', () => {
+  const proposal = (i: number, bytes = 4) => ({ id: i.toString(16).padStart(8, '0'), cbor: 'ab'.repeat(bytes) });
+
+  it('leaves the oldest proposals out beyond the count bound and counts them', () => {
+    const many = Array.from({ length: MAX_PROPOSALS + 3 }, (_, i) => proposal(i));
+    const fitted = fitRecoveryHistory({ ...standard, proposals: many });
+    expect(fitted.proposals).toHaveLength(MAX_PROPOSALS);
+    expect(fitted.proposals[0]).toEqual(many[3]);
+    expect(fitted.proposals[MAX_PROPOSALS - 1]).toEqual(many[many.length - 1]);
+    expect(fitted.proposalsDropped).toBe(3);
+    const decoded = decodeRecoveryPayload(encodeRecoveryPayload(fitted));
+    expect(decoded).toMatchObject({ ok: true, package: { proposalsDropped: 3, proposalHistoryTruncated: true } });
+    // Earlier drops add up.
+    expect(fitRecoveryHistory({ ...standard, proposals: many, proposalsDropped: 5 }).proposalsDropped).toBe(8);
+    expect(fitRecoveryHistory(standard)).toMatchObject({ proposals: [], proposalsDropped: 0 });
+  });
+
+  it('leaves the oldest proposals out to fit the size bound, keeping every manifest revision', () => {
+    const manifest = 'cd'.repeat(MAX_MANIFEST_BYTES);
+    const manifests = Array.from({ length: 60 }, (_, i) => ({ version: i + 1, cbor: manifest }));
+    const proposals = Array.from({ length: 40 }, (_, i) => proposal(i, MAX_PROPOSAL_BYTES));
+    const fitted = fitRecoveryHistory({ ...standard, manifests, proposals });
+    expect(fitted.manifests).toHaveLength(60);
+    expect(fitted.proposals.length).toBeGreaterThan(0);
+    expect(fitted.proposals.length).toBeLessThan(40);
+    expect(fitted.proposals[fitted.proposals.length - 1]).toEqual(proposals[39]);
+    expect(fitted.proposalsDropped).toBe(40 - fitted.proposals.length);
+    const bytes = encodeRecoveryPayload(fitted);
+    expect(bytes.length).toBeLessThanOrEqual(MAX_RECOVERY_PAYLOAD_BYTES);
+    // One more proposal would not have fitted.
+    expect(() => encodeRecoveryPayload({ ...fitted, proposals: proposals.slice(39 - fitted.proposals.length) }))
+      .toThrow(expect.objectContaining({ code: 'INVALID_PACKAGE' }));
+  });
+
+  it('refuses with the sizes when the manifests alone do not fit', () => {
+    const manifest = 'cd'.repeat(MAX_MANIFEST_BYTES);
+    const manifests = Array.from({ length: 70 }, (_, i) => ({ version: i + 1, cbor: manifest }));
+    expect(() => fitRecoveryHistory({ ...standard, manifests, proposals: [proposal(1)] })).toThrow(expect.objectContaining({
+      code: 'HISTORY_TOO_LARGE',
+      message: expect.stringContaining(`70 manifest revisions are ${70 * MAX_MANIFEST_BYTES} bytes`),
+    }));
+    const tooMany = Array.from({ length: MAX_MANIFEST_REVISIONS + 1 }, (_, i) => ({ version: i, cbor: 'a0' }));
+    expect(() => fitRecoveryHistory({ ...standard, manifests: tooMany })).toThrow(expect.objectContaining({
+      code: 'HISTORY_TOO_LARGE',
+      message: expect.stringContaining(`${MAX_MANIFEST_REVISIONS + 1} revisions`),
+    }));
   });
 });

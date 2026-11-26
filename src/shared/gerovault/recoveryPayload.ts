@@ -1,7 +1,7 @@
 /**
  * The recovery package payload (spec 6.8, GV-14): what one participant needs, with their seed, to
  * rebuild a vault and spend from it with every Gero service unavailable. It is the plaintext of
- * the file in `recoveryFormat.ts`.
+ * the file in `recoveryFormat.ts`, and it holds no spending key.
  *
  * Canonical CBOR (RFC 8949 section 4.2.1: definite lengths, minimal heads, map keys in bytewise
  * order of their encoding, which for the unsigned keys used here is numeric order). Payload
@@ -14,10 +14,11 @@
  *     3: native-vault / plutus-vault,
  *     4: self,
  *     5: [+ participant],            ; every participant, the exporter included
- *     6: [* manifest-revision],      ; manifest history, versions strictly ascending
- *     7: [* proposal-record],        ; proposal history
+ *     6: [* manifest-revision],      ; manifest history, every revision, versions strictly ascending
+ *     7: [* proposal-record],        ; proposal history, oldest first
  *     8: [* address-book-entry],
  *     9: [* output-reference],       ; reference-script UTxOs
+ *     10: uint,                      ; how many of the oldest proposals were left out to fit, 0 if none
  *   }
  *   native-vault = {
  *     0: 0,
@@ -28,14 +29,12 @@
  *   backup-terms = {
  *     0: uint,                       ; backup threshold
  *     1: uint,                       ; absolute slot the backup path opens at
- *     2: uint,                       ; the date chosen for it, Unix milliseconds
  *   }
  *   plutus-vault = {
  *     0: 1,
  *     1: output-reference,           ; the seed UTxO the validator is applied to (spec 4.2.1)
  *     2: uint,                       ; template version
- *     ? 3: bstr .size 28,            ; h as recorded at creation
- *     ? 4: bstr,                     ; the applied validator as recorded at creation
+ *     3: bstr,                       ; the applied validator, the bytes its Plutus V3 hash covers
  *   }
  *   self = {
  *     0: uint,                       ; the exporter's position in the participants list
@@ -46,6 +45,7 @@
  *     1: bstr .size 32,              ; payment vault key, raw Ed25519 (a guardian's key at 0/g)
  *     ? 2: bstr .size 32,            ; stake vault key: always in a native vault, never in a Plutus one
  *     ? 3: external-key,             ; the extended key an external wallet supplied, as received
+ *     ? 4: tstr,                     ; label, 1 to 64 bytes: a claim, shown as one
  *   }
  *   external-key = [0, bstr .size 64]                    ; CIP-1854 account key
  *                / [1, bstr .size 64, bstr .size 64]     ; payment and stake role keys
@@ -55,12 +55,18 @@
  *   output-reference   = [bstr .size 32, uint]           ; transaction id, output index
  *
  * Owners and backup holders appear in native vaults, owners and guardians in Plutus vaults.
- * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
- * (GV-60, GV-61 and later), and this file never reads inside them. Proposals and the address book
- * may be empty.
+ * Native participants carry both vault keys and may be external wallets; Plutus participants
+ * carry the payment key only (the stake credential is the validator itself), and guardians are
+ * never external wallets.
  *
- * Every vault fact here is a claim until a restore re-derives it (`recoveryPackage.ts`): `h` and
- * the validator of a Plutus vault are never trusted on their own (spec 4.2.1, GV-64).
+ * The dated backup path's date is not carried: it is the slot, and a screen shows the slot's time
+ * (`backupPathOpensAtMs`). The Plutus validator's hash `h` is not carried either: it is the hash
+ * of the validator bytes, which a restore computes and checks against the chain.
+ *
+ * Manifests and proposals are carried as their own encoded bytes: their codecs live elsewhere
+ * (GV-60, GV-61 and later), and this file never reads inside them. Every manifest revision is
+ * kept; when the history does not fit, the oldest proposals are left out first and key 10 counts
+ * them (`fitRecoveryHistory`).
  *
  * The decoder takes untrusted bytes and never throws. It uses the strict bounded reader of
  * `cbor.ts`, refuses unknown keys and anything out of bounds, and requires the bytes to be
@@ -70,35 +76,40 @@
  * client.
  */
 import { Cardano } from '@cardano-sdk/core';
-import { Ed25519PublicKeyHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { bech32 } from 'bech32';
 import { CborError, CborItem, bytesToHex, hexToBytes, readCbor } from './cbor';
 import { GeroVaultError } from './errors';
 import { BECH32_PREFIX } from './keys';
+import { MAX_RECOVERY_PAYLOAD_BYTES } from './recoveryFormat';
 import { decodeRegistration } from './registration';
 import { NETWORK_MAGIC } from './vaultId';
 import { MAX_VAULT_INDEX, ROLE, VaultNetwork, VaultScript } from './types';
 
 export const RECOVERY_PAYLOAD_VERSION = 1;
 
-/** Bounds on a payload. */
+/** Bounds on a payload. The whole payload also fits the file bound (`MAX_RECOVERY_PAYLOAD_BYTES`). */
 export const MAX_PACKAGE_PARTICIPANTS = 64;
-export const MAX_MANIFEST_REVISIONS = 1024;
+export const MAX_MANIFEST_REVISIONS = 16384;
 export const MAX_PROPOSALS = 10000;
 export const MAX_ADDRESS_BOOK_ENTRIES = 1024;
 export const MAX_REFERENCE_SCRIPTS = 16;
+/** A manifest revision is at most 256 KiB, the manifest codec's own bound. */
+export const MAX_MANIFEST_BYTES = 262144;
+export const MAX_PROPOSAL_BYTES = 65536;
 const MAX_SCRIPT_BYTES = 16384;
 const MAX_VALIDATOR_BYTES = 65536;
-const MAX_RECORD_BYTES = 65536;
 const MAX_PROPOSAL_ID_BYTES = 64;
-const MAX_LABEL_BYTES = 64;
+const MAX_TEXT_BYTES = 64;
 const MAX_TEMPLATE_VERSION = 0xffffffff;
 const MAX_OUTPUT_INDEX = 0xffff;
-const PAYLOAD_LIMITS = { maxDepth: 6, maxItems: 65536 };
+const PAYLOAD_LIMITS = { maxDepth: 6, maxItems: 131072 };
 const BECH32_LIMIT = 1023;
 const XPUB_BYTES = 64;
+/** The manifest hash's domain tag, as the manifest codec writes it (GV-60). */
+const MANIFEST_HASH_TAG = new TextEncoder().encode('gero-vault/v1|manifest|');
 
 export type PackageRole = 'owner' | 'backup' | 'guardian';
 const ROLE_CODES: readonly PackageRole[] = ['owner', 'backup', 'guardian'];
@@ -109,13 +120,11 @@ export interface OutputReference {
   readonly index: number;
 }
 
-/** The terms of a dated backup path (GV-69): what the scripts say, and the date the creator chose. */
+/** The terms of a dated backup path (GV-69), as the scripts state them. */
 export interface BackupTerms {
   readonly threshold: number;
   /** Absolute slot from which the backup quorum may spend. */
   readonly afterSlot: number;
-  /** The date and time chosen at creation, Unix milliseconds, as the wallet shows it. */
-  readonly atMs: number;
 }
 
 export interface NativeVaultRecord {
@@ -130,10 +139,8 @@ export interface PlutusVaultRecord {
   readonly kind: 'plutus';
   readonly seed: OutputReference;
   readonly templateVersion: number;
-  /** `h` as recorded at creation; a restore derives it and never trusts this. */
-  readonly scriptHash?: Hash28ByteBase16;
-  /** The applied validator as recorded at creation, hex; never trusted on its own either. */
-  readonly validator?: string;
+  /** The applied validator, hex: the script bytes its Plutus V3 hash `h` covers. */
+  readonly validator: string;
 }
 
 /** What an external wallet supplied, as `parseExternalCosignerKeys` takes it. */
@@ -147,6 +154,8 @@ export interface PackageParticipant {
   readonly payment: Ed25519PublicKeyHex;
   readonly stake?: Ed25519PublicKeyHex;
   readonly external?: ExternalCosignerInput;
+  /** A display name: a claim from the package, never verified. */
+  readonly label?: string;
 }
 
 export interface PackageSelf {
@@ -158,7 +167,7 @@ export interface PackageSelf {
 
 export interface ManifestRevision {
   readonly version: number;
-  /** The manifest's canonical CBOR, hex. */
+  /** The manifest's canonical CBOR, lowercase hex. */
   readonly cbor: string;
 }
 
@@ -182,17 +191,24 @@ export interface RecoveryPackageContents {
   readonly vault: NativeVaultRecord | PlutusVaultRecord;
   readonly self: PackageSelf;
   readonly participants: readonly PackageParticipant[];
+  /** Every revision, oldest first. */
   readonly manifests: readonly ManifestRevision[];
+  /** Oldest first: the start of the list is what is left out when the history does not fit. */
   readonly proposals: readonly ProposalRecord[];
   readonly addressBook: readonly AddressBookEntry[];
   readonly referenceScripts: readonly OutputReference[];
+  /** Proposals already left out of `proposals`, counted from the oldest; 0 when absent. */
+  readonly proposalsDropped?: number;
 }
 
 /** A decoded payload. Its vault facts are claims until a restore checks them. */
 export interface RecoveryPackage extends RecoveryPackageContents {
   readonly version: number;
-  /** Each revision with its hash: blake2b-256 over its canonical CBOR (spec 5.2). */
+  /** Each revision with its hash: blake2b-256 over the tag and its canonical CBOR (spec 5.2). */
   readonly manifests: readonly (ManifestRevision & { readonly hash: string })[];
+  readonly proposalsDropped: number;
+  /** Some of the oldest proposals were left out to fit the package. */
+  readonly proposalHistoryTruncated: boolean;
 }
 
 export type RecoveryPayloadRefusalCode = 'UNKNOWN_PAYLOAD_VERSION' | 'PAYLOAD_INVALID';
@@ -204,7 +220,6 @@ export type DecodeRecoveryPayloadResult =
 const LOWER_HEX = (bytes: number) => new RegExp(`^[0-9a-f]{${bytes * 2}}$`);
 const KEY_HEX = LOWER_HEX(32);
 const TX_ID_HEX = LOWER_HEX(32);
-const SCRIPT_HASH_HEX = LOWER_HEX(28);
 const ANY_LOWER_HEX = /^(?:[0-9a-f]{2})+$/;
 
 const MAGIC_TO_NETWORK = new Map<number, VaultNetwork>(
@@ -275,6 +290,8 @@ function invalid(message: string): never {
 const isUint = (v: unknown, max = Number.MAX_SAFE_INTEGER): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
 
+const isObject = (v: unknown): boolean => typeof v === 'object' && v !== null;
+
 function hexBytes(hex: unknown, pattern: RegExp, what: string): Uint8Array {
   if (typeof hex !== 'string' || !pattern.test(hex)) invalid(`${what} is lowercase hex of the right length`);
   return hexToBytes(hex) as Uint8Array;
@@ -287,10 +304,12 @@ function boundedHex(hex: unknown, max: number, what: string): Uint8Array {
 
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
 function label(value: unknown, what: string): string {
-  if (typeof value !== 'string' || value.length === 0 || LONE_SURROGATE.test(value) || utf8Length(value) > MAX_LABEL_BYTES) {
-    invalid(`${what} is 1 to ${MAX_LABEL_BYTES} bytes of well-formed text`);
+  if (typeof value !== 'string' || value.length === 0 || LONE_SURROGATE.test(value) || CONTROL.test(value)
+    || utf8Length(value) > MAX_TEXT_BYTES) {
+    invalid(`${what} is 1 to ${MAX_TEXT_BYTES} bytes of well-formed text without control characters`);
   }
   return value as string;
 }
@@ -309,6 +328,7 @@ function nativeScripts(payment: Uint8Array, stake: Uint8Array): { payment: Vault
 }
 
 function outputReference(ref: OutputReference | undefined, what: string): Uint8Array {
+  if (!isObject(ref)) invalid(`${what} is an output reference`);
   const txId = hexBytes(ref?.txId, TX_ID_HEX, `${what} transaction id`);
   if (!isUint(ref?.index, MAX_OUTPUT_INDEX)) invalid(`${what} output index is 0 to ${MAX_OUTPUT_INDEX}`);
   return cArray([cBytes(txId), cUint(ref.index)]);
@@ -326,18 +346,20 @@ function xpubBytes(value: unknown, prefix: string, what: string): Uint8Array {
   return bytes;
 }
 
-function externalKey(external: ExternalCosignerInput): Uint8Array {
-  if (external && 'account' in external) {
-    return cArray([cUint(0), cBytes(xpubBytes(external.account, BECH32_PREFIX.ACCOUNT_XVK, 'An external account key'))]);
+function externalKey(external: unknown): Uint8Array {
+  if (!isObject(external)) invalid('An external key is an account key or two role keys');
+  const roles = external as { readonly account?: unknown; readonly payment?: unknown; readonly stake?: unknown };
+  if ('account' in roles) {
+    return cArray([cUint(0), cBytes(xpubBytes(roles.account, BECH32_PREFIX.ACCOUNT_XVK, 'An external account key'))]);
   }
-  const roles = external as { payment?: unknown; stake?: unknown };
-  const payment = xpubBytes(roles?.payment, BECH32_PREFIX.PAYMENT_XVK, 'An external payment role key');
-  const stake = xpubBytes(roles?.stake, BECH32_PREFIX.STAKE_XVK, 'An external stake role key');
+  const payment = xpubBytes(roles.payment, BECH32_PREFIX.PAYMENT_XVK, 'An external payment role key');
+  const stake = xpubBytes(roles.stake, BECH32_PREFIX.STAKE_XVK, 'An external stake role key');
   return cArray([cUint(1), cBytes(payment), cBytes(stake)]);
 }
 
 function vaultBytes(vault: RecoveryPackageContents['vault']): Uint8Array {
-  if (vault?.kind === 'native') {
+  if (!isObject(vault)) invalid('A vault is native or plutus');
+  if (vault.kind === 'native') {
     const paymentCbor = boundedHex(vault.payment?.cbor, MAX_SCRIPT_BYTES, 'The payment script');
     const stakeCbor = boundedHex(vault.stake?.cbor, MAX_SCRIPT_BYTES, 'The stake script');
     const decoded = nativeScripts(paymentCbor, stakeCbor);
@@ -346,25 +368,24 @@ function vaultBytes(vault: RecoveryPackageContents['vault']): Uint8Array {
     }
     let backup: Uint8Array | undefined;
     if (vault.backup !== undefined) {
-      const { threshold, afterSlot, atMs } = vault.backup ?? ({} as Partial<BackupTerms>);
-      if (!isUint(threshold) || threshold < 1 || !isUint(afterSlot) || afterSlot < 1 || !isUint(atMs)) {
-        invalid('The backup terms are a threshold, a slot and a time');
+      const { threshold, afterSlot } = isObject(vault.backup) ? vault.backup : ({} as Partial<BackupTerms>);
+      if (!isUint(threshold) || threshold < 1 || !isUint(afterSlot) || afterSlot < 1) {
+        invalid('The backup terms are a threshold and a slot');
       }
-      backup = cMap({ 0: cUint(threshold), 1: cUint(afterSlot), 2: cUint(atMs) });
+      backup = cMap({ 0: cUint(threshold), 1: cUint(afterSlot) });
     }
     return cMap({ 0: cUint(0), 1: cBytes(paymentCbor), 2: cBytes(stakeCbor), 3: backup });
   }
-  if (vault?.kind === 'plutus') {
+  if (vault.kind === 'plutus') {
     if (!isUint(vault.templateVersion, MAX_TEMPLATE_VERSION)) invalid('The template version is a 32-bit unsigned integer');
-    const scriptHash = vault.scriptHash === undefined ? undefined : cBytes(hexBytes(vault.scriptHash, SCRIPT_HASH_HEX, 'The script hash'));
-    const validator = vault.validator === undefined ? undefined : cBytes(boundedHex(vault.validator, MAX_VALIDATOR_BYTES, 'The validator'));
-    return cMap({ 0: cUint(1), 1: outputReference(vault.seed, 'The seed'), 2: cUint(vault.templateVersion), 3: scriptHash, 4: validator });
+    const validator = cBytes(boundedHex(vault.validator, MAX_VALIDATOR_BYTES, 'The validator'));
+    return cMap({ 0: cUint(1), 1: outputReference(vault.seed, 'The seed'), 2: cUint(vault.templateVersion), 3: validator });
   }
   return invalid('A vault is native or plutus');
 }
 
 function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
-  const list = Array.isArray(contents.participants) ? contents.participants : invalid('Participants are a list');
+  const list: readonly PackageParticipant[] = Array.isArray(contents.participants) ? contents.participants : invalid('Participants are a list');
   if (list.length === 0 || list.length > MAX_PACKAGE_PARTICIPANTS) invalid(`A package has 1 to ${MAX_PACKAGE_PARTICIPANTS} participants`);
   const native = contents.vault.kind === 'native';
   const keys = new Set<string>();
@@ -373,7 +394,8 @@ function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
     keys.add(hex);
   };
   return cArray(list.map(p => {
-    const code = ROLE_CODES.indexOf(p?.role);
+    if (!isObject(p)) invalid('A participant is a record');
+    const code = ROLE_CODES.indexOf(p.role);
     if (code < 0) invalid('A role is owner, backup or guardian');
     if (native && p.role === 'guardian') invalid('A native vault has no guardians');
     if (!native && p.role === 'backup') invalid('A Plutus vault has no backup holders');
@@ -388,12 +410,13 @@ function participantsBytes(contents: RecoveryPackageContents): Uint8Array {
       invalid('A Plutus vault participant has no stake vault key');
     }
     const external = p.external === undefined ? undefined : externalKey(p.external);
-    return cMap({ 0: cUint(code), 1: cBytes(payment), 2: stake ? cBytes(stake) : undefined, 3: external });
+    const text = p.label === undefined ? undefined : cText(label(p.label, 'A participant label'));
+    return cMap({ 0: cUint(code), 1: cBytes(payment), 2: stake ? cBytes(stake) : undefined, 3: external, 4: text });
   }));
 }
 
 function selfBytes(contents: RecoveryPackageContents): Uint8Array {
-  const { position, index } = contents.self ?? ({} as Partial<PackageSelf>);
+  const { position, index } = isObject(contents.self) ? contents.self : ({} as Partial<PackageSelf>);
   if (!isUint(position, contents.participants.length - 1)) invalid('The exporter is one of the participants');
   if (!isUint(index, MAX_VAULT_INDEX)) invalid(`A vault index is 0 to ${MAX_VAULT_INDEX}`);
   if (contents.participants[position].external !== undefined) invalid('The exporter is not an external wallet');
@@ -408,19 +431,24 @@ function list<T>(value: readonly T[] | undefined, max: number, what: string): re
 function manifestsBytes(manifests: readonly ManifestRevision[]): Uint8Array {
   let previous = -1;
   return cArray(list(manifests, MAX_MANIFEST_REVISIONS, 'The manifest history').map(m => {
-    if (!isUint(m?.version) || m.version <= previous) invalid('Manifest versions are unsigned and strictly ascending');
+    if (!isObject(m) || !isUint(m.version) || m.version <= previous) invalid('Manifest versions are unsigned and strictly ascending');
     previous = m.version;
-    return cArray([cUint(m.version), cBytes(boundedHex(m.cbor, MAX_RECORD_BYTES, 'A manifest'))]);
+    return cArray([cUint(m.version), cBytes(boundedHex(m.cbor, MAX_MANIFEST_BYTES, 'A manifest'))]);
   }));
+}
+
+function proposalBytes(p: ProposalRecord): Uint8Array {
+  if (!isObject(p)) invalid('A proposal is a record');
+  return cArray([cBytes(boundedHex(p.id, MAX_PROPOSAL_ID_BYTES, 'A proposal id')), cBytes(boundedHex(p.cbor, MAX_PROPOSAL_BYTES, 'A proposal'))]);
 }
 
 function proposalsBytes(proposals: readonly ProposalRecord[]): Uint8Array {
   const ids = new Set<string>();
   return cArray(list(proposals, MAX_PROPOSALS, 'The proposal history').map(p => {
-    const id = boundedHex(p?.id, MAX_PROPOSAL_ID_BYTES, 'A proposal id');
+    const bytes = proposalBytes(p);
     if (ids.has(p.id)) invalid('The same proposal appears twice');
     ids.add(p.id);
-    return cArray([cBytes(id), cBytes(boundedHex(p.cbor, MAX_RECORD_BYTES, 'A proposal'))]);
+    return bytes;
   }));
 }
 
@@ -440,7 +468,8 @@ function addressBytes(address: unknown, network: VaultNetwork): Uint8Array {
 function addressBookBytes(entries: readonly AddressBookEntry[], network: VaultNetwork): Uint8Array {
   const seen = new Set<string>();
   return cArray(list(entries, MAX_ADDRESS_BOOK_ENTRIES, 'The address book').map(e => {
-    const bytes = addressBytes(e?.address, network);
+    if (!isObject(e)) invalid('An address book entry is a record');
+    const bytes = addressBytes(e.address, network);
     const hex = bytesToHex(bytes);
     if (seen.has(hex)) invalid('The same address appears twice in the address book');
     seen.add(hex);
@@ -461,16 +490,19 @@ function referenceScriptsBytes(refs: readonly OutputReference[]): Uint8Array {
 
 /**
  * Encodes a payload. Throws `GeroVaultError('INVALID_PACKAGE')` naming the first rule the
- * contents break.
+ * contents break, a payload over the file bound included (`fitRecoveryHistory` makes the history
+ * fit first).
  */
 export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8Array {
-  if (!contents || typeof contents !== 'object') invalid('No contents');
+  if (!isObject(contents)) invalid('No contents');
   const magic = Object.prototype.hasOwnProperty.call(NETWORK_MAGIC, contents.network) ? NETWORK_MAGIC[contents.network] : undefined;
   if (magic === undefined) invalid('A vault network is mainnet, preprod or preview');
   if (!isUint(contents.exportedAtMs)) invalid('The export time is Unix milliseconds');
+  const dropped = contents.proposalsDropped ?? 0;
+  if (!isUint(dropped)) invalid('The count of proposals left out is an unsigned integer');
   const vault = vaultBytes(contents.vault);
   const participants = participantsBytes(contents);
-  return cMap({
+  const out = cMap({
     0: cUint(RECOVERY_PAYLOAD_VERSION),
     1: cUint(magic),
     2: cUint(contents.exportedAtMs),
@@ -481,14 +513,61 @@ export function encodeRecoveryPayload(contents: RecoveryPackageContents): Uint8A
     7: proposalsBytes(contents.proposals),
     8: addressBookBytes(contents.addressBook, contents.network),
     9: referenceScriptsBytes(contents.referenceScripts),
+    10: cUint(dropped),
   });
+  if (out.length > MAX_RECOVERY_PAYLOAD_BYTES) invalid(`The payload is ${out.length} bytes, over the bound of ${MAX_RECOVERY_PAYLOAD_BYTES}`);
+  return out;
 }
 
-/** blake2b-256 of a manifest's canonical CBOR, hex. */
-export function manifestHash(cborHex: string): string {
-  const bytes = hexToBytes(cborHex);
-  if (!bytes) throw new GeroVaultError('INVALID_MANIFEST_REVISION', 'A manifest is hex');
-  return bytesToHex(blake2b(bytes, { dkLen: 32 }));
+/**
+ * Makes the history fit one package without losing a manifest revision: the oldest proposals are
+ * left out first, at most `MAX_PROPOSALS` are kept, and `proposalsDropped` counts what was left out.
+ * Throws `GeroVaultError('HISTORY_TOO_LARGE')`, with the sizes, when the package does not fit even
+ * without any proposal, and `INVALID_PACKAGE` for contents that break any other rule.
+ */
+export function fitRecoveryHistory(contents: RecoveryPackageContents): RecoveryPackageContents {
+  if (!isObject(contents)) invalid('No contents');
+  const proposals = list(contents.proposals, Number.MAX_SAFE_INTEGER, 'The proposal history');
+  const manifests = Array.isArray(contents.manifests) ? contents.manifests : invalid('The manifest history is a list');
+  if (manifests.length > MAX_MANIFEST_REVISIONS) {
+    throw new GeroVaultError('HISTORY_TOO_LARGE', `The manifest history has ${manifests.length} revisions; a package holds at most ${MAX_MANIFEST_REVISIONS}`);
+  }
+  const earlier = contents.proposalsDropped ?? 0;
+  if (!isUint(earlier)) invalid('The count of proposals left out is an unsigned integer');
+  const without = { ...contents, proposals: [], proposalsDropped: earlier + proposals.length };
+  let base: Uint8Array;
+  try {
+    base = encodeRecoveryPayload(without);
+  } catch (e) {
+    if (e instanceof GeroVaultError && e.message.startsWith('The payload is')) {
+      const manifestBytes = manifests.reduce((n, m) => n + (typeof m?.cbor === 'string' ? m.cbor.length / 2 : 0), 0);
+      throw new GeroVaultError(
+        'HISTORY_TOO_LARGE',
+        `The package is over ${MAX_RECOVERY_PAYLOAD_BYTES} bytes without any proposal: its ${manifests.length} manifest revisions are ${manifestBytes} bytes`,
+      );
+    }
+    throw e;
+  }
+  // Room for the proposals: the list head and the count grow by at most 8 bytes each.
+  let room = MAX_RECOVERY_PAYLOAD_BYTES - base.length - 16;
+  let kept = 0;
+  for (let i = proposals.length - 1; i >= 0 && kept < MAX_PROPOSALS; i--) {
+    const size = proposalBytes(proposals[i]).length;
+    if (size > room) break;
+    room -= size;
+    kept++;
+  }
+  return { ...contents, proposals: proposals.slice(proposals.length - kept), proposalsDropped: earlier + proposals.length - kept };
+}
+
+/** The tagged manifest hash, blake2b-256 over the tag and the canonical CBOR; `undefined` for anything but lowercase hex. */
+export function manifestRevisionHash(cborHex: unknown): string | undefined {
+  if (typeof cborHex !== 'string' || !ANY_LOWER_HEX.test(cborHex)) return undefined;
+  const bytes = hexToBytes(cborHex) as Uint8Array;
+  const preimage = new Uint8Array(MANIFEST_HASH_TAG.length + bytes.length);
+  preimage.set(MANIFEST_HASH_TAG, 0);
+  preimage.set(bytes, MANIFEST_HASH_TAG.length);
+  return bytesToHex(blake2b(preimage, { dkLen: 32 }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -562,24 +641,18 @@ function decodeVault(item: CborItem): NativeVaultRecord | PlutusVaultRecord {
     const scripts = nativeScripts(bytesOf(f.get(1), 'payment script', 1, MAX_SCRIPT_BYTES), bytesOf(f.get(2), 'stake script', 1, MAX_SCRIPT_BYTES));
     const out: { -readonly [K in keyof NativeVaultRecord]: NativeVaultRecord[K] } = { kind: 'native', ...scripts };
     if (f.has(3)) {
-      const b = fields(f.get(3) as CborItem, 'backup terms', [0, 1, 2]);
-      out.backup = Object.freeze({
-        threshold: uintOf(b.get(0), 'backup threshold'),
-        afterSlot: uintOf(b.get(1), 'backup slot'),
-        atMs: uintOf(b.get(2), 'backup time'),
-      });
+      const b = fields(f.get(3) as CborItem, 'backup terms', [0, 1]);
+      out.backup = Object.freeze({ threshold: uintOf(b.get(0), 'backup threshold'), afterSlot: uintOf(b.get(1), 'backup slot') });
     }
     return Object.freeze(out);
   }
-  const f = fields(item, 'plutus vault', [0, 1, 2], [3, 4]);
-  const out: { -readonly [K in keyof PlutusVaultRecord]: PlutusVaultRecord[K] } = {
+  const f = fields(item, 'plutus vault', [0, 1, 2, 3]);
+  return Object.freeze({
     kind: 'plutus',
     seed: decodeOutputReference(f.get(1), 'seed'),
     templateVersion: uintOf(f.get(2), 'template version', MAX_TEMPLATE_VERSION),
-  };
-  if (f.has(3)) out.scriptHash = Hash28ByteBase16(hexOf(bytesOf(f.get(3), 'script hash', 28, 28)));
-  if (f.has(4)) out.validator = hexOf(bytesOf(f.get(4), 'validator', 1, MAX_VALIDATOR_BYTES));
-  return Object.freeze(out);
+    validator: hexOf(bytesOf(f.get(3), 'validator', 1, MAX_VALIDATOR_BYTES)),
+  });
 }
 
 const toBech32 = (prefix: string, bytes: Uint8Array) => bech32.encode(prefix, bech32.toWords(bytes), BECH32_LIMIT);
@@ -599,13 +672,14 @@ function decodeExternal(item: CborItem): ExternalCosignerInput {
 }
 
 function decodeParticipant(item: CborItem): PackageParticipant {
-  const f = fields(item, 'participant', [0, 1], [2, 3]);
+  const f = fields(item, 'participant', [0, 1], [2, 3, 4]);
   const out: { -readonly [K in keyof PackageParticipant]: PackageParticipant[K] } = {
     role: ROLE_CODES[uintOf(f.get(0), 'role', ROLE_CODES.length - 1)],
     payment: Ed25519PublicKeyHex(hexOf(bytesOf(f.get(1), 'payment vault key', 32, 32))),
   };
   if (f.has(2)) out.stake = Ed25519PublicKeyHex(hexOf(bytesOf(f.get(2), 'stake vault key', 32, 32)));
   if (f.has(3)) out.external = decodeExternal(f.get(3) as CborItem);
+  if (f.has(4)) out.label = textOf(f.get(4), 'participant label');
   return Object.freeze(out);
 }
 
@@ -633,7 +707,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
   if (version !== BigInt(RECOVERY_PAYLOAD_VERSION)) {
     throw new PayloadRefusal(version === undefined ? 'PAYLOAD_INVALID' : 'UNKNOWN_PAYLOAD_VERSION', String(version ?? 'missing'));
   }
-  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  const f = fields(root, 'payload', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   const network = MAGIC_TO_NETWORK.get(uintOf(f.get(1), 'network magic', 0xffffffff)) ?? bad('unknown network');
   const self = fields(f.get(4) as CborItem, 'self', [0, 1]);
   const contents: RecoveryPackageContents = {
@@ -644,25 +718,29 @@ function decode(bytes: Uint8Array): RecoveryPackage {
     participants: Object.freeze(arrayOf(f.get(5), 'participants', MAX_PACKAGE_PARTICIPANTS).map(decodeParticipant)),
     manifests: Object.freeze(arrayOf(f.get(6), 'manifests', MAX_MANIFEST_REVISIONS).map(m => {
       const [v, b] = tuple(m, 'manifest revision', 2);
-      return Object.freeze({ version: uintOf(v, 'manifest version'), cbor: hexOf(bytesOf(b, 'manifest', 1, MAX_RECORD_BYTES)) });
+      return Object.freeze({ version: uintOf(v, 'manifest version'), cbor: hexOf(bytesOf(b, 'manifest', 1, MAX_MANIFEST_BYTES)) });
     })),
     proposals: Object.freeze(arrayOf(f.get(7), 'proposals', MAX_PROPOSALS).map(p => {
       const [id, b] = tuple(p, 'proposal', 2);
-      return Object.freeze({ id: hexOf(bytesOf(id, 'proposal id', 1, MAX_PROPOSAL_ID_BYTES)), cbor: hexOf(bytesOf(b, 'proposal', 1, MAX_RECORD_BYTES)) });
+      return Object.freeze({ id: hexOf(bytesOf(id, 'proposal id', 1, MAX_PROPOSAL_ID_BYTES)), cbor: hexOf(bytesOf(b, 'proposal', 1, MAX_PROPOSAL_BYTES)) });
     })),
     addressBook: Object.freeze(arrayOf(f.get(8), 'address book', MAX_ADDRESS_BOOK_ENTRIES).map(e => {
       const [address, text] = tuple(e, 'address book entry', 2);
       return Object.freeze({ address: decodeAddress(address), label: textOf(text, 'address book label') });
     })),
     referenceScripts: Object.freeze(arrayOf(f.get(9), 'reference scripts', MAX_REFERENCE_SCRIPTS).map(r => decodeOutputReference(r, 'reference script'))),
+    proposalsDropped: uintOf(f.get(10), 'proposals left out'),
   };
   // Every rule of the encoder applies, and the bytes must be exactly its output.
   const canonical = encodeRecoveryPayload(contents);
   if (canonical.length !== bytes.length || !canonical.every((b, i) => b === bytes[i])) bad('not the canonical encoding');
+  const dropped = contents.proposalsDropped ?? 0;
   return Object.freeze({
     version: RECOVERY_PAYLOAD_VERSION,
     ...contents,
-    manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestHash(m.cbor) }))),
+    manifests: Object.freeze(contents.manifests.map(m => Object.freeze({ ...m, hash: manifestRevisionHash(m.cbor) as string }))),
+    proposalsDropped: dropped,
+    proposalHistoryTruncated: dropped > 0,
   });
 }
 
@@ -670,7 +748,7 @@ function decode(bytes: Uint8Array): RecoveryPackage {
 export function decodeRecoveryPayload(bytes: unknown): DecodeRecoveryPayloadResult {
   try {
     if (!(bytes instanceof Uint8Array)) return { ok: false, code: 'PAYLOAD_INVALID', detail: 'not bytes' };
-    return { ok: true, package: decode(bytes) };
+    return { ok: true, package: decode(new Uint8Array(bytes)) };
   } catch (e) {
     if (e instanceof PayloadRefusal) return { ok: false, code: e.code, ...(e.detail ? { detail: e.detail } : {}) };
     // A rule of the encoder (`INVALID_PACKAGE`) that the decoded contents break.

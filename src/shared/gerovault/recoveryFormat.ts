@@ -25,25 +25,26 @@
  *
  * Keys:
  *
- *   P      = UTF-8 of the passphrase in Unicode NFC (RFC 8265 OpaqueString normalisation)
- *   master = Argon2id v1.3 (P, salt, memory, passes, lanes, 32-byte tag), no secret, no data
+ *   P      = UTF-8 of normalizeRecoveryPassphrase(passphrase)
+ *   master = Argon2id v1.3 (P, salt, 64 MiB, 3 passes, 1 lane, 32-byte tag), no secret, no data
  *   key    = BLAKE2b-256 keyed by master over "gero-vault/recovery-package/v1|key"
  *   check  = BLAKE2b-128 keyed by master over "gero-vault/recovery-package/v1|check"
  *   ciphertext || tag = XChaCha20-Poly1305 (key, nonce, associated data = header, payload)
  *
  * The check tells a wrong passphrase from a damaged file. It gives an attacker nothing the tag
- * does not already give: each guess still costs one Argon2id derivation. A change to the salt, the
- * parameters or the check itself reads as a wrong passphrase; any other change, as tampering.
- * Either way the file is refused.
+ * does not already give: each guess still costs one Argon2id derivation. A change to the salt or
+ * the check itself reads as a wrong passphrase; any other change, as tampering. Either way the file
+ * is refused.
  *
- * The parameters are those of RFC 9106's second recommended option (64 MiB, 3 passes) with one
- * lane, which every common Argon2id implementation computes, libsodium's `crypto_pwhash`
- * included. A writer of this version always writes them. A reader refuses anything weaker, so a
- * crafted file cannot downgrade the derivation, and anything costlier than a bound, so a crafted
- * file cannot make a restore allocate gigabytes.
+ * A version 1 reader accepts exactly Argon2id v1.3 at 64 MiB, 3 passes and 1 lane, and refuses any
+ * other value before deriving: `KDF_TOO_WEAK` for less memory or fewer passes, `KDF_OUT_OF_RANGE`
+ * for anything else. No version 1 file has other parameters; a change is a new format version
+ * with its own exact values. The derivation runs with a 64 MiB memory cap. One lane is what
+ * libsodium's `crypto_pwhash` computes, so every common implementation can open a package.
  *
- * Opening never throws. The checks run cheapest first, so a file that is not a package, is
- * truncated or has a weak header is refused before the derivation runs.
+ * Opening never throws and works on its own copy of the input. The checks run cheapest first, so
+ * a file that is not a package, is truncated or has other parameters is refused before the
+ * derivation runs.
  *
  * PROVISIONAL: the layout and the test vectors are not frozen until they are checked against the
  * other client.
@@ -64,6 +65,8 @@ export const RECOVERY_TAG_BYTES = 16;
 export const RECOVERY_HEADER_BYTES = 81;
 /** A whole package, header included, is at most 16 MiB. */
 export const MAX_RECOVERY_FILE_BYTES = 16 * 1024 * 1024;
+/** The largest payload a package can hold. */
+export const MAX_RECOVERY_PAYLOAD_BYTES = MAX_RECOVERY_FILE_BYTES - RECOVERY_HEADER_BYTES - RECOVERY_TAG_BYTES;
 
 export interface RecoveryKdfParams {
   /** Memory in KiB. */
@@ -72,12 +75,10 @@ export interface RecoveryKdfParams {
   readonly lanes: number;
 }
 
-/** What a writer of format version 1 always writes. */
+/** The only parameters of format version 1, written and read. */
 export const RECOVERY_KDF: RecoveryKdfParams = Object.freeze({ memoryKiB: 65536, passes: 3, lanes: 1 });
-/** The weakest parameters a reader accepts. */
-export const RECOVERY_KDF_MIN: RecoveryKdfParams = RECOVERY_KDF;
-/** The costliest parameters a reader accepts (256 MiB, 10 passes, one lane). */
-export const RECOVERY_KDF_MAX: RecoveryKdfParams = Object.freeze({ memoryKiB: 262144, passes: 10, lanes: 1 });
+/** The derivation's memory cap in bytes: exactly what 64 MiB needs. */
+export const RECOVERY_KDF_MAXMEM = RECOVERY_KDF.memoryKiB * 1024;
 
 const MASTER_BYTES = 32;
 const KEY_BYTES = 32;
@@ -86,6 +87,81 @@ const CHECK_TAG = new TextEncoder().encode('gero-vault/recovery-package/v1|check
 const ARGON2_VERSION = 0x13;
 
 const OFFSET = { version: 8, memory: 9, passes: 13, lanes: 17, salt: 21, nonce: 37, check: 61, length: 77 } as const;
+
+// ---------------------------------------------------------------------------------------------
+// Passphrases
+
+/** Crockford's Base32 alphabet: digits and capitals without I, L, O and U. */
+export const RECOVERY_PASSPHRASE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** A passphrase the writer accepts has at least this many code points once normalised. */
+export const RECOVERY_PASSPHRASE_MIN_CODE_POINTS = 16;
+const GENERATED_LENGTH = 16;
+
+/** The Zs separators other than U+0020: U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000. */
+const OTHER_SPACES = /[   -   　]/g;
+const EDGE_SPACE = /^[ \u0009\u000A\u000D]+|[ \u0009\u000A\u000D]+$/g;
+/** The generated pattern: 16 characters of the alphabet or its lookalikes (any letter but U). */
+const GENERATED = /^[0-9A-TV-Z]{16}$/i;
+const SEPARATORS = /[- ]/g;
+const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/**
+ * A passphrase to offer by default: 16 characters drawn uniformly from Crockford's Base32 alphabet
+ * with the platform's random generator (80 bits), shown in four groups of four, for example
+ * `7KQ2-M9XD-4TRB-H8WN`. It is no word list, so it cannot be taken for seed words.
+ */
+export function generateRecoveryPassphrase(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(GENERATED_LENGTH));
+  // 32 divides 256, so the low five bits of a uniform byte are uniform.
+  const chars = Array.from(bytes, b => RECOVERY_PASSPHRASE_ALPHABET[b & 31]);
+  bytes.fill(0);
+  return [0, 4, 8, 12].map(i => chars.slice(i, i + 4).join('')).join('-');
+}
+
+/**
+ * The one normalisation every client applies, writer and reader alike, in this order:
+ * 1. Unicode NFC;
+ * 2. the Zs separators other than U+0020 become U+0020;
+ * 3. leading and trailing U+0020, U+0009, U+000A and U+000D are trimmed;
+ * 4. only if the result, without hyphens and spaces, is 16 characters of the generated pattern
+ *    (Crockford's alphabet or its lookalikes, in any case): uppercase, hyphens and spaces removed,
+ *    O becomes 0, I and L become 1.
+ * Step 4 comes last so that a generated passphrase pasted with a trailing newline or typed with a
+ * no-break space still opens. Every other passphrase is used as typed after step 3.
+ */
+export function normalizeRecoveryPassphrase(passphrase: string): string {
+  const trimmed = passphrase.normalize('NFC').replace(OTHER_SPACES, ' ').replace(EDGE_SPACE, '');
+  const compact = trimmed.replace(SEPARATORS, '');
+  if (!GENERATED.test(compact)) return trimmed;
+  return compact.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1');
+}
+
+/** Why the writer refuses a passphrase, or `undefined` when it accepts it. */
+export function recoveryPassphraseProblem(passphrase: unknown): 'NOT_TEXT' | 'TOO_SHORT' | 'CONTROL_CHARACTER' | 'NOT_WELL_FORMED' | undefined {
+  if (typeof passphrase !== 'string') return 'NOT_TEXT';
+  if (LONE_SURROGATE.test(passphrase)) return 'NOT_WELL_FORMED';
+  const normalised = normalizeRecoveryPassphrase(passphrase);
+  if (CONTROL.test(normalised)) return 'CONTROL_CHARACTER';
+  if (Array.from(normalised).length < RECOVERY_PASSPHRASE_MIN_CODE_POINTS) return 'TOO_SHORT';
+  return undefined;
+}
+
+/** The KDF input for writing, or a `GeroVaultError('INVALID_PASSPHRASE')`. */
+function passphraseForWriting(passphrase: unknown): Uint8Array {
+  const problem = recoveryPassphraseProblem(passphrase);
+  if (problem) throw new GeroVaultError('INVALID_PASSPHRASE', `The passphrase is refused: ${problem}`);
+  return new TextEncoder().encode(normalizeRecoveryPassphrase(passphrase as string));
+}
+
+/** The KDF input for reading: any passphrase that is not empty once normalised. */
+function passphraseForReading(passphrase: string): Uint8Array | undefined {
+  const normalised = normalizeRecoveryPassphrase(passphrase);
+  return normalised.length === 0 ? undefined : new TextEncoder().encode(normalised);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Header
 
 export interface RecoveryHeader {
   readonly version: number;
@@ -97,7 +173,7 @@ export interface RecoveryHeader {
 }
 
 export type RecoveryFileRefusalCode =
-  /** The input is not bytes, or the passphrase is not a string. */
+  /** The input is not readable bytes, or the passphrase is not a string. */
   | 'INVALID_INPUT'
   /** The file does not start with the magic. */
   | 'NOT_A_PACKAGE'
@@ -106,9 +182,9 @@ export type RecoveryFileRefusalCode =
   /** The file ends before its header or its ciphertext does. */
   | 'TRUNCATED'
   | 'TOO_LARGE'
-  /** Key derivation parameters below the format's minimum. */
+  /** Less memory or fewer passes than format version 1. */
   | 'KDF_TOO_WEAK'
-  /** Key derivation parameters above the format's bounds, or lanes other than one. */
+  /** Any other parameters than format version 1's. */
   | 'KDF_OUT_OF_RANGE'
   | 'WRONG_PASSPHRASE'
   /** The passphrase is right but the header or the ciphertext was changed, or bytes follow it. */
@@ -126,23 +202,10 @@ export type OpenRecoveryFileResult =
   | { readonly ok: true; readonly header: RecoveryHeader; readonly payload: Uint8Array }
   | RecoveryFileRefusal;
 
-/** Tests only: fixed random values, for the vectors. */
+/** Tests only: fixed random values, for the vectors. Not reachable from the library index. */
 export interface SealOptions {
   readonly salt?: Uint8Array;
   readonly nonce?: Uint8Array;
-}
-
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
-
-/**
- * The passphrase bytes: UTF-8 of its NFC form. `undefined` for anything that cannot be a
- * passphrase: not a string, empty, or not well-formed Unicode (a lone surrogate would be replaced
- * on encoding, so two different strings would give one key).
- */
-export function recoveryPassphraseBytes(passphrase: unknown): Uint8Array | undefined {
-  if (typeof passphrase !== 'string' || LONE_SURROGATE.test(passphrase)) return undefined;
-  const normalised = passphrase.normalize('NFC');
-  return normalised.length === 0 ? undefined : new TextEncoder().encode(normalised);
 }
 
 function writeUint32(out: Uint8Array, offset: number, value: number): void {
@@ -167,13 +230,14 @@ function encodeHeader(header: RecoveryHeader): Uint8Array {
   return out;
 }
 
-async function deriveKeys(passphrase: Uint8Array, salt: Uint8Array, kdf: RecoveryKdfParams): Promise<{ key: Uint8Array; check: Uint8Array }> {
+async function deriveKeys(passphrase: Uint8Array, salt: Uint8Array): Promise<{ key: Uint8Array; check: Uint8Array }> {
   const master = await argon2idAsync(passphrase, salt, {
-    m: kdf.memoryKiB,
-    t: kdf.passes,
-    p: kdf.lanes,
+    m: RECOVERY_KDF.memoryKiB,
+    t: RECOVERY_KDF.passes,
+    p: RECOVERY_KDF.lanes,
     dkLen: MASTER_BYTES,
     version: ARGON2_VERSION,
+    maxmem: RECOVERY_KDF_MAXMEM,
   });
   try {
     return {
@@ -194,21 +258,19 @@ function randomOrGiven(given: Uint8Array | undefined, length: number, what: stri
 }
 
 /**
- * Encrypts a payload into a format version 1 file. Throws `GeroVaultError` for a passphrase that
- * cannot be one (`INVALID_PASSPHRASE`) or a payload over the size bound (`INVALID_PACKAGE`).
- * `exportRecoveryPackage` is the call to use: it also checks the file opens.
+ * Encrypts a payload into a format version 1 file. Throws `GeroVaultError`: `INVALID_PASSPHRASE`
+ * for a passphrase the writer refuses, `INVALID_PACKAGE` for a payload over the size bound.
+ * `exportRecoveryPackage` is the call to use: it also checks the contents and that the file opens.
+ * `options` is for test vectors only; the library index does not export this function.
  */
 export async function sealRecoveryFile(payload: Uint8Array, passphrase: string, options: SealOptions = {}): Promise<Uint8Array> {
-  const secret = recoveryPassphraseBytes(passphrase);
-  if (!secret) throw new GeroVaultError('INVALID_PASSPHRASE', 'A passphrase is a non-empty, well-formed string');
+  const secret = passphraseForWriting(passphrase);
   if (!(payload instanceof Uint8Array)) throw new GeroVaultError('INVALID_PACKAGE', 'The payload is bytes');
+  if (payload.length > MAX_RECOVERY_PAYLOAD_BYTES) throw new GeroVaultError('INVALID_PACKAGE', 'The package is over the size bound');
   const ciphertextLength = payload.length + RECOVERY_TAG_BYTES;
-  if (RECOVERY_HEADER_BYTES + ciphertextLength > MAX_RECOVERY_FILE_BYTES) {
-    throw new GeroVaultError('INVALID_PACKAGE', 'The package is over the size bound');
-  }
   const salt = randomOrGiven(options.salt, RECOVERY_SALT_BYTES, 'salt');
   const nonce = randomOrGiven(options.nonce, RECOVERY_NONCE_BYTES, 'nonce');
-  const { key, check } = await deriveKeys(secret, salt, RECOVERY_KDF).finally(() => secret.fill(0));
+  const { key, check } = await deriveKeys(secret, salt).finally(() => secret.fill(0));
   try {
     const header = encodeHeader({ version: RECOVERY_FORMAT_VERSION, kdf: RECOVERY_KDF, salt, nonce, check, ciphertextLength });
     const ciphertext = xchacha20poly1305(key, nonce, header).encrypt(payload);
@@ -225,22 +287,30 @@ const refuse = (code: RecoveryFileRefusalCode, detail?: string): RecoveryFileRef
   Object.freeze({ ok: false, code, ...(detail ? { detail } : {}) });
 
 function kdfRefusal(kdf: RecoveryKdfParams): RecoveryFileRefusal | undefined {
-  if (kdf.memoryKiB < RECOVERY_KDF_MIN.memoryKiB || kdf.passes < RECOVERY_KDF_MIN.passes) {
+  if (kdf.memoryKiB < RECOVERY_KDF.memoryKiB || kdf.passes < RECOVERY_KDF.passes) {
     return refuse('KDF_TOO_WEAK', `memory ${kdf.memoryKiB} KiB, ${kdf.passes} passes`);
   }
-  if (kdf.memoryKiB > RECOVERY_KDF_MAX.memoryKiB || kdf.passes > RECOVERY_KDF_MAX.passes
-    || kdf.lanes < RECOVERY_KDF_MIN.lanes || kdf.lanes > RECOVERY_KDF_MAX.lanes) {
+  if (kdf.memoryKiB !== RECOVERY_KDF.memoryKiB || kdf.passes !== RECOVERY_KDF.passes || kdf.lanes !== RECOVERY_KDF.lanes) {
     return refuse('KDF_OUT_OF_RANGE', `memory ${kdf.memoryKiB} KiB, ${kdf.passes} passes, ${kdf.lanes} lanes`);
   }
   return undefined;
 }
 
 /**
- * Reads and checks the header without the passphrase: whether the bytes are a package this client
- * reads, whole, with acceptable parameters. Never throws.
+ * A private copy of the input, so that nothing the caller does to its buffer later reaches a
+ * result, and so that a Proxy or a forged typed array is refused rather than thrown on.
  */
-export function readRecoveryHeader(file: unknown): ReadRecoveryHeaderResult {
-  if (!(file instanceof Uint8Array)) return refuse('INVALID_INPUT', 'not bytes');
+function ownCopy(file: unknown): Uint8Array | RecoveryFileRefusal {
+  try {
+    if (!(file instanceof Uint8Array)) return refuse('INVALID_INPUT', 'not bytes');
+    if (file.length > MAX_RECOVERY_FILE_BYTES) return refuse('TOO_LARGE');
+    return new Uint8Array(file);
+  } catch {
+    return refuse('INVALID_INPUT', 'not readable bytes');
+  }
+}
+
+function parseHeader(file: Uint8Array): ReadRecoveryHeaderResult {
   if (file.length === 0) return refuse('NOT_A_PACKAGE', 'empty');
   const magicSeen = Math.min(file.length, RECOVERY_MAGIC.length);
   if (!RECOVERY_MAGIC.subarray(0, magicSeen).every((b, i) => file[i] === b)) return refuse('NOT_A_PACKAGE');
@@ -248,14 +318,13 @@ export function readRecoveryHeader(file: unknown): ReadRecoveryHeaderResult {
   const version = file[OFFSET.version];
   if (version !== RECOVERY_FORMAT_VERSION) return refuse('UNKNOWN_VERSION', String(version));
   if (file.length < RECOVERY_HEADER_BYTES) return refuse('TRUNCATED', 'header');
-  if (file.length > MAX_RECOVERY_FILE_BYTES) return refuse('TOO_LARGE');
   const kdf = {
     memoryKiB: readUint32(file, OFFSET.memory),
     passes: readUint32(file, OFFSET.passes),
     lanes: readUint32(file, OFFSET.lanes),
   };
-  const weak = kdfRefusal(kdf);
-  if (weak) return weak;
+  const other = kdfRefusal(kdf);
+  if (other) return other;
   const ciphertextLength = readUint32(file, OFFSET.length);
   if (ciphertextLength < RECOVERY_TAG_BYTES) return refuse('TAMPERED', 'ciphertext length');
   if (RECOVERY_HEADER_BYTES + ciphertextLength > MAX_RECOVERY_FILE_BYTES) return refuse('TOO_LARGE');
@@ -276,20 +345,32 @@ export function readRecoveryHeader(file: unknown): ReadRecoveryHeaderResult {
 }
 
 /**
+ * Reads and checks the header without the passphrase: whether the bytes are a package this client
+ * reads, whole, with format version 1's parameters. Never throws.
+ */
+export function readRecoveryHeader(file: unknown): ReadRecoveryHeaderResult {
+  const bytes = ownCopy(file);
+  return bytes instanceof Uint8Array ? parseHeader(bytes) : bytes;
+}
+
+/**
  * Opens a package file with the passphrase and returns the payload bytes, authenticated but not
- * yet decoded (`openRecoveryPackage` decodes them). Never throws and never changes `file`.
+ * yet decoded (`openRecoveryPackage` decodes them). Accepts any passphrase that is not empty once
+ * normalised, so an old package is never stranded by a later writer rule. Never throws and never
+ * changes `file`.
  */
 export async function openRecoveryFile(file: unknown, passphrase: unknown): Promise<OpenRecoveryFileResult> {
   if (typeof passphrase !== 'string') return refuse('INVALID_INPUT', 'passphrase');
-  const read = readRecoveryHeader(file);
+  const bytes = ownCopy(file);
+  if (!(bytes instanceof Uint8Array)) return bytes;
+  const read = parseHeader(bytes);
   if (read.ok !== true) return read;
-  const bytes = file as Uint8Array;
-  // No package was ever sealed under such a passphrase, so there is no key to try.
-  const secret = recoveryPassphraseBytes(passphrase);
+  const secret = passphraseForReading(passphrase);
+  // No package was ever sealed under an empty passphrase, so there is no key to try.
   if (!secret) return refuse('WRONG_PASSPHRASE');
   let derived: { key: Uint8Array; check: Uint8Array };
   try {
-    derived = await deriveKeys(secret, read.header.salt, read.header.kdf);
+    derived = await deriveKeys(secret, read.header.salt);
   } catch {
     return refuse('KDF_OUT_OF_RANGE', 'derivation failed');
   } finally {
@@ -297,11 +378,10 @@ export async function openRecoveryFile(file: unknown, passphrase: unknown): Prom
   }
   try {
     if (!equalBytes(derived.check, read.header.check)) return refuse('WRONG_PASSPHRASE');
-    const header = bytes.slice(0, RECOVERY_HEADER_BYTES);
-    const ciphertext = bytes.slice(RECOVERY_HEADER_BYTES);
     let payload: Uint8Array;
     try {
-      payload = xchacha20poly1305(derived.key, read.header.nonce, header).decrypt(ciphertext);
+      payload = xchacha20poly1305(derived.key, read.header.nonce, bytes.subarray(0, RECOVERY_HEADER_BYTES))
+        .decrypt(bytes.subarray(RECOVERY_HEADER_BYTES));
     } catch {
       return refuse('TAMPERED', 'authentication failed');
     }

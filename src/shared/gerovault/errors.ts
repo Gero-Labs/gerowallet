@@ -31,7 +31,9 @@ export type GeroVaultErrorCode =
   | 'BACKUP_TOO_SOON'
   | 'INVALID_PACKAGE'
   | 'PACKAGE_CHECK_FAILED'
-  | 'INVALID_MANIFEST_REVISION';
+  | 'INVALID_MANIFEST_REVISION'
+  | 'SEED_MISMATCH'
+  | 'HISTORY_TOO_LARGE';
 
 export class GeroVaultError extends Error {
   readonly code: GeroVaultErrorCode;

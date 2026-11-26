@@ -45,14 +45,20 @@ export type {
   VaultDescription,
 } from './registration';
 export { CIP83_DEFAULT_PASSPHRASE, cip83Decrypt, cip83Encrypt } from './cip83';
-// Recovery package (GV-14): file format, payload, export, restore and staleness.
+// Recovery package (GV-14): file format, passphrases, payload, export, restore and staleness.
+// `sealRecoveryFile` and its fixed salt and nonce for test vectors are deliberately not exported.
 export {
   MAX_RECOVERY_FILE_BYTES,
+  MAX_RECOVERY_PAYLOAD_BYTES,
   RECOVERY_FORMAT_VERSION,
   RECOVERY_KDF,
-  RECOVERY_KDF_MAX,
-  RECOVERY_KDF_MIN,
+  RECOVERY_KDF_MAXMEM,
+  RECOVERY_PASSPHRASE_ALPHABET,
+  RECOVERY_PASSPHRASE_MIN_CODE_POINTS,
+  generateRecoveryPassphrase,
+  normalizeRecoveryPassphrase,
   readRecoveryHeader,
+  recoveryPassphraseProblem,
 } from './recoveryFormat';
 export type {
   ReadRecoveryHeaderResult,
@@ -66,11 +72,13 @@ export {
   MAX_MANIFEST_REVISIONS,
   MAX_PACKAGE_PARTICIPANTS,
   MAX_PROPOSALS,
+  MAX_PROPOSAL_BYTES,
   MAX_REFERENCE_SCRIPTS,
   RECOVERY_PAYLOAD_VERSION,
   decodeRecoveryPayload,
   encodeRecoveryPayload,
-  manifestHash,
+  fitRecoveryHistory,
+  manifestRevisionHash,
 } from './recoveryPayload';
 export type {
   AddressBookEntry,
@@ -90,18 +98,26 @@ export type {
   RecoveryPayloadRefusalCode,
 } from './recoveryPayload';
 export {
+  backupPathOpensAtMs,
   exportRecoveryPackage,
   openRecoveryPackage,
   recoveryPackageStaleness,
   restoreVaultFromPackage,
 } from './recoveryPackage';
 export type {
+  ExportedRecoveryPackage,
   LatestManifestRevision,
   OpenRecoveryPackageResult,
+  OwnAttestationQuery,
+  OwnAttestationResult,
+  OwnAttestationVerifier,
+  PlutusRestoreFacts,
   RecoveryChainFacts,
+  RecoveryChainState,
+  RecoveryChainUtxo,
   RecoveryPackageStaleness,
   RestoreOptions,
   RestoreRefusalCode,
   RestoreResult,
-  RestoredVault,
+  RestoredNativeCandidate,
 } from './recoveryPackage';
