@@ -7,6 +7,13 @@ import featureFlagService from '@/services/featureFlag.service';
 const CIP45_DEFAULT_ENABLED =
   (import.meta as { env?: Record<string, unknown> }).env?.['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
 
+// Local test builds only: VITE_GEROVAULT_FORCE_ON=true at build time turns GeroVault on whatever
+// the flag service says, so a test extension can open the vault screens while the remote flag
+// stays off for everyone. Release builds never set it (scripts/write-production-env.mjs).
+// Read as a plain `import.meta.env[...]`: the build replaces it with the value, and vitest
+// does not see through a cast of `import.meta`.
+const GEROVAULT_FORCED_ON = import.meta.env['VITE_GEROVAULT_FORCE_ON'] === 'true';
+
 export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
@@ -201,7 +208,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isMidnightSponsoredFeesEnabled: false,
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
-    isVaultsEnabled: false,
+    isVaultsEnabled: GEROVAULT_FORCED_ON,
     isCardholderDetailsEnabled: true,
     isAnnouncementsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
@@ -307,7 +314,7 @@ export const featureFlagsStore = {
     // Multi-account ships DARK (default false); UI-only gate.
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
     // GeroVault ships DARK (default false); UI-only gate for the routes and the nav item.
-    featureFlagsState.flags.isVaultsEnabled = featureFlagService.getFlag('isVaultsEnabled', false);
+    featureFlagsState.flags.isVaultsEnabled = GEROVAULT_FORCED_ON || featureFlagService.getFlag('isVaultsEnabled', false);
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
     featureFlagsState.flags.isCardholderDetailsEnabled =
       featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
@@ -437,7 +444,7 @@ export const featureFlagsStore = {
       featureFlagsState.flags['isMultiAccountEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isVaultsEnabled', (newValue) => {
-      featureFlagsState.flags['isVaultsEnabled'] = newValue === true;
+      featureFlagsState.flags['isVaultsEnabled'] = GEROVAULT_FORCED_ON || newValue === true;
     });
     featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
       featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
@@ -821,7 +828,7 @@ export const featureFlagsStore = {
       isMidnightSponsoredFeesEnabled: false,
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
-      isVaultsEnabled: false,
+      isVaultsEnabled: GEROVAULT_FORCED_ON,
       isCardholderDetailsEnabled: true,
       isAnnouncementsEnabled: true,
       isKeyEnvelopeV2Enabled: false,
