@@ -563,7 +563,7 @@ export const verifyOwnAttestationInManifests: OwnAttestationVerifier = async que
         const digest = bindingDigest(binding);
         const key = `${digest}|${attestation.method}|${attestation.proof}`;
         if (!verifiedBindings.has(key)) {
-          verifiedBindings.set(key, (await verifyAttestation(attestation, query.credential, { kind: 'binding', digest })).ok === true);
+          verifiedBindings.set(key, (await verifyAttestation(attestation, query.credential, { kind: 'binding', digest, network: query.network })).ok === true);
         }
         if (verifiedBindings.get(key) !== true) continue;
         // The earliest revision that still holds this very binding: its recorded date is shown.

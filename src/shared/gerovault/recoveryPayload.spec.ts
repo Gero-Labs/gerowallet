@@ -650,7 +650,7 @@ describe('fitting the history into one package', () => {
     // They count toward the bound like the manifests: a package that cannot hold them is refused.
     const [, external] = await testParticipants();
     const attestations = Array.from({ length: MAX_EXTERNAL_ATTESTATIONS }, (_, i) =>
-      attestationBy(external, { kind: 'verification', digest: i.toString(16).padStart(64, '0') }, 'expiredTx'));
+      attestationBy(external, { kind: 'verification', digest: i.toString(16).padStart(64, '0'), network: 'preprod' }, 'expiredTx'));
     const bare = { ...backup, endorsements: [], externalAttestations: [], proposals: [], addressBook: [] };
     const full = Array.from({ length: 63 }, (_, i) => ({ version: i + 1, cbor: 'cd'.repeat(MAX_MANIFEST_BYTES) }));
     const used = encodeRecoveryPayload({ ...bare, manifests: [...full, { version: 64, cbor: 'cd' }] }).length;
