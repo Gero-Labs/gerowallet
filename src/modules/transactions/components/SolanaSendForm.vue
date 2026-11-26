@@ -357,7 +357,14 @@ const tokenItems = computed(() => (walletStore.solana?.tokens ?? [])
     else if (amountHeld > row.amount) row.amount = amountHeld;
     return rows;
   }, []));
-const selectedToken = computed(() => (asset.value === SOL_ASSET ? null : tokenItems.value.find((token) => token.mint === asset.value) ?? null));
+// A compressed or Core NFT opened from its detail: not a token account, one indivisible unit.
+const heldAsset = computed(() => (props.nftMint ? walletStore.solanaAssets?.find((a) => a.mint === props.nftMint) ?? null : null));
+const selectedToken = computed(() => {
+  if (asset.value === SOL_ASSET) return null;
+  const token = tokenItems.value.find((t) => t.mint === asset.value);
+  if (token) return token;
+  return heldAsset.value?.mint === asset.value ? { mint: heldAsset.value.mint, amount: 1n, decimals: 0 } : null;
+});
 // NFTs are sent from their own detail (`nftMint`), not picked here among tokens.
 const pickerTokens = computed(() => tokenItems.value.filter((token) => !walletStore.solanaNfts?.[token.mint]));
 const assetItems = computed(() => [
@@ -367,6 +374,7 @@ const assetItems = computed(() => [
 /** The NFT this form sends, when opened from its detail; null for any other send. */
 const nft = computed(() => {
   if (!props.nftMint) return null;
+  if (heldAsset.value) return heldAsset.value;
   const entry = walletStore.solanaNfts?.[props.nftMint];
   return entry && tokenItems.value.some((token) => token.mint === props.nftMint) ? entry : null;
 });

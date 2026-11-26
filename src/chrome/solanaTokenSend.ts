@@ -127,7 +127,7 @@ export interface SolanaTokenAccountInfo {
 }
 
 export type SolanaTokenSendApi = Pick<SolanaApi, 'getFees' | 'getChainTip' | 'getAccounts' | 'simulate'>
-  & Partial<Pick<SolanaApi, 'getNftMetadata'>>;
+  & Partial<Pick<SolanaApi, 'getNftMetadata' | 'getAssetTransfer'>>;
 
 /**
  * Rent of a plain token account (165 bytes): used only to tell "not enough SOL" from other
@@ -327,7 +327,7 @@ export async function planSolanaTokenSend(
  * (negative when the sender gains, e.g. a refund larger than what it paid). Whether the simulated
  * state already has the fee taken off does not matter: the bound includes it.
  */
-function senderPaysAtMost(simulation: SolanaRemoteSimulation, senderAccount: SolanaRemoteAccount, bound: bigint): bigint {
+export function senderPaysAtMost(simulation: SolanaRemoteSimulation, senderAccount: SolanaRemoteAccount, bound: bigint): bigint {
   const before = simulation.before[0]?.lamports ?? senderAccount.lamports;
   const after = simulation.after?.[0]?.lamports;
   if (before === null || before === undefined || after === null || after === undefined) throw new SolanaTokenSendError('SIMULATION_FAILED');
@@ -337,7 +337,7 @@ function senderPaysAtMost(simulation: SolanaRemoteSimulation, senderAccount: Sol
 }
 
 /** The limits from the review the user approved: never more SOL, never less received. */
-function holdToReview(request: SolanaTokenSendRequest, solCost: bigint, received: bigint): void {
+export function holdToReview(request: SolanaTokenSendRequest, solCost: bigint, received: bigint): void {
   const { maxSolCost, minReceived } = request;
   if (maxSolCost !== undefined) {
     if (typeof maxSolCost !== 'string' || !/^\d+$/.test(maxSolCost)) throw new SolanaTokenSendError('INVALID_REQUEST');
@@ -490,5 +490,7 @@ export function solanaTokenQuote(plan: SolanaTokenPlan): SolanaTokenQuote {
 }
 
 export function solanaTokenAccountInfos(plan: SolanaTokenPlan): SolanaTokenAccountInfo[] {
+  // A compressed or Core NFT names no token account.
+  if (!plan.tokenProgram) return [];
   return [{ baseAddress: plan.recipient, tokenProgram: plan.tokenProgram, tokenMint: plan.mint, tokenAccount: plan.destination }];
 }

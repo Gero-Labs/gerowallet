@@ -67,6 +67,7 @@
         </a>
 
         <p v-if="programmable" class="t-caption" data-test="sol-nft-programmable">{{ $t('solana.nft.programmableRules') }}</p>
+        <p v-if="nft.kind" class="t-caption" data-test="sol-nft-kind">{{ $t(nft.kind === 'compressed' ? 'solana.nft.compressed' : 'solana.nft.core') }}</p>
         <GButton tier="primary" block data-test="sol-nft-send" @click="emit('send', nft.mint)">
           <v-icon size="small" start>mdi-arrow-top-right</v-icon>
           {{ $t('send.send') }}

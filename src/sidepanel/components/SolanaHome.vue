@@ -80,7 +80,8 @@ const lamports = computed<bigint | null>(() => {
 // NFTs are counted apart and shown on the dashboard.
 const tokens = computed(() => (walletStore.solana?.tokens ?? [])
   .filter((token) => token.amount !== '0' && !walletStore.solanaNfts?.[token.mint]));
-const nftCount = computed(() => solanaNftCandidates(walletStore.solana?.tokens).filter((mint) => !!walletStore.solanaNfts?.[mint]).length);
+const nftCount = computed(() => solanaNftCandidates(walletStore.solana?.tokens).filter((mint) => !!walletStore.solanaNfts?.[mint]).length
+  + (walletStore.solanaAssets?.length ?? 0));
 
 function openCollectibles(): void {
   void openFullDashboard('#/?view=collectibles', true);

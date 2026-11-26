@@ -160,6 +160,8 @@ export interface WalletStore {
    * NFT). Kept by sync.service from Nexus; third-party text, shown only as text (solanaNfts.ts).
    */
   solanaNfts?: Record<string, SolanaNft | false>;
+  /** The account's compressed and Core NFTs from Nexus's DAS index (sync.service `syncSolanaAssets`). */
+  solanaAssets?: SolanaNft[];
 }
 
 /**
@@ -307,6 +309,7 @@ export const walletStore = reactive<WalletStore>({
   solana: emptySolanaState(),
   solanaTransactions: [],
   solanaNfts: {},
+  solanaAssets: [],
 });
 
 const STORE_NAME = 'walletStore';
@@ -319,7 +322,7 @@ const context = getContextType();
  */
 const BULK_FIELDS: (keyof WalletStore)[] = [
   'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'listedListings', 'rewards', 'keys',
-  'solanaTransactions', 'solanaNfts',
+  'solanaTransactions', 'solanaNfts', 'solanaAssets',
 ];
 
 /**
@@ -555,6 +558,12 @@ export default {
   setSolanaTransactions(solanaTransactions: SolanaTransaction[]) {
     walletStore.solanaTransactions = solanaTransactions;
     broadcastFromBackground({ solanaTransactions });
+  },
+
+  /** The account's compressed and Core NFTs (sync.service `syncSolanaAssets`). */
+  setSolanaAssets(solanaAssets: SolanaNft[]) {
+    walletStore.solanaAssets = solanaAssets;
+    broadcastFromBackground({ solanaAssets });
   },
 
   /** The held Solana NFTs' metadata (sync.service `syncSolanaNfts`). */
@@ -814,6 +823,7 @@ export default {
       solana: emptySolanaState(),
       solanaTransactions: [],
       solanaNfts: {},
+      solanaAssets: [],
     };
 
     // Apply to local state
@@ -854,6 +864,7 @@ export default {
       solana: emptySolanaState(),
       solanaTransactions: [],
       solanaNfts: {},
+      solanaAssets: [],
     };
 
     // Apply to a local state

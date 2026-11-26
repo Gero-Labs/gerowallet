@@ -37,6 +37,7 @@ import {
   type SolanaSendRefusal,
 } from '@/chains/solana/solanaSendRules';
 import { singleSignerTransaction } from '@/chains/solana/solanaTokenTransfer';
+import { heldSolanaAsset, planSolanaAssetSend } from '@/chrome/solanaAssetSend';
 import {
   planSolanaTokenSend,
   solanaTokenAccountInfos,
@@ -249,6 +250,12 @@ function holdings() {
 /** Plans a token send; any refusal is re-thrown as a SolanaSendError with the same code. */
 async function plannedTokenSend(sender: SolanaSendWallet, request: SolanaTokenSendRequest, api: SolanaTokenSendApi) {
   try {
+    // A compressed or Core NFT the worker itself lists for this account: never a token account.
+    const asset = heldSolanaAsset(request, WalletStore.state.solanaAssets);
+    if (asset) {
+      if (!api.getAssetTransfer) throw new SolanaTokenSendError('LOOKUP_FAILED');
+      return await planSolanaAssetSend(sender, request, asset, { ...api, getAssetTransfer: api.getAssetTransfer.bind(api) });
+    }
     return await planSolanaTokenSend(sender, request, holdings(), api);
   } catch (error) {
     if (error instanceof SolanaTokenSendError) throw new SolanaSendError(error.code);
