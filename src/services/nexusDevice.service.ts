@@ -123,36 +123,77 @@ async function refresh(refreshToken: string): Promise<CachedTokens> {
 }
 
 /**
- * Returns a valid access token for nexus, refreshing or re-logging in as needed.
- * Safe to call from request interceptors — it caches and only contacts the
- * server when the cached token is missing or near expiry.
+ * The one token acquisition (refresh or device login) running in this context, if any.
+ * Every caller that needs new tokens awaits it, so N requests made at once on first start
+ * send one POST /api/auth/device for one device id, instead of N each with its own id.
+ * Cleared once it settles, success or failure, so the next caller after a failure tries again.
  */
-export async function getNexusAccessToken(): Promise<string> {
+let pendingTokens: Promise<CachedTokens> | null = null;
+
+/**
+ * The background and every extension page each load this module, so the promise above
+ * covers one context. Where the Web Locks API exists (extension pages and the MV3 worker),
+ * the acquisition also runs under one lock for the whole extension; it re-reads the store
+ * first, so a context that waited takes the tokens and device id the other one just wrote.
+ */
+const DEVICE_AUTH_LOCK = 'gero-nexus-device-auth';
+
+async function acrossContexts(work: () => Promise<CachedTokens>): Promise<CachedTokens> {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  return locks ? locks.request(DEVICE_AUTH_LOCK, work) : work();
+}
+
+function singleFlight(acquire: () => Promise<CachedTokens>): Promise<CachedTokens> {
+  if (pendingTokens) return pendingTokens;
+  const attempt = acrossContexts(acquire);
+  pendingTokens = attempt;
+  const release = () => { if (pendingTokens === attempt) pendingTokens = null; };
+  attempt.then(release, release);
+  return attempt;
+}
+
+function stillValid(tokens: CachedTokens): boolean {
+  return tokens.expiresAt > Date.now() + EXPIRY_BUFFER_MS;
+}
+
+/** Tokens that are still good (another caller may have just written them), else refreshed, else a login. */
+async function acquireTokens(): Promise<CachedTokens> {
   const cached = await readCachedTokens();
-
-  if (cached && cached.expiresAt > Date.now() + EXPIRY_BUFFER_MS) {
-    return cached.accessToken;
-  }
-
+  if (cached && stillValid(cached)) return cached;
   if (cached?.refreshToken) {
     try {
-      const refreshed = await refresh(cached.refreshToken);
-      return refreshed.accessToken;
+      return await refresh(cached.refreshToken);
     } catch (err) {
       debugLog('[nexusAuth] Refresh failed, falling back to fresh login:', err);
       await clearCachedTokens();
     }
   }
-
-  const fresh = await login();
-  return fresh.accessToken;
+  return login();
 }
 
 /**
- * Force a fresh login (used by the API client's 401 handler).
+ * Returns a valid access token for nexus, refreshing or re-logging in as needed.
+ * Safe to call from request interceptors: it caches and only contacts the
+ * server when the cached token is missing or near expiry, once for all callers.
+ */
+export async function getNexusAccessToken(): Promise<string> {
+  const cached = await readCachedTokens();
+  if (cached && stillValid(cached)) return cached.accessToken;
+  return (await singleFlight(acquireTokens)).accessToken;
+}
+
+/**
+ * Force a fresh login (used by the API client's 401 handler). Requests rejected together
+ * share one login, and so does a login or refresh already running: its tokens are new.
  */
 export async function reauthenticateNexus(): Promise<string> {
-  await clearCachedTokens();
-  const fresh = await login();
-  return fresh.accessToken;
+  if (pendingTokens) return (await pendingTokens).accessToken;
+  const rejected = (await readCachedTokens())?.accessToken;
+  return (await singleFlight(async () => {
+    // Another context logged in again while this one waited for the lock.
+    const current = await readCachedTokens();
+    if (current && stillValid(current) && current.accessToken !== rejected) return current;
+    await clearCachedTokens();
+    return login();
+  })).accessToken;
 }
