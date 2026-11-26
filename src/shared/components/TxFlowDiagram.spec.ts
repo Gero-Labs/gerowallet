@@ -13,8 +13,28 @@ vi.mock('@/shared/composables/useTranslation', () => ({
 
 import TxFlowDiagram from './TxFlowDiagram.vue';
 
-// happy-dom lays nothing out; the diagram draws only once its container has a width
-Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 600 });
+// happy-dom lays nothing out; the diagram draws only once its container has a width.
+// Chip rows are 150px wide and every chip 56px plus a 4px gap, so chip fitting can be measured.
+const CHIP_ROW_WIDTH = 150;
+const CHIP_STEP = 60;
+let canvasWidth = 600;
+Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+  configurable: true,
+  get(this: HTMLElement) {
+    return this.hasAttribute('data-chips') ? CHIP_ROW_WIDTH : canvasWidth;
+  },
+});
+const realRect = Element.prototype.getBoundingClientRect;
+Element.prototype.getBoundingClientRect = function getBoundingClientRect(this: Element) {
+  if (this.hasAttribute('data-chip')) {
+    const index = Array.from(this.parentElement?.children ?? []).indexOf(this);
+    return { left: index * CHIP_STEP, right: index * CHIP_STEP + 56, top: 0, bottom: 18, width: 56, height: 18, x: index * CHIP_STEP, y: 0, toJSON: () => ({}) } as DOMRect;
+  }
+  if (this.hasAttribute('data-chips')) {
+    return { left: 0, right: CHIP_ROW_WIDTH, top: 0, bottom: 18, width: CHIP_ROW_WIDTH, height: 18, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+  }
+  return realRect.call(this);
+};
 
 const node = (key: string, kind: FlowNode['kind'], lovelace: number, tokens: FlowNode['tokens'] = []): FlowNode =>
   ({ key, kind, address: kind === 'fee' ? '' : `addr1${key}`, lovelace, count: 1, tokens });
@@ -98,6 +118,58 @@ describe('TxFlowDiagram', () => {
     } finally {
       none.unmount();
       some.unmount();
+    }
+  });
+
+  describe('token chips', () => {
+    const withTokens = (units: string[]) => model({
+      inputs: [node('in:mine', 'own', 10_000_000, units.map((unit) => ({ unit, quantity: 5 })))],
+      outputs: [node('out:other', 'other', 9_800_000), node('src:fee', 'fee', 200_000)],
+    });
+
+    it('folds the chips that do not fit into "+N", naming them in its title', async () => {
+      const wrapper = await mountDiagram({ model: withTokens(['AAA', 'BBB', 'CCC']) });
+      try {
+        await nextTick();
+        await nextTick();
+        const row = wrapper.find('[data-chips="in:mine"]');
+        expect(row.findAll('[data-chip]').map((chip) => chip.text())).toEqual(['5 AAA']);
+        const more = row.find('.tx-flow__chip--more');
+        expect(more.text()).toBe('+2');
+        expect(more.attributes('title')).toBe('BBB, CCC');
+      } finally {
+        wrapper.unmount();
+      }
+    });
+
+    it('shows every chip, with no "+N", when they all fit', async () => {
+      const wrapper = await mountDiagram({ model: withTokens(['AAA', 'BBB']) });
+      try {
+        await nextTick();
+        await nextTick();
+        const row = wrapper.find('[data-chips="in:mine"]');
+        expect(row.findAll('[data-chip]')).toHaveLength(2);
+        expect(row.find('.tx-flow__chip--more').exists()).toBe(false);
+      } finally {
+        wrapper.unmount();
+      }
+    });
+  });
+
+  it('goes compact below 520px: no icon, the amount under the label', async () => {
+    canvasWidth = 400;
+    const narrow = await mountDiagram();
+    canvasWidth = 600;
+    const wide = await mountDiagram();
+    try {
+      expect(narrow.find('.tx-flow').classes()).toContain('tx-flow--compact');
+      expect(narrow.find('.tx-flow__icon').exists()).toBe(false);
+      expect(narrow.find('.tx-flow__ada').exists()).toBe(false);
+      expect(wide.find('.tx-flow').classes()).not.toContain('tx-flow--compact');
+      expect(wide.find('.tx-flow__icon').exists()).toBe(true);
+    } finally {
+      narrow.unmount();
+      wide.unmount();
     }
   });
 });
