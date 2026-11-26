@@ -1,7 +1,7 @@
 /**
  * GeroVault core: CIP-1854 role keys, native vault scripts, the CIP-0146 registration codec,
- * vault index allocation and the recovery package. Pure TypeScript: no Vue, no storage, no
- * network, no `chrome.*`.
+ * vault index allocation, the `gero-vault/v1` manifest, attestations, the verification ceremony
+ * and the recovery package. Pure TypeScript: no Vue, no storage, no network, no `chrome.*`.
  */
 export * from './types';
 export * from './errors';
@@ -45,8 +45,34 @@ export type {
   VaultDescription,
 } from './registration';
 export { CIP83_DEFAULT_PASSPHRASE, cip83Decrypt, cip83Encrypt } from './cip83';
-// Display labels: read, write and display rules (spec 5.3, 6.8).
-export { displayLabel, readLabel, writeLabel } from './labels';
+export { encodeCanonicalCbor } from './canonicalCbor';
+export type { CborWritable, CborWritableMap } from './canonicalCbor';
+export {
+  ATTESTATION_LABEL,
+  ATTESTATION_METHOD,
+  MAX_ATTESTATION_BYTES,
+  MAX_PROTECTED_HEADER_BYTES,
+  MAX_SIGNED_ADDRESS_BYTES,
+  MAX_SIGNED_BODY_BYTES,
+  assembleExpiredTx,
+  attestationSigner,
+  canonicalAttestation,
+  cip8Proof,
+  expiredTxAuxiliaryData,
+  expiredTxBody,
+  expiredTxBodyHash,
+  ingestAttestation,
+  isCanonicalAttestation,
+  isUsableEd25519Key,
+  verifyAttestation,
+  verifyEd25519,
+} from './attestation';
+export type { AttestationCheck, AttestationRefusalCode, AttestedDigest, OwnerAttestation } from './attestation';
+export { readLabel, writeLabel, displayLabel } from './labels';
+export { isManifestAck } from './ackBrand';
+export * from './manifest';
+export * from './manifestCheck';
+export * from './verificationNumber';
 // Recovery package (GV-14): file format, passphrases, payload, export, restore and staleness.
 // `sealRecoveryFile` and its fixed salt and nonce for test vectors are deliberately not exported.
 export {

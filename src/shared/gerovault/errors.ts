@@ -11,6 +11,10 @@ export type GeroVaultErrorCode =
   | 'INVALID_VAULT_KEYS'
   | 'EXTENDED_KEY_NOT_ACCEPTED'
   | 'INVALID_KEY_HASH'
+  | 'INVALID_MANIFEST'
+  | 'INVALID_DEVICE_BINDING'
+  | 'INVALID_VERIFICATION'
+  | 'INVALID_LABEL'
   | 'TOO_FEW_OWNERS'
   | 'TOO_MANY_OWNERS'
   | 'THRESHOLD_TOO_LOW'
@@ -34,7 +38,6 @@ export type GeroVaultErrorCode =
   | 'INVALID_MANIFEST_REVISION'
   | 'SEED_MISMATCH'
   | 'HISTORY_TOO_LARGE'
-  | 'INVALID_LABEL'
   | 'MANIFEST_HISTORY_CORRUPT';
 
 export class GeroVaultError extends Error {
