@@ -418,7 +418,8 @@ export function recoveryPackageStaleness(
     throw new GeroVaultError('INVALID_MANIFEST_REVISION', 'A manifest revision is an unsigned version and an optional blake2b-256 hash');
   }
   const manifests = Array.isArray(pkg?.manifests) ? pkg.manifests : [];
-  const newest = manifests[manifests.length - 1];
+  // A decoded package lists revisions in ascending order; any other list is not assumed to.
+  const newest = manifests.reduce<ManifestRevision | undefined>((a, m) => (a === undefined || m.version > a.version ? m : a), undefined);
   if (!newest) return { stale: true, reason: 'NO_MANIFEST' };
   if (newest.version < latest.version) return { stale: true, reason: 'OLDER_REVISION' };
   if (newest.version === latest.version && latest.hash !== undefined && manifestHash(newest.cbor) !== latest.hash) {

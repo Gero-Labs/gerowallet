@@ -16,7 +16,7 @@ vi.mock('@noble/hashes/argon2.js', async () => {
 import { argon2idAsync } from '@noble/hashes/argon2.js';
 import { deriveRoleKeys } from './keys';
 import { sealRecoveryFile } from './recoveryFormat';
-import { RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload } from './recoveryPayload';
+import { RecoveryPackage, RecoveryPackageContents, encodeRecoveryPayload, manifestHash } from './recoveryPayload';
 import {
   RecoveryChainFacts,
   RestoreResult,
@@ -360,6 +360,8 @@ describe('staleness reminder', () => {
     expect(recoveryPackageStaleness(pkg, { version: 0 })).toEqual({ stale: false });
     expect(recoveryPackageStaleness({ manifests: [] }, { version: 0 })).toEqual({ stale: true, reason: 'NO_MANIFEST' });
     expect(recoveryPackageStaleness({ manifests: [m(4, 'a0')] }, { version: 5 })).toEqual({ stale: true, reason: 'OLDER_REVISION' });
+    // The newest revision is the highest version, whatever order a list gives.
+    expect(recoveryPackageStaleness({ manifests: [m(5, 'a1'), m(4, 'a0')] }, { version: 5, hash: manifestHash('a1') })).toEqual({ stale: false });
   });
 
   it('refuses a malformed latest revision', () => {
