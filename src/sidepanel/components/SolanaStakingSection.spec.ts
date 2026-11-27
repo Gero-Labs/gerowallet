@@ -49,6 +49,7 @@ const INFO: SolanaStakeInfo = { epoch: 700, slotIndex: 216_000, slotsInEpoch: 43
 
 function use(stakes: SolanaStakes | null, opts: { failed?: boolean; info?: SolanaStakeInfo | null } = {}) {
   const load = vi.fn();
+  const ensureValidators = vi.fn();
   staking.state = {
     stakes: Vue.shallowRef(stakes),
     validators: Vue.shallowRef([validator]),
@@ -59,9 +60,10 @@ function use(stakes: SolanaStakes | null, opts: { failed?: boolean; info?: Solan
     validatorsFailed: Vue.ref(false),
     load,
     reloadAfterAction: vi.fn(),
+    ensureValidators,
     owner: Vue.computed(() => OWNER),
   };
-  return load;
+  return Object.assign(load, { ensureValidators });
 }
 
 function render() {
@@ -97,12 +99,14 @@ describe('SolanaStakingSection', () => {
     expect((sheetProps.last?.['account'] as SolanaStakeAccount).state).toBe('inactive');
   });
 
-  it('opens Stake once the epoch info is in', async () => {
-    use({ epoch: 700, accounts: [], truncated: false, dropped: 0 });
+  it('opens Stake once the epoch info is in, reading the validator list for its picker', async () => {
+    const { ensureValidators } = use({ epoch: 700, accounts: [], truncated: false, dropped: 0 });
     const wrapper = render();
     expect(wrapper.text()).toContain('solana.staking.empty');
     await wrapper.find('[data-test="sol-panel-stake"]').trigger('click');
     expect(sheetProps.last).toMatchObject({ modelValue: true, action: 'stake', account: null });
+    // The validator list is read for the picker only now.
+    expect(ensureValidators).toHaveBeenCalledTimes(1);
   });
 
   it('offers a retry when the read failed, and keeps Stake off without the epoch info', async () => {

@@ -71,7 +71,7 @@ import {
 } from '@/chains/solana/solanaStaking';
 import type { SolanaStakeAction } from '@/chains/solana/solanaStakeTransfer';
 
-const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, owner } = useSolanaStaking();
+const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, ensureValidators, owner } = useSolanaStaking();
 
 const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network));
 const hide = computed(() => walletStore.config?.hideBalances || false);
@@ -83,6 +83,7 @@ const sheetAction = ref<SolanaStakeAction>('stake');
 const sheetAccount = shallowRef<SolanaStakeAccount | null>(null);
 
 function open(action: SolanaStakeAction, account: SolanaStakeAccount | null = null): void {
+  if (action === 'stake') ensureValidators();
   sheetAction.value = action;
   sheetAccount.value = account;
   sheetOpen.value = true;

@@ -87,7 +87,7 @@ import {
 } from '@/chains/solana/solanaStaking';
 import type { SolanaStakeAction } from '@/chains/solana/solanaStakeTransfer';
 
-const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, owner } = useSolanaStaking();
+const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, ensureValidators, owner } = useSolanaStaking();
 
 const networkName = computed(() => walletStore.loggedWallet?.network ?? '');
 const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, networkName.value));
@@ -99,6 +99,7 @@ const dialogAction = ref<SolanaStakeAction>('stake');
 const dialogAccount = shallowRef<SolanaStakeAccount | null>(null);
 
 function open(action: SolanaStakeAction, account: SolanaStakeAccount | null = null): void {
+  if (action === 'stake') ensureValidators();
   dialogAction.value = action;
   dialogAccount.value = account;
   dialogOpen.value = true;
