@@ -25,7 +25,7 @@ import { createAnnouncementFeed, DEFAULT_ANNOUNCEMENTS_API_URL } from '@/service
 import { announcementHooks } from '@/services/announcements/announcementHooks';
 import { announcementEventTag, createAnnouncementStore, type StoredAnnouncement } from '@/services/announcements/announcementStore';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
-import { inviteRecords } from '@/services/vaultInvites/vaultInviteBackground';
+import { registrationInviteKey } from '@/services/vaultInvites/vaultInviteBackground';
 import { vaultInviteHooks } from '@/services/vaultInvites/vaultInviteHooks';
 import type { InviteTransport } from '@/services/vaultInvites/inviteApi';
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
@@ -69,14 +69,12 @@ const announcementCaps = (): string[] => (announcementKeys.editorial.length || a
 const announcementsOn = async (): Promise<boolean> => (await readFeatureFlagMirror())['isAnnouncementsEnabled'] !== false;
 
 /**
- * This device's GeroVault invite public key, once a vault screen made one (`inviteService.status`).
- * PUT /device carries it with the `vault_invites` cap; without one the device is never a directory entry.
+ * This device's GeroVault invite public key, made on the first registration or re-assertion where
+ * vault invitations are available (`deviceInviteKey.ts`), not only when Create vault is opened.
+ * PUT /device carries it with the `vault_invites` cap; without one the device is never a directory
+ * entry, and an invitation to its wallet reaches only decoys. Never throws.
  */
-const vaultInviteKey = async (): Promise<string | null> => {
-  try {
-    return (await inviteRecords.deviceKey())?.publicKey ?? null;
-  } catch { return null; }
-};
+const vaultInviteKey = (): Promise<string | null> => registrationInviteKey(log);
 
 const notifyClient = createNotifyClient({
   baseUrl: import.meta.env['VITE_NOTIFY_API_URL'] || DEFAULT_NOTIFY_API_URL,

@@ -83,7 +83,8 @@ export interface NotifyRegistrationDeps {
    */
   caps?: () => string[];
   /**
-   * This device's GeroVault invite public key (hex), or null before a vault screen created one.
+   * This device's GeroVault invite public key (hex), made by this call when vault invitations are
+   * available and the device has none; null where they are not.
    * Present: PUT /device carries it with the `vault_invites` cap (gero-sync pushes vault
    * invitations only to a device that says so).
    */

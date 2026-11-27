@@ -16,6 +16,7 @@ import { getDb } from '@/db/wallet-db';
 import { vaultStore } from '@/db/vaultStore';
 import adaHandleApi from '@/api/ada-handle.api';
 import type { VaultNetwork } from '@/shared/gerovault';
+import { publishableInviteKey } from './deviceInviteKey';
 import { createInviteApi, type InviteTransport } from './inviteApi';
 import { openVaultKey, type VaultKeyDeps } from './inviteKeys';
 import { createInviteRecords, type InviteKv } from './inviteRecords';
@@ -32,6 +33,26 @@ export const privateInviteKv: InviteKv = {
 
 /** The invite records in the private store (the device key is read from here for `PUT /device`). */
 export const inviteRecords = createInviteRecords(privateInviteKv);
+
+/** Vault invitations are available in this worker: the GeroVault flag, as the push handler reads it. */
+async function vaultInvitesAvailable(): Promise<boolean> {
+  if (import.meta.env['VITE_GEROVAULT_FORCE_ON'] === 'true') return true;
+  return (await readFeatureFlagMirror())['isVaultsEnabled'] === true;
+}
+
+/**
+ * This device's invite public key for `PUT /device` (hex), made here when the device has none and
+ * vault invitations are available: the notify registration publishes it at worker start and on
+ * every re-assertion, so a wallet that never opened Create vault can still be invited.
+ */
+export function registrationInviteKey(log?: (message: string) => void): Promise<string | null> {
+  return publishableInviteKey(inviteRecords, {
+    available: vaultInvitesAvailable,
+    random: n => globalThis.crypto.getRandomValues(new Uint8Array(n)),
+    now: () => Date.now(),
+    ...(log ? { log } : {}),
+  });
+}
 
 function walletVaultNetwork(wallet: Pick<Wallet, 'network'>): VaultNetwork | null {
   const n = String(wallet.network ?? '').toLowerCase();
@@ -119,8 +140,7 @@ export function createVaultInviteBackground(deps: VaultInviteBackgroundDeps): ()
   };
 
   vaultInviteHooks.forPush = async (t, setupId) => {
-    const flags = await readFeatureFlagMirror();
-    if (import.meta.env['VITE_GEROVAULT_FORCE_ON'] !== 'true' && flags['isVaultsEnabled'] !== true) return null;
+    if (!(await vaultInvitesAvailable())) return null;
     return (await get()).forPush(t, setupId);
   };
   return get;
