@@ -28,6 +28,7 @@ import TxFlowDiagram, { type FlowTokenInfo } from '@/shared/components/TxFlowDia
 import { buildUnsignedTxFlow } from '@/shared/utils/txFlowUnsigned';
 import type { ApprovalDeposits } from '@/shared/utils/txApprovalSummary';
 import type { TxFlowModel } from '@/shared/utils/txFlow';
+import { debugLog } from '@/utils/debug';
 
 interface Props {
   /** The request's transaction, decoded from the CBOR the signer hashes; null when it did not parse */
@@ -51,7 +52,9 @@ const title = computed(() => t('transactions.flow.approvalAriaLabel'));
 const model = computed<TxFlowModel | null>(() => {
   try {
     return buildUnsignedTxFlow(props.tx, { ownAddresses: props.ownAddresses, ownUtxos: props.ownUtxos, deposits: props.deposits });
-  } catch {
+  } catch (error) {
+    // The error's name only: a message could quote transaction data.
+    debugLog('[TxApprovalFlow] flow model not built:', error instanceof Error ? error.name : typeof error);
     return null;
   }
 });
