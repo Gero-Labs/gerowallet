@@ -1,0 +1,863 @@
+{
+  "protocol": "gero-vault-invite/v1",
+  "note": "PROVISIONAL test vectors. Every secret is BLAKE2b-256(\"gero-vault-invite vectors|<label>\"); vault keys are the manifest test participants 0 (inviter) and 1 (cosigner) at vault index 1. Bytes are lowercase hex, ciphertexts base64url without padding, times unix seconds.",
+  "now": 1795651200,
+  "clockSkewSeconds": 300,
+  "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+  "network": "cardano-preprod",
+  "deviceKeys": {
+    "initiator": {
+      "secret": "965cca0e0fe4f93128d05e63ff55b4760db88b0a0514e61c187e1ac64d91e6c9",
+      "inviteKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68"
+    },
+    "cosignerA": {
+      "secret": "a576c7ab4f1327502f73b5f52d637ddd06c98eec244b8fa506f83eba9573362e",
+      "inviteKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545"
+    },
+    "cosignerB": {
+      "secret": "294dd4ab02795f3b672d747738abc6e14967eeca55f0cc5a69d35ecc09efa217",
+      "inviteKey": "f2637cba9da16e94c3f0121929c95715774969b70aefbb48506b4eb82fa30c47"
+    }
+  },
+  "decoys": {
+    "serverSecret": "cbeb92a1dd5d81b68661cc7e8813ef90fddf02c3ab66a466c5ead401fb345ce9",
+    "network": "cardano-preprod",
+    "stakeCredential": "4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+    "entries": [
+      {
+        "slot": 2,
+        "inviteKey": "dea836f01281b19c22cc661dc85a775e234660cde9382a0db9f5ad10573ad377"
+      },
+      {
+        "slot": 3,
+        "inviteKey": "4e9bc500898aff1f92099994dcbd2ea1df7a695d152831c2f15bffcb985c7b4d"
+      },
+      {
+        "slot": 4,
+        "inviteKey": "0ad12c4e30f9caf495613687d33de535464a6a8688e8959d202cbad79c6c7608"
+      }
+    ]
+  },
+  "directory": [
+    {
+      "slot": 0,
+      "inviteKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545"
+    },
+    {
+      "slot": 1,
+      "inviteKey": "f2637cba9da16e94c3f0121929c95715774969b70aefbb48506b4eb82fa30c47"
+    },
+    {
+      "slot": 2,
+      "inviteKey": "dea836f01281b19c22cc661dc85a775e234660cde9382a0db9f5ad10573ad377"
+    },
+    {
+      "slot": 3,
+      "inviteKey": "4e9bc500898aff1f92099994dcbd2ea1df7a695d152831c2f15bffcb985c7b4d"
+    },
+    {
+      "slot": 4,
+      "inviteKey": "0ad12c4e30f9caf495613687d33de535464a6a8688e8959d202cbad79c6c7608"
+    }
+  ],
+  "invite": {
+    "body": {
+      "network": "cardano-preprod",
+      "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "vault": {
+        "name": "Ops petty cash",
+        "template": "standard",
+        "threshold": 2,
+        "owners": 3
+      },
+      "inviter": {
+        "label": "Adam",
+        "stakeCredential": "2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40",
+        "handle": "$adam"
+      },
+      "invitee": "4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "participants": [
+        {
+          "label": "Bea",
+          "status": "accepted"
+        }
+      ],
+      "replyKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+      "vaultKeys": {
+        "payment": "7225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36",
+        "stake": "cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545"
+      },
+      "revokeHash": "48e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d",
+      "issuedAt": 1795651200,
+      "expiresAt": 1796256000
+    },
+    "bodyCbor": "ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+    "digest": "5182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9",
+    "revokeSecret": "0c44a74d849ce5d7ed4f6672f86efb7e4883b8f6b8edcdea29f4bdc498fd9e5a",
+    "cip8": {
+      "sig": {
+        "method": 0,
+        "proof": "8258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36"
+      },
+      "signedCbor": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564"
+    },
+    "expiredTx": {
+      "sig": {
+        "method": 1,
+        "proof": "84a700818258200000000000000000000000000000000000000000000000000000000000000000000180020003010758200b249c9a6391dfa5e9b218ab2e50dae4d02cecf18a315f5aab96abc85f56ae6f0e81581c1196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d0f00a100818258207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e3658405ed818683267f16ddf1bf667aa1fc3c3af781e2d27b0d1691c16b36f46c9fc595907cdddd31507d47086fa2e0f9fd7d4e7243a4b6a663fd1e12198fe12a6af0cf5a119486da10558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9"
+      },
+      "signedCbor": "a263736967a26570726f6f6659010484a700818258200000000000000000000000000000000000000000000000000000000000000000000180020003010758200b249c9a6391dfa5e9b218ab2e50dae4d02cecf18a315f5aab96abc85f56ae6f0e81581c1196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d0f00a100818258207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e3658405ed818683267f16ddf1bf667aa1fc3c3af781e2d27b0d1691c16b36f46c9fc595907cdddd31507d47086fa2e0f9fd7d4e7243a4b6a663fd1e12198fe12a6af0cf5a119486da10558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9666d6574686f640164626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564"
+    },
+    "seal": {
+      "kind": "INVITE",
+      "contentKey": "b94f6c6e9cbf604ed4c1025a60db59a7ed07c838ca34456eca2be5dc1f1872e7",
+      "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+      "bodyAad": "6765726f2d7661756c742d696e766974652f76317c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "wraps": [
+        {
+          "slot": 0,
+          "ephemeralSecret": "634f1231c7208fed93256043122e8741a8179ba918e80942481f45896769b376",
+          "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+          "sharedSecret": "6a5b539783f2dd21c44f4e7176b2c8773461dbb1d61c6160ee33f4451dde1e3e",
+          "wrapKey": "42582c3f7678043be07f4fda0689bb0b9909e2992fe256fca8d8eebfa79371a2",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf00",
+          "wrapNonce": "f62e143e5bfa27104ff16b9a472f53abdb33a3aa1d1217e6"
+        },
+        {
+          "slot": 1,
+          "ephemeralSecret": "daaa747d950d3b419e57432f71bc08e3260b4409cc3b3d282f41da672836acfb",
+          "ephemeralKey": "536ed0a8388b59547cfe7a00bf1626448c265e4f413995455ad80ef562a75057",
+          "sharedSecret": "0e9129b969f9dc1a460a2ecf98ec4f9e2038b427dca418e2b0a8806479427c69",
+          "wrapKey": "39658f0a474663c3018036116fb6c1dc733281d6ac21318a45b8d9aba2a8763c",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf01",
+          "wrapNonce": "05408fe58f761d1291d99e8773ea56923abb70c17e62b5a2"
+        },
+        {
+          "slot": 2,
+          "ephemeralSecret": "93d8826f7684f5ddea73d33c10164657ffa37aa2d0385cff4e7727525cd387e9",
+          "ephemeralKey": "3b807359adc24cf1db8f0b3c446e291828cd88d3fc7939511056eaef1da40779",
+          "sharedSecret": "4d254794e8eba96f3721cda73d66dbd4fcec17b96039688409cdb059d0bbf818",
+          "wrapKey": "5cbc91c73dc207a92f45e2e00ed6f9adba97fb4c5213a27c4d1a5097701c048a",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf02",
+          "wrapNonce": "26de0ae9d775e07119245b9e80ddb960cbaf7765fab4be89"
+        },
+        {
+          "slot": 3,
+          "ephemeralSecret": "82fd9e821933ac8dfa8676a16cf1123b0d50d22ecb21bffbd316e71e78a49492",
+          "ephemeralKey": "d56b8b00cc8d16a8253b5741eff8cc91bacb736f29420578956d244704cc1f60",
+          "sharedSecret": "4e971928445d9fefcb174c58ef816c6b1a199920e335c146674cf9d796eb5d39",
+          "wrapKey": "80bca255a67f743810ee7e14d87900425852a76227d976c5edadf30e27c13f48",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf03",
+          "wrapNonce": "03298b7c2e0b7538dd2832a85d0adb4754a4765caab89ca5"
+        },
+        {
+          "slot": 4,
+          "ephemeralSecret": "5cbba7fab825e375aadc347f98525ccba9ca21c10c05e808d1d0d479f35107c0",
+          "ephemeralKey": "e2ad9089e6815f5f36322304967eee2e7feaebdb4625fce2c5114bca1db18c4f",
+          "sharedSecret": "8001a56759e9a817d8b2d9ef8a2428bca6a4d2d7b01cbe4574527859cc99c37b",
+          "wrapKey": "17b1cbaf566a0b6727369f77345722152e46b82e515367e40c1b4d85f3ee7d5d",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c494e564954457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf04",
+          "wrapNonce": "01d6ccefc211ba12c11450794abf155cb00c43ae485aad22"
+        }
+      ],
+      "plaintext": "invite.cip8.signedCbor",
+      "sealed": {
+        "wraps": [
+          {
+            "slot": 0,
+            "recipientKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545",
+            "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+            "nonce": "f62e143e5bfa27104ff16b9a472f53abdb33a3aa1d1217e6",
+            "wrappedKey": "2e4548f89e5f19d75719320cd705b40532934ab087c4d6c17468785c43d8e14e0f91010ca6844f28a8ffd941e7c0d87d"
+          },
+          {
+            "slot": 1,
+            "recipientKey": "f2637cba9da16e94c3f0121929c95715774969b70aefbb48506b4eb82fa30c47",
+            "ephemeralKey": "536ed0a8388b59547cfe7a00bf1626448c265e4f413995455ad80ef562a75057",
+            "nonce": "05408fe58f761d1291d99e8773ea56923abb70c17e62b5a2",
+            "wrappedKey": "aaf4cc1ef237c7c7844e1bd5857f02ef21cad6078c5265bd95194f7f6d750ff408f30c5a045a8bfb2a545d8dbf3a1fd6"
+          },
+          {
+            "slot": 2,
+            "recipientKey": "dea836f01281b19c22cc661dc85a775e234660cde9382a0db9f5ad10573ad377",
+            "ephemeralKey": "3b807359adc24cf1db8f0b3c446e291828cd88d3fc7939511056eaef1da40779",
+            "nonce": "26de0ae9d775e07119245b9e80ddb960cbaf7765fab4be89",
+            "wrappedKey": "89b9f52cf4cbacd3d15826f3750a79d8d359366c09cbca2d3da172f5e8ecd1aad84dd3e7fd0c3c51dc6695a9c6ee8fd7"
+          },
+          {
+            "slot": 3,
+            "recipientKey": "4e9bc500898aff1f92099994dcbd2ea1df7a695d152831c2f15bffcb985c7b4d",
+            "ephemeralKey": "d56b8b00cc8d16a8253b5741eff8cc91bacb736f29420578956d244704cc1f60",
+            "nonce": "03298b7c2e0b7538dd2832a85d0adb4754a4765caab89ca5",
+            "wrappedKey": "11d405e00682247c4ff9430cd8281165f0fc6239bf66de797de303dce69f0f2e33361f719e89dd9f3d25a637e1c05fe7"
+          },
+          {
+            "slot": 4,
+            "recipientKey": "0ad12c4e30f9caf495613687d33de535464a6a8688e8959d202cbad79c6c7608",
+            "ephemeralKey": "e2ad9089e6815f5f36322304967eee2e7feaebdb4625fce2c5114bca1db18c4f",
+            "nonce": "01d6ccefc211ba12c11450794abf155cb00c43ae485aad22",
+            "wrappedKey": "be3f4641f5cec53699b8f91baee60c4af854d7bb8a1726c0b3fdb30dbd41e01fe30d7f531ed107e9a77915a17a496bf1"
+          }
+        ],
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "PJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      }
+    }
+  },
+  "link": {
+    "fields": {
+      "network": "cardano-preprod",
+      "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "replyKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+      "cap": "a3463874548b1649e910231dca28fcbbb9dfd922d0b9d5d6e741764932e0e4fe",
+      "exp": 1795651800
+    },
+    "payload": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+    "url": "https://gerowallet.io/vault-invite#gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+    "cbor": "a7617601636361705820a3463874548b1649e910231dca28fcbbb9dfd922d0b9d5d6e741764932e0e4fe636578701a6b0778d8646b696e64646c696e6b676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+    "joinToken": "4a7f28d3fb769c5d40ad5fefeed481546660e58a3995a255e9dd1202a06f12e9",
+    "joinTokenHash": "333228f7301a19fcf1e0bda3340942fbaed5880407cfb00a859015a2e6f27b7c",
+    "contentKey": "8f8319c476be0fa7147c4484ff5f3a13980d3a1cc0105b551de9da2d86a72835",
+    "macKey": "300c91a5dffddad8b2f277b12656295eb6801067a46b7490cd02fe88b22447f7",
+    "copy": {
+      "body": {
+        "network": "cardano-preprod",
+        "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "vault": {
+          "name": "Ops petty cash",
+          "template": "standard",
+          "threshold": 2,
+          "owners": 3
+        },
+        "inviter": {
+          "label": "Adam",
+          "stakeCredential": "2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40",
+          "handle": "$adam"
+        },
+        "participants": [],
+        "replyKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+        "vaultKeys": {
+          "payment": "7225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36",
+          "stake": "cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545"
+        },
+        "revokeHash": "125a0ea4d717a4cd64fe0eefb6aba8b4f98bf2454673e4db7e73e23800ca2164",
+        "issuedAt": 1795651200,
+        "expiresAt": 1796256000
+      },
+      "digest": "99ed2ecdbaeac87069869027b989821a77963ffaa7a6ddb4832f15c5b5af29bf",
+      "revokeSecret": "a78be134b36f77c7a1fe8b0dd8b0f38ca7e6773efa1dd8861e51bb63f55cbd23",
+      "sig": {
+        "method": 0,
+        "proof": "8258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da0582099ed2ecdbaeac87069869027b989821a77963ffaa7a6ddb4832f15c5b5af29bf5840c29bb4da84ad37c656a57cc2f8d58d2d4d33067642c20bb9434558ea603d83d5cc0be563b47df7ea7036cdc2056cb25a3d0d380f5538b66f23fbffb68fd21e0a582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36"
+      },
+      "signedCbor": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da0582099ed2ecdbaeac87069869027b989821a77963ffaa7a6ddb4832f15c5b5af29bf5840c29bb4da84ad37c656a57cc2f8d58d2d4d33067642c20bb9434558ea603d83d5cc0be563b47df7ea7036cdc2056cb25a3d0d380f5538b66f23fbffb68fd21e0a582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ac617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b65486173685820125a0ea4d717a4cd64fe0eefb6aba8b4f98bf2454673e4db7e73e23800ca21646c7061727469636970616e747380",
+      "bodyAad": "6765726f2d7661756c742d696e766974652f76317c4c494e4b7ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "sealed": {
+        "nonce": "6e624299355c1aeed800591cfea82e24ce1f2469d1e57362",
+        "ciphertext": "LawzzYIPLUZ0IxPAxlvUMBaXf51XS6dteiD_6hA4mmWyqUt77KMbo0wzibBEAA4AygiaAN62fAsIohnU2ctP8o1Rx_a2ZUmIwZsW5qmiV3QfYYpo6bXo7UW5-QX-ITotIGV5NN5nngjKWEEmta9c9AnjiWw7bpP6SAKI6LcU9LlMicsdwEFtkQwzrWIjKNey868RqErMhG_TKOlhUraYnrrjLBsNbVLQjB_OXD8d4DTgB9aUxXQBcnCl5Xw1HHVv7M0_wCoc0bUyYJqisJ3gSh6VGEe1JqgFHUG9npNOVnQuVi_KQgEc5ZHz-iqc4lY8UG_3msjje_psygfJ2sh1sHmf3aY20g02JBO3nfP9LdIhjqM-ZnVjsWqoOxPaBBa_q72Vc9Aud_x9xOau4mZwow4TVS9qmdC_CDHq1qfVJJ4RSzD5xp0YasvZGFwtIChc798_QfizKo3i8iPLdTK831iOXjA8_MjeoWtWUld06Mhsjfe8hTiKDw5egOK_k7yhNcF4qa1ANfDc6W9Nhg3Qf_3DGp3jgAtdYFBDP967-sLYIctnI9srbiHiOhZEg8Cj658DyOoHOFCCwtTDwy6--0OAHMho4TBXffsUMcUThSL7Q76g8hnqY-cKoqHkZA5q-IKLPBXYS1EoUqNCSWfvlcPDp5uJqP-4vhKrIWCKQiaau2lZvTan65BSSDIsjZXONLQzX7Vhfi-e2bP3veKsi4HAv3dikuwzNyLaAgJM9GxuTB9xaPXvW8F44rqBfCf8QTcMwGgNum9yArqUf4_sg6r8_iQZ4qNm07c63SLx4VMigLkclTcl8a5ArR47jBgGX5xKuRI6Ex2WOLdwRrQEW9wK9PwxiDzekh7gOZSdDGhTiLZrI4WXJQJynZpf4PtFv4MvuVerJ6oiTcIoszCQo5yovPV4uRtPe6H7Dw"
+      }
+    }
+  },
+  "accept": {
+    "body": {
+      "network": "cardano-preprod",
+      "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "invite": "5182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9",
+      "label": "Carla",
+      "stakeCredential": "4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "vaultKeys": {
+        "payment": "3a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20",
+        "stake": "e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a"
+      },
+      "acceptedAt": 1795654800
+    },
+    "bodyCbor": "a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+    "digest": "b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330",
+    "cip8": {
+      "sig": {
+        "method": 0,
+        "proof": "8258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20"
+      },
+      "signedCbor": "a263736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220"
+    },
+    "expiredTx": {
+      "sig": {
+        "method": 1,
+        "proof": "84a70081825820000000000000000000000000000000000000000000000000000000000000000000018002000301075820d1a07f63c696f6a8dddf5b509715de22ad2f181c29f996b71c85529e5af87ded0e81581c3e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5560f00a100818258203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c205840da7315e8b8aa4f9360d025991c98df8af9550543740dc9fc3948886a1342e2e1e7c6d439fdc5e936c3b2e42ed0189346e9d8c28cb0caa35f2e9d1df3836ea205f5a119486da1065820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330"
+      },
+      "signedCbor": "a263736967a26570726f6f6659010484a70081825820000000000000000000000000000000000000000000000000000000000000000000018002000301075820d1a07f63c696f6a8dddf5b509715de22ad2f181c29f996b71c85529e5af87ded0e81581c3e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5560f00a100818258203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c205840da7315e8b8aa4f9360d025991c98df8af9550543740dc9fc3948886a1342e2e1e7c6d439fdc5e936c3b2e42ed0189346e9d8c28cb0caa35f2e9d1df3836ea205f5a119486da1065820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330666d6574686f640164626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220"
+    },
+    "seal": {
+      "kind": "ACCEPT",
+      "contentKey": "1e66b42305fc24878f473b37fe7fdb23933a925d8a139d0a4c947e3bcdd73997",
+      "nonce": "611b074b7c2653649eb680aec5562441da6e859604289891",
+      "bodyAad": "6765726f2d7661756c742d696e766974652f76317c4143434550547ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "wraps": [
+        {
+          "slot": 0,
+          "ephemeralSecret": "d9796a3de25ac6d176ebd18d8f7c5bbf227c40675fbf3d16f1d40e58ac6f51e3",
+          "ephemeralKey": "52b86c7fcba908f635de603346ff7bfacd77a8c6d97878d088195c52a8846e09",
+          "sharedSecret": "09c9c1570afe52eda9b9a5af5aba108a685350b5bf13cfab19bd6cdccf04a45f",
+          "wrapKey": "46bc7181a008da8d7005cd9e8c8d8bbfe8f1f2925c8ac82e9738b2e8931b0bcb",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c4143434550547ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf00",
+          "wrapNonce": "e26c41eccd9386c090b6815e2b427933502d181620a64be0"
+        }
+      ],
+      "plaintext": "accept.cip8.signedCbor",
+      "sealed": {
+        "wraps": [
+          {
+            "slot": 0,
+            "recipientKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+            "ephemeralKey": "52b86c7fcba908f635de603346ff7bfacd77a8c6d97878d088195c52a8846e09",
+            "nonce": "e26c41eccd9386c090b6815e2b427933502d181620a64be0",
+            "wrappedKey": "911f349c8f95d2af57dfc100c8ecef4b32bc7e6a226a0e64f680e85b76632e8560302e99b234317c92c007fa794abc63"
+          }
+        ],
+        "nonce": "611b074b7c2653649eb680aec5562441da6e859604289891",
+        "ciphertext": "Rv50SdHrsxt5qSJk7_yjFZK4n7ZZyWeNzovlkLhM7B1reolTq7CxW8oHzrkrybyxgckm2vCCI1YVC8djBBbcaB_3DwuGy_ehg5YWoEWYCqljjMCLcQbjJEQIdkA1lY5i3ZCPKzcGj-ckJHCSnQq_JVVyMQApZlwql4LXusvvUnKtFTymJ74aTGmmxpEEiJRcOB0MM2JciaYlTZwVMDbS6jx9BTiHNizLhNWEIg30xNhDCTRJ1sfXd0oUr7MSybB3xrQjF-SU09_aki60deuXD-j-A5t4mfu_-z3hGU0z9_14e_DDaeSdw3fpvT7Kx4jQQbzgY_Z2UqVUeAkQ-jHRXzgxNFlf9NfnrwHlhRNGuzkq4ad4S6wBwyOJEPs3rPyAUT5PQYySo24QYnPz1KirkOE8Gk_VfKAF1g-8psRnti5HsCMLZ3FlSdf8dqcF0Ev9FI4JC6yyVQ_T3HCCdRzBP27eH2U5U5y7fIKzlRtZk4FoOnaVMoHX-0ovc1mdSdq7fnC86O4DX09nbvVfqKiLBYHHGYTp_C52ykrcTg9mtzL5iHKLcQxpu6HTEV-M62jv_8NGXs4-KIkbbLdWvZJfEDB7XLhln05vx8CDRmgmJjzLmdQgItsszp14NQvv8Foed7SG-Jfs4pcZpyKSviAgddwFzKWJabVFyvjdLThn6EucREO-fw8dov7ucwbNdD1c1ncLq1B43DQB1lwLPg"
+      }
+    }
+  },
+  "linkAccept": {
+    "body": {
+      "network": "cardano-preprod",
+      "setupId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "invite": "99ed2ecdbaeac87069869027b989821a77963ffaa7a6ddb4832f15c5b5af29bf",
+      "label": "Carla",
+      "stakeCredential": "4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "vaultKeys": {
+        "payment": "3a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20",
+        "stake": "e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a"
+      },
+      "acceptedAt": 1795651260
+    },
+    "digest": "07c560689008d835be903368068f5764c68dc987412683838f9c1d08088a9766",
+    "mac": "9d987c8e48a7f69fa2426930267b1c13a376493235db9e2eb7ae7c626bd17836",
+    "sig": {
+      "method": 0,
+      "proof": "8258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a0582007c560689008d835be903368068f5764c68dc987412683838f9c1d08088a976658402f304730f8b534e637c3e8a220a9211200cb33601c960576319b96dcf1d2f90fe608cc61b69f25af43603301594946c5fa8190562c7b32f845250649fd1ad806582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20"
+    },
+    "signedCbor": "a3636d616358209d987c8e48a7f69fa2426930267b1c13a376493235db9e2eb7ae7c626bd1783663736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a0582007c560689008d835be903368068f5764c68dc987412683838f9c1d08088a976658402f304730f8b534e637c3e8a220a9211200cb33601c960576319b96dcf1d2f90fe608cc61b69f25af43603301594946c5fa8190562c7b32f845250649fd1ad806582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e76697465582099ed2ecdbaeac87069869027b989821a77963ffaa7a6ddb4832f15c5b5af29bf676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0776bc6f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+    "seal": {
+      "kind": "ACCEPT",
+      "contentKey": "a320ac31469340caaf8d78346a251a6dbe87826c1631d66a43ae1f832773ea7b",
+      "nonce": "1ee217497f41abd29a4f920194313a6a91c97e7bdc7aa55a",
+      "wraps": [
+        {
+          "slot": 0,
+          "ephemeralSecret": "fa1feb30e46fb0b20a32df5b7f146b3fd48d804642b1b9f34fbda2993d146e01",
+          "ephemeralKey": "e2532b81e41949c741f62f1a54da9cba7a7fd4bea0d40dd1eee21a04434eb372",
+          "sharedSecret": "4cd779c2b68e07171a4e47d305640dad6f875f74591182fb73e6ca17debf8a28",
+          "wrapKey": "ca87aeb7d83c2ca06084ce99c7e980f90036195fae3b8a2934adeba93984d089",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c4143434550547ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf00",
+          "wrapNonce": "93361b0952f384ca9ff85ac62e59918ea065dced640a618a"
+        }
+      ],
+      "sealed": {
+        "wraps": [
+          {
+            "slot": 0,
+            "recipientKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+            "ephemeralKey": "e2532b81e41949c741f62f1a54da9cba7a7fd4bea0d40dd1eee21a04434eb372",
+            "nonce": "93361b0952f384ca9ff85ac62e59918ea065dced640a618a",
+            "wrappedKey": "7a40fbc134fa1250f6db1efa244f3917aa8fca6527646149873ac13176ad90c29b907230e9093cc1975f040b8f950f2c"
+          }
+        ],
+        "nonce": "1ee217497f41abd29a4f920194313a6a91c97e7bdc7aa55a",
+        "ciphertext": "IL5yp3_1VS41GutdMTwyee3qhcgVxPSMQaqoh2pGk6iKrmJUY97WFmnQBnw6Dg-h5K4shEO4h1VsYGwXUOoC88b2Rb9jWONX-BX0szc3Kfyg5FBIW5rhyZzeez-y8an2LUzZbpxgKKZgAC1Bqv7Y0q8eke2r6ToZhiNxCJPN404e8v8uk4UIOgdYqtLAlpW_o4wVHBf5JNG74Qob1e-qSwgjHSvTyjLRoFHX8PPKCAEw6ggFsKRVQp3SzqzkEY-kTKLMU0Wb15XZceL2QXkmsETlzU-K_9F81S7pH06ciA_dn69dAxDWVE6QkouNs6QLUJsjNLtUtaR74VqWabCQE7jWBhGLoj7wMTTvt5Dbr0qrbgKAEtSszI1w2kdmZPZvossfL82w3XDAzcIEs5aDo3Zy4D7Il2yVmlqjdL5BT9i5mbupcLA4-pe57JUmrRqFCEzxL9Qcq3__Ve6X-A2v7NPtB-IEfwS0L2SbQfByZWH6zcNJjUOx4qrWQotpSs1uZr5TOq-ycdyEC1DnsqXY_MJ_WrHodkaz_arT6g4Cpm--Vy0E3Zm0ogY0f30caRs2iv0lp16lnAGdf6d_ca6NqMyItL0ZkOvii8xohvumfRUTJchl2ffG74GG5GriCVV9MDjkRBgGyTYXxRsxNrN6H3VjJaT0yX7dNqRyGyIbwWTTBuzim5BasbBJa1fleLX9k_DFuDyjk1MEx-2vfjqjsc_aQoydbyPrXSUVfpO-_IaNkBfHX-9v3NdUjaTHPwAic7gp"
+      }
+    }
+  },
+  "decline": {
+    "cbor": "a4617601646b696e64676465636c696e6566696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "seal": {
+      "kind": "DECLINE",
+      "contentKey": "8b263d2858d0e744831ecc5807fffd7b040f0b8c3c056526e4e50c93e5f12e13",
+      "nonce": "a23f8f4fd4080b6bd267992e6c93d27a6caf32ee14bfb02e",
+      "wraps": [
+        {
+          "slot": 0,
+          "ephemeralSecret": "10c1aaa797250193272836e027174fb5198a400f3e16bc68279cde83b9e64d09",
+          "ephemeralKey": "3e4603f836d1af419ffc605cfdd8c8d7ef856d66af3c00ca44a5c9f8dcb5992e",
+          "sharedSecret": "4c9fa925775ed23e6627a541ed529dd18f7c777c5277599950446c1a06b28512",
+          "wrapKey": "34d366248c376af023003f04f2e0915962d08771a43655779202c166b72055a2",
+          "wrapAad": "6765726f2d7661756c742d696e766974652f76317c575241507c4445434c494e457ca0a1a2a3a4a5a6a7a8a9aaabacadaeaf00",
+          "wrapNonce": "dea9935255b9bdc80fb75e5894e8098e234c5277278c88e9"
+        }
+      ],
+      "sealed": {
+        "wraps": [
+          {
+            "slot": 0,
+            "recipientKey": "c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68",
+            "ephemeralKey": "3e4603f836d1af419ffc605cfdd8c8d7ef856d66af3c00ca44a5c9f8dcb5992e",
+            "nonce": "dea9935255b9bdc80fb75e5894e8098e234c5277278c88e9",
+            "wrappedKey": "52420ada011aa851c35cbafcb33245b80ef94c9cf6e0a9cc3b39ee7d2501bd78bf247c004ca7711b3323b3d839d2ce60"
+          }
+        ],
+        "nonce": "a23f8f4fd4080b6bd267992e6c93d27a6caf32ee14bfb02e",
+        "ciphertext": "HPvOQoPL8xfmyMEHa7n_C5nSmDYxCKzTPJEFzvMi5d80pAgnL2zUb0GWikzerRqe2spaDhjtrqsUGVXLk2tvvweYee2bTIDk_WY4RvaPD3HwxqFQYIGg2cqynGs86euxbopb"
+      }
+    }
+  },
+  "revoke": {
+    "cbor": "a5617601646b696e64667265766f6b656673656372657458200c44a74d849ce5d7ed4f6672f86efb7e4883b8f6b8edcdea29f4bdc498fd9e5a677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697265766f6b656441741a6b0792a0",
+    "base64url": "pWF2AWRraW5kZnJldm9rZWZzZWNyZXRYIAxEp02EnOXX7U9mcvhu-35Ig7j2uO3N6in0vcSY_Z5aZ3NldHVwSWRQoKGio6SlpqeoqaqrrK2ur2lyZXZva2VkQXQaaweSoA",
+    "revokeHash": "48e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d"
+  },
+  "negative": [
+    {
+      "target": "link",
+      "name": "expired",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+      "now": 1795651800,
+      "code": "EXPIRED"
+    },
+    {
+      "target": "link",
+      "name": "unknown prefix version",
+      "input": "gvi2p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+      "now": 1795651200,
+      "code": "UNKNOWN_VERSION"
+    },
+    {
+      "target": "link",
+      "name": "v 2 inside",
+      "input": "gvi1p2F2AmNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+      "now": 1795651200,
+      "code": "UNKNOWN_VERSION"
+    },
+    {
+      "target": "link",
+      "name": "other host",
+      "input": "https://example.com/vault-invite#gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+      "now": 1795651200,
+      "code": "MALFORMED"
+    },
+    {
+      "target": "link",
+      "name": "padding",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o=",
+      "now": 1795651200,
+      "code": "MALFORMED"
+    },
+    {
+      "target": "link",
+      "name": "short cap",
+      "input": "gvi1p2F2AWNjYXBYH6NGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4ORjZXhwGmsHeNhka2luZGRsaW5rZ25ldHdvcmtvY2FyZGFuby1wcmVwcm9kZ3NldHVwSWRQoKGio6SlpqeoqaqrrK2ur2hyZXBseUtleVggyfQPh4widqRd4_4Drmjs3GziFPIgxgJxXCq74LvzTWg",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "link",
+      "name": "short setup id",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkT6ChoqOkpaanqKmqq6ytrmhyZXBseUtleVggyfQPh4widqRd4_4Drmjs3GziFPIgxgJxXCq74LvzTWg",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "link",
+      "name": "unknown field",
+      "input": "gvi1qGF2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2VleHRyYQFnbmV0d29ya29jYXJkYW5vLXByZXByb2Rnc2V0dXBJZFCgoaKjpKWmp6ipqqusra6vaHJlcGx5S2V5WCDJ9A-HjCJ2pF3j_gOuaOzcbOIU8iDGAnFcKrvgu_NNaA",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "link",
+      "name": "unknown network",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3JrcWNhcmRhbm8tc2FuY2hvbmV0Z3NldHVwSWRQoKGio6SlpqeoqaqrrK2ur2hyZXBseUtleVggyfQPh4widqRd4_4Drmjs3GziFPIgxgJxXCq74LvzTWg",
+      "now": 1795651200,
+      "code": "WRONG_NETWORK"
+    },
+    {
+      "target": "link",
+      "name": "small-order reply key",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jYZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "now": 1795651200,
+      "code": "BAD_KEY"
+    },
+    {
+      "target": "link",
+      "name": "lifetime over 7 days",
+      "input": "gvi1p2F2AWNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprELItZGtpbmRkbGlua2duZXR3b3Jrb2NhcmRhbm8tcHJlcHJvZGdzZXR1cElkUKChoqOkpaanqKmqq6ytrq9ocmVwbHlLZXlYIMn0D4eMInakXeP-A65o7Nxs4hTyIMYCcVwqu-C7801o",
+      "now": 1795651200,
+      "code": "LIFETIME_TOO_LONG"
+    },
+    {
+      "target": "link",
+      "name": "keys not in canonical order",
+      "input": "gvi1p2F2AWRraW5kZGxpbmtnbmV0d29ya29jYXJkYW5vLXByZXByb2Rnc2V0dXBJZFCgoaKjpKWmp6ipqqusra6vaHJlcGx5S2V5WCDJ9A-HjCJ2pF3j_gOuaOzcbOIU8iDGAnFcKrvgu_NNaGNjYXBYIKNGOHRUixZJ6RAjHcoo_Lu539ki0LnV1udBdkky4OT-Y2V4cBprB3jY",
+      "now": 1795651200,
+      "code": "NOT_CANONICAL"
+    },
+    {
+      "target": "signedInvite",
+      "name": "version 2",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617602646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "UNKNOWN_VERSION"
+    },
+    {
+      "target": "signedInvite",
+      "name": "kind accept",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466616363657074657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "WRONG_KIND"
+    },
+    {
+      "target": "signedInvite",
+      "name": "unknown field",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ae617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640266636f6c6f75726372656467696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "missing replyKey",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ac617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "backup template",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465666261636b7570697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "threshold above owners",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640467696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "threshold 1",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640167696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "21 owners",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273156874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "too many participants",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747383a2656c6162656c625031667374617475736777616974696e67a2656c6162656c625032667374617475736777616974696e67a2656c6162656c625033667374617475736777616974696e67",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "unknown participant status",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686465636c696e6564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "handle without $",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c65646164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "label with a control character",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a2656c6162656c65416407616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "small-order reply key",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_KEY"
+    },
+    {
+      "target": "signedInvite",
+      "name": "payment key equals stake key",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b6558207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_KEY"
+    },
+    {
+      "target": "signedInvite",
+      "name": "lifetime over 7 days",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b101697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "LIFETIME_TOO_LONG"
+    },
+    {
+      "target": "signedInvite",
+      "name": "expires before issued",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b077680697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_FIELD"
+    },
+    {
+      "target": "signedInvite",
+      "name": "vault name changed after signing",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656c4f7073207472656173757279666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_SIGNATURE"
+    },
+    {
+      "target": "signedInvite",
+      "name": "revoke hash changed after signing",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582000000000000000000000000000000000000000000000000000000000000000006c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795651200,
+      "code": "BAD_SIGNATURE"
+    },
+    {
+      "target": "signedInvite",
+      "name": "expired",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1796256000,
+      "code": "EXPIRED"
+    },
+    {
+      "target": "signedInvite",
+      "name": "issued in the future",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c6342656166737461747573686163636570746564",
+      "now": 1795650899,
+      "code": "NOT_YET_VALID"
+    },
+    {
+      "target": "signedInvite",
+      "name": "trailing byte",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f640064626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c634265616673746174757368616363657074656400",
+      "now": 1795651200,
+      "code": "MALFORMED"
+    },
+    {
+      "target": "signedInvite",
+      "name": "unsorted outer map",
+      "input": "a264626f6479ad617601646b696e6466696e76697465657661756c74a4646e616d656e4f70732070657474792063617368666f776e657273036874656d706c617465687374616e64617264697468726573686f6c640267696e7669746565581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f22067696e7669746572a3656c6162656c644164616d6668616e646c6565246164616d6f7374616b6543726564656e7469616c581c2b1d0d64db1e7988ee96a513b308b0995bd1468aca9e74ffdf012c40676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf6869737375656441741a6b077680687265706c794b65795820c9f40f878c2276a45de3fe03ae68ecdc6ce214f220c602715c2abbe0bbf34d68696578706972657341741a6b10b100697661756c744b657973a2657374616b655820cde24ddd6a132994025981a3cf15e5638a0aefb66371f24b1617579b5c0c3545677061796d656e7458207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e366a7265766f6b6548617368582048e9a8cfc944f6cedf2243a42499760d1ed0be6a16f1258aad0e098f5648d86d6c7061727469636970616e747381a2656c6162656c634265616673746174757368616363657074656463736967a26570726f6f6658e18258b284584aa3012704581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10d6761646472657373581d601196fe3062e96b78dd959058f5adad44dd663519200f2495d17ef10da058205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd95840fd4d145ce7c39edc7845f029cfab975f4f019d2078e0e45c7edff3b0d0e8ecb14300212565b6f548c2ef3c23a47216884c9844d82dbe03a9bcb3bbf0b218e801582aa40101032720062158207225e2a4ce53366b04f441cf3bbbe9fd8d9637de5e9c47ce165cd49d6a2e6e36666d6574686f6400",
+      "now": 1795651200,
+      "code": "NOT_CANONICAL"
+    },
+    {
+      "target": "signedAccept",
+      "name": "MAC on a mailbox accept",
+      "input": "a3636d616358204816d013a43aa726232e6b606c6a484bf1f01eb14303ca2f9ba564c5e0f2a7f563736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "now": 1795654800,
+      "code": "BAD_MAC"
+    },
+    {
+      "target": "signedAccept",
+      "name": "accepted after the invitation expired",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "now": 1795654800,
+      "inviteExpiresAt": 1795654800,
+      "code": "EXPIRED"
+    },
+    {
+      "target": "signedAccept",
+      "name": "dated in the future",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "now": 1795651200,
+      "code": "NOT_YET_VALID"
+    },
+    {
+      "target": "signedAccept",
+      "name": "other invitation",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c654361726c6166696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "now": 1795654800,
+      "inviteDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "code": "WRONG_INVITE"
+    },
+    {
+      "target": "signedAccept",
+      "name": "label changed after signing",
+      "input": "a263736967a26570726f6f6658e18258b284584aa3012704581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a5566761646472657373581d603e94c7a4a4179bdfa3e337b4317534272fcdb126454dc4963698a556a05820b225f9b47e1da0379608fcfdb60d367b5cb72a51b169c668ed2872bcff599330584099edf0b3a9e7a4ca1a401ac083f54a45375677831beb83b4e0970b93e0a8b6e90c35828278eebecb65194756b5ebc6406a3e25ae9b3b592f28a8185ac0266603582aa40101032720062158203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c20666d6574686f640064626f6479a9617601646b696e6466616363657074656c6162656c644361726c66696e7669746558205182c7ed7cdf0060da68abae47dc26f1264d6abbc62ed3f90fe9b74e5f961bd9676e6574776f726b6f63617264616e6f2d70726570726f64677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697661756c744b657973a2657374616b655820e535d2e3372f3cec8cbb6d37fc5e2b9d79a2bf5a552e2131f9ef202cf65dfc7a677061796d656e7458203a469d54a952a2ef488c93fe5669bc31cc15000f1d568ba2846552c8543a1c206a616363657074656441741a6b0784906f7374616b6543726564656e7469616c581c4d0ee4d5f723bee4aa3d87112dbbbba9d2d6507d9e504fdb2c47f220",
+      "now": 1795654800,
+      "code": "BAD_SIGNATURE"
+    },
+    {
+      "target": "delivery",
+      "name": "wrap of another device",
+      "delivery": {
+        "wrap": {
+          "slot": 1,
+          "recipientKey": "f2637cba9da16e94c3f0121929c95715774969b70aefbb48506b4eb82fa30c47",
+          "ephemeralKey": "536ed0a8388b59547cfe7a00bf1626448c265e4f413995455ad80ef562a75057",
+          "nonce": "05408fe58f761d1291d99e8773ea56923abb70c17e62b5a2",
+          "wrappedKey": "aaf4cc1ef237c7c7844e1bd5857f02ef21cad6078c5265bd95194f7f6d750ff408f30c5a045a8bfb2a545d8dbf3a1fd6"
+        },
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "PJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      },
+      "device": "cosignerA",
+      "now": 1795651200,
+      "code": "WRONG_RECIPIENT"
+    },
+    {
+      "target": "delivery",
+      "name": "wrapped key tampered",
+      "delivery": {
+        "wrap": {
+          "slot": 0,
+          "recipientKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545",
+          "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+          "nonce": "f62e143e5bfa27104ff16b9a472f53abdb33a3aa1d1217e6",
+          "wrappedKey": "2e4548f89e5f19d75719320cd705b40532934ab087c4d6c17468785c43d8e14e0f91010ca6844f28a8ffd941e7c0d870"
+        },
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "PJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      },
+      "device": "cosignerA",
+      "now": 1795651200,
+      "code": "DECRYPT_FAILED"
+    },
+    {
+      "target": "delivery",
+      "name": "slot changed",
+      "delivery": {
+        "wrap": {
+          "slot": 1,
+          "recipientKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545",
+          "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+          "nonce": "f62e143e5bfa27104ff16b9a472f53abdb33a3aa1d1217e6",
+          "wrappedKey": "2e4548f89e5f19d75719320cd705b40532934ab087c4d6c17468785c43d8e14e0f91010ca6844f28a8ffd941e7c0d87d"
+        },
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "PJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      },
+      "device": "cosignerA",
+      "now": 1795651200,
+      "code": "DECRYPT_FAILED"
+    },
+    {
+      "target": "delivery",
+      "name": "ciphertext tampered",
+      "delivery": {
+        "wrap": {
+          "slot": 0,
+          "recipientKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545",
+          "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+          "nonce": "f62e143e5bfa27104ff16b9a472f53abdb33a3aa1d1217e6",
+          "wrappedKey": "2e4548f89e5f19d75719320cd705b40532934ab087c4d6c17468785c43d8e14e0f91010ca6844f28a8ffd941e7c0d87d"
+        },
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "AJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      },
+      "device": "cosignerA",
+      "now": 1795651200,
+      "code": "DECRYPT_FAILED"
+    },
+    {
+      "target": "delivery",
+      "name": "uppercase hex",
+      "delivery": {
+        "wrap": {
+          "slot": 0,
+          "recipientKey": "932f20d2eb5cefae87a14620f9fc5c07c69bf0ea8596b1ded126cc8e54815545",
+          "ephemeralKey": "8add258dceda29fa91a0d6795143a23a96a242df1b067e171f428338d3e2525b",
+          "nonce": "F62E143E5BFA27104FF16B9A472F53ABDB33A3AA1D1217E6",
+          "wrappedKey": "2e4548f89e5f19d75719320cd705b40532934ab087c4d6c17468785c43d8e14e0f91010ca6844f28a8ffd941e7c0d87d"
+        },
+        "nonce": "f4e4af81a8f9ff13c6c51c48d7893949a860665f35f1bc75",
+        "ciphertext": "PJyz4RuWRXnoMJVYFSVajZbZ1b9NVrDTtpVNZtPhxcuYuHNZF2WCVxKCtEmt1XSrKMO6APAz338zFgulrEG9WWZnL3TtBsCE0H-7ipm5EUeJLHuKD6p0uVOz3VyGuYUSif6RMCks5t0yecVZ12bhydxgzUrb5dZ6P651F6chnphLN4FdsGcAmcIC07Lgxkkf5cPXFBk8unPpVxoWw-QhbTYSunZaNNZSWBNABIyLL61ZAoP_HBm268-wHnLiRFOJyCG59-PQJwuFfy00HhMykp-hTucrt3QO-0ve7m9PCZoULKYhJonO-lEnEs1E_A2w_jryHSY9OVarSRevFHMC5J5gY88ZZ72Zw0EDcVi0DwEgRjQ9COilkpRXiRgQ4-bDzd0W03gH5f_WQxwegkmmMGac3eGjZxgIcmXQ68J4YorZ5d_I-znhIpbCgmvyQfBGetflQq83jsDajjSZs5u6JI_ZmG0G-c3wWoRkEJb_fZik_FWQax6NW3mZuGcmXaP7wXrUXIrOO81scfrD4DEitHOguexHcOVj8XVbAqZY-skPhHHWkVq0nMnKYFcu4epmNd49zNEX41hybq6HIpzkUd3_X6ewdMpRuVLcJ6U9ObWyZYcSu5vRD4LMdkKvzf4n6pYnWi3NZ9osf2YCZtyNFZI9NrrSCftRvrIR3sXC1e2SLgoP8zGbBHp0eel60RKvT8B8V1rp490OcrqpMu1QSaV7FiB2kwGrDrRQOJjUrdSNekSqyqNCFG5x31al1cmDak2-jhataXIW7pqBewwSKm3Rd0kto09lpB2bTCC3-1Q0-j_cSiin0MmdOT7RCkj5OVL2JAJxM0T-gwFBxkWkUoSdmJvFKG6Im6ss6_sUevv0u-ZE-PHTGIynueH9CvxYvQgznd9RDWjnrO705AxKtBaZWyvKHGulvjYg49ex0UlMS9NBzCRFVvMfskku4O_lqooPFfVeIyE3rTf3VUd3pukEWGUvPOMLBtDIi1NeCEYaZ1tnoc2yhSuUdw85"
+      },
+      "device": "cosignerA",
+      "now": 1795651200,
+      "code": "MALFORMED"
+    },
+    {
+      "target": "revoke",
+      "name": "wrong secret",
+      "input": "a5617601646b696e64667265766f6b6566736563726574582019b61996ee345556945dcc8600729b19da2c3ad3f51b49e5f7822e1be6638c02677365747570496450a0a1a2a3a4a5a6a7a8a9aaabacadaeaf697265766f6b656441741a6b077680",
+      "code": "BAD_REVOKE"
+    },
+    {
+      "target": "revoke",
+      "name": "other setup",
+      "input": "a5617601646b696e64667265766f6b656673656372657458200c44a74d849ce5d7ed4f6672f86efb7e4883b8f6b8edcdea29f4bdc498fd9e5a67736574757049645000000000000000000000000000000000697265766f6b656441741a6b077680",
+      "code": "WRONG_SETUP"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key 00000000…",
+      "input": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key 01000000…",
+      "input": "0100000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key e0eb7a7c…",
+      "input": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key 5f9c95bc…",
+      "input": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key ecffffff…",
+      "input": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key edffffff…",
+      "input": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key eeffffff…",
+      "input": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    },
+    {
+      "target": "x25519",
+      "name": "refused key 72ceb5c7…",
+      "input": "72ceb5c7261f030297e063b72c382d43c34d3a9d971db7b2025e18da7485c780"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"AA==\"",
+      "input": "AA=="
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"A\"",
+      "input": "A"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"AB\"",
+      "input": "AB"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"a+b/\"",
+      "input": "a+b/"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"ab cd\"",
+      "input": "ab cd"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"AAF\"",
+      "input": "AAF"
+    },
+    {
+      "target": "base64url",
+      "name": "refused \"AAAB=\"",
+      "input": "AAAB="
+    }
+  ]
+}
