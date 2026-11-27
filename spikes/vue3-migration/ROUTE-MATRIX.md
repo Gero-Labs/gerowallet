@@ -19,14 +19,14 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 
 ## Summary
 
-- 56 routes: 47 options, 9 sidepanel.
-- By owner: V04 4, V08 10, V09 8, V10 5, V11 29.
-- 52 routes render a view; 4 are redirects or catch-alls, covered by the guard spec or a manual step.
-- 38 of the 52 views have a check that renders them without a funded wallet (unit, Help browser or E2E).
+- 57 routes: 48 options, 9 sidepanel.
+- By owner: V04 4, V08 10, V09 9, V10 5, V11 29.
+- 53 routes render a view; 4 are redirects or catch-alls, covered by the guard spec or a manual step.
+- 39 of the 53 views have a check that renders them without a funded wallet (unit, Help browser or E2E).
 - 14 views rely on the manual step: `options:/nexus`, `options:/governance/dreps/:drepId`, `options:/copilot-feed`, `options:/dev-tools`, `options:/wc-session-proposal`, `options:/warning`, `options:/ledger-ble-sign`, `options:/ordinals`, `options:/mempool`, `options:/lightning`, `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/feed`.
 - Of those, 3 have the guard spec, which proves where the router lands but not that the view renders, and no check that renders them: `options:/ledger-ble-sign`, `sidepanel:/staking`, `sidepanel:/feed`.
 - 4 routes have browser coverage only in specs that skip without a funded wallet: `sidepanel:/staking`, `sidepanel:/market`, `sidepanel:/perps`, `sidepanel:/vaults`.
-- 38 routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.
+- 39 routes list a manual step (device, live provider, mainnet or funds) for the V13 signoff.
 
 ## Options page
 
@@ -72,6 +72,7 @@ E2E references are paths under `tests/specs` in [Gero-Labs/gerowallet-e2e-tests]
 | `/card` | `card` | V11 | auth, `isGeroCardEnabled`, network | unit: `modules/wallet/components/dashboard/CardStatusSection.spec.ts`<br>unit: `modules/wallet/components/dashboard/OrderCardFlowModal.spec.ts`<br>e2e: `08-post-v27/gero-card-hardening.spec.ts`<br>e2e: `08-post-v27/gero-card-ordering.spec.ts` | Mainnet only: KYC, order and top-up with the live provider. |
 | `/passkey-auth` | `passkey-auth` | V08 | auth | guards: `modules/navigation/router.guards.spec.ts`<br>e2e: `08-post-v27/passkeys.spec.ts` (via the page object authenticatePasskey()) | Real authenticator (Touch ID, a security key and a phone) in Chrome and Brave. |
 | `/ledger-ble-sign` | `ledger-ble-sign` | V08 | auth | guards: `modules/navigation/router.guards.spec.ts` | Sign from the side panel with a Ledger Nano X over Bluetooth. |
+| `/tx-flow/:id` | `tx-flow` | V09 | auth | unit: `modules/transactions/views/TxFlowWindow.spec.ts` | Open a Cardano transaction in the side panel and use Show flow diagram; open a second one while the window is open. |
 | `/gomining` | `gomining` | V11 | auth, `isBitcoinEnabled`, `isGoMiningEnabled`, network | unit: `modules/gomining/useGoMiningAccount.spec.ts`<br>unit: `modules/gomining/dialogs/GoMiningBuyDialog.spec.ts` | Mainnet Bitcoin wallet: sign in to GoMining and view the account. |
 | `/babylon` | `babylon` | V11 | auth, `isBitcoinEnabled`, network | unit: `modules/babylon/dialogs/BabylonStakeDialog.spec.ts` | Stake a small amount on Babylon testnet. |
 | `/ordinals` | `ordinals` | V09 | auth, `isBitcoinEnabled`, network | - | Bitcoin wallet holding inscriptions: the gallery renders them. |
