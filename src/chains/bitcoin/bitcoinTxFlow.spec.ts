@@ -95,6 +95,15 @@ describe('buildBitcoinTxFlow', () => {
     expect(model.outputs.at(-1)).toMatchObject({ kind: 'fee', lovelace: 1_000 });
   });
 
+  it('never shows a spend with unresolved prevouts as a coinbase', () => {
+    const model = buildBitcoinTxFlow({
+      fee: 200,
+      inputs: [{ address: '', value: 0, txid: 'a'.repeat(64), vout: 2 }],
+      outputs: [{ address: OTHER, value: 5_000 }],
+    }, own)!;
+    expect(model.inputs.map((node) => node.kind)).toEqual(['other']);
+  });
+
   it('draws nothing without outputs, or without inputs that are not a coinbase', () => {
     expect(buildBitcoinTxFlow(null, own)).toBeNull();
     expect(buildBitcoinTxFlow({ inputs: [{ address: OWN, value: 1, txid: 'a'.repeat(64), vout: 0 }], outputs: [] }, own)).toBeNull();
@@ -105,7 +114,10 @@ describe('buildBitcoinTxFlow', () => {
 describe('isCoinbaseInput', () => {
   it('recognises the null outpoint and never an input with an address', () => {
     expect(isCoinbaseInput({ address: '', txid: ZERO_TXID, vout: 0xffffffff })).toBe(true);
-    expect(isCoinbaseInput({ address: '', txid: '' })).toBe(true);
+    expect(isCoinbaseInput({ address: '', txid: ZERO_TXID, vout: 0 })).toBe(true);
+    // An unresolved prevout has no address either: not newly mined
+    expect(isCoinbaseInput({ address: '', txid: '' })).toBe(false);
+    expect(isCoinbaseInput({ address: '', txid: 'a'.repeat(64), vout: 0 })).toBe(false);
     expect(isCoinbaseInput({ address: OWN, txid: ZERO_TXID, vout: 0xffffffff })).toBe(false);
     expect(isCoinbaseInput({ address: '', txid: 'a'.repeat(64), vout: 1 })).toBe(false);
   });

@@ -24,9 +24,13 @@ export type BitcoinFlowRecord = Pick<UnifiedTransaction, 'fee' | 'inputs' | 'out
 const COINBASE_VOUT = 0xffffffff;
 const NULL_TXID = /^0+$/;
 
+/**
+ * Only the null outpoint marks a coinbase. A missing address alone does not: an input whose
+ * prevout was not resolved has none either, and must not read as newly mined coins.
+ */
 export function isCoinbaseInput(input: { address?: string; txid?: string; vout?: number }): boolean {
   if (input.address) return false;
-  return !input.txid || NULL_TXID.test(input.txid) || input.vout === COINBASE_VOUT;
+  return (!!input.txid && NULL_TXID.test(input.txid)) || input.vout === COINBASE_VOUT;
 }
 
 const sats = (value: unknown): number => {
