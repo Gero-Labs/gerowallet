@@ -105,7 +105,7 @@ describe('Vue proxy IndexedDB boundary', () => {
     expect(saved.child.bytes).toEqual(input.child.bytes);
     expect(saved.child.count).toBe(4n);
     expect(saved.encryptedPrivateKey).toBe(input.encryptedPrivateKey);
-    expect(reopened.verno).toBe(12);
+    expect(reopened.verno).toBe(13);
     const blockchain = await getBlockchainDb('CloneBoundaryTest', 'test');
     databases.push(blockchain);
     const target = blockchain.table('assets');

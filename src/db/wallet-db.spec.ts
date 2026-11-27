@@ -16,6 +16,7 @@ const original = {
 };
 const multisig = 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt';
 const charts = '++id, address, currency, [address+currency], data, timestamp, expiresAt';
+const vaults = 'vaultId, status, network, updatedAt';
 let nextId = 105600;
 const connections: Dexie[] = [];
 const names: string[] = [];
@@ -42,7 +43,7 @@ afterEach(async () => {
 });
 
 describe('wallet database upgrades', () => {
-  for (const version of [3, 4, 5, 6, 7, 8, 9, 10, 10.1, 11]) {
+  for (const version of [3, 4, 5, 6, 7, 8, 9, 10, 10.1, 11, 12]) {
     it(`preserves records upgrading version ${version} through concurrent openers`, async () => {
       const id = walletId();
       const legacy = connection(id);
@@ -53,6 +54,7 @@ describe('wallet database upgrades', () => {
         ...(hasMultisig ? { multisig } : {}),
         ...(version >= 7 ? { portfolio_charts: charts } : {}),
         ...(version >= 10 ? { utxos: '++id' } : {}),
+        ...(version >= 12 ? { vaults } : {}),
       });
       await legacy.open();
       const records: Record<string, object> = {
@@ -67,6 +69,7 @@ describe('wallet database upgrades', () => {
         ...(hasMultisig ? { multisig: { id: 'saved-script', cbor: '00', signers: ['key-a'] } } : {}),
         ...(version >= 7 ? { portfolio_charts: { id: 1, address: 'saved-address', data: '[1,2]' } } : {}),
         ...(version >= 10 ? { utxos: { id: 1, txHash: 'saved-utxo', amount: '1234567' } } : {}),
+        ...(version >= 12 ? { vaults: { vaultId: 'ab'.repeat(32), status: 'accepted', network: 'preprod', updatedAt: 1 } } : {}),
       };
       for (const [table, record] of Object.entries(records)) await legacy.table(table).put(record);
       legacy.close();
@@ -75,15 +78,17 @@ describe('wallet database upgrades', () => {
       const ui = connection(id);
       databaseSetup.setWalletDBVersionSchema(ui);
       const [background] = await Promise.all([openWallet(id), ui.open()]);
-      expect(background.backendDB().version).toBe(120);
-      expect(ui.backendDB().version).toBe(120);
+      expect(background.backendDB().version).toBe(130);
+      expect(ui.backendDB().version).toBe(130);
       expect(ui.tables.map(t => t.name).sort()).toEqual(background.tables.map(t => t.name).sort());
       expect(background.tables.map(t => t.name)).toContain('multisig');
       for (const [table, record] of Object.entries(records)) {
         expect(await background.table(table).toArray()).toEqual([record]);
       }
-      // Version 12 adds the GeroVault table, empty, beside the legacy multisig one.
-      expect(await background.table('vaults').count()).toBe(0);
+      // Version 12 adds the GeroVault table, empty, beside the legacy multisig one; 13 adds the
+      // Midnight one, empty, and leaves every earlier table as it was.
+      if (version < 12) expect(await background.table('vaults').count()).toBe(0);
+      expect(await background.table('midnightVaults').count()).toBe(0);
       expect(warn.mock.calls.flat().join(' ')).not.toMatch(/SchemaDiff|without increasing|blocked by other connection/);
     });
   }
@@ -97,7 +102,7 @@ describe('wallet database upgrades', () => {
     databases[0].close();
     const reopened = await openWallet(id);
     expect(reopened).not.toBe(databases[0]);
-    expect(reopened.backendDB().version).toBe(120);
+    expect(reopened.backendDB().version).toBe(130);
   });
 
   it('allows retry after a failed open instead of caching failure', async () => {
@@ -108,7 +113,7 @@ describe('wallet database upgrades', () => {
     expect(failed).toEqual([null, null]);
     expect(open).toHaveBeenCalledTimes(1);
     open.mockRestore();
-    expect((await openWallet(id)).backendDB().version).toBe(120);
+    expect((await openWallet(id)).backendDB().version).toBe(130);
   });
 
   it('declares the vaults table with the vault id as its key', async () => {
@@ -116,5 +121,12 @@ describe('wallet database upgrades', () => {
     const vaults = db.table('vaults');
     expect(vaults.schema.primKey.keyPath).toBe('vaultId');
     expect(vaults.schema.indexes.map(index => index.name).sort()).toEqual(['network', 'status', 'updatedAt']);
+  });
+
+  it('declares the midnightVaults table with the vault id as its key', async () => {
+    const db = await openWallet(walletId());
+    const midnight = db.table('midnightVaults');
+    expect(midnight.schema.primKey.keyPath).toBe('vaultId');
+    expect(midnight.schema.indexes.map(index => index.name).sort()).toEqual(['contractAddress', 'network', 'status', 'updatedAt']);
   });
 });
