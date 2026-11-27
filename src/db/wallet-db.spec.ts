@@ -89,6 +89,7 @@ describe('wallet database upgrades', () => {
       // Midnight one, empty, and leaves every earlier table as it was.
       if (version < 12) expect(await background.table('vaults').count()).toBe(0);
       expect(await background.table('midnightVaults').count()).toBe(0);
+      expect(await background.table('midnightVaultIndexes').count()).toBe(0);
       expect(warn.mock.calls.flat().join(' ')).not.toMatch(/SchemaDiff|without increasing|blocked by other connection/);
     });
   }
@@ -123,10 +124,11 @@ describe('wallet database upgrades', () => {
     expect(vaults.schema.indexes.map(index => index.name).sort()).toEqual(['network', 'status', 'updatedAt']);
   });
 
-  it('declares the midnightVaults table with the vault id as its key', async () => {
+  it('declares the Midnight tables: vaults by vault id, index counters by network', async () => {
     const db = await openWallet(walletId());
     const midnight = db.table('midnightVaults');
     expect(midnight.schema.primKey.keyPath).toBe('vaultId');
     expect(midnight.schema.indexes.map(index => index.name).sort()).toEqual(['contractAddress', 'network', 'status', 'updatedAt']);
+    expect(db.table('midnightVaultIndexes').schema.primKey.keyPath).toBe('network');
   });
 });

@@ -1,503 +1,181 @@
 /**
- * GeroVault on Midnight: the contract vaults one wallet holds, in that wallet's `midnightVaults`
- * table (`schema.ts`, version 13). Callers pass the wallet id of the phrase's secrets record, so
- * every account of one phrase sees one vault list and one index sequence.
+ * GeroVault on Midnight: the contract vaults one seed holds, in its wallet database's
+ * `midnightVaults` table, and its own index counter per network in `midnightVaultIndexes`
+ * (`schema.ts`, version 13). Implements `MidnightVaultStore` of
+ * `src/modules/gerovault/midnight/contracts.ts`; `walletId` is the phrase's `secretsWalletId`.
  *
- * A table of its own beside the Cardano `vaults` table: its rows have no scripts, and the Cardano
- * store, its checks and the dApp signing guard (knownVaults.ts) never read them.
+ * Tables of their own beside the Cardano `vaults` table: the Cardano store, its checks and the
+ * dApp signing guard (knownVaults.ts) never read them.
  *
  * Every write checks the whole record, so a screen never has to trust a row:
  * - the vault id is the one the network and the contract address give;
  * - the build is a pinned build allowed on the vault's network, and a test build is preprod only;
- * - the operations read from the contract carry exactly the build's verifier key fingerprints, with
- *   at most the build's deferred circuits missing, and the committee's threshold is at least 1;
- * - the lifecycle agrees with them: `ready` needs every operation and a committee past the
- *   deployer's interim key, and a vault cannot be accepted before that;
- * - the participants' keys are well formed, never twice in one vault, in slots the build has;
- * - this seed has exactly one entry per role it holds, each naming a participant of that role, and
- *   is never both an owner and a guardian;
- * - the agreed configuration names the build's manifest hash and keeps the build's recovery floors;
- * - every verification record names an owner and the agreed configuration's digest.
+ * - a candidate's state read passed the import checks: every operation of a known build (or a
+ *   deferred one missing), a state the build decodes, a role for this seed, and the agreed
+ *   configuration where there is one; nothing that failed one is stored;
+ * - the lifecycle agrees with the state read: `ready` has no missing operation and no interim
+ *   committee, and a vault is accepted only once it is complete on chain;
+ * - a split deployment defers exactly the build's deferred set;
+ * - participants sit in the build's slots, their keys are well formed and never twice in one
+ *   vault, and each card matches its slot (when `checkCard` is given);
+ * - this seed has exactly one entry per role it holds, never both owner and guardian, each role
+ *   held by some participant;
+ * - verification records name an owner and the agreed configuration's digest;
+ * - requests belong to this vault (network, contract, build, digest) and only to an accepted one.
  *
- * The results of the operation and committee checks are computed here on every write, never taken
- * from the caller. What cannot be checked here: that this seed derives the keys at its indexes (that
- * needs the phrase), and anything only the chain knows (the import checks run before the store).
- * Point validity beyond the encoding (on the curve, in the prime-order subgroup) and the lift of an
- * upgrade key come from `keyProblem`, which the caller passes.
+ * A later state read is stored whatever it found (an unknown operation, a committee out of step),
+ * so a screen sees the change rather than an earlier good read. What cannot be checked here: that
+ * this seed derives the keys at its indexes (that needs the phrase), and anything only the chain
+ * knows. Point validity beyond the encoding and card signatures come from `keyProblem` and
+ * `checkCard`, which integration passes from the keys library.
  *
- * Every failure is a `MidnightVaultStoreError`, and a database that cannot be read throws, never
- * answers "no vaults".
+ * Every failure is a `MidnightVaultStoreError`; `INVALID_INPUT` carries a `reason`. A database
+ * that cannot be read, or a row this version cannot read, throws `STORE_UNAVAILABLE`, never "no
+ * vaults".
  */
-import { blake2b } from '@noble/hashes/blake2.js';
 import type Dexie from 'dexie';
 import type { Table } from 'dexie';
+import { MIDNIGHT_VAULT_BUILDS, MIDNIGHT_VAULT_CIRCUITS, MIDNIGHT_VAULT_NETWORK_IDS } from '@/chains/midnight/vault/build';
 import { getDb } from '@/db/wallet-db';
-import { bytesToHex, hexToBytes } from '@/shared/gerovault/cbor';
 import { readLabel } from '@/shared/gerovault/labels';
+import {
+  JUBJUB_IDENTITY_HEX,
+  MIDNIGHT_APPROVAL_FILE_TYPE,
+  MIDNIGHT_FILE_MAX_BYTES,
+  MIDNIGHT_FILE_VERSION,
+  MIDNIGHT_REQUEST_FILE_TYPE,
+  MIDNIGHT_REQUEST_KINDS,
+  midnightVaultId,
+  type MidnightApprovalFile,
+  type MidnightDelegateSlot,
+  type MidnightDeploymentRecord,
+  type MidnightLastCheck,
+  type MidnightOwnerVerification,
+  type MidnightRequestFile,
+  type MidnightSelfRole,
+  type MidnightStoredGuardian,
+  type MidnightStoredOwner,
+  type MidnightStoredParticipants,
+  type MidnightStoredRequest,
+  type MidnightVaultBuild,
+  type MidnightVaultCandidateInput,
+  type MidnightVaultListFilter,
+  type MidnightVaultNetwork,
+  type MidnightVaultRecord,
+  type MidnightVaultRecordPatch,
+  type MidnightVaultStore,
+  type MidnightVaultStoreErrorCode,
+  type MidnightVerificationSetPin,
+} from '@/modules/gerovault/midnight/contracts';
 
-// -------------------------------------------------------------------------------------------------
-// Types
-
-/** The Midnight networks a vault can name. The pinned builds decide which of them are open. */
-export type MidnightVaultNetwork = 'preprod' | 'preview' | 'mainnet';
-
-/** The two pinned builds: test delays (preprod only) and the production floors. */
-export type MidnightBuildProfile = 'test' | 'production';
-
-/**
- * `candidate`: quarantined. Shown for review, never funded from this wallet, never signed for.
- * `accepted`: the user accepted the vault on this device.
- */
-export type MidnightVaultStatus = 'candidate' | 'accepted';
-
-export type MidnightVaultOrigin = 'created' | 'imported' | 'restored';
-
-/**
- * `deploying`: built on this device, not complete on chain yet. `incomplete`: on chain, with a
- * deferred operation missing or the deployer's interim committee. `ready`: complete. `temporary`:
- * recovered, the move to a new vault pending. `moved`: the funds moved to `successor`, still watched.
- */
-export type MidnightVaultLifecycle = 'deploying' | 'incomplete' | 'ready' | 'temporary' | 'moved';
-
-export type MidnightVaultRole = 'owner' | 'guardian' | 'delegate';
-
-/** One pinned build, from the vendored build manifest. */
-export interface PinnedMidnightBuild {
-  /** `gvmn-<profile>-<16 hex>`. */
-  readonly id: string;
-  readonly profile: MidnightBuildProfile;
-  /** The networks the pin allows. A test build is refused off preprod whatever this says. */
-  readonly networks: readonly MidnightVaultNetwork[];
-  /** Hash of the pinned build manifest, 32 bytes of lowercase hex: the verification set's `buildHash`. */
-  readonly manifestHash: string;
-  readonly constants: {
-    readonly ownerSlots: number;
-    readonly guardianSlots: number;
-    readonly delegateSlots: number;
-    readonly whitelistEntries: number;
-    readonly minRecoveryDelaySeconds: number;
-    readonly expiryWindowSeconds: number;
-    readonly cooldownSeconds: number;
-  };
-  /** Every circuit: its verifier key fingerprint (`verifierKeyHashOf`, lowercase hex) and whether a split deployment defers it. */
-  readonly circuits: Readonly<Record<string, { readonly fingerprint: string; readonly deferred: boolean }>>;
-}
-
-export interface MidnightVaultBuildRef {
-  readonly id: string;
-  readonly profile: MidnightBuildProfile;
-}
-
-/**
- * Keys as stored: a Jubjub point is 64 bytes of lowercase hex (x then y, each a 32-byte
- * little-endian field element, the runtime's representation); an upgrade key is a BIP-340 x-only
- * key, 32 bytes of lowercase hex.
- */
-export interface StoredMidnightOwner {
-  /** The contract's owner slot. */
-  readonly slot: number;
-  readonly approvalKey: string;
-  readonly upgradeKey: string;
-  /** A claim from whoever named the participant, never proof. Show it only through `displayLabel`. */
-  readonly label?: string;
-}
-
-export interface StoredMidnightGuardian {
-  /** The guardian slot of the recovery configuration. */
-  readonly slot: number;
-  readonly key: string;
-  /** 32 bytes of lowercase hex. Required on an owner's record: owners hold every guardian's salt. */
-  readonly salt?: string;
-  readonly label?: string;
-}
-
-export interface StoredMidnightDelegate {
-  /** The policy's delegate slot. */
-  readonly slot: number;
-  readonly key: string;
-  readonly label?: string;
-}
-
-/** Owner cards in slot order; guardian cards (with salts when this device is an owner); delegate cards. */
-export interface MidnightVaultParticipants {
-  readonly owners: readonly StoredMidnightOwner[];
-  readonly guardians: readonly StoredMidnightGuardian[];
-  readonly delegates: readonly StoredMidnightDelegate[];
-}
-
-/** One role this seed holds in the vault. */
-export interface MidnightVaultSelf {
-  readonly role: MidnightVaultRole;
-  /** The hardened index `i` of `m/1854'/2400'/n'/r'/i'`, from 1. */
-  readonly index: number;
-  /** The participant slot of that role that holds this seed's key. */
-  readonly slot: number;
-}
-
-export interface MidnightWhitelistEntry {
-  /** A user address, 32 bytes of lowercase hex. */
-  readonly recipient: string;
-  readonly scope: 'quorumOnly' | 'any';
-}
-
-/** The verified configuration (the verification set without the record's own network and build). */
-export interface MidnightVaultAgreedConfig {
-  /** Digest of the verification set, 32 bytes of lowercase hex: what the verification number shows. */
-  readonly digest: string;
-  /** Must be the pinned build's `manifestHash`. */
-  readonly buildHash: string;
-  /** In slot order. */
-  readonly owners: readonly { readonly approvalKey: string; readonly upgradeKey: string }[];
-  readonly threshold: number;
-  /** Seconds. */
-  readonly changeDelay: number;
-  readonly whitelist: { readonly enabled: boolean; readonly entries: readonly MidnightWhitelistEntry[] };
-  /** Guardian commitments in slot order, 32 bytes of lowercase hex each. */
-  readonly guardians: readonly string[];
-  readonly guardianThreshold: number;
-  /** Seconds. */
-  readonly recoveryDelay: number;
-  readonly cooldown: number;
-  readonly expiryWindow: number;
-}
-
-/** How this device verified a co-owner. Kept on this device, never sent anywhere. */
-export interface MidnightVaultVerification {
-  readonly method: 'number' | 'qr';
-  /** The co-owner's approval key. */
-  readonly owner: string;
-  /** The agreed configuration's digest the numbers came from. */
-  readonly digest: string;
-  /** Unix seconds. */
-  readonly at: number;
-}
-
-export interface MidnightVaultDeployment {
-  /** Transaction hashes, 32 bytes of lowercase hex, once built. */
-  readonly deployTx: string | null;
-  readonly completionTx: string | null;
-  /** The circuits the deploy left for the completion update: the build's deferred set, or none. */
-  readonly deferred: readonly string[];
-}
-
-/** The maintenance committee: BIP-340 x-only keys and a threshold. */
-export interface MidnightVaultCommittee {
-  readonly keys: readonly string[];
-  readonly threshold: number;
-}
-
-/** A state read as the caller gives it. */
-export interface MidnightVaultLastCheckInput {
-  /** Where the state came from, lowercase (`deployment` for the transaction this device built). */
-  readonly source: string;
-  readonly blockHeight: number | null;
-  /** 32 bytes of lowercase hex. */
-  readonly blockHash: string | null;
-  /** Milliseconds since the epoch. */
-  readonly at: number;
-  /** Every operation the contract has, by circuit name, with its verifier key fingerprint. */
-  readonly operations: Readonly<Record<string, string>>;
-  readonly committee: MidnightVaultCommittee;
-  /** The contract's owner threshold. */
-  readonly ownerThreshold: number;
-}
-
-/**
- * Computed by the store on every write.
- * - `operations`: `complete`, or `deferredMissing` when some of the build's deferred circuits are not there yet.
- * - `committee`: `owners` (the owners' upgrade keys at the owner threshold), `interim` (one owner's
- *   upgrade key alone at threshold 1, before the completion update), or `outOfStep` (anything else:
- *   after a recovery, expected; otherwise the drift flag, deposits blocked).
- */
-export interface MidnightVaultCheckResults {
-  readonly operations: 'complete' | 'deferredMissing';
-  readonly committee: 'owners' | 'interim' | 'outOfStep';
-}
-
-/** The last state read, kept for display. */
-export interface MidnightVaultLastCheck extends MidnightVaultLastCheckInput {
-  readonly results: MidnightVaultCheckResults;
-}
-
-export interface MidnightVaultApproval {
-  /** The signer's Jubjub key. */
-  readonly signer: string;
-  /** The approval file as received, JSON text. */
-  readonly file: string;
-}
-
-/** An open request, kept across reloads: Midnight approvals live for days. */
-export interface MidnightVaultRequestInput {
-  /** The statement digest, 32 bytes of lowercase hex. */
-  readonly id: string;
-  /** The statement kind, as the request file names it. */
-  readonly kind: string;
-  /** Made on this device, or imported from a file. */
-  readonly origin: 'made' | 'imported';
-  /** The request file as saved, JSON text. */
-  readonly file: string;
-  /** When the statement expires, unix seconds. */
-  readonly expiresAt: number;
-  /** One per signer. */
-  readonly approvals: readonly MidnightVaultApproval[];
-}
-
-export interface StoredMidnightVaultRequest extends MidnightVaultRequestInput {
-  /** Milliseconds since the epoch. */
-  readonly createdAt: number;
-  readonly updatedAt: number;
-}
-
-/** One vault of one wallet: a row of the `midnightVaults` table. */
-export interface MidnightVaultRecord {
-  readonly recordVersion: 1;
-  /** `midnightVaultId(network, contractAddress)`, the table key. */
-  readonly vaultId: string;
-  readonly network: MidnightVaultNetwork;
-  /** 32 bytes of lowercase hex. An identifier, not a payment address. */
-  readonly contractAddress: string;
-  readonly build: MidnightVaultBuildRef;
-  readonly status: MidnightVaultStatus;
-  readonly origin: MidnightVaultOrigin;
-  readonly lifecycle: MidnightVaultLifecycle;
-  /** A local name, read rule of `labels.ts`. Show it only through `displayLabel`. */
-  readonly name?: string;
-  readonly self: readonly MidnightVaultSelf[];
-  /** The highest index this seed has allocated on this network, carried into the recovery package. */
-  readonly highestIndex: number;
-  readonly participants: MidnightVaultParticipants;
-  readonly agreedConfig: MidnightVaultAgreedConfig | null;
-  readonly verifications: readonly MidnightVaultVerification[];
-  readonly deployment: MidnightVaultDeployment | null;
-  readonly lastCheck: MidnightVaultLastCheck | null;
-  readonly requests: readonly StoredMidnightVaultRequest[];
-  /** The successor vault's id after a recovery's move. */
-  readonly successor: string | null;
-  /** Milliseconds since the epoch. `updatedAt` grows on every write. */
-  readonly createdAt: number;
-  readonly updatedAt: number;
-  readonly acceptedAt: number | null;
-}
-
-export interface MidnightVaultCandidateInput {
-  /** Must equal `midnightVaultId(network, contractAddress)`; the store recomputes it. */
-  readonly vaultId: string;
-  readonly network: MidnightVaultNetwork;
-  readonly contractAddress: string;
-  readonly build: MidnightVaultBuildRef;
-  readonly origin: MidnightVaultOrigin;
-  readonly lifecycle: MidnightVaultLifecycle;
-  readonly name?: string;
-  readonly participants: MidnightVaultParticipants;
-  readonly self: readonly MidnightVaultSelf[];
-  readonly highestIndex: number;
-  readonly agreedConfig?: MidnightVaultAgreedConfig | null;
-  readonly verifications?: readonly MidnightVaultVerification[];
-  readonly deployment?: MidnightVaultDeployment | null;
-  readonly lastCheck?: MidnightVaultLastCheckInput | null;
-  readonly successor?: string | null;
-}
-
-export interface MidnightVaultAcceptInput {
-  /** The `updatedAt` of the record the user reviewed. A record changed since is not accepted. */
-  readonly reviewedUpdatedAt: number;
-}
-
-/** What `update` may change. The identity, build, status, origin and creation time never change. */
-export interface MidnightVaultRecordPatch {
-  /** A new name; null removes it. */
-  readonly name?: string | null;
-  /** Participant labels by role and slot; a null label removes one. */
-  readonly labels?: readonly { readonly role: MidnightVaultRole; readonly slot: number; readonly label: string | null }[];
-  readonly lifecycle?: MidnightVaultLifecycle;
-  /** Replaces every participant, after a change on chain. Pass `self` with it when this seed's slots move. */
-  readonly participants?: MidnightVaultParticipants;
-  readonly self?: readonly MidnightVaultSelf[];
-  /** Only ever raised. */
-  readonly highestIndex?: number;
-  readonly agreedConfig?: MidnightVaultAgreedConfig | null;
-  /** Replaces the stored verification records. */
-  readonly verifications?: readonly MidnightVaultVerification[];
-  readonly deployment?: MidnightVaultDeployment | null;
-  readonly lastCheck?: MidnightVaultLastCheckInput | null;
-  readonly successor?: string | null;
-}
-
-export interface MidnightVaultListFilter {
-  readonly status?: MidnightVaultStatus;
-  readonly network?: MidnightVaultNetwork;
-  /** Only vaults where this seed holds the role (guardian mode lists `guardian`). */
-  readonly role?: MidnightVaultRole;
-}
-
-/**
- * Codes of `MidnightVaultStoreError`.
- * - `STORE_UNAVAILABLE`: the wallet database could not be opened or read, or holds a row this version
- *   cannot read. Never treat it as "no vaults".
- * - `INVALID_INPUT`: a field is malformed.
- * - `INVALID_KEY`: a key is malformed, refused by `keyProblem`, or appears twice in one vault.
- * - `VAULT_ID_MISMATCH`: the vault id is not the one the network and contract address give.
- * - `UNKNOWN_BUILD`: the build id is not a pinned build of that profile.
- * - `TEST_BUILD_NETWORK`: a test build on a network other than preprod.
- * - `BUILD_NETWORK`: the pinned build does not allow this network.
- * - `BUILD_MISMATCH`: an operation's fingerprint, the deferred set, the manifest hash or a recovery
- *   constant is not the build's, or the contract lacks an operation the build always deploys.
- * - `COMMITTEE_MISMATCH`: the committee is malformed or its threshold is below 1.
- * - `SELF_MISMATCH`: this seed does not have exactly one entry per role it holds, an entry names no
- *   participant, or this seed is both an owner and a guardian.
- * - `LIFECYCLE_MISMATCH`: the lifecycle contradicts the state read, the origin, the successor, or the
- *   previous lifecycle.
- * - `VAULT_EXISTS`: this wallet already holds the vault.
- * - `NOT_FOUND`: this wallet does not hold the vault.
- * - `NOT_A_CANDIDATE`: `accept` on a vault already accepted.
- * - `NOT_ACCEPTED`: a request on a candidate, which is never signed for.
- * - `VAULT_INCOMPLETE`: `accept` before the vault is complete on chain.
- * - `STALE_REVIEW`: `accept` of a record that changed after the user reviewed it.
- */
-export type MidnightVaultStoreErrorCode =
-  | 'STORE_UNAVAILABLE'
-  | 'INVALID_INPUT'
-  | 'INVALID_KEY'
-  | 'VAULT_ID_MISMATCH'
+/** Why an `INVALID_INPUT` was refused, so a screen can name the failure. */
+export type MidnightVaultStoreRefusal =
+  | 'MALFORMED'
   | 'UNKNOWN_BUILD'
   | 'TEST_BUILD_NETWORK'
   | 'BUILD_NETWORK'
   | 'BUILD_MISMATCH'
-  | 'COMMITTEE_MISMATCH'
+  | 'IMPORT_CHECK_FAILED'
+  | 'INVALID_KEY'
+  | 'INVALID_CARD'
   | 'SELF_MISMATCH'
   | 'LIFECYCLE_MISMATCH'
-  | 'VAULT_EXISTS'
-  | 'NOT_FOUND'
-  | 'NOT_A_CANDIDATE'
-  | 'NOT_ACCEPTED'
   | 'VAULT_INCOMPLETE'
-  | 'STALE_REVIEW';
-
-/**
- * Persistence of the Midnight vaults one wallet holds. Every call throws a `MidnightVaultStoreError`;
- * reads never answer empty when the database cannot be read.
- */
-export interface MidnightVaultStore {
-  /** The wallet's Midnight vaults, oldest first. */
-  list(walletId: number, filter?: MidnightVaultListFilter): Promise<readonly MidnightVaultRecord[]>;
-  get(walletId: number, vaultId: string): Promise<MidnightVaultRecord | undefined>;
-  /** Checks the input and stores it as a candidate. Nothing partial is stored. */
-  addCandidate(walletId: number, input: MidnightVaultCandidateInput): Promise<MidnightVaultRecord>;
-  /** Moves a reviewed, complete candidate to accepted. Funding gates stay the caller's. */
-  accept(walletId: number, vaultId: string, input: MidnightVaultAcceptInput): Promise<MidnightVaultRecord>;
-  update(walletId: number, vaultId: string, patch: MidnightVaultRecordPatch): Promise<MidnightVaultRecord>;
-  /** Adds a request to an accepted vault, or adds approvals to the stored request with its id. Never drops an approval. */
-  putRequest(walletId: number, vaultId: string, request: MidnightVaultRequestInput): Promise<MidnightVaultRecord>;
-  /** Removes a request; a request that is not there leaves the record as it is. */
-  removeRequest(walletId: number, vaultId: string, requestId: string): Promise<MidnightVaultRecord>;
-}
-
-/** A key handed to `keyProblem`. */
-export interface MidnightVaultKey {
-  readonly kind: 'jubjub' | 'upgrade';
-  readonly hex: string;
-}
-
-export interface MidnightVaultStoreOptions {
-  /** The pinned builds a vault may name. With none, every write is refused. */
-  readonly builds: readonly PinnedMidnightBuild[];
-  /**
-   * The full key check: null when the key is usable, otherwise the reason. It runs after the
-   * store's own encoding checks, on every participant and agreed key (not on committee keys, which
-   * are display only).
-   */
-  readonly keyProblem?: (key: MidnightVaultKey) => string | null;
-  /** The wallet database; `getDb` unless a test passes another. */
-  readonly openDatabase?: (walletId: number) => Promise<Dexie | null>;
-}
+  | 'NOT_ACCEPTED'
+  | 'REQUEST_MISMATCH'
+  | 'TOO_MANY_REQUESTS';
 
 export class MidnightVaultStoreError extends Error {
   readonly code: MidnightVaultStoreErrorCode;
+  /** Set on every `INVALID_INPUT`. */
+  readonly reason?: MidnightVaultStoreRefusal;
 
-  constructor(code: MidnightVaultStoreErrorCode, message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  constructor(code: MidnightVaultStoreErrorCode, message: string, options?: { cause?: unknown; reason?: MidnightVaultStoreRefusal }) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'MidnightVaultStoreError';
     this.code = code;
+    if (options?.reason) this.reason = options.reason;
   }
 }
 
-// -------------------------------------------------------------------------------------------------
-// The vault id
+/** What a card in a slot must carry: its role, the vault's network and the slot's keys or commitment. */
+export interface MidnightCardExpectation {
+  readonly role: 'owner' | 'guardian';
+  readonly network: MidnightVaultNetwork;
+  readonly approvalKey?: string;
+  readonly upgradeKey?: string;
+  readonly commitment?: string;
+}
 
-export const MIDNIGHT_VAULT_ID_TAG = 'gero-vault/v1|midnight-vault-id|';
-
-const NETWORKS: readonly MidnightVaultNetwork[] = ['preprod', 'preview', 'mainnet'];
-const HEX32 = /^[0-9a-f]{64}$/;
-
-/** BLAKE2b-256 of the tag, the network id (UTF-8) and the 32-byte contract address, lowercase hex. */
-export function midnightVaultId(network: MidnightVaultNetwork, contractAddress: string): string {
-  if (!NETWORKS.includes(network)) invalid('A Midnight network is preprod, preview or mainnet');
-  if (typeof contractAddress !== 'string' || !HEX32.test(contractAddress)) invalid('A contract address is 32 bytes of lowercase hex');
-  const utf8 = new TextEncoder();
-  const tag = utf8.encode(MIDNIGHT_VAULT_ID_TAG);
-  const net = utf8.encode(network);
-  const address = hexToBytes(contractAddress) as Uint8Array;
-  const preimage = new Uint8Array(tag.length + net.length + address.length);
-  preimage.set(tag, 0);
-  preimage.set(net, tag.length);
-  preimage.set(address, tag.length + net.length);
-  return bytesToHex(blake2b(preimage, { dkLen: 32 }));
+export interface MidnightVaultStoreOptions {
+  /** The pinned builds a vault may name: both vendored builds unless a test passes others. */
+  readonly builds?: readonly MidnightVaultBuild[];
+  /**
+   * The full key check (on the curve, prime-order subgroup; an x-only key that lifts): null when
+   * usable, otherwise the reason. Runs after the store's own encoding checks.
+   */
+  readonly keyProblem?: (key: { readonly kind: 'jubjub' | 'upgrade'; readonly hex: string }) => string | null;
+  /** Whether a card's text reads (`readKeyCard`: signatures and all) and matches its slot. */
+  readonly checkCard?: (card: string, expected: MidnightCardExpectation) => boolean;
+  /** The wallet database; `getDb` unless a test passes another. */
+  readonly openDatabase?: (walletId: number) => Promise<Dexie | null>;
 }
 
 // -------------------------------------------------------------------------------------------------
 // Checks
 
-const TABLE = 'midnightVaults';
+const VAULTS = 'midnightVaults';
+const INDEXES = 'midnightVaultIndexes';
+const HEX32 = /^[0-9a-f]{64}$/;
 const JUBJUB_HEX = /^[0-9a-f]{128}$/;
-const PROFILES: readonly string[] = ['test', 'production'];
+const HEX_BYTES = /^(?:[0-9a-f]{2})+$/;
+const DECIMAL = /^(?:0|[1-9][0-9]{0,38})$/;
+const SOURCE = /^[\x21-\x7e][\x20-\x7e]{0,63}$/;
 const ORIGINS: readonly string[] = ['created', 'imported', 'restored'];
 const LIFECYCLES: readonly string[] = ['deploying', 'incomplete', 'ready', 'temporary', 'moved'];
-const ROLES: readonly MidnightVaultRole[] = ['owner', 'guardian', 'delegate'];
+const ROLES: readonly MidnightSelfRole['role'][] = ['owner', 'guardian', 'delegate'];
 const VERIFICATION_METHODS: readonly string[] = ['number', 'qr'];
-const REQUEST_ORIGINS: readonly string[] = ['made', 'imported'];
-const SCOPES: readonly string[] = ['quorumOnly', 'any'];
-/** Lifecycles a candidate can be accepted in: never before completion. */
-const ACCEPTABLE: readonly MidnightVaultLifecycle[] = ['ready', 'temporary', 'moved'];
-const PATCH_KEYS: readonly string[] = [
-  'name', 'labels', 'lifecycle', 'participants', 'self', 'highestIndex',
-  'agreedConfig', 'verifications', 'deployment', 'lastCheck', 'successor',
-];
-/** Only test builds have test delays, and only preprod takes them. */
+const OPERATION_CHECKS: readonly string[] = ['exact', 'incomplete', 'unknown-build'];
+const COMMITTEE_CHECKS: readonly string[] = ['owners', 'interim', 'temporary', 'drift'];
+const REQUEST_STATES: readonly string[] = ['open', 'submitted', 'landed', 'replaced', 'expired', 'failed'];
+const SETTLED_STATES: readonly string[] = ['landed', 'replaced', 'expired', 'failed'];
+const APPROVAL_ROLES: readonly string[] = ['owner', 'guardian', 'committee'];
+/** A vault is accepted only once it is complete on chain. */
+const ACCEPTABLE: readonly string[] = ['ready', 'temporary', 'moved'];
+const PATCH_KEYS: readonly string[] = ['name', 'lifecycle', 'self', 'participants', 'agreedConfig', 'verifications', 'deployment', 'lastCheck', 'successor'];
 const TEST_BUILD_ONLY_NETWORK: MidnightVaultNetwork = 'preprod';
 const MAX_INDEX = 2 ** 31 - 1;
-const MAX_COMMITTEE = 32;
+const MAX_CARD = 4096;
+const MAX_SET_CBOR = 16 * 1024;
 const MAX_VERIFICATIONS = 64;
 const MAX_REQUESTS = 32;
-const MAX_REQUEST_FILE = 32 * 1024;
-const MAX_APPROVAL_FILE = 8 * 1024;
-const SOURCE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const KIND = /^[a-zA-Z][a-zA-Z0-9:-]{0,47}$/;
-/** Jubjub's base field, the BLS12-381 scalar field: every coordinate is below it. */
-const JUBJUB_BASE_FIELD = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n;
+const MIN_DELEGATE_PERIOD = 600;
+const MAX_UINT128 = (1n << 128n) - 1n;
+/** Jubjub's base field, the BLS12-381 scalar field: coordinates and field elements are below it. */
+const FIELD = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n;
 /** The secp256k1 base field: an x-only key is below it. */
 const SECP256K1_FIELD = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
-/** (0, 1), the identity, as x then y little-endian. The contract's empty slot; never a key. */
-const JUBJUB_IDENTITY = '00'.repeat(32) + '01' + '00'.repeat(31);
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 /** A value shaped like `T` as far as its keys go, every field still to be checked. */
 type Untrusted<T> = { readonly [K in keyof T]?: unknown };
-type KeyCheck = (key: MidnightVaultKey) => string | null;
+type Options = Required<Pick<MidnightVaultStoreOptions, 'builds'>> & Pick<MidnightVaultStoreOptions, 'keyProblem' | 'checkCard'>;
 
-function fail(code: MidnightVaultStoreErrorCode, message: string): never {
-  throw new MidnightVaultStoreError(code, message);
+interface IndexRow {
+  readonly network: MidnightVaultNetwork;
+  readonly highestIndex: number;
 }
 
-function invalid(message: string): never {
-  return fail('INVALID_INPUT', message);
+function refuse(reason: MidnightVaultStoreRefusal, message: string): never {
+  throw new MidnightVaultStoreError('INVALID_INPUT', message, { reason });
+}
+
+function malformed(message: string): never {
+  return refuse('MALFORMED', message);
 }
 
 function isObject<T = object>(value: unknown): value is Untrusted<T> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function own<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
-  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
 }
 
 function isUint(value: unknown): value is number {
@@ -512,390 +190,357 @@ function isIndex(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= MAX_INDEX;
 }
 
+function isNetwork(value: unknown): value is MidnightVaultNetwork {
+  return (MIDNIGHT_VAULT_NETWORK_IDS as readonly unknown[]).includes(value);
+}
+
 function littleEndian(hex: string): bigint {
   let reversed = '';
   for (let i = hex.length - 2; i >= 0; i -= 2) reversed += hex.slice(i, i + 2);
   return BigInt(`0x${reversed}`);
 }
 
-function readJubjubKey(value: unknown, what: string, keyProblem: KeyCheck | undefined): string {
-  if (typeof value !== 'string' || !JUBJUB_HEX.test(value)) fail('INVALID_KEY', `The ${what} is not a Jubjub point (64 bytes of lowercase hex)`);
-  if (littleEndian(value.slice(0, 64)) >= JUBJUB_BASE_FIELD || littleEndian(value.slice(64)) >= JUBJUB_BASE_FIELD) {
-    fail('INVALID_KEY', `The ${what} has a coordinate outside the field`);
-  }
-  if (value === JUBJUB_IDENTITY) fail('INVALID_KEY', `The ${what} is the identity point`);
-  if (keyProblem?.({ kind: 'jubjub', hex: value })) fail('INVALID_KEY', `The ${what} is not a usable key`);
+/** The JSON text's UTF-8 length: files are bounded in bytes. */
+function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+/** A plain copy of a JSON-safe value, holding none of the caller's objects. */
+function jsonCopy<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function readJubjubKey(value: unknown, what: string, options: Options): string {
+  if (typeof value !== 'string' || !JUBJUB_HEX.test(value)) refuse('INVALID_KEY', `The ${what} is not a Jubjub point (64 bytes of lowercase hex)`);
+  if (littleEndian(value.slice(0, 64)) >= FIELD || littleEndian(value.slice(64)) >= FIELD) refuse('INVALID_KEY', `The ${what} has a coordinate outside the field`);
+  if (value === JUBJUB_IDENTITY_HEX) refuse('INVALID_KEY', `The ${what} is the identity point`);
+  if (options.keyProblem?.({ kind: 'jubjub', hex: value })) refuse('INVALID_KEY', `The ${what} is not a usable key`);
   return value;
 }
 
-function readUpgradeKey(value: unknown, what: string, keyProblem: KeyCheck | undefined): string {
-  if (!isHex32(value)) fail('INVALID_KEY', `The ${what} is not an x-only key (32 bytes of lowercase hex)`);
+function readUpgradeKey(value: unknown, what: string, options: Options): string {
+  if (!isHex32(value)) refuse('INVALID_KEY', `The ${what} is not an x-only key (32 bytes of lowercase hex)`);
   const x = BigInt(`0x${value}`);
-  if (x === 0n || x >= SECP256K1_FIELD) fail('INVALID_KEY', `The ${what} is outside the field`);
-  if (keyProblem?.({ kind: 'upgrade', hex: value })) fail('INVALID_KEY', `The ${what} is not a usable key`);
+  if (x === 0n || x >= SECP256K1_FIELD) refuse('INVALID_KEY', `The ${what} is outside the field`);
+  if (options.keyProblem?.({ kind: 'upgrade', hex: value })) refuse('INVALID_KEY', `The ${what} is not a usable key`);
   return value;
 }
 
-function optionalLabel(value: unknown, what: string): string | undefined {
-  if (value === undefined) return undefined;
+function readField(value: unknown, what: string): string {
+  if (!isHex32(value) || littleEndian(value) >= FIELD || littleEndian(value) === 0n) malformed(`The ${what} is a non-zero field element (32 bytes little-endian)`);
+  return value;
+}
+
+function optionalLabel(value: unknown): { label?: string } {
+  if (value === undefined) return {};
   const label = readLabel(value);
-  if (label === undefined) invalid(`The ${what} is not a valid label`);
-  return label;
+  if (label === undefined) malformed('A label is at most 64 bytes of text with no control character');
+  return { label };
 }
 
-function withLabel<T extends object>(entry: T, label: unknown, what: string): T & { label?: string } {
-  const read = optionalLabel(label, what);
-  return read === undefined ? entry : { ...entry, label: read };
+function optionalCard(value: unknown): { card?: string } {
+  if (value === undefined) return {};
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_CARD) malformed('A card is the text of a key card file');
+  return { card: value };
 }
 
-function readSlot(value: unknown, slots: number, used: Set<number>, what: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) >= slots) {
-    invalid(`A ${what} slot is from 0 to ${slots - 1}`);
-  }
-  if (used.has(value as number)) invalid(`Two ${what}s share a slot`);
-  used.add(value as number);
-  return value as number;
+function buildOf(buildId: unknown, network: MidnightVaultNetwork, options: Options): MidnightVaultBuild {
+  const build = options.builds.find(b => b.buildId === buildId);
+  if (!build) refuse('UNKNOWN_BUILD', 'The build is not a pinned build');
+  if (build.profile === 'test' && network !== TEST_BUILD_ONLY_NETWORK) refuse('TEST_BUILD_NETWORK', 'A test build is for preprod only');
+  if (!build.networks.includes(network)) refuse('BUILD_NETWORK', 'The pinned build does not allow this network');
+  return build;
 }
 
-function readList<T>(value: unknown, max: number, what: string): readonly Untrusted<T>[] {
-  if (!Array.isArray(value) || value.length > max) invalid(`A vault has at most ${max} ${what}s`);
-  if (!value.every(entry => isObject(entry))) invalid(`A ${what} is an object`);
-  return value as readonly Untrusted<T>[];
+function readSlots<T, R>(value: unknown, count: number, what: string, read: (entry: Untrusted<T>) => R): (R | null)[] {
+  if (!Array.isArray(value) || value.length !== count) malformed(`The ${what} are ${count} slots in contract order, null when empty`);
+  return (value as readonly unknown[]).map(entry => {
+    if (entry === null) return null;
+    if (!isObject<T>(entry)) malformed(`A ${what} slot is an object or null`);
+    return read(entry);
+  });
 }
 
-function bySlot<T extends { readonly slot: number }>(entries: T[]): T[] {
-  return entries.sort((a, b) => a.slot - b.slot);
+function assertDistinct(values: readonly string[], message: string): void {
+  if (new Set(values).size !== values.length) refuse('INVALID_KEY', message);
 }
 
-function assertDistinct(keys: readonly string[], message: string): void {
-  if (new Set(keys).size !== keys.length) fail('INVALID_KEY', message);
+function present<T>(slots: readonly (T | null)[]): T[] {
+  return slots.filter((slot): slot is T => slot !== null);
 }
 
-function readParticipants(value: unknown, build: PinnedMidnightBuild, keyProblem: KeyCheck | undefined): MidnightVaultParticipants {
-  if (!isObject<MidnightVaultParticipants>(value)) invalid('Participants are owners, guardians and delegates');
+function readParticipants(value: unknown, network: MidnightVaultNetwork, build: MidnightVaultBuild, options: Options): MidnightStoredParticipants {
+  if (!isObject<MidnightStoredParticipants>(value)) malformed('Participants are owner, guardian and delegate slots');
   const { ownerSlots, guardianSlots, delegateSlots } = build.constants;
-  const ownerList = readList<StoredMidnightOwner>(value.owners, ownerSlots, 'owner');
-  if (ownerList.length === 0) invalid('A vault has at least one owner');
-  const slots = { owner: new Set<number>(), guardian: new Set<number>(), delegate: new Set<number>() };
-  const owners = bySlot(ownerList.map(o => withLabel({
-    slot: readSlot(o.slot, ownerSlots, slots.owner, 'owner'),
-    approvalKey: readJubjubKey(o.approvalKey, 'owner approval key', keyProblem),
-    upgradeKey: readUpgradeKey(o.upgradeKey, 'owner upgrade key', keyProblem),
-  }, o.label, 'participant label')));
-  const guardians = bySlot(readList<StoredMidnightGuardian>(value.guardians, guardianSlots, 'guardian').map(g => {
-    if (g.salt !== undefined && !isHex32(g.salt)) invalid('A guardian salt is 32 bytes of lowercase hex');
-    return withLabel({
-      slot: readSlot(g.slot, guardianSlots, slots.guardian, 'guardian'),
-      key: readJubjubKey(g.key, 'guardian key', keyProblem),
-      ...(g.salt !== undefined ? { salt: g.salt as string } : {}),
-    }, g.label, 'participant label');
+  const owners = readSlots<MidnightStoredOwner, MidnightStoredOwner>(value.owners, ownerSlots, 'owner', o => ({
+    approvalKey: readJubjubKey(o.approvalKey, 'owner approval key', options),
+    upgradeKey: readUpgradeKey(o.upgradeKey, 'owner upgrade key', options),
+    ...optionalLabel(o.label),
+    ...optionalCard(o.card),
   }));
-  const delegates = bySlot(readList<StoredMidnightDelegate>(value.delegates, delegateSlots, 'delegate').map(d => withLabel({
-    slot: readSlot(d.slot, delegateSlots, slots.delegate, 'delegate'),
-    key: readJubjubKey(d.key, 'delegate key', keyProblem),
-  }, d.label, 'participant label')));
-  assertDistinct(
-    [...owners.map(o => o.approvalKey), ...guardians.map(g => g.key), ...delegates.map(d => d.key)],
-    'A Jubjub key appears twice in one vault',
-  );
-  assertDistinct(owners.map(o => o.upgradeKey), 'Two owners share an upgrade key');
+  const guardians = readSlots<MidnightStoredGuardian, MidnightStoredGuardian>(value.guardians, guardianSlots, 'guardian', g => ({
+    commitment: readField(g.commitment, 'guardian commitment'),
+    ...optionalCard(g.card),
+    ...optionalLabel(g.label),
+  }));
+  const delegates = readSlots<MidnightDelegateSlot, MidnightDelegateSlot>(value.delegates, delegateSlots, 'delegate', d => {
+    if (typeof d.cap !== 'string' || !DECIMAL.test(d.cap) || BigInt(d.cap) > MAX_UINT128) malformed('A delegate cap is STAR, a decimal string');
+    if (!isUint(d.period) || d.period < MIN_DELEGATE_PERIOD) malformed(`A delegate period is at least ${MIN_DELEGATE_PERIOD} seconds`);
+    return { key: readJubjubKey(d.key, 'delegate key', options), cap: d.cap, period: d.period, ...optionalLabel(d.label) };
+  });
+  const ownerList = present(owners);
+  if (ownerList.length === 0) malformed('A vault has at least one owner');
+  assertDistinct([...ownerList.map(o => o.approvalKey), ...present(delegates).map(d => d.key)], 'A Jubjub key appears twice in one vault');
+  assertDistinct(ownerList.map(o => o.upgradeKey), 'Two owners share an upgrade key');
+  assertDistinct(present(guardians).map(g => g.commitment), 'Two guardian slots share a commitment');
+  if (options.checkCard) {
+    for (const owner of ownerList) {
+      if (owner.card !== undefined && !options.checkCard(owner.card, { role: 'owner', network, approvalKey: owner.approvalKey, upgradeKey: owner.upgradeKey })) {
+        refuse('INVALID_CARD', 'An owner card does not read, or is not the card of its slot');
+      }
+    }
+    for (const guardian of present(guardians)) {
+      if (guardian.card !== undefined && !options.checkCard(guardian.card, { role: 'guardian', network, commitment: guardian.commitment })) {
+        refuse('INVALID_CARD', 'A guardian card does not read, or is not the card of its slot');
+      }
+    }
+  }
   return { owners, guardians, delegates };
 }
 
-function participantsOf(participants: MidnightVaultParticipants, role: MidnightVaultRole): readonly { readonly slot: number }[] {
-  return role === 'owner' ? participants.owners : role === 'guardian' ? participants.guardians : participants.delegates;
-}
-
-function readSelf(value: unknown, participants: MidnightVaultParticipants): MidnightVaultSelf[] {
-  if (!Array.isArray(value) || value.length === 0) fail('SELF_MISMATCH', 'This seed holds a role in the vault');
-  const self: MidnightVaultSelf[] = [];
+function readSelf(value: unknown, participants: MidnightStoredParticipants): MidnightSelfRole[] {
+  if (!Array.isArray(value) || value.length === 0) refuse('SELF_MISMATCH', 'This seed holds a role in the vault');
+  const self: MidnightSelfRole[] = [];
   for (const entry of value as readonly unknown[]) {
-    if (!isObject<MidnightVaultSelf>(entry) || !ROLES.includes(entry.role as MidnightVaultRole)) fail('SELF_MISMATCH', 'A self entry is an owner, a guardian or a delegate');
-    const role = entry.role as MidnightVaultRole;
-    if (self.some(s => s.role === role)) fail('SELF_MISMATCH', 'This seed has one entry per role it holds');
-    if (!isIndex(entry.index)) invalid('An index is from 1 to 2^31 - 1');
-    if (!participantsOf(participants, role).some(p => p.slot === entry.slot)) fail('SELF_MISMATCH', 'A self entry names a participant of its role');
-    self.push({ role, index: entry.index, slot: entry.slot as number });
+    if (!isObject<MidnightSelfRole>(entry) || !ROLES.includes(entry.role as MidnightSelfRole['role'])) refuse('SELF_MISMATCH', 'A self entry is an owner, a guardian or a delegate');
+    const role = entry.role as MidnightSelfRole['role'];
+    if (self.some(s => s.role === role)) refuse('SELF_MISMATCH', 'This seed has exactly one entry per role it holds');
+    if (!isIndex(entry.index)) malformed('An index is from 1 to 2^31 - 1');
+    const slots = role === 'owner' ? participants.owners : role === 'guardian' ? participants.guardians : participants.delegates;
+    if (present<unknown>(slots).length === 0) refuse('SELF_MISMATCH', 'This seed holds a role no participant holds');
+    self.push({ role, index: entry.index });
   }
   const roles = self.map(s => s.role);
-  if (roles.includes('owner') && roles.includes('guardian')) fail('SELF_MISMATCH', 'A guardian is never an owner of the same vault');
-  if (roles.includes('owner') && participants.guardians.some(g => g.salt === undefined)) {
-    invalid('An owner holds every guardian\'s salt');
-  }
+  if (roles.includes('owner') && roles.includes('guardian')) refuse('SELF_MISMATCH', 'A guardian is never an owner of the same vault');
   return self.sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role));
 }
 
-function readAgreedConfig(value: unknown, build: PinnedMidnightBuild, keyProblem: KeyCheck | undefined): MidnightVaultAgreedConfig | null {
+function readAgreedConfig(value: unknown): MidnightVerificationSetPin | null {
   if (value === null) return null;
-  if (!isObject<MidnightVaultAgreedConfig>(value)) invalid('The agreed configuration is an object');
-  const c = build.constants;
-  if (!isHex32(value.digest)) invalid('The agreed configuration\'s digest is 32 bytes of lowercase hex');
-  if (!isHex32(value.buildHash)) invalid('The agreed build hash is 32 bytes of lowercase hex');
-  if (value.buildHash !== build.manifestHash) fail('BUILD_MISMATCH', 'The agreed build hash is not the pinned build manifest\'s');
-  if (!Array.isArray(value.owners) || value.owners.length === 0) invalid('The agreed configuration has at least one owner');
-  if (value.owners.length > c.ownerSlots) fail('BUILD_MISMATCH', `The build has ${c.ownerSlots} owner slots`);
-  const owners = (value.owners as readonly unknown[]).map(o => {
-    if (!isObject<MidnightVaultAgreedConfig['owners'][number]>(o)) invalid('An agreed owner is an object');
+  if (!isObject<MidnightVerificationSetPin>(value)) malformed('The agreed configuration is a pinned verification set');
+  if (typeof value.cbor !== 'string' || value.cbor.length > MAX_SET_CBOR || !HEX_BYTES.test(value.cbor)) malformed('A verification set is canonical CBOR, lowercase hex');
+  if (!isHex32(value.digest)) malformed('A verification digest is 32 bytes of lowercase hex');
+  return { cbor: value.cbor, digest: value.digest };
+}
+
+function readVerifications(value: unknown, participants: MidnightStoredParticipants, agreed: MidnightVerificationSetPin | null): MidnightOwnerVerification[] {
+  if (!Array.isArray(value) || value.length > MAX_VERIFICATIONS) malformed(`Verification records are a list of at most ${MAX_VERIFICATIONS}`);
+  if (value.length > 0 && !agreed) malformed('Verification records need the agreed configuration they verified');
+  const owners = present(participants.owners).map(o => o.approvalKey);
+  return (value as readonly unknown[]).map(record => {
+    if (!isObject<MidnightOwnerVerification>(record) || !VERIFICATION_METHODS.includes(record.method as string)) malformed('A verification record has an unknown method');
+    if (!owners.includes(record.approvalKey as string)) malformed('A verification record names someone who is not an owner');
+    if (record.verificationDigest !== agreed?.digest) malformed('A verification record is not of the agreed configuration');
+    if (!isUint(record.at)) malformed('A verification record\'s time is unix seconds');
     return {
-      approvalKey: readJubjubKey(o.approvalKey, 'agreed approval key', keyProblem),
-      upgradeKey: readUpgradeKey(o.upgradeKey, 'agreed upgrade key', keyProblem),
+      approvalKey: record.approvalKey as string,
+      method: record.method as MidnightOwnerVerification['method'],
+      verificationDigest: record.verificationDigest,
+      at: record.at,
     };
   });
-  assertDistinct(owners.map(o => o.approvalKey), 'Two agreed owners share an approval key');
-  assertDistinct(owners.map(o => o.upgradeKey), 'Two agreed owners share an upgrade key');
-  if (!Number.isSafeInteger(value.threshold) || (value.threshold as number) < 1 || (value.threshold as number) > owners.length) {
-    invalid('The agreed threshold is from 1 to the number of owners');
+}
+
+function readDeployment(value: unknown, build: MidnightVaultBuild): MidnightDeploymentRecord | null {
+  if (value === null) return null;
+  if (!isObject<MidnightDeploymentRecord>(value)) malformed('A deployment is an object');
+  for (const field of ['deployTxHash', 'completionTxHash'] as const) {
+    if (value[field] !== undefined && !isHex32(value[field])) malformed('A transaction hash is 32 bytes of lowercase hex');
   }
-  if (!isUint(value.changeDelay)) invalid('The change delay is whole seconds');
-  const whitelist = value.whitelist;
-  if (!isObject<MidnightVaultAgreedConfig['whitelist']>(whitelist) || typeof whitelist.enabled !== 'boolean' || !Array.isArray(whitelist.entries)) {
-    invalid('The whitelist is a switch and a list of entries');
+  if (value.completionTxHash !== undefined && value.deployTxHash === undefined) malformed('A completion update follows a deploy');
+  if (!Array.isArray(value.deferred) || !value.deferred.every(c => (MIDNIGHT_VAULT_CIRCUITS as readonly unknown[]).includes(c))) {
+    malformed('The deferred circuits are circuit names');
   }
-  if (whitelist.entries.length > c.whitelistEntries) fail('BUILD_MISMATCH', `The build has ${c.whitelistEntries} whitelist entries`);
-  const entries = (whitelist.entries as readonly unknown[]).map(e => {
-    if (!isObject<MidnightWhitelistEntry>(e) || !isHex32(e.recipient) || !SCOPES.includes(e.scope as string)) invalid('A whitelist entry is a recipient and a scope');
-    return { recipient: e.recipient, scope: e.scope as MidnightWhitelistEntry['scope'] };
-  });
-  if (!Array.isArray(value.guardians) || !value.guardians.every(isHex32)) invalid('Guardian commitments are 32 bytes of lowercase hex each');
-  const guardians = [...(value.guardians as readonly string[])];
-  if (guardians.length > c.guardianSlots) fail('BUILD_MISMATCH', `The build has ${c.guardianSlots} guardian slots`);
-  if (guardians.some(g => /^0+$/.test(g)) || new Set(guardians).size !== guardians.length) invalid('Guardian commitments are distinct and not empty');
-  const n = guardians.length;
-  const t = value.guardianThreshold;
-  if (!Number.isSafeInteger(t) || !((n === 0 && t === 0) || ((t as number) >= 1 && (t as number) <= n && 2 * (t as number) > n))) {
-    invalid('The guardian threshold is 0 with no guardians, else a strict majority');
-  }
-  for (const field of ['recoveryDelay', 'cooldown', 'expiryWindow'] as const) {
-    if (!isUint(value[field])) invalid(`The ${field} is whole seconds`);
-  }
-  if ((value.recoveryDelay as number) < c.minRecoveryDelaySeconds) fail('BUILD_MISMATCH', 'The recovery delay is below the build\'s floor');
-  if (value.expiryWindow !== c.expiryWindowSeconds) fail('BUILD_MISMATCH', 'The expiry window is not the build\'s');
-  if (value.cooldown !== c.cooldownSeconds) fail('BUILD_MISMATCH', 'The cool-down is not the build\'s');
+  const deferred = [...(value.deferred as MidnightDeploymentRecord['deferred'])].sort();
+  if (deferred.length > 0 && deferred.join() !== [...build.deferred].sort().join()) refuse('BUILD_MISMATCH', 'A split deployment defers exactly the build\'s deferred set');
   return {
-    digest: value.digest,
-    buildHash: value.buildHash,
-    owners,
-    threshold: value.threshold as number,
-    changeDelay: value.changeDelay,
-    whitelist: { enabled: whitelist.enabled, entries },
-    guardians,
-    guardianThreshold: t as number,
-    recoveryDelay: value.recoveryDelay as number,
-    cooldown: value.cooldown as number,
-    expiryWindow: value.expiryWindow as number,
+    ...(value.deployTxHash !== undefined ? { deployTxHash: value.deployTxHash as string } : {}),
+    ...(value.completionTxHash !== undefined ? { completionTxHash: value.completionTxHash as string } : {}),
+    deferred,
   };
 }
 
-function readVerifications(
-  value: unknown,
-  participants: MidnightVaultParticipants,
-  agreed: MidnightVaultAgreedConfig | null,
-): MidnightVaultVerification[] {
-  if (!Array.isArray(value) || value.length > MAX_VERIFICATIONS) invalid(`Verification records are a list of at most ${MAX_VERIFICATIONS}`);
-  if (value.length > 0 && !agreed) invalid('Verification records need the agreed configuration they verified');
-  return (value as readonly unknown[]).map(record => {
-    if (!isObject<MidnightVaultVerification>(record) || !VERIFICATION_METHODS.includes(record.method as string)) invalid('A verification record has an unknown method');
-    if (!participants.owners.some(o => o.approvalKey === record.owner)) invalid('A verification record names someone who is not an owner');
-    if (record.digest !== agreed?.digest) invalid('A verification record is not of the agreed configuration');
-    if (!isUint(record.at)) invalid('A verification record\'s time is unix seconds');
-    return { method: record.method as MidnightVaultVerification['method'], owner: record.owner as string, digest: record.digest, at: record.at };
-  });
-}
-
-function deferredSet(build: PinnedMidnightBuild): string[] {
-  return Object.keys(build.circuits).filter(name => build.circuits[name].deferred).sort();
-}
-
-function readDeployment(value: unknown, build: PinnedMidnightBuild): MidnightVaultDeployment | null {
+function readLastCheck(value: unknown, agreed: MidnightVerificationSetPin | null): MidnightLastCheck | null {
   if (value === null) return null;
-  if (!isObject<MidnightVaultDeployment>(value)) invalid('A deployment is an object');
-  for (const field of ['deployTx', 'completionTx'] as const) {
-    if (value[field] !== null && !isHex32(value[field])) invalid('A transaction hash is 32 bytes of lowercase hex');
+  if (!isObject<MidnightLastCheck>(value)) malformed('A state read is an object');
+  if (typeof value.source !== 'string' || !SOURCE.test(value.source)) malformed('A state read names its source');
+  if (!isUint(value.blockHeight) || !isHex32(value.blockHash)) malformed('A state read names its block: a height and a 32-byte hash');
+  if (!isUint(value.at)) malformed('A state read\'s time is milliseconds since the epoch');
+  const checks = value.checks;
+  if (!isObject<MidnightLastCheck['checks']>(checks)
+    || !OPERATION_CHECKS.includes(checks.operations as string)
+    || !COMMITTEE_CHECKS.includes(checks.committee as string)
+    || typeof checks.decoded !== 'boolean'
+    || typeof checks.role !== 'boolean'
+    || !(checks.matchesAgreed === null || typeof checks.matchesAgreed === 'boolean')) {
+    malformed('A state read carries the results of every import check');
   }
-  if (value.completionTx !== null && value.deployTx === null) invalid('A completion update follows a deploy');
-  if (!Array.isArray(value.deferred) || !value.deferred.every(name => typeof name === 'string')) invalid('The deferred circuits are a list of names');
-  const deferred = [...(value.deferred as readonly string[])].sort();
-  if (deferred.length > 0 && deferred.join(',') !== deferredSet(build).join(',')) {
-    fail('BUILD_MISMATCH', 'A split deployment defers exactly the build\'s deferred set');
-  }
-  return { deployTx: value.deployTx as string | null, completionTx: value.completionTx as string | null, deferred };
-}
-
-function readCommittee(value: unknown): MidnightVaultCommittee {
-  if (!isObject<MidnightVaultCommittee>(value) || !Array.isArray(value.keys)) fail('COMMITTEE_MISMATCH', 'A committee is keys and a threshold');
-  if (value.keys.length === 0 || value.keys.length > MAX_COMMITTEE) fail('COMMITTEE_MISMATCH', `A committee has 1 to ${MAX_COMMITTEE} keys`);
-  if (!value.keys.every(isHex32) || new Set(value.keys).size !== value.keys.length) {
-    fail('COMMITTEE_MISMATCH', 'Committee keys are distinct x-only keys');
-  }
-  // A threshold of 0 accepts unsigned maintenance updates: no vault the wallet keeps has one.
-  if (!Number.isSafeInteger(value.threshold) || (value.threshold as number) < 1) fail('COMMITTEE_MISMATCH', 'A committee threshold is at least 1');
-  return { keys: [...(value.keys as readonly string[])], threshold: value.threshold as number };
-}
-
-function committeeResult(committee: MidnightVaultCommittee, owners: readonly StoredMidnightOwner[], ownerThreshold: number): MidnightVaultCheckResults['committee'] {
-  const upgradeKeys = owners.map(o => o.upgradeKey);
-  const sameKeys = committee.keys.length === upgradeKeys.length && committee.keys.every(key => upgradeKeys.includes(key));
-  if (sameKeys && committee.threshold === ownerThreshold) return 'owners';
-  if (committee.keys.length === 1 && committee.threshold === 1 && upgradeKeys.includes(committee.keys[0])) return 'interim';
-  return 'outOfStep';
-}
-
-function readLastCheck(value: unknown, build: PinnedMidnightBuild, participants: MidnightVaultParticipants): MidnightVaultLastCheck | null {
-  if (value === null) return null;
-  if (!isObject<MidnightVaultLastCheckInput>(value)) invalid('A state read is an object');
-  if (typeof value.source !== 'string' || !SOURCE.test(value.source)) invalid('A state read names its source');
-  if (value.blockHeight !== null && !isUint(value.blockHeight)) invalid('A block height is a whole number');
-  if (value.blockHash !== null && !isHex32(value.blockHash)) invalid('A block hash is 32 bytes of lowercase hex');
-  if (!isUint(value.at)) invalid('A state read\'s time is milliseconds since the epoch');
-  if (!isObject<Record<string, string>>(value.operations)) invalid('The operations are a map from circuit to fingerprint');
-  const operations: Record<string, string> = {};
-  for (const [circuit, fingerprint] of Object.entries(value.operations)) {
-    const pin = own(build.circuits, circuit);
-    if (!pin) fail('BUILD_MISMATCH', 'The contract has an operation the build does not');
-    if (fingerprint !== pin.fingerprint) fail('BUILD_MISMATCH', 'An operation\'s verifier key is not the build\'s');
-    operations[circuit] = pin.fingerprint;
-  }
-  const missing = Object.keys(build.circuits).filter(circuit => !own(operations, circuit));
-  if (missing.some(circuit => !build.circuits[circuit].deferred)) fail('BUILD_MISMATCH', 'The contract lacks an operation the build always deploys');
-  const committee = readCommittee(value.committee);
-  const ownerThreshold = value.ownerThreshold;
-  if (!Number.isSafeInteger(ownerThreshold) || (ownerThreshold as number) < 1 || (ownerThreshold as number) > participants.owners.length) {
-    invalid('The owner threshold is from 1 to the number of owners');
-  }
+  if ((checks.matchesAgreed === null) !== (agreed === null)) malformed('The agreed configuration was compared exactly when there is one');
   return {
     source: value.source,
-    blockHeight: value.blockHeight as number | null,
-    blockHash: value.blockHash as string | null,
+    blockHeight: value.blockHeight,
+    blockHash: value.blockHash,
     at: value.at,
-    operations,
-    committee,
-    ownerThreshold: ownerThreshold as number,
-    results: {
-      operations: missing.length === 0 ? 'complete' : 'deferredMissing',
-      committee: committeeResult(committee, participants.owners, ownerThreshold as number),
+    checks: {
+      operations: checks.operations as MidnightLastCheck['checks']['operations'],
+      committee: checks.committee as MidnightLastCheck['checks']['committee'],
+      decoded: checks.decoded,
+      role: checks.role,
+      matchesAgreed: checks.matchesAgreed as boolean | null,
     },
   };
 }
 
-function readApprovals(value: unknown, build: PinnedMidnightBuild): MidnightVaultApproval[] {
-  const max = build.constants.ownerSlots + build.constants.guardianSlots;
-  if (!Array.isArray(value) || value.length > max) invalid(`A request has at most ${max} approvals`);
-  const approvals = (value as readonly unknown[]).map(a => {
-    if (!isObject<MidnightVaultApproval>(a)) invalid('An approval is a signer and a file');
-    const signer = readJubjubKey(a.signer, 'approval signer', undefined);
-    if (typeof a.file !== 'string' || a.file.length === 0 || a.file.length > MAX_APPROVAL_FILE) invalid('An approval file is at most 8 KiB of text');
-    return { signer, file: a.file };
-  });
-  if (new Set(approvals.map(a => a.signer)).size !== approvals.length) invalid('One approval per signer');
-  return approvals;
+/** The import checks a state read must have passed before a candidate is stored or accepted. */
+function assertImportChecks(check: MidnightLastCheck | null): void {
+  if (!check) return;
+  const { operations, decoded, role, matchesAgreed } = check.checks;
+  if (operations === 'unknown-build') refuse('IMPORT_CHECK_FAILED', 'Not a known build: the contract has an operation no pinned build has');
+  if (!decoded) refuse('IMPORT_CHECK_FAILED', 'The state does not decode with the build\'s reader');
+  if (!role) refuse('IMPORT_CHECK_FAILED', 'This seed holds no role in the vault');
+  if (matchesAgreed === false) refuse('IMPORT_CHECK_FAILED', 'The state is not the configuration verified in the ceremony');
 }
 
-function readRequestInput(value: unknown, build: PinnedMidnightBuild): MidnightVaultRequestInput {
-  if (!isObject<MidnightVaultRequestInput>(value)) invalid('A request is an object');
-  if (!isHex32(value.id)) invalid('A request id is 32 bytes of lowercase hex');
-  if (typeof value.kind !== 'string' || !KIND.test(value.kind)) invalid('A request names its kind');
-  if (!REQUEST_ORIGINS.includes(value.origin as string)) invalid('A request was made here or imported');
-  if (typeof value.file !== 'string' || value.file.length === 0 || value.file.length > MAX_REQUEST_FILE) invalid('A request file is at most 32 KiB of text');
-  if (!isUint(value.expiresAt)) invalid('A request\'s expiry is unix seconds');
+interface VaultContext {
+  readonly network: MidnightVaultNetwork;
+  readonly contractAddress: string;
+  readonly build: MidnightVaultBuild;
+}
+
+function readApproval(value: unknown, vault: VaultContext, digest: string): MidnightApprovalFile {
+  if (!isObject<MidnightApprovalFile>(value)) malformed('An approval is an approval file');
+  if (value.type !== MIDNIGHT_APPROVAL_FILE_TYPE || value.version !== MIDNIGHT_FILE_VERSION || !APPROVAL_ROLES.includes(value.role as string)) {
+    malformed('An approval is a version 1 approval file');
+  }
+  if (value.network !== vault.network || value.contract !== vault.contractAddress || value.digest !== digest) {
+    refuse('REQUEST_MISMATCH', 'An approval names another vault or another request');
+  }
+  if (!isUint(value.createdAt)) malformed('An approval\'s time is milliseconds since the epoch');
+  if (jsonBytes(value) > MIDNIGHT_FILE_MAX_BYTES.approval) malformed(`An approval file is at most ${MIDNIGHT_FILE_MAX_BYTES.approval} bytes`);
+  return jsonCopy(value as MidnightApprovalFile);
+}
+
+/** Owners and guardians sign with their Jubjub key, committee members with their upgrade key. */
+function signerOf(approval: MidnightApprovalFile): string {
+  const key = approval.role === 'committee' ? approval.upgrade?.key : approval.approvalKey;
+  const shape = approval.role === 'committee' ? HEX32 : JUBJUB_HEX;
+  if (typeof key !== 'string' || !shape.test(key)) malformed('An approval names its signer\'s key');
+  return `${approval.role === 'committee' ? 'upgrade' : 'jubjub'}:${key}`;
+}
+
+function readStoredRequest(value: unknown, vault: VaultContext): MidnightStoredRequest {
+  if (!isObject<MidnightStoredRequest>(value)) malformed('A stored request is an object');
+  const request = value.request;
+  if (!isObject<MidnightRequestFile>(request)) malformed('A stored request holds its request file');
+  if (request.type !== MIDNIGHT_REQUEST_FILE_TYPE || request.version !== MIDNIGHT_FILE_VERSION
+    || !(MIDNIGHT_REQUEST_KINDS as readonly unknown[]).includes(request.kind) || !isObject(request.body)) {
+    malformed('A request is a version 1 request file');
+  }
+  if (request.network !== vault.network || request.contract !== vault.contractAddress || request.build !== vault.build.buildId) {
+    refuse('REQUEST_MISMATCH', 'The request names another vault or another build');
+  }
+  if (!isHex32(request.digest) || !isUint(request.expiry) || !isUint(request.createdAt)) malformed('A request has its digest, expiry and time');
+  if (jsonBytes(request) > MIDNIGHT_FILE_MAX_BYTES.request) malformed(`A request file is at most ${MIDNIGHT_FILE_MAX_BYTES.request} bytes`);
+  const maxApprovals = vault.build.constants.ownerSlots + vault.build.constants.guardianSlots;
+  if (!Array.isArray(value.approvals) || value.approvals.length > maxApprovals) malformed(`A request has at most ${maxApprovals} approvals`);
+  const approvals = (value.approvals as readonly unknown[]).map(a => readApproval(a, vault, request.digest as string));
+  const signers = approvals.map(signerOf);
+  if (new Set(signers).size !== signers.length) malformed('One approval per signer');
+  if (!REQUEST_STATES.includes(value.state as string)) malformed('Unknown request state');
+  if (value.txHash !== undefined && !isHex32(value.txHash)) malformed('A transaction hash is 32 bytes of lowercase hex');
+  if (!isUint(value.updatedAt)) malformed('A request\'s time is milliseconds since the epoch');
   return {
-    id: value.id,
-    kind: value.kind,
-    origin: value.origin as MidnightVaultRequestInput['origin'],
-    file: value.file,
-    expiresAt: value.expiresAt,
-    approvals: readApprovals(value.approvals, build),
+    request: jsonCopy(request as MidnightRequestFile),
+    approvals,
+    state: value.state as MidnightStoredRequest['state'],
+    ...(value.txHash !== undefined ? { txHash: value.txHash as string } : {}),
+    updatedAt: value.updatedAt,
   };
 }
 
-function readRequests(value: unknown, build: PinnedMidnightBuild): StoredMidnightVaultRequest[] {
-  if (!Array.isArray(value) || value.length > MAX_REQUESTS) invalid(`A vault keeps at most ${MAX_REQUESTS} open requests`);
-  const requests = (value as readonly unknown[]).map(request => {
-    const read = readRequestInput(request, build);
-    const { createdAt, updatedAt } = request as Untrusted<StoredMidnightVaultRequest>;
-    if (!isUint(createdAt) || !isUint(updatedAt) || updatedAt < createdAt) invalid('A request\'s times are milliseconds since the epoch');
-    return { ...read, createdAt, updatedAt };
-  });
-  if (new Set(requests.map(r => r.id)).size !== requests.length) invalid('Two requests share an id');
+function readRequests(value: unknown, vault: VaultContext): MidnightStoredRequest[] {
+  if (!Array.isArray(value) || value.length > MAX_REQUESTS) malformed(`A vault keeps at most ${MAX_REQUESTS} requests`);
+  const requests = (value as readonly unknown[]).map(r => readStoredRequest(r, vault));
+  if (new Set(requests.map(r => r.request.digest)).size !== requests.length) malformed('Two requests share a digest');
   return requests;
 }
 
 function checkLifecycle(record: MidnightVaultRecord): void {
   const { lifecycle, lastCheck, successor } = record;
   if (lifecycle === 'deploying') {
-    if (record.origin !== 'created') fail('LIFECYCLE_MISMATCH', 'Only a vault this device created is still deploying');
+    if (record.origin !== 'created') refuse('LIFECYCLE_MISMATCH', 'Only a vault this device created is still deploying');
   } else if (!lastCheck) {
-    fail('LIFECYCLE_MISMATCH', 'A vault past deploying was read from the chain');
-  } else if (lifecycle === 'incomplete') {
-    if (lastCheck.results.operations === 'complete' && lastCheck.results.committee !== 'interim') {
-      fail('LIFECYCLE_MISMATCH', 'A vault with every operation and past the interim committee is not incomplete');
-    }
+    refuse('LIFECYCLE_MISMATCH', 'A vault past deploying was read from the chain');
   } else {
-    if (lastCheck.results.operations !== 'complete') fail('LIFECYCLE_MISMATCH', 'A vault missing a deferred operation is incomplete');
-    if (lifecycle === 'ready' && lastCheck.results.committee === 'interim') {
-      fail('LIFECYCLE_MISMATCH', 'A vault under its deployer\'s interim committee is incomplete');
+    const { operations, committee } = lastCheck.checks;
+    if (lifecycle === 'incomplete') {
+      if (operations !== 'incomplete' && committee !== 'interim') refuse('LIFECYCLE_MISMATCH', 'A vault with every operation and past the interim committee is not incomplete');
+    } else {
+      if (operations === 'incomplete') refuse('LIFECYCLE_MISMATCH', 'A vault missing an operation is incomplete');
+      if (lifecycle === 'ready' && committee === 'interim') refuse('LIFECYCLE_MISMATCH', 'A vault under its deployer\'s interim committee is incomplete');
     }
   }
   if (successor !== null) {
-    if (!isHex32(successor) || successor === record.vaultId) invalid('A successor is another vault\'s id');
-    if (lifecycle !== 'temporary' && lifecycle !== 'moved') fail('LIFECYCLE_MISMATCH', 'Only a recovered or moved vault has a successor');
+    if (!isHex32(successor) || successor === record.vaultId) malformed('A successor is another vault\'s id');
+    if (lifecycle !== 'temporary' && lifecycle !== 'moved') refuse('LIFECYCLE_MISMATCH', 'Only a recovered or moved vault has a successor');
   } else if (lifecycle === 'moved') {
-    fail('LIFECYCLE_MISMATCH', 'A moved vault names its successor');
+    refuse('LIFECYCLE_MISMATCH', 'A moved vault names its successor');
   }
 }
 
 /**
- * The whole record, read again from `draft` and checked: the result holds no reference to the
- * caller's objects and no field the record does not have.
+ * The whole record, read again from `draft` and checked: the result holds none of the caller's
+ * objects and no field the record does not have.
  */
-function checkRecord(draft: MidnightVaultRecord, builds: ReadonlyMap<string, PinnedMidnightBuild>, keyProblem: KeyCheck | undefined): MidnightVaultRecord {
+function checkRecord(draft: MidnightVaultRecord, options: Options): MidnightVaultRecord {
   const { vaultId, network, contractAddress } = draft;
-  if (!isHex32(vaultId)) invalid('A vault id is 32 bytes of lowercase hex');
-  if (!NETWORKS.includes(network)) invalid('A Midnight network is preprod, preview or mainnet');
-  if (!isHex32(contractAddress)) invalid('A contract address is 32 bytes of lowercase hex');
+  if (!isHex32(vaultId)) malformed('A vault id is 32 bytes of lowercase hex');
+  if (!isNetwork(network)) malformed('A Midnight network is preprod, preview or mainnet');
+  if (!isHex32(contractAddress)) malformed('A contract address is 32 bytes of lowercase hex');
   if (midnightVaultId(network, contractAddress) !== vaultId) {
-    fail('VAULT_ID_MISMATCH', 'The vault id is not the one this network and contract address give');
+    throw new MidnightVaultStoreError('VAULT_ID_MISMATCH', 'The vault id is not the one this network and contract address give');
   }
+  const build = buildOf(draft.build, network, options);
+  if (draft.status !== 'candidate' && draft.status !== 'accepted') malformed('A vault is a candidate or accepted');
+  if (!ORIGINS.includes(draft.origin)) malformed('A vault was created, imported or restored');
+  if (!LIFECYCLES.includes(draft.lifecycle)) malformed('Unknown lifecycle');
+  const name = draft.name === undefined ? {} : { name: optionalLabel(draft.name).label as string };
 
-  if (!isObject(draft.build) || typeof draft.build.id !== 'string' || !PROFILES.includes(draft.build.profile)) {
-    invalid('A build is an id and a profile');
-  }
-  const build = builds.get(draft.build.id);
-  if (!build || build.profile !== draft.build.profile) fail('UNKNOWN_BUILD', 'The build is not a pinned build of this profile');
-  if (build.profile === 'test' && network !== TEST_BUILD_ONLY_NETWORK) fail('TEST_BUILD_NETWORK', 'A test build is for preprod only');
-  if (!build.networks.includes(network)) fail('BUILD_NETWORK', 'The pinned build does not allow this network');
-
-  if (draft.status !== 'candidate' && draft.status !== 'accepted') invalid('A vault is a candidate or accepted');
-  if (!ORIGINS.includes(draft.origin)) invalid('A vault was created, imported or restored');
-  if (!LIFECYCLES.includes(draft.lifecycle)) invalid('Unknown lifecycle');
-  const name = optionalLabel(draft.name, 'vault name');
-
-  const participants = readParticipants(draft.participants, build, keyProblem);
+  const participants = readParticipants(draft.participants, network, build, options);
   const self = readSelf(draft.self, participants);
-  if (!isIndex(draft.highestIndex)) invalid('The highest index is from 1 to 2^31 - 1');
-  if (self.some(s => s.index > draft.highestIndex)) invalid('The highest index is at least every index of this seed');
-  const agreedConfig = readAgreedConfig(draft.agreedConfig, build, keyProblem);
+  const agreedConfig = readAgreedConfig(draft.agreedConfig);
   const verifications = readVerifications(draft.verifications, participants, agreedConfig);
   const deployment = readDeployment(draft.deployment, build);
-  const lastCheck = readLastCheck(draft.lastCheck, build, participants);
-  const requests = readRequests(draft.requests, build);
+  const lastCheck = readLastCheck(draft.lastCheck, agreedConfig);
+  const requests = readRequests(draft.requests, { network, contractAddress, build });
+  if (requests.length > 0 && draft.status !== 'accepted') refuse('NOT_ACCEPTED', 'A candidate is never signed for, so it holds no requests');
 
   const { createdAt, updatedAt, acceptedAt } = draft;
-  if (!isUint(createdAt) || !isUint(updatedAt) || updatedAt < createdAt) invalid('Times are milliseconds since the epoch');
-  if ((draft.status === 'accepted') !== (acceptedAt !== null)) invalid('Only an accepted vault has an acceptance time');
-  if (acceptedAt !== null && (!isUint(acceptedAt) || acceptedAt < createdAt)) invalid('Times are milliseconds since the epoch');
+  if (!isUint(createdAt) || !isUint(updatedAt) || updatedAt < createdAt) malformed('Times are milliseconds since the epoch');
+  if ((draft.status === 'accepted') !== (acceptedAt !== null)) malformed('Only an accepted vault has an acceptance time');
+  if (acceptedAt !== null && (!isUint(acceptedAt) || acceptedAt < createdAt)) malformed('Times are milliseconds since the epoch');
 
   const record: MidnightVaultRecord = {
     recordVersion: 1,
     vaultId,
     network,
     contractAddress,
-    build: { id: build.id, profile: build.profile },
+    build: build.buildId,
     status: draft.status,
     origin: draft.origin,
     lifecycle: draft.lifecycle,
-    ...(name !== undefined ? { name } : {}),
+    ...name,
     self,
-    highestIndex: draft.highestIndex,
     participants,
     agreedConfig,
     verifications,
@@ -911,42 +556,33 @@ function checkRecord(draft: MidnightVaultRecord, builds: ReadonlyMap<string, Pin
   return record;
 }
 
-function checkBuilds(builds: readonly PinnedMidnightBuild[]): ReadonlyMap<string, PinnedMidnightBuild> {
-  const map = new Map<string, PinnedMidnightBuild>();
-  for (const build of builds) {
-    const sound = typeof build?.id === 'string'
-      && PROFILES.includes(build.profile)
-      && Array.isArray(build.networks) && build.networks.every(n => NETWORKS.includes(n))
-      && isHex32(build.manifestHash)
-      && isObject(build.circuits) && Object.values(build.circuits).every(c => isHex32(c?.fingerprint) && typeof c.deferred === 'boolean')
-      && isObject(build.constants) && Object.values(build.constants).every(isUint)
-      && build.constants.ownerSlots >= 1;
-    if (!sound || map.has(build.id)) throw new Error('A pinned Midnight vault build is malformed or listed twice');
-    map.set(build.id, build);
-  }
-  return map;
-}
-
 function assertVaultId(vaultId: unknown): asserts vaultId is string {
-  if (!isHex32(vaultId)) invalid('A vault id is 32 bytes of lowercase hex');
+  if (!isHex32(vaultId)) malformed('A vault id is 32 bytes of lowercase hex');
 }
 
+function assertNetwork(network: unknown): asserts network is MidnightVaultNetwork {
+  if (!isNetwork(network)) malformed('A Midnight network is preprod, preview or mainnet');
+}
+
+/** Strictly increasing, so a version a screen showed is never mistaken for a later one. */
 function nextUpdatedAt(current: MidnightVaultRecord): number {
-  // Strictly increasing, so a review of an earlier version never matches a later one.
   return Math.max(Date.now(), current.updatedAt + 1);
 }
 
 // -------------------------------------------------------------------------------------------------
 // The store
 
-export function createMidnightVaultStore(options: MidnightVaultStoreOptions): MidnightVaultStore {
-  const builds = checkBuilds(options.builds);
-  const { keyProblem } = options;
-  const openDatabase = options.openDatabase ?? getDb;
-  const check = (draft: MidnightVaultRecord) => checkRecord(draft, builds, keyProblem);
+export function createMidnightVaultStore(storeOptions: MidnightVaultStoreOptions = {}): MidnightVaultStore {
+  const options: Options = {
+    builds: storeOptions.builds ?? [MIDNIGHT_VAULT_BUILDS.test, MIDNIGHT_VAULT_BUILDS.production],
+    keyProblem: storeOptions.keyProblem,
+    checkCard: storeOptions.checkCard,
+  };
+  const openDatabase = storeOptions.openDatabase ?? getDb;
+  const check = (draft: MidnightVaultRecord) => checkRecord(draft, options);
 
   async function database(walletId: number): Promise<Dexie> {
-    if (!Number.isSafeInteger(walletId) || walletId < 0) invalid('A wallet id is a non-negative integer');
+    if (!Number.isSafeInteger(walletId) || walletId < 0) malformed('A wallet id is a non-negative integer');
     let db: Dexie | null;
     try {
       db = await openDatabase(walletId);
@@ -958,13 +594,17 @@ export function createMidnightVaultStore(options: MidnightVaultStoreOptions): Mi
   }
 
   /**
-   * Runs `work` in one transaction on the table. Only Dexie calls and synchronous checks may run
+   * Runs `work` in one transaction on both tables. Only Dexie calls and synchronous checks may run
    * inside it: awaiting anything else would end the transaction early.
    */
-  async function withVaults<T>(walletId: number, mode: 'r' | 'rw', work: (table: Table<MidnightVaultRecord, string>) => Promise<T>): Promise<T> {
+  async function withTables<T>(
+    walletId: number,
+    mode: 'r' | 'rw',
+    work: (vaults: Table<MidnightVaultRecord, string>, indexes: Table<IndexRow, string>) => Promise<T>,
+  ): Promise<T> {
     const db = await database(walletId);
     try {
-      return await db.transaction(mode, TABLE, () => work(db.table<MidnightVaultRecord, string>(TABLE)));
+      return await db.transaction(mode, [VAULTS, INDEXES], () => work(db.table<MidnightVaultRecord, string>(VAULTS), db.table<IndexRow, string>(INDEXES)));
     } catch (error) {
       if (error instanceof MidnightVaultStoreError) throw error;
       throw new MidnightVaultStoreError('STORE_UNAVAILABLE', 'The Midnight vaults of this wallet could not be read or written', { cause: error });
@@ -972,18 +612,31 @@ export function createMidnightVaultStore(options: MidnightVaultStoreOptions): Mi
   }
 
   function readable(row: MidnightVaultRecord): MidnightVaultRecord {
-    if (row?.recordVersion !== 1) fail('STORE_UNAVAILABLE', 'A stored Midnight vault has a format this version cannot read');
+    if (row?.recordVersion !== 1) throw new MidnightVaultStoreError('STORE_UNAVAILABLE', 'A stored Midnight vault has a format this version cannot read');
     return row;
   }
 
-  async function current(table: Table<MidnightVaultRecord, string>, vaultId: string): Promise<MidnightVaultRecord> {
-    const row = await table.get(vaultId);
-    if (!row) fail('NOT_FOUND', 'This wallet does not hold this vault');
+  async function current(vaults: Table<MidnightVaultRecord, string>, vaultId: string): Promise<MidnightVaultRecord> {
+    const row = await vaults.get(vaultId);
+    if (!row) throw new MidnightVaultStoreError('NOT_FOUND', 'This wallet does not hold this vault');
     return readable(row);
   }
 
+  async function highestIn(vaults: Table<MidnightVaultRecord, string>, indexes: Table<IndexRow, string>, network: MidnightVaultNetwork): Promise<number> {
+    const counter = (await indexes.get(network))?.highestIndex ?? 0;
+    const rows = (await vaults.where('network').equals(network).toArray()).map(readable);
+    return Math.max(counter, ...rows.flatMap(row => row.self.map(s => s.index)));
+  }
+
+  /** Records this seed's indexes in a record as taken: an index is never handed out twice. */
+  async function recordIndexes(indexes: Table<IndexRow, string>, record: MidnightVaultRecord): Promise<void> {
+    const highest = Math.max(...record.self.map(s => s.index));
+    const counter = (await indexes.get(record.network))?.highestIndex ?? 0;
+    if (highest > counter) await indexes.put({ network: record.network, highestIndex: highest });
+  }
+
   async function addCandidate(walletId: number, input: MidnightVaultCandidateInput): Promise<MidnightVaultRecord> {
-    if (!isObject(input)) invalid('A candidate is an object');
+    if (!isObject(input)) malformed('A candidate is an object');
     const now = Date.now();
     const record = check({
       recordVersion: 1,
@@ -996,148 +649,144 @@ export function createMidnightVaultStore(options: MidnightVaultStoreOptions): Mi
       lifecycle: input.lifecycle,
       ...(input.name !== undefined ? { name: input.name } : {}),
       self: input.self,
-      highestIndex: input.highestIndex,
       participants: input.participants,
       agreedConfig: input.agreedConfig ?? null,
       verifications: input.verifications ?? [],
       deployment: input.deployment ?? null,
-      lastCheck: (input.lastCheck ?? null) as MidnightVaultLastCheck | null,
+      lastCheck: input.lastCheck ?? null,
       requests: [],
-      successor: input.successor ?? null,
+      successor: null,
       createdAt: now,
       updatedAt: now,
       acceptedAt: null,
     });
-    return withVaults(walletId, 'rw', async table => {
-      if (await table.get(record.vaultId)) fail('VAULT_EXISTS', 'This wallet already holds this vault');
-      await table.add(record);
+    // Nothing that failed an import check is stored.
+    assertImportChecks(record.lastCheck);
+    return withTables(walletId, 'rw', async (vaults, indexes) => {
+      if (await vaults.get(record.vaultId)) throw new MidnightVaultStoreError('VAULT_EXISTS', 'This wallet already holds this vault');
+      await vaults.add(record);
+      await recordIndexes(indexes, record);
       return record;
     });
   }
 
-  async function accept(walletId: number, vaultId: string, input: MidnightVaultAcceptInput): Promise<MidnightVaultRecord> {
+  async function accept(walletId: number, vaultId: string, input: { readonly verifications?: readonly MidnightOwnerVerification[] } = {}): Promise<MidnightVaultRecord> {
     assertVaultId(vaultId);
-    if (!isObject(input) || !isUint(input.reviewedUpdatedAt)) invalid('Accepting names the version the user reviewed');
-    return withVaults(walletId, 'rw', async table => {
-      const row = await current(table, vaultId);
-      if (row.status !== 'candidate') fail('NOT_A_CANDIDATE', 'This vault is already accepted');
-      if (row.updatedAt !== input.reviewedUpdatedAt) fail('STALE_REVIEW', 'This vault changed after it was reviewed');
-      if (!ACCEPTABLE.includes(row.lifecycle)) fail('VAULT_INCOMPLETE', 'A vault is accepted only once it is complete on chain');
+    if (!isObject(input)) malformed('Acceptance input is an object');
+    return withTables(walletId, 'rw', async vaults => {
+      const row = await current(vaults, vaultId);
+      if (row.status !== 'candidate') throw new MidnightVaultStoreError('NOT_A_CANDIDATE', 'This vault is already accepted');
+      if (!ACCEPTABLE.includes(row.lifecycle)) refuse('VAULT_INCOMPLETE', 'A vault is accepted only once it is complete on chain');
+      assertImportChecks(row.lastCheck);
       const now = nextUpdatedAt(row);
-      const next = check({ ...row, status: 'accepted', updatedAt: now, acceptedAt: now });
-      await table.put(next);
+      const next = check({
+        ...row,
+        ...(input.verifications !== undefined ? { verifications: input.verifications } : {}),
+        status: 'accepted',
+        updatedAt: now,
+        acceptedAt: now,
+      });
+      await vaults.put(next);
       return next;
     });
   }
 
   async function update(walletId: number, vaultId: string, patch: MidnightVaultRecordPatch): Promise<MidnightVaultRecord> {
     assertVaultId(vaultId);
-    if (!isObject(patch)) invalid('A patch is an object');
-    if (Object.keys(patch).some(key => !PATCH_KEYS.includes(key))) invalid('Only the fields listed in MidnightVaultRecordPatch change');
-    return withVaults(walletId, 'rw', async table => {
-      const row = await current(table, vaultId);
+    if (!isObject(patch)) malformed('A patch is an object');
+    if (Object.keys(patch).some(key => !PATCH_KEYS.includes(key))) malformed('Only the fields of MidnightVaultRecordPatch change');
+    return withTables(walletId, 'rw', async (vaults, indexes) => {
+      const row = await current(vaults, vaultId);
       const draft: Mutable<MidnightVaultRecord> = { ...row };
       if (patch.name === null) delete draft.name;
       else if (patch.name !== undefined) draft.name = patch.name;
-      if (patch.participants !== undefined) draft.participants = patch.participants;
-      if (patch.self !== undefined) draft.self = patch.self;
-      if (patch.labels !== undefined) draft.participants = relabel(draft.participants, patch.labels);
-      if (patch.lifecycle !== undefined) {
-        if (patch.lifecycle !== row.lifecycle && patch.lifecycle === 'deploying') fail('LIFECYCLE_MISMATCH', 'A vault never goes back to deploying');
-        if (patch.lifecycle !== row.lifecycle && row.lifecycle === 'moved') fail('LIFECYCLE_MISMATCH', 'A moved vault stays moved');
+      if (patch.lifecycle !== undefined && patch.lifecycle !== row.lifecycle) {
+        if (patch.lifecycle === 'deploying') refuse('LIFECYCLE_MISMATCH', 'A vault never goes back to deploying');
+        if (row.lifecycle === 'moved') refuse('LIFECYCLE_MISMATCH', 'A moved vault stays moved');
         draft.lifecycle = patch.lifecycle;
       }
-      if (patch.highestIndex !== undefined) {
-        if (!isIndex(patch.highestIndex) || patch.highestIndex < row.highestIndex) invalid('The highest index is only ever raised');
-        draft.highestIndex = patch.highestIndex;
-      }
+      if (patch.self !== undefined) draft.self = patch.self;
+      if (patch.participants !== undefined) draft.participants = patch.participants;
       if (patch.agreedConfig !== undefined) draft.agreedConfig = patch.agreedConfig;
       if (patch.verifications !== undefined) draft.verifications = patch.verifications;
       if (patch.deployment !== undefined) draft.deployment = patch.deployment;
-      if (patch.lastCheck !== undefined) draft.lastCheck = patch.lastCheck as MidnightVaultLastCheck | null;
+      if (patch.lastCheck !== undefined) draft.lastCheck = patch.lastCheck;
       if (patch.successor !== undefined) draft.successor = patch.successor;
       draft.updatedAt = nextUpdatedAt(row);
       const next = check(draft);
-      await table.put(next);
+      await vaults.put(next);
+      await recordIndexes(indexes, next);
       return next;
     });
   }
 
-  async function putRequest(walletId: number, vaultId: string, request: MidnightVaultRequestInput): Promise<MidnightVaultRecord> {
+  async function putRequest(walletId: number, vaultId: string, request: MidnightStoredRequest): Promise<MidnightVaultRecord> {
     assertVaultId(vaultId);
-    return withVaults(walletId, 'rw', async table => {
-      const row = await current(table, vaultId);
-      if (row.status !== 'accepted') fail('NOT_ACCEPTED', 'A candidate is never signed for, so it holds no requests');
-      const build = builds.get(row.build.id);
-      if (!build) fail('UNKNOWN_BUILD', 'The build is not a pinned build of this profile');
-      const input = readRequestInput(request, build);
+    return withTables(walletId, 'rw', async vaults => {
+      const row = await current(vaults, vaultId);
       const now = nextUpdatedAt(row);
-      const stored = row.requests.find(r => r.id === input.id);
-      let requests: StoredMidnightVaultRequest[];
-      if (!stored) {
-        requests = [...row.requests, { ...input, createdAt: now, updatedAt: now }];
-      } else {
-        if (stored.kind !== input.kind || stored.expiresAt !== input.expiresAt) invalid('Another request has this id');
-        const added = input.approvals.filter(a => !stored.approvals.some(s => s.signer === a.signer));
-        if (added.length === 0) return row;
-        const merged = { ...stored, approvals: [...stored.approvals, ...added], updatedAt: now };
-        requests = row.requests.map(r => (r.id === input.id ? merged : r));
+      const stored = readStoredRequest(isObject(request) ? { ...request, updatedAt: now } : request, {
+        network: row.network,
+        contractAddress: row.contractAddress,
+        build: buildOf(row.build, row.network, options),
+      });
+      const digest = stored.request.digest;
+      let requests = row.requests.some(r => r.request.digest === digest)
+        ? row.requests.map(r => (r.request.digest === digest ? stored : r))
+        : [...row.requests, stored];
+      if (requests.length > MAX_REQUESTS) {
+        // Make room by dropping the oldest settled request; open and submitted ones stay.
+        const settled = requests.filter(r => SETTLED_STATES.includes(r.state)).sort((a, b) => a.updatedAt - b.updatedAt)[0];
+        if (!settled) refuse('TOO_MANY_REQUESTS', `A vault keeps at most ${MAX_REQUESTS} requests, and none of them is settled`);
+        requests = requests.filter(r => r !== settled);
       }
       const next = check({ ...row, requests, updatedAt: now });
-      await table.put(next);
-      return next;
-    });
-  }
-
-  async function removeRequest(walletId: number, vaultId: string, requestId: string): Promise<MidnightVaultRecord> {
-    assertVaultId(vaultId);
-    if (!isHex32(requestId)) invalid('A request id is 32 bytes of lowercase hex');
-    return withVaults(walletId, 'rw', async table => {
-      const row = await current(table, vaultId);
-      if (!row.requests.some(r => r.id === requestId)) return row;
-      const next = check({ ...row, requests: row.requests.filter(r => r.id !== requestId), updatedAt: nextUpdatedAt(row) });
-      await table.put(next);
+      await vaults.put(next);
       return next;
     });
   }
 
   async function list(walletId: number, filter: MidnightVaultListFilter = {}): Promise<readonly MidnightVaultRecord[]> {
-    if (!isObject(filter)) invalid('A filter is an object');
-    const rows = await withVaults(walletId, 'r', table => table.toArray());
+    if (!isObject(filter)) malformed('A filter is an object');
+    const rows = await withTables(walletId, 'r', vaults => vaults.toArray());
     return rows
       .map(readable)
-      .filter(row => (filter.status === undefined || row.status === filter.status)
-        && (filter.network === undefined || row.network === filter.network)
-        && (filter.role === undefined || row.self.some(s => s.role === filter.role)))
+      .filter(row => (filter.status === undefined || row.status === filter.status) && (filter.network === undefined || row.network === filter.network))
       .sort((a, b) => a.createdAt - b.createdAt || (a.vaultId < b.vaultId ? -1 : a.vaultId > b.vaultId ? 1 : 0));
   }
 
   async function get(walletId: number, vaultId: string): Promise<MidnightVaultRecord | undefined> {
     assertVaultId(vaultId);
-    const row = await withVaults(walletId, 'r', table => table.get(vaultId));
+    const row = await withTables(walletId, 'r', vaults => vaults.get(vaultId));
     return row === undefined ? undefined : readable(row);
   }
 
-  return Object.freeze({ list, get, addCandidate, accept, update, putRequest, removeRequest });
-}
-
-function relabel(participants: MidnightVaultParticipants, labels: MidnightVaultRecordPatch['labels']): MidnightVaultParticipants {
-  if (!Array.isArray(labels)) invalid('Labels are a list of role, slot and label');
-  const next = { owners: [...participants.owners], guardians: [...participants.guardians], delegates: [...participants.delegates] };
-  const lists = { owner: next.owners, guardian: next.guardians, delegate: next.delegates } as Record<MidnightVaultRole, { slot: number; label?: string }[]>;
-  for (const change of labels) {
-    if (!isObject<{ role: unknown; slot: unknown; label: unknown }>(change) || !ROLES.includes(change.role as MidnightVaultRole)) invalid('A label change names a role');
-    const list = lists[change.role as MidnightVaultRole];
-    const at = list.findIndex(p => p.slot === change.slot);
-    if (at < 0) invalid('A label names someone who is not a participant');
-    const { label: _old, ...rest } = list[at];
-    list[at] = change.label === null ? rest : { ...rest, label: change.label as string };
+  async function allocateIndex(walletId: number, network: MidnightVaultNetwork): Promise<number> {
+    assertNetwork(network);
+    return withTables(walletId, 'rw', async (vaults, indexes) => {
+      const highest = await highestIn(vaults, indexes, network);
+      if (highest >= MAX_INDEX) throw new MidnightVaultStoreError('INDEX_EXHAUSTED', 'Every index of this seed on this network is taken');
+      await indexes.put({ network, highestIndex: highest + 1 });
+      return highest + 1;
+    });
   }
-  return next;
+
+  async function highestIndex(walletId: number, network: MidnightVaultNetwork): Promise<number> {
+    assertNetwork(network);
+    return withTables(walletId, 'r', (vaults, indexes) => highestIn(vaults, indexes, network));
+  }
+
+  async function raiseIndex(walletId: number, network: MidnightVaultNetwork, index: number): Promise<void> {
+    assertNetwork(network);
+    if (!isUint(index) || index > MAX_INDEX) malformed('An index is from 0 to 2^31 - 1');
+    await withTables(walletId, 'rw', async (_vaults, indexes) => {
+      const counter = (await indexes.get(network))?.highestIndex ?? 0;
+      if (index > counter) await indexes.put({ network, highestIndex: index });
+    });
+  }
+
+  return Object.freeze({ list, get, addCandidate, accept, update, putRequest, allocateIndex, highestIndex, raiseIndex });
 }
 
-/**
- * The store screens use. It refuses every write until the pinned builds are wired in, and the full
- * key check comes from the Midnight keys package at integration.
- */
-export const midnightVaultStore: MidnightVaultStore = createMidnightVaultStore({ builds: [] });
+/** The store, over both pinned builds. The full key and card checks are wired in at integration. */
+export const midnightVaultStore: MidnightVaultStore = createMidnightVaultStore();

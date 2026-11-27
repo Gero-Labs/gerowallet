@@ -10,7 +10,7 @@ export const geroDBSchema = {
 };
 
 // 12 adds `vaults` (GeroVault, src/db/vaultStore.ts). Additive, like every earlier change.
-// 13 adds `midnightVaults` (GeroVault on Midnight, src/db/midnightVaultStore.ts). Additive too.
+// 13 adds `midnightVaults` and `midnightVaultIndexes` (GeroVault on Midnight, src/db/midnightVaultStore.ts). Additive too.
 export const walletDBVersion: number = 13;
 
 export const walletDBSchema = {
@@ -33,6 +33,8 @@ export const walletDBSchema = {
   // GeroVault on Midnight: the contract vaults this wallet holds, keyed by vault id. A table of its
   // own, so no Cardano vault check or reader (knownVaults.ts) ever sees a Midnight row.
   midnightVaults: 'vaultId, status, network, contractAddress, updatedAt',
+  // The highest vault key index this seed has allocated, per Midnight network: never handed out twice.
+  midnightVaultIndexes: 'network',
 };
 
 export const blockChainDBVersion: number = 5;

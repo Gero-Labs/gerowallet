@@ -4,56 +4,31 @@ import { jubjub } from '@noble/curves/jubjub';
 import { schnorr } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MIDNIGHT_VAULT_BUILDS } from '@/chains/midnight/vault/build';
+import {
+  MIDNIGHT_APPROVAL_FILE_TYPE,
+  MIDNIGHT_REQUEST_FILE_TYPE,
+  midnightVaultId,
+  type MidnightLastCheck,
+  type MidnightOwnerApprovalFile,
+  type MidnightRequestFile,
+  type MidnightStoredParticipants,
+  type MidnightStoredRequest,
+  type MidnightVaultCandidateInput,
+} from '@/modules/gerovault/midnight/contracts';
 import { walletDBSchema } from './schema';
 import { clearDbCache, getDb } from './wallet-db';
 import { vaultStore } from './vaultStore';
-import {
-  MidnightVaultStoreError,
-  createMidnightVaultStore,
-  midnightVaultId,
-  midnightVaultStore,
-  type MidnightVaultCandidateInput,
-  type MidnightVaultKey,
-  type MidnightVaultLastCheckInput,
-  type MidnightVaultRequestInput,
-  type PinnedMidnightBuild,
-} from './midnightVaultStore';
+import { MidnightVaultStoreError, createMidnightVaultStore, midnightVaultStore, type MidnightCardExpectation } from './midnightVaultStore';
 
 // -------------------------------------------------------------------------------------------------
 // Fixtures
 
-const CIRCUITS = [
-  'applyGuardians', 'applyOwners', 'applyPolicy', 'applyRecovery', 'cancelGuardians', 'cancelOwners',
-  'cancelPolicy', 'cancelRecovery', 'clearExpiredRecovery', 'delegatePayout', 'deposit', 'execute',
-  'narrowPolicy', 'proposeGuardians', 'proposeOwners', 'proposePolicy', 'proposeRecovery', 'withdrawRecovery',
-];
-const DEFERRED = ['deposit', 'withdrawRecovery', 'clearExpiredRecovery', 'applyRecovery', 'proposeGuardians', 'cancelGuardians', 'applyGuardians'];
+const TEST = MIDNIGHT_VAULT_BUILDS.test;
+const PRODUCTION = MIDNIGHT_VAULT_BUILDS.production;
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 const digestOf = (text: string) => hex(sha256(new TextEncoder().encode(text)));
-
-function pinnedBuild(profile: 'test' | 'production', networks: PinnedMidnightBuild['networks']): PinnedMidnightBuild {
-  const test = profile === 'test';
-  return {
-    id: test ? 'gvmn-test-45d16eda70751d57' : 'gvmn-production-c4585eee75a8b850',
-    profile,
-    networks,
-    manifestHash: digestOf(`${profile} manifest`),
-    constants: {
-      ownerSlots: 5,
-      guardianSlots: 5,
-      delegateSlots: 2,
-      whitelistEntries: 8,
-      minRecoveryDelaySeconds: test ? 60 : 604800,
-      expiryWindowSeconds: test ? 600 : 2592000,
-      cooldownSeconds: test ? 120 : 172800,
-    },
-    circuits: Object.fromEntries(CIRCUITS.map(name => [name, { fingerprint: digestOf(`${profile} ${name}`), deferred: DEFERRED.includes(name) }])),
-  };
-}
-
-const TEST_BUILD = pinnedBuild('test', ['preprod']);
-const PRODUCTION_BUILD = pinnedBuild('production', ['preprod', 'mainnet']);
 
 /** Little-endian 32-byte hex of a field element. */
 function le32(value: bigint): string {
@@ -75,12 +50,10 @@ function jubjubKey(scalar: bigint): string {
   return le32(x) + le32(y);
 }
 
-function upgradeKey(seed: number): string {
-  return hex(schnorr.getPublicKey(new Uint8Array(32).fill(seed)));
-}
+const upgradeKey = (seed: number) => hex(schnorr.getPublicKey(new Uint8Array(32).fill(seed)));
 
 /** The full key check integration passes in: on the curve, prime order, and an x-only key that lifts. */
-function fullKeyProblem(key: MidnightVaultKey): string | null {
+function fullKeyProblem(key: { kind: 'jubjub' | 'upgrade'; hex: string }): string | null {
   try {
     if (key.kind === 'upgrade') {
       schnorr.utils.lift_x(BigInt(`0x${key.hex}`));
@@ -95,52 +68,38 @@ function fullKeyProblem(key: MidnightVaultKey): string | null {
 }
 
 const P = jubjub.CURVE.Fp.ORDER;
-/** (0, -1): on the curve, of order 2. Encoded well, refused only by the full key check. */
+/** (0, -1): on the curve, of order 2. Encoded well; refused only by the full key check. */
 const ORDER_TWO = le32(0n) + le32(P - 1n);
 
 const owners = [1, 2, 3].map(i => ({ approvalKey: jubjubKey(BigInt(1000 + i)), upgradeKey: upgradeKey(i) }));
-const guardianKeys = [1, 2, 3].map(i => jubjubKey(BigInt(2000 + i)));
-const salts = [1, 2, 3].map(i => digestOf(`salt ${i}`));
+const commitments = [1, 2, 3].map(i => le32(BigInt(7000 + i)));
 const delegateKeys = [1, 2].map(i => jubjubKey(BigInt(3000 + i)));
 const ADDRESS = digestOf('contract address');
 const OTHER_ADDRESS = digestOf('another contract');
-const AGREED_DIGEST = digestOf('verification set');
+const AGREED = { cbor: 'a1616101', digest: digestOf('verification set') };
+const VAULT_ID = midnightVaultId('preprod', ADDRESS);
 
-function operations(build: PinnedMidnightBuild, omit: readonly string[] = []): Record<string, string> {
-  return Object.fromEntries(CIRCUITS.filter(c => !omit.includes(c)).map(c => [c, build.circuits[c].fingerprint]));
+function participants(overrides: Partial<MidnightStoredParticipants> = {}): MidnightStoredParticipants {
+  return {
+    owners: [...owners.map((o, i) => ({ ...o, label: `Owner ${i + 1}` })), null, null],
+    guardians: [...commitments.map(commitment => ({ commitment })), null, null],
+    delegates: [null, null],
+    ...overrides,
+  };
 }
 
-function lastCheck(overrides: Partial<MidnightVaultLastCheckInput> = {}, build = TEST_BUILD): MidnightVaultLastCheckInput {
+function lastCheck(checks: Partial<MidnightLastCheck['checks']> = {}, overrides: Partial<MidnightLastCheck> = {}): MidnightLastCheck {
   return {
     source: 'indexer',
     blockHeight: 120345,
     blockHash: digestOf('block'),
     at: 1_800_000_000_000,
-    operations: operations(build),
-    committee: { keys: owners.map(o => o.upgradeKey), threshold: 2 },
-    ownerThreshold: 2,
+    checks: { operations: 'exact', committee: 'owners', decoded: true, role: true, matchesAgreed: true, ...checks },
     ...overrides,
   };
 }
 
-function agreedConfig(build = TEST_BUILD) {
-  const test = build.profile === 'test';
-  return {
-    digest: AGREED_DIGEST,
-    buildHash: build.manifestHash,
-    owners: owners.map(o => ({ ...o })),
-    threshold: 2,
-    changeDelay: 60,
-    whitelist: { enabled: false, entries: [] },
-    guardians: [1, 2, 3].map(i => digestOf(`commitment ${i}`)),
-    guardianThreshold: 2,
-    recoveryDelay: test ? 60 : 604800,
-    cooldown: test ? 120 : 172800,
-    expiryWindow: test ? 600 : 2592000,
-  };
-}
-
-/** A 2 of 3 test-build vault on preprod with three guardians, imported by owner 1 (slot 0, index 1). */
+/** A 2 of 3 test-build vault on preprod with three guardians, imported by owner 1 at index 1. */
 function candidate(overrides: Partial<MidnightVaultCandidateInput> = {}): MidnightVaultCandidateInput {
   const network = overrides.network ?? 'preprod';
   const contractAddress = overrides.contractAddress ?? ADDRESS;
@@ -148,38 +107,62 @@ function candidate(overrides: Partial<MidnightVaultCandidateInput> = {}): Midnig
     vaultId: overrides.vaultId ?? midnightVaultId(network, contractAddress),
     network,
     contractAddress,
-    build: { id: TEST_BUILD.id, profile: 'test' },
+    build: TEST.buildId,
     origin: 'imported',
     lifecycle: 'ready',
     name: 'Team vault',
-    participants: {
-      // Out of slot order on purpose: the store keeps slot order.
-      owners: [owners[2], owners[0], owners[1]].map(o => ({ slot: owners.indexOf(o), ...o, label: `Owner ${owners.indexOf(o) + 1}` })),
-      guardians: guardianKeys.map((key, slot) => ({ slot, key, salt: salts[slot] })),
-      delegates: [],
-    },
-    self: [{ role: 'owner', index: 1, slot: 0 }],
-    highestIndex: 3,
-    agreedConfig: agreedConfig(),
-    verifications: [{ method: 'number', owner: owners[1].approvalKey, digest: AGREED_DIGEST, at: 1_800_000_000 }],
+    self: [{ role: 'owner', index: 1 }],
+    participants: participants(),
+    agreedConfig: AGREED,
+    verifications: [{ approvalKey: owners[1].approvalKey, method: 'number', verificationDigest: AGREED.digest, at: 1_800_000_000 }],
     lastCheck: lastCheck(),
     ...overrides,
   };
 }
 
-function request(overrides: Partial<MidnightVaultRequestInput> = {}): MidnightVaultRequestInput {
-  return {
-    id: digestOf('payout statement'),
-    kind: 'payout:v4',
-    origin: 'made',
-    file: '{"type":"gero-vault/v1|midnight-request"}',
-    expiresAt: 1_800_172_800,
-    approvals: [{ signer: owners[0].approvalKey, file: '{"type":"gero-vault/v1|midnight-approval","n":1}' }],
-    ...overrides,
-  };
+/** A production-build candidate on `network`. */
+function production(network: 'preprod' | 'mainnet' | 'preview'): MidnightVaultCandidateInput {
+  return candidate({ network, build: PRODUCTION.buildId });
 }
 
-const store = createMidnightVaultStore({ builds: [TEST_BUILD, PRODUCTION_BUILD], keyProblem: fullKeyProblem });
+function requestFile(overrides: Record<string, unknown> = {}): MidnightRequestFile {
+  return {
+    type: MIDNIGHT_REQUEST_FILE_TYPE,
+    version: 1,
+    network: 'preprod',
+    contract: ADDRESS,
+    build: TEST.buildId,
+    kind: 'payout',
+    signers: 'owners',
+    nonce: '3',
+    expiry: 1_800_172_800,
+    body: { recipient: 'mn_addr_preprod1example', amount: '1000000' },
+    digest: digestOf('payout statement'),
+    createdAt: 1_800_000_000_000,
+    ...overrides,
+  } as MidnightRequestFile;
+}
+
+function approval(signer = owners[0].approvalKey, overrides: Record<string, unknown> = {}): MidnightOwnerApprovalFile {
+  return {
+    type: MIDNIGHT_APPROVAL_FILE_TYPE,
+    version: 1,
+    network: 'preprod',
+    contract: ADDRESS,
+    digest: digestOf('payout statement'),
+    createdAt: 1_800_000_000_000,
+    role: 'owner',
+    approvalKey: signer,
+    signature: { announcement: jubjubKey(9n), response: le32(9n) },
+    ...overrides,
+  } as MidnightOwnerApprovalFile;
+}
+
+function stored(overrides: Partial<MidnightStoredRequest> = {}): MidnightStoredRequest {
+  return { request: requestFile(), approvals: [approval()], state: 'open', updatedAt: 0, ...overrides };
+}
+
+const store = createMidnightVaultStore({ keyProblem: fullKeyProblem });
 
 let nextWallet = 307100;
 const wallets: number[] = [];
@@ -199,67 +182,61 @@ afterEach(async () => {
   }
 });
 
+/** The error's code, and its reason when it has one: `INVALID_INPUT/SELF_MISMATCH`. */
 async function refusal(promise: Promise<unknown>): Promise<string> {
   const error = await promise.then(() => undefined, (e: unknown) => e);
   expect(error).toBeInstanceOf(MidnightVaultStoreError);
-  return (error as MidnightVaultStoreError).code;
+  const { code, reason } = error as MidnightVaultStoreError;
+  return reason ? `${code}/${reason}` : code;
 }
 
-/** Adds the default candidate as accepted. */
 async function accepted(wallet: number, overrides: Partial<MidnightVaultCandidateInput> = {}) {
   const added = await store.addCandidate(wallet, candidate(overrides));
-  return store.accept(wallet, added.vaultId, { reviewedUpdatedAt: added.updatedAt });
+  return store.accept(wallet, added.vaultId);
 }
 
 // -------------------------------------------------------------------------------------------------
 
 describe('Midnight vault store: records', () => {
-  it('adds a candidate that reads back in slot order, with the check results it computed', async () => {
+  it('adds a candidate that reads back as stored, in slot order', async () => {
     const wallet = walletId();
     vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const added = await store.addCandidate(wallet, candidate());
-    expect(added).toMatchObject({
+    expect(added).toEqual({
       recordVersion: 1,
-      vaultId: midnightVaultId('preprod', ADDRESS),
+      vaultId: VAULT_ID,
       network: 'preprod',
       contractAddress: ADDRESS,
-      build: { id: TEST_BUILD.id, profile: 'test' },
+      build: TEST.buildId,
       status: 'candidate',
       origin: 'imported',
       lifecycle: 'ready',
       name: 'Team vault',
-      self: [{ role: 'owner', index: 1, slot: 0 }],
-      highestIndex: 3,
+      self: [{ role: 'owner', index: 1 }],
+      participants: participants(),
+      agreedConfig: AGREED,
+      verifications: candidate().verifications,
       deployment: null,
+      lastCheck: lastCheck(),
       requests: [],
       successor: null,
       createdAt: 1_800_000_000_000,
       updatedAt: 1_800_000_000_000,
       acceptedAt: null,
     });
-    expect(added.participants.owners.map(o => [o.slot, o.approvalKey, o.label])).toEqual(
-      owners.map((o, i) => [i, o.approvalKey, `Owner ${i + 1}`]),
-    );
-    expect(added.lastCheck!.results).toEqual({ operations: 'complete', committee: 'owners' });
     clearDbCache(wallet);
-    expect(await store.get(wallet, added.vaultId)).toEqual(added);
+    expect(await store.get(wallet, VAULT_ID)).toEqual(added);
     expect(await store.list(wallet)).toEqual([added]);
   });
 
-  it('keeps each wallet\'s vaults apart and filters by status, network and role', async () => {
+  it('keeps each wallet\'s vaults apart and filters by status and network', async () => {
     const [mine, theirs] = [walletId(), walletId()];
-    const first = await store.addCandidate(mine, candidate());
-    const second = await accepted(mine, {
-      contractAddress: OTHER_ADDRESS,
-      participants: { ...candidate().participants, guardians: [], delegates: [{ slot: 1, key: delegateKeys[0] }] },
-      self: [{ role: 'owner', index: 4, slot: 0 }, { role: 'delegate', index: 5, slot: 1 }],
-      highestIndex: 5,
-    });
+    await store.addCandidate(mine, candidate());
+    const other = await accepted(mine, { contractAddress: OTHER_ADDRESS });
     expect(await store.list(theirs)).toEqual([]);
-    expect(await store.get(theirs, first.vaultId)).toBeUndefined();
-    expect((await store.list(mine, { status: 'accepted' })).map(v => v.vaultId)).toEqual([second.vaultId]);
-    expect((await store.list(mine, { role: 'delegate' })).map(v => v.vaultId)).toEqual([second.vaultId]);
-    expect(await store.list(mine, { role: 'guardian' })).toEqual([]);
+    expect(await store.get(theirs, VAULT_ID)).toBeUndefined();
+    expect((await store.list(mine, { status: 'accepted' })).map(v => v.vaultId)).toEqual([other.vaultId]);
+    expect((await store.list(mine, { status: 'candidate' })).map(v => v.vaultId)).toEqual([VAULT_ID]);
     expect(await store.list(mine, { network: 'mainnet' })).toEqual([]);
   });
 
@@ -267,419 +244,423 @@ describe('Midnight vault store: records', () => {
     const wallet = walletId();
     expect(await refusal(store.addCandidate(wallet, candidate({ vaultId: midnightVaultId('mainnet', ADDRESS) })))).toBe('VAULT_ID_MISMATCH');
     expect(await refusal(store.addCandidate(wallet, candidate({ vaultId: midnightVaultId('preprod', OTHER_ADDRESS) })))).toBe('VAULT_ID_MISMATCH');
-    expect(await refusal(store.addCandidate(wallet, candidate({ vaultId: midnightVaultId('preprod', ADDRESS), contractAddress: 'AB'.repeat(32) })))).toBe('INVALID_INPUT');
+    expect(await refusal(store.addCandidate(wallet, candidate({ vaultId: VAULT_ID, contractAddress: 'AB'.repeat(32) })))).toBe('INVALID_INPUT/MALFORMED');
     expect(await store.list(wallet)).toEqual([]);
-  });
-
-  it('pins the vault id: BLAKE2b-256 over the tag, the network id and the address', () => {
-    expect(midnightVaultId('preprod', '00'.repeat(32))).toMatch(/^[0-9a-f]{64}$/);
-    expect(midnightVaultId('preprod', ADDRESS)).not.toBe(midnightVaultId('preview', ADDRESS));
-    expect(() => midnightVaultId('testnet' as never, ADDRESS)).toThrow(MidnightVaultStoreError);
   });
 
   it('refuses the same vault twice', async () => {
     const wallet = walletId();
     await store.addCandidate(wallet, candidate());
     expect(await refusal(store.addCandidate(wallet, candidate({ name: 'Again' })))).toBe('VAULT_EXISTS');
-    expect((await store.get(wallet, midnightVaultId('preprod', ADDRESS)))!.name).toBe('Team vault');
+    expect((await store.get(wallet, VAULT_ID))!.name).toBe('Team vault');
   });
 });
 
 describe('Midnight vault store: builds', () => {
-  it('refuses a build that is not pinned, or pinned under another profile', async () => {
-    const wallet = walletId();
-    expect(await refusal(store.addCandidate(wallet, candidate({ build: { id: 'gvmn-test-0000000000000000', profile: 'test' } })))).toBe('UNKNOWN_BUILD');
-    expect(await refusal(store.addCandidate(wallet, candidate({ build: { id: TEST_BUILD.id, profile: 'production' } })))).toBe('UNKNOWN_BUILD');
+  it('refuses a build that is not pinned', async () => {
+    expect(await refusal(store.addCandidate(walletId(), candidate({ build: 'gvmn-test-0000000000000000' })))).toBe('INVALID_INPUT/UNKNOWN_BUILD');
   });
 
   it('refuses a test build on any network other than preprod, even where a pin lists it', async () => {
     const wallet = walletId();
     for (const network of ['mainnet', 'preview'] as const) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ network })))).toBe('TEST_BUILD_NETWORK');
+      expect(await refusal(store.addCandidate(wallet, candidate({ network })))).toBe('INVALID_INPUT/TEST_BUILD_NETWORK');
     }
-    const loose = createMidnightVaultStore({ builds: [pinnedBuild('test', ['preprod', 'preview', 'mainnet'])] });
+    const loose = createMidnightVaultStore({ builds: [{ ...TEST, networks: ['preprod', 'preview', 'mainnet'] }] });
     for (const network of ['mainnet', 'preview'] as const) {
-      expect(await refusal(loose.addCandidate(wallet, candidate({ network })))).toBe('TEST_BUILD_NETWORK');
+      expect(await refusal(loose.addCandidate(wallet, candidate({ network })))).toBe('INVALID_INPUT/TEST_BUILD_NETWORK');
     }
     expect(await store.list(wallet)).toEqual([]);
   });
 
   it('takes the production build on the networks its pin lists, and only those', async () => {
     const wallet = walletId();
-    const production = (network: 'preprod' | 'mainnet' | 'preview') => candidate({
-      network,
-      build: { id: PRODUCTION_BUILD.id, profile: 'production' },
-      agreedConfig: agreedConfig(PRODUCTION_BUILD),
-      lastCheck: lastCheck({}, PRODUCTION_BUILD),
-    });
-    expect((await store.addCandidate(wallet, production('mainnet'))).network).toBe('mainnet');
-    expect((await store.addCandidate(wallet, production('preprod'))).build.profile).toBe('production');
-    expect(await refusal(store.addCandidate(wallet, production('preview')))).toBe('BUILD_NETWORK');
+    expect((await store.addCandidate(wallet, production('mainnet'))).build).toBe(PRODUCTION.buildId);
+    expect((await store.addCandidate(wallet, production('preprod'))).build).toBe(PRODUCTION.buildId);
+    expect(await refusal(store.addCandidate(wallet, production('preview')))).toBe('INVALID_INPUT/BUILD_NETWORK');
   });
 
-  it('refuses an operation set whose fingerprints are not the build\'s', async () => {
+  it('refuses a split deployment that defers anything but the build\'s deferred set', async () => {
     const wallet = walletId();
-    const altered = { ...operations(TEST_BUILD), execute: digestOf('another execute') };
-    const extra = { ...operations(TEST_BUILD), sweep: digestOf('sweep') };
-    const cases: Record<string, string>[] = [
-      altered,
-      extra,
-      operations(TEST_BUILD, ['execute']),
-      // The production build's keys under the test build's id.
-      operations(PRODUCTION_BUILD),
-    ];
-    for (const ops of cases) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck({ operations: ops }) })))).toBe('BUILD_MISMATCH');
-    }
-    expect(await store.list(wallet)).toEqual([]);
-  });
-
-  it('refuses an agreed configuration that is not of the build', async () => {
-    const wallet = walletId();
-    const base = agreedConfig();
-    const cases = [
-      { ...base, buildHash: PRODUCTION_BUILD.manifestHash },
-      { ...base, recoveryDelay: 59 },
-      { ...base, expiryWindow: 601 },
-      { ...base, cooldown: 0 },
-      { ...base, guardians: [...base.guardians, digestOf('4'), digestOf('5'), digestOf('6')], guardianThreshold: 4 },
-      { ...base, whitelist: { enabled: true, entries: Array.from({ length: 9 }, (_, i) => ({ recipient: digestOf(`r${i}`), scope: 'any' as const })) } },
-    ];
-    for (const agreed of cases) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ agreedConfig: agreed })))).toBe('BUILD_MISMATCH');
-    }
-    // The contract's own rules: a strict guardian majority, an owner threshold within the owners.
-    for (const agreed of [{ ...base, guardianThreshold: 1 }, { ...base, threshold: 4 }]) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ agreedConfig: agreed })))).toBe('INVALID_INPUT');
-    }
-    expect((await store.addCandidate(wallet, candidate({ agreedConfig: { ...base, recoveryDelay: 3600 } }))).agreedConfig!.recoveryDelay).toBe(3600);
-  });
-
-  it('refuses a deployment that defers anything but the build\'s deferred set', async () => {
-    const wallet = walletId();
-    const deployment = { deployTx: digestOf('deploy'), completionTx: null, deferred: ['deposit'] };
-    expect(await refusal(store.addCandidate(wallet, candidate({ deployment })))).toBe('BUILD_MISMATCH');
-    const split = { deployTx: digestOf('deploy'), completionTx: digestOf('completion'), deferred: [...DEFERRED].reverse() };
-    expect((await store.addCandidate(wallet, candidate({ deployment: split }))).deployment!.deferred).toEqual([...DEFERRED].sort());
+    const partial = { deployTxHash: digestOf('deploy'), deferred: ['deposit' as const] };
+    expect(await refusal(store.addCandidate(wallet, candidate({ deployment: partial })))).toBe('INVALID_INPUT/BUILD_MISMATCH');
+    expect(await refusal(store.addCandidate(wallet, candidate({ deployment: { deferred: ['sweep' as never] } })))).toBe('INVALID_INPUT/MALFORMED');
+    const split = { deployTxHash: digestOf('deploy'), completionTxHash: digestOf('completion'), deferred: [...TEST.deferred].reverse() };
+    expect((await store.addCandidate(wallet, candidate({ deployment: split }))).deployment).toEqual({ ...split, deferred: [...TEST.deferred].sort() });
   });
 });
 
-describe('Midnight vault store: committee and lifecycle', () => {
-  it('refuses a committee with a threshold below 1, no keys, or malformed keys', async () => {
+describe('Midnight vault store: import checks, committee and lifecycle', () => {
+  it('stores nothing whose state read failed an import check', async () => {
     const wallet = walletId();
-    const keys = owners.map(o => o.upgradeKey);
-    for (const committee of [
-      { keys, threshold: 0 },
-      { keys: [], threshold: 1 },
-      { keys: [keys[0], keys[0]], threshold: 1 },
-      { keys: ['zz'.repeat(32)], threshold: 1 },
+    for (const checks of [
+      { operations: 'unknown-build' as const },
+      { decoded: false },
+      { role: false },
+      { matchesAgreed: false },
     ]) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck({ committee }) })))).toBe('COMMITTEE_MISMATCH');
+      expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck(checks) })))).toBe('INVALID_INPUT/IMPORT_CHECK_FAILED');
     }
+    // The agreed configuration is compared exactly when there is one.
+    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck({ matchesAgreed: null }) })))).toBe('INVALID_INPUT/MALFORMED');
+    expect(await refusal(store.addCandidate(wallet, candidate({ agreedConfig: null, verifications: [] })))).toBe('INVALID_INPUT/MALFORMED');
+    expect(await store.list(wallet)).toEqual([]);
+    const noCeremony = await store.addCandidate(wallet, candidate({ agreedConfig: null, verifications: [], lastCheck: lastCheck({ matchesAgreed: null }) }));
+    expect(noCeremony.agreedConfig).toBeNull();
+  });
+
+  it('stores a later read whatever it found, so the screen sees the change', async () => {
+    const wallet = walletId();
+    const vault = await accepted(wallet);
+    const unknown = await store.update(wallet, vault.vaultId, { lastCheck: lastCheck({ operations: 'unknown-build' }) });
+    expect(unknown.lastCheck!.checks.operations).toBe('unknown-build');
+    const drift = await store.update(wallet, vault.vaultId, { lastCheck: lastCheck({ committee: 'drift' }) });
+    expect(drift.lastCheck!.checks.committee).toBe('drift');
+    expect(await store.get(wallet, vault.vaultId)).toEqual(drift);
   });
 
   it('keeps an incomplete deployment, and refuses to call it ready', async () => {
     const wallet = walletId();
-    const interim = lastCheck({ operations: operations(TEST_BUILD, DEFERRED), committee: { keys: [owners[0].upgradeKey], threshold: 1 } });
-    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: interim })))).toBe('LIFECYCLE_MISMATCH');
-    // Every operation in, but still the deployer's interim committee.
-    const notHandedOver = lastCheck({ committee: { keys: [owners[0].upgradeKey], threshold: 1 } });
-    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: notHandedOver })))).toBe('LIFECYCLE_MISMATCH');
-    const stored = await store.addCandidate(wallet, candidate({ lifecycle: 'incomplete', lastCheck: interim }));
-    expect(stored.lastCheck!.results).toEqual({ operations: 'deferredMissing', committee: 'interim' });
-    // A complete vault under its final committee is not incomplete.
-    expect(await refusal(store.addCandidate(walletId(), candidate({ lifecycle: 'incomplete' })))).toBe('LIFECYCLE_MISMATCH');
-  });
-
-  it('flags a committee out of step with the owners from the data, whatever the caller says', async () => {
-    const wallet = walletId();
-    const drift = lastCheck({ committee: { keys: [owners[1].upgradeKey, owners[2].upgradeKey], threshold: 2 } });
-    const claimed = { ...drift, results: { operations: 'complete', committee: 'owners' } } as MidnightVaultLastCheckInput;
-    const stored = await store.addCandidate(wallet, candidate({ lastCheck: claimed }));
-    expect(stored.lastCheck!.results).toEqual({ operations: 'complete', committee: 'outOfStep' });
-    const wrongThreshold = await store.update(wallet, stored.vaultId, { lastCheck: lastCheck({ committee: { keys: owners.map(o => o.upgradeKey), threshold: 3 } }) });
-    expect(wrongThreshold.lastCheck!.results.committee).toBe('outOfStep');
-    const fixed = await store.update(wallet, stored.vaultId, { lastCheck: lastCheck() });
-    expect(fixed.lastCheck!.results.committee).toBe('owners');
+    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck({ operations: 'incomplete' }) })))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: lastCheck({ committee: 'interim' }) })))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.addCandidate(wallet, candidate({ lifecycle: 'incomplete' })))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    const interim = lastCheck({ operations: 'incomplete', committee: 'interim' });
+    expect((await store.addCandidate(wallet, candidate({ lifecycle: 'incomplete', lastCheck: interim }))).lastCheck).toEqual(interim);
+    // A committee out of step is kept, as the drift flag.
+    expect((await store.addCandidate(wallet, candidate({ contractAddress: OTHER_ADDRESS, lastCheck: lastCheck({ committee: 'drift' }) }))).lifecycle).toBe('ready');
   });
 
   it('lets only a vault this device created be deploying, and nothing else go without a state read', async () => {
     const wallet = walletId();
-    expect(await refusal(store.addCandidate(wallet, candidate({ lifecycle: 'deploying', lastCheck: null })))).toBe('LIFECYCLE_MISMATCH');
-    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: null })))).toBe('LIFECYCLE_MISMATCH');
-    const deploying = await store.addCandidate(wallet, candidate({ origin: 'created', lifecycle: 'deploying', lastCheck: null, verifications: [] }));
-    expect(deploying.lifecycle).toBe('deploying');
+    const deploying = { lifecycle: 'deploying' as const, lastCheck: null };
+    expect(await refusal(store.addCandidate(wallet, candidate(deploying)))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.addCandidate(wallet, candidate({ lastCheck: null })))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect((await store.addCandidate(wallet, candidate({ ...deploying, origin: 'created' }))).lifecycle).toBe('deploying');
   });
 
   it('ties the successor to a recovered or moved vault, and keeps a moved vault moved', async () => {
     const wallet = walletId();
     const successor = midnightVaultId('preprod', OTHER_ADDRESS);
-    expect(await refusal(store.addCandidate(wallet, candidate({ lifecycle: 'moved' })))).toBe('LIFECYCLE_MISMATCH');
-    expect(await refusal(store.addCandidate(wallet, candidate({ successor })))).toBe('LIFECYCLE_MISMATCH');
-    expect(await refusal(store.addCandidate(wallet, candidate({ lifecycle: 'temporary', successor: midnightVaultId('preprod', ADDRESS) })))).toBe('INVALID_INPUT');
-    const vault = await accepted(wallet, { lifecycle: 'temporary' });
-    const moved = await store.update(wallet, vault.vaultId, { lifecycle: 'moved', successor });
+    const ready = await accepted(wallet);
+    expect(await refusal(store.update(wallet, ready.vaultId, { successor }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.update(wallet, ready.vaultId, { lifecycle: 'moved' }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.update(wallet, ready.vaultId, { lifecycle: 'temporary', successor: VAULT_ID }))).toBe('INVALID_INPUT/MALFORMED');
+    const temporary = await store.update(wallet, ready.vaultId, { lifecycle: 'temporary', lastCheck: lastCheck({ committee: 'temporary' }) });
+    expect(temporary.lifecycle).toBe('temporary');
+    const moved = await store.update(wallet, ready.vaultId, { lifecycle: 'moved', successor });
     expect(moved).toMatchObject({ lifecycle: 'moved', successor });
-    expect(await refusal(store.update(wallet, vault.vaultId, { lifecycle: 'ready', successor: null }))).toBe('LIFECYCLE_MISMATCH');
-    expect(await refusal(store.update(wallet, vault.vaultId, { lifecycle: 'deploying' }))).toBe('LIFECYCLE_MISMATCH');
-    expect(await store.get(wallet, vault.vaultId)).toEqual(moved);
+    expect(await refusal(store.update(wallet, ready.vaultId, { lifecycle: 'temporary' }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await refusal(store.update(wallet, ready.vaultId, { lifecycle: 'deploying' }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect(await store.get(wallet, ready.vaultId)).toEqual(moved);
   });
 });
 
 describe('Midnight vault store: participants and self', () => {
   it('refuses a record without exactly one self entry per role it holds', async () => {
     const wallet = walletId();
-    const base = candidate();
-    const withDelegate = { ...base.participants, delegates: [{ slot: 0, key: delegateKeys[0] }] };
+    const withDelegate = participants({ delegates: [{ key: delegateKeys[0], cap: '100', period: 600 }, null] });
     const cases: Partial<MidnightVaultCandidateInput>[] = [
       { self: [] },
-      { self: [{ role: 'owner', index: 1, slot: 0 }, { role: 'owner', index: 2, slot: 1 }] },
-      { self: [{ role: 'owner', index: 1, slot: 4 }] },
-      { self: [{ role: 'delegate', index: 1, slot: 0 }] },
-      { self: [{ role: 'observer' as never, index: 1, slot: 0 }] },
-      { participants: withDelegate, self: [{ role: 'delegate', index: 2, slot: 0 }, { role: 'delegate', index: 2, slot: 0 }] },
+      { self: [{ role: 'owner', index: 1 }, { role: 'owner', index: 2 }] },
+      { self: [{ role: 'delegate', index: 2 }] },
+      { self: [{ role: 'observer' as never, index: 1 }] },
+      { participants: withDelegate, self: [{ role: 'delegate', index: 2 }, { role: 'delegate', index: 3 }] },
       // A guardian is never an owner of the same vault.
-      { self: [{ role: 'owner', index: 1, slot: 0 }, { role: 'guardian', index: 2, slot: 0 }] },
+      { self: [{ role: 'owner', index: 1 }, { role: 'guardian', index: 2 }] },
     ];
     for (const overrides of cases) {
-      expect(await refusal(store.addCandidate(wallet, candidate(overrides)))).toBe('SELF_MISMATCH');
+      expect(await refusal(store.addCandidate(wallet, candidate(overrides)))).toBe('INVALID_INPUT/SELF_MISMATCH');
     }
     expect(await store.list(wallet)).toEqual([]);
   });
 
-  it('takes one entry for each of two roles, and a guardian that knows only its own card', async () => {
+  it('takes one entry for each of two roles, and a guardian that knows only commitments', async () => {
     const wallet = walletId();
     const both = await store.addCandidate(wallet, candidate({
-      participants: { ...candidate().participants, delegates: [{ slot: 1, key: delegateKeys[0], label: 'Ops' }] },
-      self: [{ role: 'delegate', index: 3, slot: 1 }, { role: 'owner', index: 1, slot: 0 }],
+      participants: participants({ delegates: [null, { key: delegateKeys[0], cap: '100000000', period: 86400, label: 'Ops' }] }),
+      self: [{ role: 'delegate', index: 3 }, { role: 'owner', index: 1 }],
     }));
-    expect(both.self.map(s => s.role)).toEqual(['owner', 'delegate']);
+    expect(both.self).toEqual([{ role: 'owner', index: 1 }, { role: 'delegate', index: 3 }]);
     const guardian = await store.addCandidate(wallet, candidate({
       contractAddress: OTHER_ADDRESS,
-      participants: { owners: candidate().participants.owners, guardians: [{ slot: 2, key: guardianKeys[2] }], delegates: [] },
-      self: [{ role: 'guardian', index: 2, slot: 2 }],
-      highestIndex: 2,
+      self: [{ role: 'guardian', index: 2 }],
       agreedConfig: null,
       verifications: [],
+      lastCheck: lastCheck({ matchesAgreed: null }),
     }));
-    expect(guardian.self).toEqual([{ role: 'guardian', index: 2, slot: 2 }]);
-    expect((await store.list(wallet, { role: 'guardian' })).map(v => v.vaultId)).toEqual([guardian.vaultId]);
+    expect(guardian.self).toEqual([{ role: 'guardian', index: 2 }]);
   });
 
-  it('refuses an index outside 1 to 2^31 - 1, or a highest index below one of them', async () => {
+  it('refuses an index outside 1 to 2^31 - 1', async () => {
     const wallet = walletId();
-    for (const overrides of [
-      { self: [{ role: 'owner' as const, index: 0, slot: 0 }] },
-      { self: [{ role: 'owner' as const, index: 2 ** 31, slot: 0 }] },
-      { self: [{ role: 'owner' as const, index: 4, slot: 0 }], highestIndex: 3 },
-      { highestIndex: 0 },
-    ]) {
-      expect(await refusal(store.addCandidate(wallet, candidate(overrides)))).toBe('INVALID_INPUT');
+    for (const index of [0, 2 ** 31, 1.5]) {
+      expect(await refusal(store.addCandidate(wallet, candidate({ self: [{ role: 'owner', index }] })))).toBe('INVALID_INPUT/MALFORMED');
     }
   });
 
   it('refuses keys that are malformed, the identity, outside the field, or twice in one vault', async () => {
     const wallet = walletId();
-    const base = candidate().participants;
     const identity = le32(0n) + le32(1n);
-    const outside = le32(P) + base.owners[0].approvalKey.slice(64);
-    const ownerWith = (o: Partial<(typeof base.owners)[number]>) => ({ ...base, owners: [{ ...base.owners[0], ...o }, ...base.owners.slice(1)] });
+    const withOwner = (o: Partial<(typeof owners)[number]>) => participants({ owners: [{ ...owners[0], ...o }, owners[1], owners[2], null, null] });
     const cases = [
-      ownerWith({ approvalKey: identity }),
-      ownerWith({ approvalKey: outside }),
-      ownerWith({ approvalKey: base.owners[0].approvalKey.slice(2) }),
-      ownerWith({ approvalKey: base.owners[0].approvalKey.toUpperCase() }),
-      ownerWith({ upgradeKey: '00'.repeat(32) }),
-      ownerWith({ upgradeKey: 'ff'.repeat(32) }),
-      ownerWith({ upgradeKey: base.owners[1].upgradeKey }),
-      // The same Jubjub key as an owner and as a guardian.
-      { ...base, guardians: [{ slot: 0, key: base.owners[1].approvalKey, salt: salts[0] }] },
-      { ...base, delegates: [{ slot: 0, key: guardianKeys[0] }] },
+      withOwner({ approvalKey: identity }),
+      withOwner({ approvalKey: le32(P) + owners[0].approvalKey.slice(64) }),
+      withOwner({ approvalKey: owners[0].approvalKey.slice(2) }),
+      withOwner({ approvalKey: owners[0].approvalKey.toUpperCase() }),
+      withOwner({ upgradeKey: '00'.repeat(32) }),
+      withOwner({ upgradeKey: 'ff'.repeat(32) }),
+      withOwner({ upgradeKey: owners[1].upgradeKey }),
+      participants({ delegates: [{ key: owners[1].approvalKey, cap: '1', period: 600 }, null] }),
+      participants({ guardians: [{ commitment: commitments[0] }, { commitment: commitments[0] }, null, null, null] }),
     ];
-    for (const participants of cases) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ participants })))).toBe('INVALID_KEY');
+    for (const overrides of cases) {
+      expect(await refusal(store.addCandidate(wallet, candidate({ participants: overrides })))).toBe('INVALID_INPUT/INVALID_KEY');
     }
   });
 
-  it('runs the full key check it is given on every participant and agreed key', async () => {
+  it('runs the full key check it is given, which the encoding checks cannot replace', async () => {
     const wallet = walletId();
-    const base = candidate().participants;
-    const smallOrder = { ...base, guardians: [...base.guardians.slice(0, 2), { slot: 2, key: ORDER_TWO, salt: salts[2] }] };
-    const noLift = { ...base, owners: [{ ...base.owners[0], upgradeKey: le32(0n).slice(0, 62) + '05' }, ...base.owners.slice(1)] };
-    const agreed = { ...agreedConfig(), owners: [{ approvalKey: ORDER_TWO, upgradeKey: owners[0].upgradeKey }, ...agreedConfig().owners.slice(1)] };
-    expect(await refusal(store.addCandidate(wallet, candidate({ participants: smallOrder })))).toBe('INVALID_KEY');
-    expect(await refusal(store.addCandidate(wallet, candidate({ participants: noLift })))).toBe('INVALID_KEY');
-    expect(await refusal(store.addCandidate(wallet, candidate({ agreedConfig: agreed })))).toBe('INVALID_KEY');
-    // The encoding checks alone cannot see a small-order point: that is why the check is passed in.
-    const shapeOnly = createMidnightVaultStore({ builds: [TEST_BUILD] });
-    expect((await shapeOnly.addCandidate(wallet, candidate({ participants: smallOrder }))).participants.guardians[2].key).toBe(ORDER_TWO);
+    const smallOrder = participants({ owners: [owners[0], owners[1], { ...owners[2], approvalKey: ORDER_TWO }, null, null] });
+    const noLift = participants({ owners: [{ ...owners[0], upgradeKey: le32(0n).slice(0, 62) + '05' }, owners[1], owners[2], null, null] });
+    expect(await refusal(store.addCandidate(wallet, candidate({ participants: smallOrder })))).toBe('INVALID_INPUT/INVALID_KEY');
+    expect(await refusal(store.addCandidate(wallet, candidate({ participants: noLift })))).toBe('INVALID_INPUT/INVALID_KEY');
+    const shapeOnly = createMidnightVaultStore();
+    const identity = participants({ owners: [owners[0], owners[1], { ...owners[2], approvalKey: le32(0n) + le32(1n) }, null, null] });
+    expect(await refusal(shapeOnly.addCandidate(wallet, candidate({ participants: identity })))).toBe('INVALID_INPUT/INVALID_KEY');
+    expect((await shapeOnly.addCandidate(wallet, candidate({ participants: smallOrder }))).participants.owners[2]!.approvalKey).toBe(ORDER_TWO);
   });
 
-  it('refuses slots the build does not have and an owner record missing a guardian\'s salt', async () => {
+  it('checks each card against its slot with the card check it is given', async () => {
     const wallet = walletId();
-    const base = candidate().participants;
-    for (const participants of [
-      { ...base, owners: [{ ...base.owners[0], slot: 5 }, ...base.owners.slice(1)] },
-      { ...base, owners: [{ ...base.owners[0], slot: 1 }, ...base.owners.slice(1)] },
-      { ...base, owners: [] },
-      { ...base, delegates: [{ slot: 2, key: delegateKeys[0] }] },
-      { ...base, guardians: [{ slot: 0, key: guardianKeys[0] }] },
-      { ...base, guardians: [{ slot: 0, key: guardianKeys[0], salt: 'salt' }] },
+    const seen: MidnightCardExpectation[] = [];
+    const cardStore = createMidnightVaultStore({
+      checkCard: (card, expected) => {
+        seen.push(expected);
+        return card === `card:${expected.approvalKey ?? expected.commitment}`;
+      },
+    });
+    const carded = participants({
+      owners: [{ ...owners[0], card: `card:${owners[0].approvalKey}` }, owners[1], owners[2], null, null],
+      guardians: [{ commitment: commitments[0], card: `card:${commitments[0]}` }, null, null, null, null],
+    });
+    await cardStore.addCandidate(wallet, candidate({ participants: carded }));
+    expect(seen).toEqual([
+      { role: 'owner', network: 'preprod', approvalKey: owners[0].approvalKey, upgradeKey: owners[0].upgradeKey },
+      { role: 'guardian', network: 'preprod', commitment: commitments[0] },
+    ]);
+    const swapped = participants({ owners: [owners[0], { ...owners[1], card: `card:${owners[0].approvalKey}` }, owners[2], null, null] });
+    expect(await refusal(cardStore.addCandidate(wallet, candidate({ contractAddress: OTHER_ADDRESS, participants: swapped })))).toBe('INVALID_INPUT/INVALID_CARD');
+  });
+
+  it('refuses slots the build does not have and malformed slot contents', async () => {
+    const wallet = walletId();
+    for (const overrides of [
+      participants({ owners: [owners[0], owners[1], owners[2]] }),
+      participants({ owners: [null, null, null, null, null] }),
+      participants({ delegates: [null, null, null] }),
+      participants({ guardians: [{ commitment: '00'.repeat(32) }, null, null, null, null] }),
+      participants({ guardians: [{ commitment: le32(P) }, null, null, null, null] }),
+      participants({ delegates: [{ key: delegateKeys[0], cap: '100', period: 599 }, null] }),
+      participants({ delegates: [{ key: delegateKeys[0], cap: '-1', period: 600 }, null] }),
+      participants({ owners: [{ ...owners[0], label: 'bad\u0000label' }, owners[1], owners[2], null, null] }),
     ]) {
-      expect(await refusal(store.addCandidate(wallet, candidate({ participants })))).toBe('INVALID_INPUT');
+      expect(await refusal(store.addCandidate(wallet, candidate({ participants: overrides })))).toBe('INVALID_INPUT/MALFORMED');
     }
   });
 
   it('refuses verification records of another configuration, of a non-owner, or with no agreed configuration', async () => {
     const wallet = walletId();
-    const record = { method: 'qr' as const, owner: owners[2].approvalKey, digest: AGREED_DIGEST, at: 1_800_000_000 };
+    const record = { approvalKey: owners[2].approvalKey, method: 'qr' as const, verificationDigest: AGREED.digest, at: 1_800_000_000 };
     for (const overrides of [
-      { verifications: [{ ...record, digest: digestOf('another set') }] },
-      { verifications: [{ ...record, owner: guardianKeys[0] }] },
+      { verifications: [{ ...record, verificationDigest: digestOf('another set') }] },
+      { verifications: [{ ...record, approvalKey: delegateKeys[0] }] },
       { verifications: [{ ...record, method: 'voice' as never }] },
-      { verifications: [record], agreedConfig: null },
+      { verifications: [record], agreedConfig: null, lastCheck: lastCheck({ matchesAgreed: null }) },
     ]) {
-      expect(await refusal(store.addCandidate(wallet, candidate(overrides)))).toBe('INVALID_INPUT');
+      expect(await refusal(store.addCandidate(wallet, candidate(overrides)))).toBe('INVALID_INPUT/MALFORMED');
     }
     expect((await store.addCandidate(wallet, candidate({ verifications: [record] }))).verifications).toEqual([record]);
   });
 });
 
 describe('Midnight vault store: candidate and accept', () => {
-  it('accepts only on an explicit accept of the version the user reviewed', async () => {
+  it('accepts only through accept, once', async () => {
     const wallet = walletId();
     vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     const added = await store.addCandidate(wallet, candidate());
     expect(added.status).toBe('candidate');
-    expect(await refusal(store.update(wallet, added.vaultId, { status: 'accepted' } as never))).toBe('INVALID_INPUT');
-    expect(await refusal(store.accept(wallet, added.vaultId, {} as never))).toBe('INVALID_INPUT');
-    // A state read lands while the review screen is open, in the same millisecond.
-    const read = await store.update(wallet, added.vaultId, { lastCheck: lastCheck({ blockHeight: 120346 }) });
-    expect(read.updatedAt).toBeGreaterThan(added.updatedAt);
-    expect(await refusal(store.accept(wallet, added.vaultId, { reviewedUpdatedAt: added.updatedAt }))).toBe('STALE_REVIEW');
-    const done = await store.accept(wallet, added.vaultId, { reviewedUpdatedAt: read.updatedAt });
-    expect(done).toMatchObject({ status: 'accepted', acceptedAt: done.updatedAt });
-    expect(await refusal(store.accept(wallet, added.vaultId, { reviewedUpdatedAt: done.updatedAt }))).toBe('NOT_A_CANDIDATE');
-    expect(await refusal(store.accept(wallet, 'ab'.repeat(32), { reviewedUpdatedAt: 0 }))).toBe('NOT_FOUND');
+    expect(await refusal(store.update(wallet, VAULT_ID, { status: 'accepted' } as never))).toBe('INVALID_INPUT/MALFORMED');
+    const record = { approvalKey: owners[2].approvalKey, method: 'qr' as const, verificationDigest: AGREED.digest, at: 1_800_000_100 };
+    const done = await store.accept(wallet, VAULT_ID, { verifications: [record] });
+    expect(done).toMatchObject({ status: 'accepted', acceptedAt: done.updatedAt, verifications: [record] });
+    expect(done.updatedAt).toBeGreaterThan(added.updatedAt);
+    expect(await refusal(store.accept(wallet, VAULT_ID))).toBe('NOT_A_CANDIDATE');
+    expect(await refusal(store.accept(wallet, 'ab'.repeat(32)))).toBe('NOT_FOUND');
   });
 
   it('refuses to accept before completion, and accepts the created vault once it is ready', async () => {
     const wallet = walletId();
-    const deploying = await store.addCandidate(wallet, candidate({ origin: 'created', lifecycle: 'deploying', lastCheck: null, verifications: [] }));
-    expect(await refusal(store.accept(wallet, deploying.vaultId, { reviewedUpdatedAt: deploying.updatedAt }))).toBe('VAULT_INCOMPLETE');
-    const interim = lastCheck({ source: 'deployment', blockHeight: null, blockHash: null, operations: operations(TEST_BUILD, DEFERRED), committee: { keys: [owners[0].upgradeKey], threshold: 1 } });
-    const incomplete = await store.update(wallet, deploying.vaultId, {
+    await store.addCandidate(wallet, candidate({ origin: 'created', lifecycle: 'deploying', lastCheck: null }));
+    expect(await refusal(store.accept(wallet, VAULT_ID))).toBe('INVALID_INPUT/VAULT_INCOMPLETE');
+    await store.update(wallet, VAULT_ID, {
       lifecycle: 'incomplete',
-      lastCheck: interim,
-      deployment: { deployTx: digestOf('deploy'), completionTx: null, deferred: DEFERRED },
+      lastCheck: lastCheck({ operations: 'incomplete', committee: 'interim' }),
+      deployment: { deployTxHash: digestOf('deploy'), deferred: TEST.deferred },
     });
-    expect(await refusal(store.accept(wallet, deploying.vaultId, { reviewedUpdatedAt: incomplete.updatedAt }))).toBe('VAULT_INCOMPLETE');
-    const ready = await store.update(wallet, deploying.vaultId, {
+    expect(await refusal(store.accept(wallet, VAULT_ID))).toBe('INVALID_INPUT/VAULT_INCOMPLETE');
+    await store.update(wallet, VAULT_ID, {
       lifecycle: 'ready',
       lastCheck: lastCheck(),
-      deployment: { deployTx: digestOf('deploy'), completionTx: digestOf('completion'), deferred: DEFERRED },
+      deployment: { deployTxHash: digestOf('deploy'), completionTxHash: digestOf('completion'), deferred: TEST.deferred },
     });
-    expect((await store.accept(wallet, deploying.vaultId, { reviewedUpdatedAt: ready.updatedAt })).status).toBe('accepted');
+    expect((await store.accept(wallet, VAULT_ID)).status).toBe('accepted');
+    expect(await refusal(store.update(wallet, VAULT_ID, { lifecycle: 'deploying' }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+  });
+
+  it('refuses to accept a candidate whose latest read failed an import check', async () => {
+    const wallet = walletId();
+    await store.addCandidate(wallet, candidate());
+    await store.update(wallet, VAULT_ID, { lastCheck: lastCheck({ operations: 'unknown-build' }) });
+    expect(await refusal(store.accept(wallet, VAULT_ID))).toBe('INVALID_INPUT/IMPORT_CHECK_FAILED');
+    expect((await store.get(wallet, VAULT_ID))!.status).toBe('candidate');
   });
 });
 
 describe('Midnight vault store: requests', () => {
   it('holds no requests for a candidate, which is never signed for', async () => {
     const wallet = walletId();
-    const added = await store.addCandidate(wallet, candidate());
-    expect(await refusal(store.putRequest(wallet, added.vaultId, request()))).toBe('NOT_ACCEPTED');
+    await store.addCandidate(wallet, candidate());
+    expect(await refusal(store.putRequest(wallet, VAULT_ID, stored()))).toBe('INVALID_INPUT/NOT_ACCEPTED');
   });
 
-  it('keeps requests and their approvals across a reload', async () => {
+  it('keeps requests and their approvals across a reload, and replaces one by digest', async () => {
     const wallet = walletId();
-    const vault = await accepted(wallet);
-    const stored = await store.putRequest(wallet, vault.vaultId, request());
+    await accepted(wallet);
+    vi.spyOn(Date, 'now').mockReturnValue(1_900_000_000_000);
+    const first = await store.putRequest(wallet, VAULT_ID, stored());
+    expect(first.requests).toEqual([{ ...stored(), updatedAt: 1_900_000_000_000 }]);
     clearDbCache(wallet);
-    const reread = await store.get(wallet, vault.vaultId);
-    expect(reread!.requests).toEqual(stored.requests);
-    expect(reread!.requests[0]).toMatchObject({ id: request().id, kind: 'payout:v4', approvals: request().approvals });
+    expect((await store.get(wallet, VAULT_ID))!.requests).toEqual(first.requests);
+    const second = await store.putRequest(wallet, VAULT_ID, stored({ approvals: [approval(), approval(owners[1].approvalKey)], state: 'submitted', txHash: digestOf('tx') }));
+    expect(second.requests).toHaveLength(1);
+    expect(second.requests[0]).toMatchObject({ state: 'submitted', txHash: digestOf('tx') });
+    expect(second.requests[0].approvals.map(a => (a as MidnightOwnerApprovalFile).approvalKey)).toEqual([owners[0].approvalKey, owners[1].approvalKey]);
   });
 
-  it('adds approvals to a stored request and never drops one', async () => {
+  it('refuses a request or approval of another vault, and malformed ones', async () => {
     const wallet = walletId();
-    const vault = await accepted(wallet);
-    const first = await store.putRequest(wallet, vault.vaultId, request());
-    // A stale copy without the first approval changes nothing.
-    expect(await store.putRequest(wallet, vault.vaultId, request({ approvals: [] }))).toEqual(first);
-    const second = { signer: owners[1].approvalKey, file: '{"n":2}' };
-    const merged = await store.putRequest(wallet, vault.vaultId, request({ approvals: [second] }));
-    expect(merged.requests[0].approvals.map(a => a.signer)).toEqual([owners[0].approvalKey, owners[1].approvalKey]);
-    expect(merged.requests[0].createdAt).toBe(first.requests[0].createdAt);
-    expect(await refusal(store.putRequest(wallet, vault.vaultId, request({ kind: 'cancel-recov:v2' })))).toBe('INVALID_INPUT');
-  });
-
-  it('bounds requests and approvals', async () => {
-    const wallet = walletId();
-    const vault = await accepted(wallet);
-    const approval = request().approvals[0];
+    await accepted(wallet);
     for (const bad of [
-      request({ id: 'xyz' }),
-      request({ file: 'x'.repeat(32 * 1024 + 1) }),
-      request({ approvals: [approval, approval] }),
-      request({ approvals: [{ ...approval, file: 'x'.repeat(8 * 1024 + 1) }] }),
-      request({ approvals: Array.from({ length: 11 }, (_, i) => ({ signer: jubjubKey(BigInt(5000 + i)), file: '{}' })) }),
-      request({ origin: 'relayed' as never }),
+      stored({ request: requestFile({ contract: OTHER_ADDRESS }) }),
+      stored({ request: requestFile({ network: 'mainnet' }) }),
+      stored({ request: requestFile({ build: PRODUCTION.buildId }) }),
+      stored({ approvals: [approval(owners[0].approvalKey, { digest: digestOf('another statement') })] }),
+      stored({ approvals: [approval(owners[0].approvalKey, { contract: OTHER_ADDRESS })] }),
     ]) {
-      expect(await refusal(store.putRequest(wallet, vault.vaultId, bad))).toBe('INVALID_INPUT');
+      expect(await refusal(store.putRequest(wallet, VAULT_ID, bad))).toBe('INVALID_INPUT/REQUEST_MISMATCH');
     }
-    for (let i = 0; i < 32; i++) await store.putRequest(wallet, vault.vaultId, request({ id: digestOf(`statement ${i}`) }));
-    expect(await refusal(store.putRequest(wallet, vault.vaultId, request({ id: digestOf('one more') })))).toBe('INVALID_INPUT');
+    for (const bad of [
+      stored({ request: requestFile({ type: 'gero-vault/v1|unsigned-tx' }) }),
+      stored({ request: requestFile({ kind: 'sweep' }) }),
+      stored({ request: requestFile({ digest: 'xyz' }) }),
+      stored({ request: requestFile({ body: { recipient: 'mn_addr_preprod1example', amount: '1', pad: 'x'.repeat(64 * 1024) } }) }),
+      stored({ approvals: [approval(), approval()] }),
+      stored({ approvals: [approval(owners[0].approvalKey, { signature: { announcement: 'x'.repeat(5000), response: '' } })] }),
+      stored({ approvals: Array.from({ length: 11 }, (_, i) => approval(jubjubKey(BigInt(5000 + i)))) }),
+      stored({ state: 'lost' as never }),
+    ]) {
+      expect(await refusal(store.putRequest(wallet, VAULT_ID, bad))).toBe('INVALID_INPUT/MALFORMED');
+    }
+    expect((await store.get(wallet, VAULT_ID))!.requests).toEqual([]);
   });
 
-  it('removes a request, and leaves the record as it is for one that is not there', async () => {
+  it('keeps at most 32 requests, making room by dropping the oldest settled one', async () => {
     const wallet = walletId();
-    const vault = await accepted(wallet);
-    const stored = await store.putRequest(wallet, vault.vaultId, request());
-    const removed = await store.removeRequest(wallet, vault.vaultId, request().id);
-    expect(removed.requests).toEqual([]);
-    expect(removed.updatedAt).toBeGreaterThan(stored.updatedAt);
-    expect(await store.removeRequest(wallet, vault.vaultId, request().id)).toEqual(removed);
+    await accepted(wallet);
+    const numbered = (i: number, state: MidnightStoredRequest['state'] = 'open') => {
+      const digest = digestOf(`statement ${i}`);
+      return stored({ request: requestFile({ digest }), approvals: [approval(owners[0].approvalKey, { digest })], state });
+    };
+    for (let i = 0; i < 32; i++) await store.putRequest(wallet, VAULT_ID, numbered(i));
+    expect(await refusal(store.putRequest(wallet, VAULT_ID, numbered(32)))).toBe('INVALID_INPUT/TOO_MANY_REQUESTS');
+    await store.putRequest(wallet, VAULT_ID, numbered(5, 'landed'));
+    await store.putRequest(wallet, VAULT_ID, numbered(9, 'expired'));
+    const record = await store.putRequest(wallet, VAULT_ID, numbered(32));
+    const digests = record.requests.map(r => r.request.digest);
+    expect(digests).toHaveLength(32);
+    expect(digests).not.toContain(digestOf('statement 5'));
+    expect(digests).toContain(digestOf('statement 9'));
+    expect(digests).toContain(digestOf('statement 32'));
+  });
+});
+
+describe('Midnight vault store: the index counter', () => {
+  it('allocates each index of a network once, from 1, and keeps networks apart', async () => {
+    const wallet = walletId();
+    expect(await store.highestIndex(wallet, 'preprod')).toBe(0);
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(1);
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(2);
+    expect(await store.allocateIndex(wallet, 'mainnet')).toBe(1);
+    clearDbCache(wallet);
+    expect(await store.highestIndex(wallet, 'preprod')).toBe(2);
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(3);
+  });
+
+  it('counts this seed\'s indexes in stored vaults as taken', async () => {
+    const wallet = walletId();
+    await store.addCandidate(wallet, candidate({ self: [{ role: 'owner', index: 5 }] }));
+    expect(await store.highestIndex(wallet, 'preprod')).toBe(5);
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(6);
+    await store.update(wallet, VAULT_ID, { self: [{ role: 'owner', index: 9 }] });
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(10);
+    expect(await store.highestIndex(wallet, 'mainnet')).toBe(0);
+    // A role this seed no longer holds keeps its index taken.
+    const other = midnightVaultId('preprod', OTHER_ADDRESS);
+    await store.addCandidate(wallet, candidate({
+      contractAddress: OTHER_ADDRESS,
+      participants: participants({ delegates: [{ key: delegateKeys[0], cap: '1', period: 600 }, null] }),
+      self: [{ role: 'owner', index: 1 }, { role: 'delegate', index: 20 }],
+    }));
+    await store.update(wallet, other, { participants: participants(), self: [{ role: 'owner', index: 1 }] });
+    expect(await store.allocateIndex(wallet, 'preprod')).toBe(21);
+  });
+
+  it('raises the counter to a restored package\'s index, never lowers it, and stops at the last index', async () => {
+    const wallet = walletId();
+    await store.raiseIndex(wallet, 'preprod', 12);
+    await store.raiseIndex(wallet, 'preprod', 4);
+    expect(await store.highestIndex(wallet, 'preprod')).toBe(12);
+    await store.raiseIndex(wallet, 'preprod', 2 ** 31 - 1);
+    expect(await refusal(store.allocateIndex(wallet, 'preprod'))).toBe('INDEX_EXHAUSTED');
+    for (const call of [store.raiseIndex(wallet, 'preprod', -1), store.raiseIndex(wallet, 'preprod', 2 ** 31), store.allocateIndex(wallet, 'testnet' as never)]) {
+      expect(await refusal(call)).toBe('INVALID_INPUT/MALFORMED');
+    }
   });
 });
 
 describe('Midnight vault store: updates', () => {
-  it('changes the name, labels and highest index, and never the identity, build, status or origin', async () => {
-    const wallet = walletId();
-    const vault = await store.addCandidate(wallet, candidate());
-    const updated = await store.update(wallet, vault.vaultId, {
-      name: null,
-      labels: [{ role: 'owner', slot: 1, label: 'Bob' }, { role: 'owner', slot: 2, label: null }, { role: 'guardian', slot: 0, label: 'Carol' }],
-      highestIndex: 7,
-    });
-    expect(updated.name).toBeUndefined();
-    expect(updated.participants.owners.map(o => o.label)).toEqual(['Owner 1', 'Bob', undefined]);
-    expect(updated.participants.guardians[0].label).toBe('Carol');
-    expect(updated.highestIndex).toBe(7);
-    for (const patch of [
-      { vaultId: 'ab'.repeat(32) }, { network: 'mainnet' }, { contractAddress: OTHER_ADDRESS }, { build: { id: PRODUCTION_BUILD.id, profile: 'production' } },
-      { status: 'accepted' }, { origin: 'created' }, { createdAt: 0 }, { requests: [] }, { acceptedAt: 1 },
-    ]) {
-      expect(await refusal(store.update(wallet, vault.vaultId, patch as never))).toBe('INVALID_INPUT');
-    }
-    expect(await refusal(store.update(wallet, vault.vaultId, { highestIndex: 6 }))).toBe('INVALID_INPUT');
-    expect(await refusal(store.update(wallet, vault.vaultId, { labels: [{ role: 'delegate', slot: 0, label: 'Mallory' }] }))).toBe('INVALID_INPUT');
-    expect(await refusal(store.update(wallet, vault.vaultId, { name: 'bad\u0000name' }))).toBe('INVALID_INPUT');
-    expect(await store.get(wallet, vault.vaultId)).toEqual(updated);
-    expect(await refusal(store.update(wallet, midnightVaultId('preprod', OTHER_ADDRESS), { name: 'Nope' }))).toBe('NOT_FOUND');
-  });
-
-  it('checks the whole record on every update and stores nothing it refuses', async () => {
+  it('changes only the fields of the patch type, checking the whole record', async () => {
     const wallet = walletId();
     const vault = await accepted(wallet);
-    const base = vault.participants;
-    // An owner change on chain moves this seed from slot 0 to slot 1: participants and self together.
-    const swapped = { ...base, owners: [{ ...base.owners[1], slot: 0 }, { ...base.owners[0], slot: 1 }, base.owners[2]] };
-    expect(await refusal(store.update(wallet, vault.vaultId, { participants: { ...base, owners: base.owners.slice(1).map((o, i) => ({ ...o, slot: i + 1 })) } }))).toBe('SELF_MISMATCH');
-    const moved = await store.update(wallet, vault.vaultId, { participants: swapped, self: [{ role: 'owner', index: 1, slot: 1 }] });
-    expect(moved.self).toEqual([{ role: 'owner', index: 1, slot: 1 }]);
-    expect(await refusal(store.update(wallet, vault.vaultId, { lastCheck: lastCheck({ committee: { keys: [owners[0].upgradeKey], threshold: 0 } }) }))).toBe('COMMITTEE_MISMATCH');
-    expect(await refusal(store.update(wallet, vault.vaultId, { lastCheck: lastCheck({ operations: operations(TEST_BUILD, ['deposit']) }) }))).toBe('LIFECYCLE_MISMATCH');
-    expect(await store.get(wallet, vault.vaultId)).toEqual(moved);
+    const renamed = await store.update(wallet, VAULT_ID, { name: null });
+    expect(renamed.name).toBeUndefined();
+    for (const patch of [
+      { vaultId: 'ab'.repeat(32) }, { network: 'mainnet' }, { contractAddress: OTHER_ADDRESS }, { build: PRODUCTION.buildId },
+      { status: 'candidate' }, { origin: 'created' }, { createdAt: 0 }, { requests: [] }, { acceptedAt: 1 },
+    ]) {
+      expect(await refusal(store.update(wallet, VAULT_ID, patch as never))).toBe('INVALID_INPUT/MALFORMED');
+    }
+    // An owner change on chain: the new owners replace the old, this seed among them.
+    const changed = participants({ owners: [owners[0], owners[2], null, null, null] });
+    // The removed owner's verification record goes with it.
+    expect(await refusal(store.update(wallet, VAULT_ID, { participants: changed }))).toBe('INVALID_INPUT/MALFORMED');
+    expect((await store.update(wallet, VAULT_ID, { participants: changed, verifications: [] })).participants.owners).toEqual(changed.owners);
+    expect(await refusal(store.update(wallet, VAULT_ID, { participants: participants({ owners: [owners[0], owners[0], null, null, null] }) }))).toBe('INVALID_INPUT/INVALID_KEY');
+    expect(await refusal(store.update(wallet, VAULT_ID, { self: [{ role: 'delegate', index: 4 }] }))).toBe('INVALID_INPUT/SELF_MISMATCH');
+    expect(await refusal(store.update(wallet, VAULT_ID, { lastCheck: lastCheck({ operations: 'incomplete' }) }))).toBe('INVALID_INPUT/LIFECYCLE_MISMATCH');
+    expect((await store.get(wallet, VAULT_ID))!.participants.owners).toEqual(changed.owners);
+    expect(vault.vaultId).toBe(VAULT_ID);
+    expect(await refusal(store.update(wallet, midnightVaultId('preprod', OTHER_ADDRESS), { name: 'Nope' }))).toBe('NOT_FOUND');
   });
 });
 
@@ -689,47 +670,50 @@ describe('Midnight vault store: unavailable database', () => {
     vi.spyOn(Dexie.prototype, 'open').mockRejectedValue(new Error('injected open failure'));
     const wallet = walletId();
     expect(await refusal(store.list(wallet))).toBe('STORE_UNAVAILABLE');
-    expect(await refusal(store.get(wallet, midnightVaultId('preprod', ADDRESS)))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(store.get(wallet, VAULT_ID))).toBe('STORE_UNAVAILABLE');
     expect(await refusal(store.addCandidate(wallet, candidate()))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(store.highestIndex(wallet, 'preprod'))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(store.allocateIndex(wallet, 'preprod'))).toBe('STORE_UNAVAILABLE');
   });
 
-  it('throws when the database opener fails or has no Midnight table', async () => {
-    const throwing = createMidnightVaultStore({ builds: [TEST_BUILD], openDatabase: async () => { throw new Error('injected'); } });
+  it('throws when the database opener fails or has no Midnight tables', async () => {
+    const throwing = createMidnightVaultStore({ openDatabase: async () => { throw new Error('injected'); } });
     expect(await refusal(throwing.list(walletId()))).toBe('STORE_UNAVAILABLE');
-    // A connection still on version 12, before the Midnight table existed.
+    // A connection still on version 12, before the Midnight tables existed.
     const wallet = walletId();
+    const { midnightVaults: _vaults, midnightVaultIndexes: _indexes, ...version12 } = walletDBSchema;
     const old = new Dexie(`wallet-${wallet}`);
     extraDatabases.push(old);
-    const { midnightVaults: _omitted, ...version12 } = walletDBSchema;
     old.version(12).stores(version12);
     await old.open();
-    const stale = createMidnightVaultStore({ builds: [TEST_BUILD], openDatabase: async () => old });
+    const stale = createMidnightVaultStore({ openDatabase: async () => old });
     expect(await refusal(stale.list(wallet))).toBe('STORE_UNAVAILABLE');
-    expect(await refusal(stale.get(wallet, midnightVaultId('preprod', ADDRESS)))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(stale.get(wallet, VAULT_ID))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(stale.highestIndex(wallet, 'preprod'))).toBe('STORE_UNAVAILABLE');
   });
 
   it('throws on a row of a format this version cannot read, rather than leaving it out', async () => {
     const wallet = walletId();
     const vault = await store.addCandidate(wallet, candidate());
     const db = (await getDb(wallet))!;
-    await db.table('midnightVaults').put({ ...vault, vaultId: midnightVaultId('preprod', OTHER_ADDRESS), recordVersion: 2 });
+    const otherId = midnightVaultId('preprod', OTHER_ADDRESS);
+    await db.table('midnightVaults').put({ ...vault, vaultId: otherId, recordVersion: 2 });
     expect(await refusal(store.list(wallet))).toBe('STORE_UNAVAILABLE');
-    expect(await refusal(store.get(wallet, midnightVaultId('preprod', OTHER_ADDRESS)))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(store.get(wallet, otherId))).toBe('STORE_UNAVAILABLE');
+    expect(await refusal(store.highestIndex(wallet, 'preprod'))).toBe('STORE_UNAVAILABLE');
   });
 
-  it('refuses every write while no build is pinned', async () => {
+  it('serves both pinned builds from the default store', async () => {
     const wallet = walletId();
     expect(await midnightVaultStore.list(wallet)).toEqual([]);
-    expect(await refusal(midnightVaultStore.addCandidate(wallet, candidate()))).toBe('UNKNOWN_BUILD');
-    expect(() => createMidnightVaultStore({ builds: [TEST_BUILD, TEST_BUILD] })).toThrow();
-    expect(() => createMidnightVaultStore({ builds: [{ ...TEST_BUILD, manifestHash: 'nope' }] })).toThrow();
+    expect((await midnightVaultStore.addCandidate(wallet, production('mainnet'))).build).toBe(PRODUCTION.buildId);
   });
 });
 
 describe('Midnight vault store: the version 13 upgrade', () => {
   it('upgrades a version 12 wallet without touching anything it held', async () => {
     const wallet = walletId();
-    const { midnightVaults: _omitted, ...version12 } = walletDBSchema;
+    const { midnightVaults: _vaults, midnightVaultIndexes: _indexes, ...version12 } = walletDBSchema;
     const legacy = new Dexie(`wallet-${wallet}`);
     legacy.version(12).stores(version12);
     await legacy.open();
@@ -737,24 +721,27 @@ describe('Midnight vault store: the version 13 upgrade', () => {
     await legacy.table('vaults').put(cardanoVault);
     await legacy.table('config').put({ key: 'currency', value: 'EUR' });
     await legacy.table('transactions').put({ id: 'saved-transaction', cbor: '00' });
-    const before = Object.fromEntries(legacy.tables.map(t => [t.name, { primKey: t.schema.primKey.src, indexes: t.schema.indexes.map(i => i.src).sort() }]));
+    const schemaOf = (db: Dexie) => Object.fromEntries(db.tables.map(t => [t.name, { primKey: t.schema.primKey.src, indexes: t.schema.indexes.map(i => i.src).sort() }]));
+    const before = schemaOf(legacy);
     legacy.close();
 
     const db = (await getDb(wallet))!;
     expect(db.verno).toBe(13);
-    const after = Object.fromEntries(db.tables.map(t => [t.name, { primKey: t.schema.primKey.src, indexes: t.schema.indexes.map(i => i.src).sort() }]));
-    const { midnightVaults, ...unchanged } = after;
+    const { midnightVaults, midnightVaultIndexes, ...unchanged } = schemaOf(db);
     expect(unchanged).toEqual(before);
     expect(midnightVaults).toEqual({ primKey: 'vaultId', indexes: ['contractAddress', 'network', 'status', 'updatedAt'] });
+    expect(midnightVaultIndexes).toEqual({ primKey: 'network', indexes: [] });
     expect(await db.table('vaults').toArray()).toEqual([cardanoVault]);
-    expect(await db.table('config').get('currency')).toEqual({ key: 'currency', value: 'EUR' });
+    expect(await db.table('config').toArray()).toEqual([{ key: 'currency', value: 'EUR' }]);
     expect(await db.table('transactions').count()).toBe(1);
     // A wallet that never used a Midnight vault reads an empty list, and its Cardano vaults as before.
     expect(await store.list(wallet)).toEqual([]);
+    expect(await store.highestIndex(wallet, 'preprod')).toBe(0);
     expect(await vaultStore.list(wallet)).toEqual([cardanoVault]);
-    // A Midnight vault lands in its own table only.
+    // A Midnight vault and its index land in their own tables only.
     await store.addCandidate(wallet, candidate());
     expect(await db.table('vaults').toArray()).toEqual([cardanoVault]);
+    expect(await db.table('config').toArray()).toEqual([{ key: 'currency', value: 'EUR' }]);
     expect(await vaultStore.list(wallet)).toEqual([cardanoVault]);
   });
 });
