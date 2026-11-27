@@ -29,6 +29,8 @@ export interface VaultSpendParticipant {
   readonly stakeKeyHash: string;
   /** The raw Ed25519 payment public key, 32 bytes of lowercase hex. */
   readonly paymentKey: string;
+  /** The raw Ed25519 stake public key, 32 bytes of lowercase hex. */
+  readonly stakeKey: string;
   /** A claim from whoever named the participant. Show it only through `displayLabel`. */
   readonly label?: string;
   readonly self: boolean;
@@ -43,12 +45,25 @@ export interface VaultSpendContext {
   /** The payment script, as the transaction's witness set carries it. */
   readonly paymentScript: Cardano.NativeScript;
   readonly paymentScriptHash: string;
+  /** The stake script, as the witness set carries it for a stake operation. */
+  readonly stakeScript: Cardano.NativeScript;
   readonly stakeScriptHash: string;
   readonly template: ParsedVaultScript;
   /** Signatures the owners' branch needs. */
   readonly threshold: number;
   /** Owner payment key hashes, in script order. */
   readonly owners: readonly string[];
+  /** Signatures the owners' branch of the stake script needs. */
+  readonly stakeThreshold: number;
+  /** The key hashes of the stake script's owners' branch, in script order. */
+  readonly stakeOwners: readonly string[];
+  /**
+   * The stake credential is the payment script itself, as some CIP-1854 wallets build a vault:
+   * then the payment keys also authorise every stake operation, and the one script serves both.
+   */
+  readonly sharedStakeCredential: boolean;
+  /** The reward address of the vault's stake credential, bech32. */
+  readonly rewardAccount: string;
   /** The vault's full address (script payment, script stake), bech32. */
   readonly baseAddress: string;
   /** The same address, raw bytes as lowercase hex: what an output's address is compared with. */
@@ -98,11 +113,13 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
   const participants: VaultSpendParticipant[] = [];
   for (const stored of record.participants) {
     let paymentKey: string;
+    let stakeKey: string;
     try {
       const keys = parseVaultPublicKeys(stored.vaultKeys);
       const hashes = await vaultKeyHashes(keys);
       if (hashes.payment !== stored.credential || hashes.stake !== stored.stakeKeyHash) throw new Error('hash');
       paymentKey = keys.payment;
+      stakeKey = keys.stake;
     } catch {
       return spendError('VAULT_INVALID', 'A participant\'s keys do not give their stored hashes');
     }
@@ -111,6 +128,7 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
       credential: stored.credential,
       stakeKeyHash: stored.stakeKeyHash,
       paymentKey,
+      stakeKey,
       ...(stored.label !== undefined ? { label: stored.label } : {}),
       self: stored.self === true,
     }));
@@ -118,6 +136,13 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
   const owners = [...payment.parsed.owners];
   for (const owner of owners) {
     if (!participants.some(p => p.role === 'owner' && p.credential === owner)) spendError('VAULT_INVALID', 'An owner key of the script has no participant');
+  }
+  const sharedStakeCredential = stake.script.hash === payment.script.hash;
+  const stakeOwners = [...stake.parsed.owners];
+  if (!sharedStakeCredential) {
+    for (const owner of stakeOwners) {
+      if (!participants.some(p => p.role === 'owner' && p.stakeKeyHash === owner)) spendError('VAULT_INVALID', 'An owner key of the stake script has no participant');
+    }
   }
   const selves = participants.filter(p => p.self);
   if (selves.length !== 1) spendError('VAULT_INVALID', 'Exactly one participant is this wallet');
@@ -127,6 +152,10 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
   }
 
   const address = vaultBaseAddress(record.network, payment.script.hash, stake.script.hash);
+  const rewardAccount = Cardano.RewardAddress.fromCredentials(NETWORK_ID[record.network], {
+    type: Cardano.CredentialType.ScriptHash,
+    hash: Hash28ByteBase16(stake.script.hash),
+  }).toAddress().toBech32();
   return Object.freeze({
     vaultId: record.vaultId,
     network: record.network,
@@ -134,10 +163,15 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
     ...(record.name !== undefined ? { name: record.name } : {}),
     paymentScript: payment.script.script,
     paymentScriptHash: payment.script.hash,
+    stakeScript: stake.script.script,
     stakeScriptHash: stake.script.hash,
     template: payment.parsed,
     threshold: payment.parsed.threshold,
     owners: Object.freeze(owners),
+    stakeThreshold: stake.parsed.threshold,
+    stakeOwners: Object.freeze(stakeOwners),
+    sharedStakeCredential,
+    rewardAccount,
     baseAddress: address.bech32,
     baseAddressHex: address.hex,
     participants: Object.freeze(participants),
@@ -145,6 +179,11 @@ export async function spendContextOf(record: VaultRecord): Promise<VaultSpendCon
     ownIndex: record.ownIndex,
     accepted: record.status === 'accepted',
   });
+}
+
+/** The owner whose stake key hashes to `stakeKeyHash`, if any. */
+export function participantByStakeKey(context: VaultSpendContext, stakeKeyHash: string): VaultSpendParticipant | undefined {
+  return context.participants.find(p => p.stakeKeyHash === stakeKeyHash);
 }
 
 /** The participant whose payment key hashes to `credential`, if any. */

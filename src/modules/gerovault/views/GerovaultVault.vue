@@ -72,6 +72,9 @@
         <VaultAddressPanel :address="facts.addresses.base" />
       </div>
 
+      <!-- cNIGHT held by the vault and DUST generation for its stake credential. -->
+      <VaultDustPanel v-if="record.status === 'accepted'" :record="record" :utxos="chain.utxos.value" />
+
       <VaultTechnicalPanel v-if="detailsVisible" :record="record" :facts="facts" />
     </template>
 
@@ -122,6 +125,7 @@ import CandidateAcceptPanel from '@/modules/gerovault/detail/components/Candidat
 import VaultAddressPanel from '@/modules/gerovault/detail/components/VaultAddressPanel.vue';
 import VaultBalancePanel from '@/modules/gerovault/detail/components/VaultBalancePanel.vue';
 import VaultTechnicalPanel from '@/modules/gerovault/detail/components/VaultTechnicalPanel.vue';
+import VaultDustPanel from '@/modules/gerovault/dust/components/VaultDustPanel.vue';
 
 defineOptions({ name: 'GerovaultVault' });
 

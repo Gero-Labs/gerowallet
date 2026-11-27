@@ -16,6 +16,15 @@
  * - `UNSUPPORTED_WALLET`: this wallet type cannot sign a vault spend yet.
  * - `WRONG_PASSWORD`: the spending password was refused (or is in a back-off wait).
  * - `KEY_MISMATCH`: the key derived at this wallet's index is not the one the vault holds.
+ * - `SCRIPT_DATA_MISMATCH`: a DUST operation's redeemers, rebuilt here, do not give the script data
+ *   hash the owners signed (or there is no cost model to check it with).
+ * - `OPERATION_UNAVAILABLE`: the vault's network has no DUST mapping validator in this release.
+ * - `STAKE_ALREADY_REGISTERED`, `STAKE_NOT_REGISTERED`: the stake credential's state on chain does
+ *   not allow the operation (registering twice; a DUST registration before the stake one).
+ * - `DUST_ALREADY_REGISTERED`: a DUST registration for this stake credential already exists; the
+ *   wallet never builds a second one. `DUST_NOT_REGISTERED`: there is none to remove.
+ * - `INVALID_DUST_ADDRESS`: not a DUST address of the vault's network.
+ * - `NO_COLLATERAL`: the proposer's wallet has no ADA-only UTxO to put up as collateral.
  */
 export type VaultSpendErrorCode =
   | 'VAULT_INVALID'
@@ -36,7 +45,15 @@ export type VaultSpendErrorCode =
   | 'NOT_AT_THRESHOLD'
   | 'UNSUPPORTED_WALLET'
   | 'WRONG_PASSWORD'
-  | 'KEY_MISMATCH';
+  | 'KEY_MISMATCH'
+  | 'SCRIPT_DATA_MISMATCH'
+  | 'OPERATION_UNAVAILABLE'
+  | 'STAKE_ALREADY_REGISTERED'
+  | 'STAKE_NOT_REGISTERED'
+  | 'DUST_ALREADY_REGISTERED'
+  | 'DUST_NOT_REGISTERED'
+  | 'INVALID_DUST_ADDRESS'
+  | 'NO_COLLATERAL';
 
 export class VaultSpendError extends Error {
   readonly code: VaultSpendErrorCode;

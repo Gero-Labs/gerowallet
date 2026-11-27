@@ -6,11 +6,12 @@ import { MAX_BUILT_TX_FEE_LOVELACE } from '@/shared/utils/txIntentGuard';
 import type { NetworkId } from './address';
 import { bodyKeyRule, REQUIRED_BODY_KEYS, type BodyField } from './bodyKeys';
 import { certificateDeposits, decodeCertificates, type CertificateView } from './certificates';
-import { fromHex, isNull, readArray, readBoolean, readMap, readUint, stateOf, toHex, type Bytes } from './cbor';
+import { fromHex, isNull, readArray, readBoolean, readBytes, readMap, readUint, stateOf, toHex, type Bytes } from './cbor';
 import { collateralView, type CollateralView } from './collateral';
 import type { DecodeContext } from './context';
 import { decodeFee, decodeNetworkId, decodeRequiredSigners, decodeSlot, type ValidityView } from './header';
 import { decodeInputSet, proveInputs, provenViews, type InputRef, type ProvenInputView } from './inputs';
+import { decodeMint, type MintAmount } from './mint';
 import { decodeOutput, type OutputView } from './outputs';
 import { FieldRefusal, Refusals, type Refusal } from './refusals';
 import { ValueSum } from './value';
@@ -41,6 +42,12 @@ export interface DecodeVaultTxOptions {
   stakeKeyDepositLovelace?: bigint;
   /** Fees above this refuse (`fee_above_limit`). Default `MAX_BUILT_TX_FEE_LOVELACE`. */
   maxFeeLovelace?: bigint;
+  /**
+   * Minting policies whose minting and burning (body key 9) is decoded instead of refused. With it
+   * the script data hash (body key 11) is read too, since a Plutus policy needs one. A mint under
+   * any other policy still refuses (`mint_unsupported`). Without it both keys refuse, as before.
+   */
+  plutusMintPolicies?: readonly string[];
 }
 
 export interface VaultTxSummary {
@@ -64,6 +71,10 @@ export interface VaultTxSummary {
   collateral: CollateralView | null;
   /** UTxOs the transaction reads without spending, each proven from its creating transaction. */
   referenceInputs: ProvenInputView[];
+  /** What the transaction mints (positive) and burns (negative); empty without body key 9. */
+  mint: MintAmount[];
+  /** The script data hash (body key 11), lower-case hex, or null when the body has none. */
+  scriptDataHash: string | null;
 }
 
 /** `decoded`: the complete summary. `refused`: every refusal found, and no summary at all. */
@@ -112,8 +123,14 @@ function readEnvelope(tx: VaultTxInput, refusals: Refusals): Envelope | null {
 
 type RawFields = Partial<Record<BodyField, { item: Bytes; path: string }>>;
 
+/** Refused keys a caller may open: mint and the script data hash, for named minting policies. */
+const OPENED_BY_MINT_POLICIES: ReadonlyMap<number, BodyField> = new Map<number, BodyField>([
+  [9, 'mint'],
+  [11, 'script_data_hash'],
+]);
+
 /** Sort the body's entries by rule; refuse unknown, duplicate, refused and missing keys. */
-function walkBody(body: Bytes, refusals: Refusals): RawFields | null {
+function walkBody(body: Bytes, refusals: Refusals, mintOpened: boolean): RawFields | null {
   let entries: Array<[Bytes, Bytes]>;
   try {
     entries = readMap(body, 'body');
@@ -138,7 +155,9 @@ function walkBody(body: Bytes, refusals: Refusals): RawFields | null {
     }
     seen.add(key);
     const rule = bodyKeyRule(key);
+    const opened = mintOpened ? OPENED_BY_MINT_POLICIES.get(Number(key)) : undefined;
     if (!rule) refusals.add('body_key_unknown', path);
+    else if ('refuse' in rule && opened) raw[opened] = { item, path };
     else if ('refuse' in rule) refusals.add(rule.refuse, path, rule.name);
     else raw[rule.decode] = { item, path };
   });
@@ -157,7 +176,8 @@ export async function decodeVaultTransaction(tx: VaultTxInput, options: DecodeVa
   const envelope = readEnvelope(tx, refusals);
   if (!envelope) return { status: 'refused', txId: null, refusals: refusals.list };
   const txId = blake2b.hash(HexBlob.fromBytes(envelope.body), 32).toString();
-  const raw = walkBody(envelope.body, refusals);
+  const mintPolicies = options.plutusMintPolicies ?? [];
+  const raw = walkBody(envelope.body, refusals, mintPolicies.length > 0);
   if (!raw) return { status: 'refused', txId, refusals: refusals.list };
 
   const field = <T>(name: BodyField, read: (item: Bytes, path: string) => T): T | undefined => {
@@ -183,6 +203,8 @@ export async function decodeVaultTransaction(tx: VaultTxInput, options: DecodeVa
   const collateralReturn = field('collateral_return', (item, path) => decodeOutput(item, path, ctx.networkId)) ?? null;
   const totalCollateral = field('total_collateral', decodeFee) ?? null;
   const referenceInputs = field('reference_inputs', inputSet) ?? [];
+  const mint = field('mint', (item, path) => decodeMint(item, path, mintPolicies)) ?? [];
+  const scriptDataHash = field('script_data_hash', (item, path) => toHex(readBytes(item, path, 32))) ?? null;
 
   const spent = new Set(inputs.map(outputRef));
   for (const ref of referenceInputs) if (spent.has(outputRef(ref))) refusals.add('reference_input_spent', ref.path);
@@ -206,6 +228,7 @@ export async function decodeVaultTransaction(tx: VaultTxInput, options: DecodeVa
   for (const input of inputViews) balance.add(input.output.value);
   for (const withdrawal of withdrawals) balance.addLovelace(withdrawal.lovelace);
   balance.addLovelace(deposits.refunded);
+  balance.add({ lovelace: 0n, tokens: mint });
   for (const output of outputs) balance.add(output.value, -1n);
   balance.addLovelace(-fee - deposits.paid);
   if (!balance.isZero()) refusals.add('value_not_balanced', 'body', balance.lovelace() !== 0n ? 'lovelace' : 'tokens');
@@ -235,6 +258,8 @@ export async function decodeVaultTransaction(tx: VaultTxInput, options: DecodeVa
       deposits: { paidLovelace: deposits.paid, refundedLovelace: deposits.refunded },
       collateral,
       referenceInputs: provenViews(referenceInputs, proven),
+      mint,
+      scriptDataHash,
     },
   };
 }

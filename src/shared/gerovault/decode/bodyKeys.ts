@@ -19,7 +19,11 @@ export type BodyField =
   | 'network_id'
   | 'collateral_return'
   | 'total_collateral'
-  | 'reference_inputs';
+  | 'reference_inputs'
+  /** Read only when the caller names the minting policies (`plutusMintPolicies`); refused otherwise. */
+  | 'mint'
+  /** Read with `mint`: the script data hash a Plutus minting policy needs. Refused otherwise. */
+  | 'script_data_hash';
 
 export type BodyKeyRule =
   | { key: number; name: string; decode: BodyField }

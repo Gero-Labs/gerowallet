@@ -55,6 +55,14 @@ const ERROR_KEYS: Readonly<Record<VaultSpendErrorCode, string>> = {
   UNSUPPORTED_WALLET: 'gerovault.spend.error.unsupportedWallet',
   WRONG_PASSWORD: 'gerovault.spend.error.wrongPassword',
   KEY_MISMATCH: 'gerovault.spend.error.keyMismatch',
+  SCRIPT_DATA_MISMATCH: 'gerovault.dust.error.scriptDataMismatch',
+  OPERATION_UNAVAILABLE: 'gerovault.dust.error.unavailable',
+  STAKE_ALREADY_REGISTERED: 'gerovault.dust.error.stakeAlreadyRegistered',
+  STAKE_NOT_REGISTERED: 'gerovault.dust.error.stakeNotRegistered',
+  DUST_ALREADY_REGISTERED: 'gerovault.dust.error.dustAlreadyRegistered',
+  DUST_NOT_REGISTERED: 'gerovault.dust.error.dustNotRegistered',
+  INVALID_DUST_ADDRESS: 'gerovault.dust.error.invalidDustAddress',
+  NO_COLLATERAL: 'gerovault.dust.error.noCollateral',
 };
 
 /** The text key of a spend error code. */
@@ -77,6 +85,14 @@ const REFUSAL_KEYS: Partial<Record<SpendRefusalCode, string>> = {
   network_mismatch: 'gerovault.spend.refusal.networkMismatch',
   bundle_other_vault: 'gerovault.spend.refusal.otherVault',
   value_not_balanced: 'gerovault.spend.refusal.notBalanced',
+  operation_unknown: 'gerovault.dust.refusal.unknown',
+  operation_other_credential: 'gerovault.dust.refusal.otherCredential',
+  operation_output: 'gerovault.dust.refusal.output',
+  registration_output_invalid: 'gerovault.dust.refusal.registrationOutput',
+  registration_input_invalid: 'gerovault.dust.refusal.registrationInput',
+  collateral_shape: 'gerovault.dust.refusal.collateral',
+  script_data_hash_shape: 'gerovault.dust.refusal.scriptDataHash',
+  operation_unavailable: 'gerovault.dust.refusal.unavailable',
 };
 
 /**
@@ -108,6 +124,7 @@ const WITNESS_KEYS: Readonly<Record<WitnessRefusalReason, string>> = {
   key_not_in_script: 'gerovault.spend.witness.keyNotInScript',
   key_not_signer: 'gerovault.spend.witness.keyNotSigner',
   not_needed: 'gerovault.spend.witness.notNeeded',
+  stake_missing: 'gerovault.dust.witness.stakeMissing',
   bad_signature: 'gerovault.spend.witness.badSignature',
 };
 

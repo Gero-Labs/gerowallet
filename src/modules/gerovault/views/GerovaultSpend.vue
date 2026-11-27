@@ -108,6 +108,7 @@
           :review="review"
           :network="ready.context.network"
           :payment-script-hash="ready.context.paymentScriptHash"
+          :own-collateral-key-hash="ownCollateralKeyHash"
           :details="detailsVisible"
         />
         <SpendSignersCard :progress="progress" :details="detailsVisible" />
@@ -162,7 +163,8 @@ import { errorText, tokenName, unavailableKey } from '@/modules/gerovault/spend/
 import { VaultSpendError } from '@/modules/gerovault/spend/errors';
 import { saveTextFile } from '@/modules/gerovault/spend/files';
 import { reviewBundle, type SpendReview } from '@/modules/gerovault/spend/review';
-import { signerSupport } from '@/modules/gerovault/spend/signer';
+import { accountCollateralKeyHash, signerSupport } from '@/modules/gerovault/spend/signer';
+import { PLAIN_SPEND_PLAN, witnessPlanOf } from '@/modules/gerovault/dust/operations';
 import { requestVaultWitnessFile } from '@/modules/gerovault/spend/signClient';
 import { clearSpendSession, spendSession, spendSessionKey, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
 import { useVaultSpend } from '@/modules/gerovault/spend/useVaultSpend';
@@ -274,8 +276,15 @@ function readForm(): SpendRecipient[] | null {
 const sessionKey = computed(() => (ready.value && walletId.value !== null ? spendSessionKey(walletId.value, ready.value.context.vaultId) : null));
 const session = computed(() => (sessionKey.value ? spendSession(sessionKey.value) ?? null : null));
 const review = ref<SpendReview | null>(null);
+/** What the witness set needs beyond payment signatures: read from this device's own sheet. */
+const plan = computed(() => (ready.value && review.value?.status === 'ready' ? witnessPlanOf(review.value.operation, ready.value.context) : PLAIN_SPEND_PLAN));
+/** This wallet's first address key hash, so the sheet can say a DUST operation's collateral is its own. */
+const ownCollateralKeyHash = ref<string | null>(null);
+watch(() => wallet.value?.publicKey, key => {
+  void accountCollateralKeyHash(key).then(hash => { ownCollateralKeyHash.value = hash ?? null; });
+}, { immediate: true });
 const phase = computed<'form' | 'review'>(() => (session.value && review.value ? 'review' : 'form'));
-const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context) : null));
+const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context, plan.value) : null));
 const ownSigned = computed(() => !!progress.value?.owners.some(o => o.participant.self && o.signed));
 const signing = ref(false);
 const signError = ref<string | null>(null);
@@ -328,7 +337,7 @@ async function sign(password: string): Promise<void> {
     if (walletId.value === null) throw new VaultSpendError('UNSUPPORTED_WALLET', 'No wallet');
     // Signed in the background worker, where the root key is; only the witness file comes back.
     const file = await requestVaultWitnessFile({ walletId: walletId.value, vaultId: current.context.vaultId, bundle: active.bundle, password });
-    const verified = await verifyWitnessFile(file, active.bundle, current.context);
+    const verified = await verifyWitnessFile(file, active.bundle, current.context, plan.value);
     updateSpendSession(key, { collection: addSignature(active.collection, verified).collection });
   } catch (error) {
     signError.value = describe(error);

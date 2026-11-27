@@ -6,7 +6,9 @@ import {
   encodeManifest,
   numberVerification,
   parseVaultPublicKeys,
+  ROLE,
   vaultId,
+  vaultScript,
   type VaultManifest,
   type VaultScripts,
 } from '@/shared/gerovault';
@@ -146,6 +148,23 @@ describe('vault store', () => {
       expect(await refusal(vaultStore.addCandidate(wallet, candidate({ participants })))).toBe('INVALID_INPUT');
     }
     expect(await vaultStore.list(wallet)).toEqual([]);
+  });
+
+  it('takes an imported vault whose stake credential is its payment script, and only an imported one', async () => {
+    const wallet = walletId();
+    const shared = { payment: vault.payment, stake: vaultScript(ROLE.STAKE, vault.payment.script) };
+    const input = candidate({ origin: 'imported', stakeScriptCbor: shared.stake.cbor, vaultId: vaultId(shared, 'preprod') });
+    expect(await refusal(vaultStore.addCandidate(wallet, { ...input, origin: 'created' }))).toBe('INVALID_INPUT');
+    const record = await vaultStore.addCandidate(wallet, input);
+    expect(record.stakeScriptHash).toBe(record.paymentScriptHash);
+    // The participants still have to be exactly the script's keys.
+    const outsider = candidate({
+      origin: 'imported',
+      stakeScriptCbor: shared.stake.cbor,
+      vaultId: vaultId(shared, 'preprod'),
+      participants: [...people.slice(0, 2), people[3]].map((p, i) => ({ role: 'owner' as const, vaultKeys: p.vaultKeys, self: i === 0 })),
+    });
+    expect(await refusal(vaultStore.addCandidate(walletId(), outsider))).toBe('INVALID_INPUT');
   });
 
   it('refuses a bad index, network, origin, label or wallet id', async () => {

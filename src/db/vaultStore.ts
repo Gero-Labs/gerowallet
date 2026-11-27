@@ -150,10 +150,16 @@ function sameKeys(stored: readonly string[], script: readonly string[]): boolean
   return stored.length === script.length && new Set(stored).size === stored.length && stored.every(hash => script.includes(hash));
 }
 
+/**
+ * `sharedStake`: the stake script is the payment script itself (an imported CIP-1854 vault whose
+ * stake credential is its payment script). Its keys are then the participants' payment keys, and
+ * their stake vault keys sit in no script.
+ */
 async function readParticipants(
   inputs: unknown,
   payment: ParsedVaultScript,
   stake: ParsedVaultScript,
+  sharedStake = false,
 ): Promise<StoredVaultParticipant[]> {
   if (!Array.isArray(inputs) || inputs.length === 0 || inputs.length > MAX_PARTICIPANTS) invalid('A vault has 2 to 40 participants');
   const participants: StoredVaultParticipant[] = [];
@@ -180,10 +186,11 @@ async function readParticipants(
   if (participants.filter(p => p.self).length !== 1) invalid('Exactly one participant is this wallet');
   const owners = participants.filter(p => p.role === 'owner');
   const backups = participants.filter(p => p.role === 'backupHolder');
+  const stakeKeyOf = (p: StoredVaultParticipant) => (sharedStake ? p.credential : p.stakeKeyHash);
   if (!sameKeys(owners.map(p => p.credential), payment.owners)
-    || !sameKeys(owners.map(p => p.stakeKeyHash), stake.owners)
+    || !sameKeys(owners.map(stakeKeyOf), stake.owners)
     || !sameKeys(backups.map(p => p.credential), backupKeys(payment))
-    || !sameKeys(backups.map(p => p.stakeKeyHash), backupKeys(stake))) {
+    || !sameKeys(backups.map(stakeKeyOf), backupKeys(stake))) {
     invalid('The participants are not exactly the keys of the scripts, each in the branch of their role');
   }
   return participants;
@@ -228,10 +235,13 @@ async function addCandidate(walletId: number, input: VaultCandidateInput): Promi
   const payment = readScript(ROLE.PAYMENT, input.paymentScriptCbor, 'payment');
   const stake = readScript(ROLE.STAKE, input.stakeScriptCbor, 'stake');
   assertSameTemplate(payment.parsed, stake.parsed);
+  // One script as both credentials: only a vault another CIP-1854 wallet built and this one imported.
+  const sharedStake = payment.script.hash === stake.script.hash;
+  if (sharedStake && input.origin !== 'imported') invalid('Only an imported vault may use its payment script as its stake credential');
   if (vaultIdOf({ payment: payment.script, stake: stake.script }, input.network) !== input.vaultId) {
     throw new VaultStoreError('VAULT_ID_MISMATCH', 'The vault id is not the one these scripts give on this network');
   }
-  const participants = await readParticipants(input.participants, payment.parsed, stake.parsed);
+  const participants = await readParticipants(input.participants, payment.parsed, stake.parsed, sharedStake);
   const name = optionalLabel(input.name, 'vault name');
   const identity: VaultIdentity = {
     vaultId: input.vaultId,

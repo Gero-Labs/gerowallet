@@ -10,7 +10,11 @@
  *    (`reviewBundle`), against the worker's own chain tip and the wallet's other accepted vaults;
  * 4. the key at the record's own index, `m/1854'/1815'/0'/0/i`, which must hash to the credential
  *    the record holds for this wallet;
- * 5. a signature over the transaction id only, after which the opened root key bytes are
+ * 5. for a stake or DUST operation (the sheet's own reading of the body, never the page's word),
+ *    also the stake key at `m/1854'/1815'/0'/2/i`, which must hash to the record's stake key for
+ *    this wallet and be in the stake script; and when the operation's collateral is this wallet's
+ *    own first address, that address's CIP-1852 payment key (`signCollateralWithRootKey`);
+ * 6. signatures over the transaction id only, after which the opened root key bytes are
  *    overwritten.
  *
  * Only the `VaultWitnessFile` goes back. Never log `input`: it holds the spending password.
@@ -24,11 +28,19 @@ import {
   type VaultRecord,
   type VaultWitnessFile,
 } from '@/modules/gerovault/contracts';
-import { backupPathOpensAtMs, type VaultNetwork } from '@/shared/gerovault';
+import { backupPathOpensAtMs, ROLE, type VaultNetwork } from '@/shared/gerovault';
+import { witnessPlanOf } from '@/modules/gerovault/dust/operations';
 import { parseUnsignedBundle, checkBundleForVault, signingFileText } from './bundle';
 import { VaultSpendError } from './errors';
 import { knownVaultsOf, reviewBundle } from './review';
-import { signerSupport, signWithRootKey, type SignerWallet } from './signer';
+import {
+  accountCollateralKeyHash,
+  signCollateralWithRootKey,
+  signerSupport,
+  signVaultRoleWithRootKey,
+  signWithRootKey,
+  type SignerWallet,
+} from './signer';
 import { spendContextOf } from './vaultSpendContext';
 import { createWitnessFile, verifyOwnWitness } from './witnesses';
 
@@ -75,7 +87,16 @@ const fail = (code: SignVaultBundleErrorCode, detail?: string): never => {
 
 const HEX32 = /^[0-9a-f]{64}$/;
 
-export type SignBundleWallet = SignerWallet & { readonly id: number; readonly network?: unknown };
+/**
+ * `publicKey` and `accountIndex`: the wallet's CIP-1852 account public key (bech32) and account,
+ * read only to sign for collateral at its first address.
+ */
+export type SignBundleWallet = SignerWallet & {
+  readonly id: number;
+  readonly network?: unknown;
+  readonly publicKey?: unknown;
+  readonly accountIndex?: unknown;
+};
 
 /** How far a stored tip may sit from the network's clock and still count as this network's. */
 export const TIP_CLOCK_TOLERANCE_MS = 24 * 3600 * 1000;
@@ -150,6 +171,11 @@ export async function signVaultBundleFlow(
     knownVaults: knownVaultsOf(await deps.acceptedVaults(wallet.id, record.network), record.vaultId),
   });
   if (review.status !== 'ready') return fail('bundle-refused', review.refusals.map(refusal => refusal.code).join(','));
+  const plan = witnessPlanOf(review.operation, context);
+  if (plan.stake && !context.stakeOwners.includes(context.self.stakeKeyHash)) return fail('not-owner');
+  // Collateral is signed for only when it is this wallet's own first address.
+  const ownCollateral = plan.collateralPayer !== null && (await accountCollateralKeyHash(wallet.publicKey)) === plan.collateralPayer;
+  const accountIndex = wallet.accountIndex ?? 0;
 
   let rootKey: Uint8Array | undefined;
   try {
@@ -161,9 +187,15 @@ export async function signVaultBundleFlow(
     }
     rootKey = Uint8Array.from(opened);
     opened.fill(0);
-    const witness = await signWithRootKey(rootKey, context.ownIndex, context.self.credential, bundle.txId).catch(asSpendFailure);
-    await verifyOwnWitness(witness, bundle, context).catch(asSpendFailure);
-    return createWitnessFile(bundle, context.self, [witness], deps.now?.() ?? Date.now());
+    const witnesses = [await signWithRootKey(rootKey, context.ownIndex, context.self.credential, bundle.txId).catch(asSpendFailure)];
+    if (plan.stake) {
+      witnesses.push(await signVaultRoleWithRootKey(rootKey, ROLE.STAKE, context.ownIndex, context.self.stakeKeyHash, bundle.txId).catch(asSpendFailure));
+    }
+    if (ownCollateral && plan.collateralPayer !== null && typeof wallet.publicKey === 'string' && typeof accountIndex === 'number') {
+      witnesses.push(await signCollateralWithRootKey(rootKey, accountIndex, wallet.publicKey, plan.collateralPayer, bundle.txId).catch(asSpendFailure));
+    }
+    await verifyOwnWitness(witnesses, bundle, context, plan).catch(asSpendFailure);
+    return createWitnessFile(bundle, context.self, witnesses, deps.now?.() ?? Date.now());
   } finally {
     rootKey?.fill(0);
   }

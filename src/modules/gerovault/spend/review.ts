@@ -8,8 +8,13 @@
  * vault record:
  *
  * - every input is locked by the vault's payment script;
- * - the transaction is a plain spend: no certificates, withdrawals, collateral, reference inputs
- *   or required signers (each needs its own rule before it is signed);
+ * - the transaction is a plain spend, or exactly one of the stake and DUST operations of
+ *   `dust/operations.ts`: certificates, withdrawals, a mint, collateral and a script data hash are
+ *   read only as such an operation, and refused in any other shape; reference inputs and required
+ *   signers are always refused;
+ * - an operation pays nothing out: every output is change to the vault, except the registration
+ *   output of a DUST registration, and the only input that is not the vault's is the registration
+ *   a DUST deregistration removes;
  * - change is only an output to the vault's full address, as derived here, and it carries no
  *   datum and no reference script; the same holds for an output to another vault this wallet has
  *   accepted, shown as moving to that vault;
@@ -25,6 +30,15 @@
 import { decodeVaultTransaction } from '@/shared/gerovault/decode';
 import type { OutputView, Refusal, RefusalCode, TokenAmount, ValueView, VaultTxSummary } from '@/shared/gerovault/decode';
 import type { UnsignedTxBundle, VaultRecord } from '@/modules/gerovault/contracts';
+import { mappingValidatorFor } from '@/modules/gerovault/dust/mappingValidator';
+import {
+  hasOperationFields,
+  isOperationInput,
+  isOperationOutput,
+  readOperation,
+  type OperationRefusalCode,
+  type VaultOperation,
+} from '@/modules/gerovault/dust/operations';
 import { MAX_VALIDITY_SLOTS, NATIVE_FEE_MAX_LOVELACE, NATIVE_FEE_WARN_LOVELACE, VALIDITY_START_TOLERANCE_SLOTS } from './constants';
 import { bundleTxSource, unsignedTransaction } from './bundle';
 import { vaultBaseAddress, type VaultSpendContext } from './vaultSpendContext';
@@ -35,7 +49,7 @@ export type VaultSpendRefusalCode =
   | 'bundle_other_vault'
   /** An input is not locked by this vault's payment script. */
   | 'input_not_vault'
-  /** Certificates, withdrawals, collateral, reference inputs or required signers: not a plain spend. */
+  /** Reference inputs or required signers: neither a plain spend nor an operation. */
   | 'not_a_plain_spend'
   /** Change to the vault (or an output to another accepted vault) that carries a datum. */
   | 'vault_output_datum'
@@ -52,7 +66,7 @@ export type VaultSpendRefusalCode =
   /** Its validity start is further back than the expiry window. */
   | 'validity_start_too_old';
 
-export type SpendRefusalCode = RefusalCode | VaultSpendRefusalCode;
+export type SpendRefusalCode = RefusalCode | VaultSpendRefusalCode | OperationRefusalCode;
 
 export interface SpendRefusal {
   readonly code: SpendRefusalCode;
@@ -82,8 +96,10 @@ export interface SpendWarning {
  * - `vault_script_other_stake`: the vault's payment script with another stake key; it leaves the vault.
  * - `other_vault`: another vault this wallet has accepted; it leaves this vault too.
  * - `change`: back to this vault's full address.
+ * - `dust_registration`: the DUST registration output, locked at the mapping validator until the
+ *   registration is removed.
  */
-export type ReviewOutputKind = 'external' | 'vault_script_other_stake' | 'other_vault' | 'change';
+export type ReviewOutputKind = 'external' | 'vault_script_other_stake' | 'other_vault' | 'change' | 'dust_registration';
 
 export interface ReviewOutput {
   readonly index: number;
@@ -112,6 +128,8 @@ export interface SpendReviewReady {
   readonly invalidBefore: number | null;
   readonly warnings: readonly SpendWarning[];
   readonly summary: VaultTxSummary;
+  /** The stake or DUST operation this is; absent for a plain spend. */
+  readonly operation?: VaultOperation;
 }
 
 export interface SpendReviewRefused {
@@ -180,13 +198,18 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
   const warnings: SpendWarning[] = [];
   const refuse = (code: SpendRefusalCode, path: string, detail?: string) => refusals.push(detail === undefined ? { code, path } : { code, path, detail });
 
+  const isOperation = hasOperationFields(summary);
+  let operation: VaultOperation | undefined;
+  if (isOperation) {
+    const reading = readOperation(summary, context);
+    if (reading.status === 'operation') operation = reading.operation;
+    else for (const refusal of reading.refusals) refuse(refusal.code, refusal.path, refusal.detail);
+  }
+  const isVaultInput = (input: VaultTxSummary['inputs'][number]) =>
+    input.output.address.payment.kind === 'script' && input.output.address.payment.hash === context.paymentScriptHash;
   summary.inputs.forEach((input, i) => {
-    const payment = input.output.address.payment;
-    if (payment.kind !== 'script' || payment.hash !== context.paymentScriptHash) refuse('input_not_vault', `body.0[${i}]`);
+    if (!isVaultInput(input) && !isOperationInput(operation, input)) refuse('input_not_vault', `body.0[${i}]`);
   });
-  if (summary.certificates.length > 0) refuse('not_a_plain_spend', 'body.4', 'certificates');
-  if (summary.withdrawals.length > 0) refuse('not_a_plain_spend', 'body.5', 'withdrawals');
-  if (summary.collateral) refuse('not_a_plain_spend', 'body.13', 'collateral');
   if (summary.referenceInputs.length > 0) refuse('not_a_plain_spend', 'body.18', 'reference_inputs');
   if (summary.requiredSigners.length > 0) refuse('not_a_plain_spend', 'body.14', 'required_signers');
 
@@ -204,9 +227,17 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
 
   const known = options.knownVaults ?? [];
   const outputs: ReviewOutput[] = summary.outputs.map((output, index) => {
-    const { kind, vault } = classify(output, context, known);
     const hasDatum = output.datum !== null;
     const hasReferenceScript = output.referenceScript !== null;
+    if (isOperation) {
+      // An operation pays nothing out: change to the vault, and the registration output it locks.
+      const registration = isOperationOutput(operation, index);
+      if (!registration && output.address.hex !== context.baseAddressHex) refuse('operation_output', `body.1[${index}]`);
+      else if (!registration && hasDatum) refuse('vault_output_datum', `body.1[${index}]`);
+      else if (!registration && hasReferenceScript) refuse('vault_output_script', `body.1[${index}]`);
+      return { index, kind: registration ? 'dust_registration' : 'change', address: output.address.bech32, value: output.value, hasDatum, hasReferenceScript };
+    }
+    const { kind, vault } = classify(output, context, known);
     if (kind === 'change' || kind === 'other_vault') {
       if (hasDatum) refuse('vault_output_datum', `body.1[${index}]`);
       if (hasReferenceScript) refuse('vault_output_script', `body.1[${index}]`);
@@ -223,7 +254,7 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
 
   const leaves = new TokenSum();
   const change = new TokenSum();
-  for (const input of summary.inputs) leaves.add(input.output.value);
+  for (const input of summary.inputs) if (isVaultInput(input)) leaves.add(input.output.value);
   for (const output of outputs) {
     if (output.kind !== 'change') continue;
     leaves.add(output.value, -1n);
@@ -241,6 +272,7 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
     invalidBefore: summary.validity.invalidBefore === null ? null : Number(summary.validity.invalidBefore),
     warnings,
     summary,
+    ...(operation ? { operation } : {}),
   };
 }
 
@@ -257,10 +289,13 @@ export async function reviewBundle(bundle: UnsignedTxBundle, context: VaultSpend
   if (bundle.vaultId !== context.vaultId || bundle.network !== context.network) {
     return { status: 'refused', txId: bundle.txId, refusals: [{ code: 'bundle_other_vault', path: 'bundle' }] };
   }
+  // The DUST mapping validator's token is the one mint a vault signs; with it the script data hash is read.
+  const validator = mappingValidatorFor(context.network);
   const decoded = await decodeVaultTransaction(unsignedTransaction(bundle.bodyCbor), {
     networkId: context.networkId,
     inputSources: [bundleTxSource(bundle)],
     maxFeeLovelace: NATIVE_FEE_MAX_LOVELACE,
+    ...(validator ? { plutusMintPolicies: [validator.scriptHash] } : {}),
   });
   if (decoded.status === 'refused') return { status: 'refused', txId: decoded.txId, refusals: decoded.refusals.map(fromDecoder) };
   if (decoded.summary.txId !== bundle.txId) return { status: 'refused', txId: decoded.summary.txId, refusals: [{ code: 'tx_undecodable', path: 'bundle', detail: 'tx_id' }] };
