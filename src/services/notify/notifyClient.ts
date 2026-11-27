@@ -84,6 +84,14 @@ export interface NotifyClient {
   clockOffsetMs(): Promise<number>;
 }
 
+/**
+ * Any other signed route of the notify API (the GeroVault invitation routes, `vaultInvites/inviteApi.ts`),
+ * with the same signing, retries and `device_unknown` recovery. `path` is relative to the API base.
+ */
+export interface NotifySignedSender {
+  send<T>(method: NotifyMethod, path: string, body?: unknown): Promise<T>;
+}
+
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 function parseRetryAfterMs(value: string | null): number | undefined {
@@ -94,7 +102,7 @@ function parseRetryAfterMs(value: string | null): number | undefined {
   return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
 }
 
-export function createNotifyClient(deps: NotifyClientDeps): NotifyClient {
+export function createNotifyClient(deps: NotifyClientDeps): NotifyClient & NotifySignedSender {
   const baseUrl = (deps.baseUrl || DEFAULT_NOTIFY_API_URL).replace(/\/+$/, '');
   const apiPath = new URL(baseUrl).pathname.replace(/\/+$/, '');
   const now = deps.now ?? (() => Date.now());
@@ -208,5 +216,6 @@ export function createNotifyClient(deps: NotifyClientDeps): NotifyClient {
     watchOrders: (walletTag, body) => request<{ watching: number }>('POST', `/device/wallets/${walletTag}/orders`, body),
     watchListings: (walletTag, body) => request<{ watching: number }>('POST', `/device/wallets/${walletTag}/listings`, body),
     clockOffsetMs: async () => (await deps.store.getDevice()).clockOffsetMs,
+    send: (method, path, body) => request(method, path, body),
   };
 }

@@ -73,7 +73,10 @@ import { installLocaleFor } from '@/chrome/installLocale';
 import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
-import { announcementActions, announcementsRefresh, getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
+import { announcementActions, announcementsRefresh, getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert, vaultInviteTransport } from '@/services/notify/notifyBackground';
+import { createVaultInviteBackground } from '@/services/vaultInvites/vaultInviteBackground';
+import { vaultInviteHandler } from '@/chrome/vaultInviteHandlers';
+import { VAULT_INVITE_MESSAGES } from '@/chrome/vaultInviteMessages';
 import { checkAutoLock, scheduleAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { nexusTxApi, toNexusNetwork } from '@/api/nexus-tx-api';
@@ -3091,6 +3094,25 @@ app.addToOptions(MessageTypes.GEROVAULT_SIGN_VAULT_BUNDLE, gerovaultSignVaultBun
     },
   };
 }));
+
+// GeroVault cosigner invitations (services/vaultInvites): the device invite key, gero-sync's
+// invitation routes, and this wallet's vault key behind its credential, all in the worker. Pages
+// get views without secrets. Never log request.data (spending password, PassKey root key bytes).
+const vaultInvites = createVaultInviteBackground({
+  transport: vaultInviteTransport,
+  keys: async () => {
+    const { getAllWallets } = await import('@/db/gero-db');
+    const { decryptPrivateKey } = await import('@/shared/utils/crypto');
+    return {
+      getWallets: getAllWallets,
+      sessionRootKey: (walletId) => mpcSessionCache.get(walletId),
+      decryptRootKey: decryptPrivateKey,
+    };
+  },
+  publishDevice: () => { void notifyReassert('settings'); },
+  log: (message) => debugLog('🔐', message),
+});
+for (const method of VAULT_INVITE_MESSAGES) app.addToOptions(method, vaultInviteHandler(method, vaultInvites));
 
 app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, sendResponse) => {
   try {

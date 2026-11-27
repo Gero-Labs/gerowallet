@@ -39,6 +39,10 @@ export interface PushDetails {
   aid?: string;
   /** That announcement's kind: `service`, `product` or `news`. */
   kind?: string;
+  /** A GeroVault setup (t = vault_invite / vault_response): 16 bytes, lowercase hex. */
+  setupId?: string;
+  /** The opened invitation a vault_invite led to (the worker's own reference, never the push's). */
+  ref?: string;
 }
 
 export interface PushPayload {
@@ -61,6 +65,8 @@ export type ParsedPush =
   | { ok: false; reason: 'bad_json' | 'bad_version'; partial: Partial<PushPayload> };
 
 const HEX32 = /^[0-9a-f]{32}$/;
+/** A received vault invitation: the server's invite id, or `l` and a join token hash. */
+export const VAULT_INVITE_REF = /^(?:[0-9a-f]{32}|l[0-9a-f]{64})$/;
 const SYM = /^[A-Z0-9]{1,10}$/; // §6.5, re-checked by the client (rule 7)
 const UNIT = /^[0-9a-f]{56,120}$/; // policy id + asset name, hex
 const QTY = /^[0-9]+(\.[0-9]+)?$/;
@@ -103,6 +109,8 @@ function sanitizeDetails(raw: unknown): PushDetails | undefined {
   const drepId = str(raw['drepId']); if (drepId && /^drep1[a-z0-9]{6,}$/.test(drepId)) out.drepId = drepId;
   const aid = str(raw['aid']); if (aid && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(aid)) out.aid = aid;
   const kind = str(raw['kind']); if (kind && ['service', 'product', 'news'].includes(kind)) out.kind = kind;
+  const setupId = str(raw['setupId']); if (setupId && HEX32.test(setupId)) out.setupId = setupId;
+  const ref = str(raw['ref']); if (ref && VAULT_INVITE_REF.test(ref)) out.ref = ref;
   return Object.keys(out).length ? out : undefined;
 }
 

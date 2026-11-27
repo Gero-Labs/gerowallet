@@ -82,6 +82,12 @@ export interface NotifyRegistrationDeps {
    * nothing. Absent: nothing.
    */
   caps?: () => string[];
+  /**
+   * This device's GeroVault invite public key (hex), or null before a vault screen created one.
+   * Present: PUT /device carries it with the `vault_invites` cap (gero-sync pushes vault
+   * invitations only to a device that says so).
+   */
+  inviteKey?: () => Promise<string | null>;
   now?: () => number;
   random?: (n: number) => Uint8Array;
   log?: (message: string) => void;
@@ -89,6 +95,8 @@ export interface NotifyRegistrationDeps {
 
 /** What this client can render beyond wallet alerts (PUT /device `caps`). */
 export const DEVICE_CAPS: readonly string[] = ['announcements'];
+/** The cap a device with a GeroVault invite key adds (`gerovault/invite/PROTOCOL.md` 7.3). */
+export const VAULT_INVITES_CAP = 'vault_invites';
 
 export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
@@ -171,10 +179,11 @@ export function credentialsHash(creds: string[]): string {
 /**
  * What the last PUT /device said, to tell when it must be sent again. The announcement opt-outs are
  * part of it only when there are any, so a device without them keeps the fingerprint it had. `caps`
- * is a constant of the build and rides on `appVersion`.
+ * is a constant of the build and rides on `appVersion`. The GeroVault invite key likewise only when
+ * there is one, so a new key is published at the next re-assertion.
  */
-export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean, announcementsOff: readonly string[] = []): string {
-  return JSON.stringify({ target, appVersion, locale, osPermission, ...(announcementsOff.length ? { announcementsOff: [...announcementsOff].sort() } : {}) });
+export function targetFingerprint(target: WebPushTarget | null, appVersion: string, locale: string, osPermission: boolean, announcementsOff: readonly string[] = [], inviteKey?: string): string {
+  return JSON.stringify({ target, appVersion, locale, osPermission, ...(announcementsOff.length ? { announcementsOff: [...announcementsOff].sort() } : {}), ...(inviteKey ? { inviteKey } : {}) });
 }
 
 function base64UrlToBytes(s: string): Uint8Array {
@@ -196,6 +205,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
 
   async function deviceBody(target: WebPushTarget | null): Promise<DeviceBody> {
     const identity = await deps.identity();
+    const inviteKey = await deps.inviteKey?.().catch(() => null) ?? null;
     return {
       protocol: NOTIFY_PROTOCOL,
       relayPubKey: identity.pubKeyHex,
@@ -205,8 +215,9 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       osPermission: true, // Chrome grants it with the `notifications` permission
       transport: target ? 'webpush' : 'none',
       ...(target ? { webpush: target } : {}),
-      caps: (deps.caps?.() ?? []).filter((c) => DEVICE_CAPS.includes(c)),
+      caps: [...(deps.caps?.() ?? []).filter((c) => DEVICE_CAPS.includes(c)), ...(inviteKey ? [VAULT_INVITES_CAP] : [])],
       announcementsOff: await announcementsOff(),
+      ...(inviteKey ? { inviteKey } : {}),
     };
   }
 
@@ -224,7 +235,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     const view = await client.putDevice(body);
     await store.updateDevice({
       lastPutAt: now(),
-      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff),
+      lastPutFingerprint: targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff, body.inviteKey),
       targetStatus: view.target.status === 'active' ? 'active' : 'none',
       endpoint: target?.endpoint ?? null,
       vapidKid: target?.vapidKid ?? null,
@@ -477,7 +488,7 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
     } else {
       const target = targetOf(sub, device.vapidKid ?? (config.vapidKid as string));
       const body = await deviceBody(target);
-      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff);
+      const fingerprint = targetFingerprint(target, body.appVersion, body.locale ?? '', body.osPermission, body.announcementsOff, body.inviteKey);
       if (fingerprint !== device.lastPutFingerprint || device.lastPutAt === null || now() - device.lastPutAt >= view.reassertAfterMs) {
         try { sent = await putDevice(target); } catch (e) { if (e instanceof NotifyDeferred) return 'deferred'; throw e; }
       }

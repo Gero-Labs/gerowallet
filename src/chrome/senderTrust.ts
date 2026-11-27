@@ -9,6 +9,8 @@
 // chrome.runtime.MessageSender is one of this extension's own pages, or the
 // method is explicitly allowlisted for the content script below.
 
+import { VAULT_INVITE_MESSAGES } from './vaultInviteMessages';
+
 /**
  * Options-context methods that are especially sensitive. Since the channel is
  * default-deny these are already page-only; the list is kept as a tripwire so
@@ -82,6 +84,9 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   // spending password and open the root key in the worker (gerovaultHandlers.ts).
   'GEROVAULT_DERIVE_ACCOUNT_KEY',
   'GEROVAULT_SIGN_VAULT_BUNDLE',
+  // GeroVault invitations: the device invite secret, the vault key behind the spending password,
+  // and this device's voice on gero-sync (vaultInviteHandlers.ts).
+  ...VAULT_INVITE_MESSAGES,
   // Gero's fee station: seals a send with the wallet's key and spends a voucher of the user's
   // daily allowance. A web page must not be able to do either.
   'MIDNIGHT_STATION_STATUS',

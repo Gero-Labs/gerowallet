@@ -43,6 +43,11 @@ export interface DeviceBody {
   caps?: string[];
   /** The announcement kinds the user switched off on this device: `product`, `news`. Never `service`. */
   announcementsOff?: string[];
+  /**
+   * This device's X25519 GeroVault invite key (`gerovault/invite/PROTOCOL.md` 7.3), sent with the
+   * `vault_invites` cap. Absent: the device has no invite key and is never a directory entry.
+   */
+  inviteKey?: string;
 }
 
 /** From `PushSubscription.toJSON()` plus the `/config` kid it was created with. */
