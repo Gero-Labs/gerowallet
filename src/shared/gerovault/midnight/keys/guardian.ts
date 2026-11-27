@@ -25,7 +25,12 @@ export function guardianSalt(guardianChildKey: Uint8Array): Uint8Array {
   if (!(guardianChildKey instanceof Uint8Array) || guardianChildKey.length !== 32) {
     throw new MidnightKeyError('INVALID_CHILD_KEY', 'A guardian child key is 32 bytes');
   }
-  return blake2b(concatBytes(utf8Bytes(GUARDIAN_SALT_TAG), guardianChildKey), { dkLen: 32 });
+  const preimage = concatBytes(utf8Bytes(GUARDIAN_SALT_TAG), guardianChildKey);
+  try {
+    return blake2b(preimage, { dkLen: 32 });
+  } finally {
+    preimage.fill(0);
+  }
 }
 
 /**

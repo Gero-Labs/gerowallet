@@ -41,6 +41,17 @@ function shapeOk(p: unknown): p is JubjubPoint {
   return Boolean(p) && typeof p === 'object' && typeof (p as JubjubPoint).x === 'bigint' && typeof (p as JubjubPoint).y === 'bigint';
 }
 
+/**
+ * A frozen copy of a caller's point, reading each coordinate once, or `undefined` when it is not a
+ * point object. Checks run on the copy, so an object whose properties change between reads (a
+ * getter, a proxy) cannot pass validation with one value and be used with another.
+ */
+export function snapshotJubjubPoint(p: unknown): JubjubPoint | undefined {
+  if (!p || typeof p !== 'object') return undefined;
+  const copy = { x: (p as JubjubPoint).x, y: (p as JubjubPoint).y };
+  return shapeOk(copy) ? Object.freeze(copy) : undefined;
+}
+
 function inRange(p: JubjubPoint): boolean {
   return p.x >= 0n && p.x < P && p.y >= 0n && p.y < P;
 }
@@ -70,14 +81,15 @@ function fromNoble(q: NoblePoint): JubjubPoint {
  */
 export function checkJubjubPoint(p: unknown): { readonly ok: true; readonly key: JubjubPublicKey } | { readonly ok: false; readonly code: JubjubPointRefusal } {
   try {
-    if (!shapeOk(p)) return { ok: false, code: 'MALFORMED' };
-    if (!inRange(p)) return { ok: false, code: 'OUT_OF_RANGE' };
-    if (!isOnJubjubCurve(p)) return { ok: false, code: 'NOT_ON_CURVE' };
-    if (p.x === 0n && p.y === 1n) return { ok: false, code: 'IDENTITY' };
-    const q = toNoble(p);
+    const copy = snapshotJubjubPoint(p);
+    if (!copy) return { ok: false, code: 'MALFORMED' };
+    if (!inRange(copy)) return { ok: false, code: 'OUT_OF_RANGE' };
+    if (!isOnJubjubCurve(copy)) return { ok: false, code: 'NOT_ON_CURVE' };
+    if (copy.x === 0n && copy.y === 1n) return { ok: false, code: 'IDENTITY' };
+    const q = toNoble(copy);
     if (q.isSmallOrder()) return { ok: false, code: 'SMALL_ORDER' };
     if (!q.isTorsionFree()) return { ok: false, code: 'NOT_IN_SUBGROUP' };
-    return { ok: true, key: Object.freeze({ x: p.x, y: p.y }) as JubjubPublicKey };
+    return { ok: true, key: copy as JubjubPublicKey };
   } catch {
     return { ok: false, code: 'MALFORMED' };
   }

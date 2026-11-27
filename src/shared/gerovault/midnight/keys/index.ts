@@ -33,6 +33,7 @@ export {
   jubjubPointHex,
   jubjubPointsEqual,
   jubjubPublicKey,
+  snapshotJubjubPoint,
 } from './jubjub';
 export type { JubjubPointRefusal } from './jubjub';
 export { bytes32Fields, fieldElement, fieldElementFromHex, fieldElementToHex, isFieldElement, transientHash, transientHashWords } from './poseidon';

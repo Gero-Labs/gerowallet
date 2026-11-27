@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import * as ledger from '@midnightntwrk/ledger-v9';
-import { jubjub as nobleJubjub } from '@noble/curves/misc.js';
 import {
   JUBJUB_GENERATOR,
   checkJubjubPoint,
@@ -14,29 +13,9 @@ import {
   jubjubPublicKey,
 } from './jubjub';
 import { FIELD_MODULUS, JUBJUB_SCALAR_MODULUS, JubjubPoint } from './types';
+import { FULL_GENERATOR, G, NoblePoint, T8, TORSION, addPoints, mulPoint, pointsEqual } from './__fixtures__/torsion';
 
-type NP = InstanceType<typeof nobleJubjub.Point>;
-const Point = nobleJubjub.Point;
 const RJ = JUBJUB_SCALAR_MODULUS;
-const affine = (q: NP): JubjubPoint => q.toAffine();
-const fromAffine = (p: JubjubPoint): NP => Point.fromAffine({ x: p.x, y: p.y });
-/** `[n]P` for any n >= 0 (noble refuses scalars from r_J up). */
-const times = (q: NP, n: bigint): NP => {
-  let acc = Point.ZERO;
-  let k = n;
-  while (k >= RJ) {
-    acc = acc.add(q.multiplyUnsafe(RJ - 1n)).add(q);
-    k -= RJ;
-  }
-  return acc.add(q.multiplyUnsafe(k));
-};
-
-/** midnight-zk's full-curve generator: v = 11 and the u it names. Its multiple by 8 is the subgroup generator. */
-const FULL = fromAffine({ x: 0x62edcbb8bf3787c88b0f03ddd60a8187caf55d1b29bf81afe4b3d35df1a7adfen, y: 11n });
-/** A point of order 8, and with it the whole torsion group. */
-const T8 = times(FULL, RJ);
-const TORSION = Array.from({ length: 8 }, (_, k) => affine(times(T8, BigInt(k))));
-const G = fromAffine(JUBJUB_GENERATOR);
 
 const ledgerMulGenerator = (s: bigint): JubjubPoint => {
   const v = ledger.ecMulGenerator(ledger.bigIntToValue(s));
@@ -49,8 +28,8 @@ describe('jubjub: the generator', () => {
   });
 
   it('is 8 times midnight-zk\'s full-curve generator, and not noble\'s Zcash generator', () => {
-    expect(affine(FULL.multiply(8n))).toEqual({ x: JUBJUB_GENERATOR.x, y: JUBJUB_GENERATOR.y });
-    expect(affine(Point.BASE)).not.toEqual({ x: JUBJUB_GENERATOR.x, y: JUBJUB_GENERATOR.y });
+    expect(mulPoint(FULL_GENERATOR, 8n)).toEqual({ x: JUBJUB_GENERATOR.x, y: JUBJUB_GENERATOR.y });
+    expect(NoblePoint.BASE.toAffine()).not.toEqual({ x: JUBJUB_GENERATOR.x, y: JUBJUB_GENERATOR.y });
   });
 
   it('multiplies like the runtime for any scalar', () => {
@@ -75,8 +54,8 @@ describe('jubjub: point validation', () => {
 
   it('builds the torsion group correctly: 8 distinct points of order dividing 8', () => {
     expect(new Set(TORSION.map(t => `${t.x},${t.y}`)).size).toBe(8);
-    for (const t of TORSION) expect(times(fromAffine(t), 8n).is0()).toBe(true);
-    expect(times(T8, 4n).is0()).toBe(false);
+    for (const t of TORSION) expect(pointsEqual(mulPoint(t, 8n), TORSION[0])).toBe(true);
+    expect(pointsEqual(mulPoint(T8, 4n), TORSION[0])).toBe(false);
   });
 
   it('refuses the identity', () => {
@@ -95,11 +74,30 @@ describe('jubjub: point validation', () => {
 
   it('refuses a subgroup point with a torsion component, and the full-curve generator', () => {
     for (const t of TORSION.slice(1)) {
-      const mixed = affine(G.multiply(3n).add(fromAffine(t)));
+      const mixed = addPoints(mulPoint(G, 3n), t);
       expect(isOnJubjubCurve(mixed)).toBe(true);
       expect(checkJubjubPoint(mixed)).toEqual({ ok: false, code: 'NOT_IN_SUBGROUP' });
     }
-    expect(checkJubjubPoint(affine(FULL))).toEqual({ ok: false, code: 'NOT_IN_SUBGROUP' });
+    expect(checkJubjubPoint(FULL_GENERATOR)).toEqual({ ok: false, code: 'NOT_IN_SUBGROUP' });
+  });
+
+  it('reads each coordinate once and returns that copy, so a changing object cannot pass with other values', () => {
+    const reads = { x: 0, y: 0 };
+    const g = jubjubMulGenerator(11n);
+    const shifty = {
+      get x() {
+        reads.x++;
+        return reads.x === 1 ? g.x : 0n;
+      },
+      get y() {
+        reads.y++;
+        return reads.y === 1 ? g.y : 1n;
+      },
+    };
+    const checked = checkJubjubPoint(shifty);
+    expect(checked).toEqual({ ok: true, key: { x: g.x, y: g.y } });
+    expect(reads).toEqual({ x: 1, y: 1 });
+    expect(checked.ok && Object.isFrozen(checked.key)).toBe(true);
   });
 
   it('refuses a point off the curve, coordinates out of range, and anything that is not a point', () => {
