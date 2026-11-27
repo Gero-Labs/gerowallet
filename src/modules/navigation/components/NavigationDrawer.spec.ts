@@ -272,6 +272,36 @@ describe('NavigationDrawer: the Governance section', () => {
   });
 });
 
+describe('NavigationDrawer: the GeroVault item', () => {
+  const vaultsRow = (w: VueWrapper) => w.findAll('.menuItem').find(row => linkOf(row) === '/vaults');
+  const visible = (row: DOMWrapper<Element> | undefined) => !!row && (row.element as HTMLElement).style.display !== 'none';
+
+  it('shows no Vaults row while the flag is off', () => {
+    vi.spyOn(featureFlagsStore, 'isVaultsEnabled').mockReturnValue(false);
+    wrapper = mountDrawer('/');
+    expect(visible(vaultsRow(wrapper))).toBe(false);
+  });
+
+  it('shows Vaults with the NEW badge under Financial hub, after Staking, once the flag is on', () => {
+    vi.spyOn(featureFlagsStore, 'isVaultsEnabled').mockReturnValue(true);
+    wrapper = mountDrawer('/');
+    const row = vaultsRow(wrapper);
+    expect(visible(row)).toBe(true);
+    expect(row!.text()).toContain('gerovault.title');
+    expect(row!.find('v-chip-stub').exists()).toBe(true);
+    const links = rowLinks(wrapper);
+    expect(links.indexOf('/vaults')).toBeGreaterThan(links.indexOf('/staking'));
+    expect(links.indexOf('/vaults')).toBeLessThan(links.indexOf('/card'));
+  });
+
+  it('keeps Vaults to Cardano wallets, as the route guard does', () => {
+    vi.spyOn(featureFlagsStore, 'isVaultsEnabled').mockReturnValue(true);
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, chain: 'Midnight', network: 'Preprod' } as never;
+    wrapper = mountDrawer('/');
+    expect(visible(vaultsRow(wrapper))).toBe(false);
+  });
+});
+
 describe('NavigationDrawer: the Gero mark', () => {
   const logo = (w: VueWrapper) => w.find('img[alt="logo"]').attributes('src');
 

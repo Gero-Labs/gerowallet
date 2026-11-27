@@ -2809,6 +2809,27 @@ export default {
   'perps.algo.created': 'TWAP strategy created.',
   'perps.algo.cancelRequested': 'Cancel requested.',
 
+  // GeroVault (multisig vaults), not the perpetuals vaults (vaults.*). detailsLayer.*: the shared Details layer toggle.
+  'gerovault.title': 'Vaults',
+  'gerovault.about.label': 'About vaults',
+  'gerovault.about.text': 'Shared custody on Cardano. Funds in a vault move only when enough of its owners approve, each from their own device.',
+  'gerovault.importPackage': 'Import package',
+  'gerovault.createVault': 'Create vault',
+  'gerovault.overview.empty': 'You have no vaults yet. Creating and importing vaults arrives in a later update.',
+  'gerovault.createUnavailable': 'Creating a vault is not available yet.',
+  'gerovault.backToVaults': 'Back to vaults',
+  'gerovault.vault.title': 'Vault',
+  'gerovault.vault.id': 'Vault ID',
+  'gerovault.tabs.label': 'Vault sections',
+  'gerovault.tabs.proposals': 'Proposals',
+  'gerovault.tabs.policy': 'Owners & policy',
+  'gerovault.tabs.history': 'History',
+  'gerovault.tabEmpty.proposals': 'No proposals yet.',
+  'gerovault.tabEmpty.policy': 'Owners and policy will appear here.',
+  'gerovault.tabEmpty.history': 'No activity yet.',
+  'gerovault.tabEmpty.settings': 'Vault settings will appear here.',
+  'detailsLayer.peekHint': 'Hold Alt (Option on a Mac) to show details for a moment',
+
   // Strike v2 Vaults
   'vaults.title': 'Vaults',
   'vaults.browse': 'Browse Vaults',

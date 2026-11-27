@@ -3065,6 +3065,27 @@ export default {
   'perps.algo.created': 'TWAP-Strategie erstellt.',
   'perps.algo.cancelRequested': 'Abbruch angefordert.',
 
+  // GeroVault (multisig vaults), not the perpetuals vaults (vaults.*). detailsLayer.*: the shared Details layer toggle.
+  'gerovault.title': 'Tresore',
+  'gerovault.about.label': 'Über Tresore',
+  'gerovault.about.text': 'Gemeinsame Verwahrung auf Cardano. Gelder in einem Tresor bewegen sich nur, wenn genügend seiner Eigentümer zustimmen, jeder auf dem eigenen Gerät.',
+  'gerovault.importPackage': 'Paket importieren',
+  'gerovault.createVault': 'Tresor erstellen',
+  'gerovault.overview.empty': 'Sie haben noch keine Tresore. Das Erstellen und Importieren von Tresoren folgt in einem späteren Update.',
+  'gerovault.createUnavailable': 'Das Erstellen eines Tresors ist noch nicht verfügbar.',
+  'gerovault.backToVaults': 'Zurück zu den Tresoren',
+  'gerovault.vault.title': 'Tresor',
+  'gerovault.vault.id': 'Tresor-ID',
+  'gerovault.tabs.label': 'Tresorbereiche',
+  'gerovault.tabs.proposals': 'Vorschläge',
+  'gerovault.tabs.policy': 'Eigentümer & Richtlinie',
+  'gerovault.tabs.history': 'Verlauf',
+  'gerovault.tabEmpty.proposals': 'Noch keine Vorschläge.',
+  'gerovault.tabEmpty.policy': 'Eigentümer und Richtlinie erscheinen hier.',
+  'gerovault.tabEmpty.history': 'Noch keine Aktivität.',
+  'gerovault.tabEmpty.settings': 'Tresoreinstellungen erscheinen hier.',
+  'detailsLayer.peekHint': 'Halten Sie Alt (auf dem Mac die Wahltaste), um Details kurz einzublenden',
+
   // Strike v2 Vaults
   'vaults.title': 'Tresore',
   'vaults.browse': 'Tresore Durchsuchen',

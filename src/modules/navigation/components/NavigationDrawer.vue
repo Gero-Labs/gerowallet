@@ -449,6 +449,9 @@ const items = computed((): NavigationItemUnion[] => {
     // flag). Keep the two in step: an item visible here that the guard redirects
     // away from is worse than no item at all.
     { title: t('navigation.realfi'), icon: 'mdi-sprout-outline', link: '/realfi', enabled: networks.resolveRealFiSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isRealFiEnabled(), new: true },
+    // GeroVault (multisig vaults). Mirrors the router's GeroVault guard exactly: a
+    // Cardano wallet AND the isVaultsEnabled flag (ships dark).
+    { title: t('gerovault.title'), icon: 'mdi-shield-lock-outline', link: '/vaults', enabled: loggedWallet.value?.chain === Blockchain.CARDANO && featureFlagsStore.isVaultsEnabled(), new: true },
     {
       title: t('navigation.geroCard'),
       icon: assts.cardIcon,

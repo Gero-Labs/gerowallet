@@ -18,7 +18,7 @@ vi.mock('vue-router', async importOriginal => {
 vi.mock('@/stores/walletStore', () => ({ default: { state: state.wallet }, walletStore: state.wallet }));
 vi.mock('@/stores/featureFlagsStore', () => {
   const flags = { state: { isInitialized: true }, ...Object.fromEntries([
-    'GeroCard', 'GoMining', 'PoolOperator', 'RealFi', 'Governance', 'GovernanceVoting', 'Copilot', 'Bitcoin', 'HelpCenter',
+    'GeroCard', 'GoMining', 'PoolOperator', 'RealFi', 'Governance', 'GovernanceVoting', 'Copilot', 'Bitcoin', 'HelpCenter', 'Vaults',
   ].map(key => [`is${key}Enabled`, () => state.enabled])) };
   return { default: flags, featureFlagsStore: flags };
 });
@@ -88,6 +88,51 @@ describe('production options router guards', () => {
     await router.push('/market');
     expect(router.currentRoute.value.path).toBe('/');
     expect(router.currentRoute.value.query['view']).toBe('all');
+  });
+});
+
+describe('GeroVault routes', () => {
+  const VAULT_PATHS = ['/vaults', '/vaults/create', '/vaults/abc', '/vaults/abc/proposals', '/vaults/abc/policy', '/vaults/abc/history', '/vaults/abc/settings'];
+
+  it.each(VAULT_PATHS)('sends %s home while the flag is off', async path => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
+    state.enabled = false;
+    await router.push(path);
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('opens the overview, the create placeholder and each vault tab with the flag on', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'preprod' };
+    await router.push('/vaults');
+    expect(router.currentRoute.value.name).toBe('gerovault');
+    await router.push('/vaults/create');
+    expect(router.currentRoute.value.name).toBe('gerovaultCreate');
+    for (const [tab, name] of [['proposals', 'gerovaultProposals'], ['policy', 'gerovaultPolicy'], ['history', 'gerovaultHistory'], ['settings', 'gerovaultSettings']]) {
+      await router.push(`/vaults/abc/${tab}`);
+      expect(router.currentRoute.value.name).toBe(name);
+      expect(router.currentRoute.value.params['vaultId']).toBe('abc');
+    }
+  });
+
+  it('opens a vault on its proposals tab', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.CARDANO, network: 'mainnet' };
+    await router.push('/vaults/abc');
+    expect(router.currentRoute.value.path).toBe('/vaults/abc/proposals');
+  });
+
+  it('keeps every vault route to Cardano wallets', async () => {
+    state.wallet.loggedWallet = { chain: Blockchain.MIDNIGHT, network: 'preprod' };
+    for (const path of VAULT_PATHS) {
+      await router.push('/staking');
+      await router.push(path);
+      expect(router.currentRoute.value.path).toBe('/');
+    }
+  });
+
+  it('asks for a login first, like any wallet page', async () => {
+    await router.push('/vaults/abc/policy');
+    expect(router.currentRoute.value.path).toBe('/welcome');
+    expect(router.currentRoute.value.query['redirect']).toBe('/vaults/abc/policy');
   });
 });
 
