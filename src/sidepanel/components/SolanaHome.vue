@@ -1,6 +1,6 @@
 <template>
   <!-- The panel's Solana home, from Gero Sync (walletStore.solana), as the dashboard's
-       SolanaDashboard shows it: SOL balance, Send and Receive, then SPL tokens. -->
+       SolanaDashboard shows it: SOL balance, Send and Receive, SPL tokens, then native staking. -->
   <div class="sol-home">
     <section class="sol-home__balance" data-test="sol-home-balance">
       <span class="t-label">{{ $t('common.available') }}</span>
@@ -43,6 +43,8 @@
     </ul>
     <p v-if="tokens.length === 0" class="t-caption sol-home__empty">{{ $t('solana.noTokens') }}</p>
 
+    <SolanaStakingSection />
+
     <!-- NFTs open on the dashboard, as Cardano's do -->
     <button v-if="nftCount" type="button" class="sol-home__nfts" data-test="sol-home-nfts" @click="openCollectibles()">
       <v-icon size="18">mdi-image-multiple-outline</v-icon>
@@ -59,6 +61,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import networks from '@/utils/networks';
 import QuickActions from './QuickActions.vue';
+import SolanaStakingSection from './SolanaStakingSection.vue';
 import { formatSol, formatUnits, parseRawAmount } from '@/chains/solana/solanaAmount';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import { solanaNftCandidates } from '@/chains/solana/solanaNfts';

@@ -79,6 +79,7 @@ import { formatSol } from '@/chains/solana/solanaAmount';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import {
   stakeActions,
+  stakeValidatorName,
   stakeStateKey,
   totalActiveLamports,
   totalStakedLamports,
@@ -111,10 +112,8 @@ function shortId(id: string): string {
   return `${id.slice(0, 6)}…${id.slice(-6)}`;
 }
 
-/** The validator's published name (self-declared), else its vote account; none when undelegated. */
 function validatorName(account: SolanaStakeAccount): string {
-  if (!account.voter) return '—';
-  return byVote.value.get(account.voter)?.name ?? shortId(account.voter);
+  return stakeValidatorName(account, byVote.value);
 }
 </script>
 

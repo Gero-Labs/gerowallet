@@ -23,6 +23,9 @@ vi.mock('./QuickActions.vue', () => ({
   }),
 }));
 
+// Staking reads Nexus: its own spec covers it.
+vi.mock('./SolanaStakingSection.vue', () => ({ default: Vue.defineComponent({ render: () => Vue.h('div') }) }));
+
 import SolanaHomeSfc from './SolanaHome.vue';
 import { walletStore } from '@/stores/walletStore';
 
