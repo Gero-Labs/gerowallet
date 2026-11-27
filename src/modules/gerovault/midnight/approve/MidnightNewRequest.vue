@@ -1,0 +1,12 @@
+<template>
+  <!-- Placeholder from the scaffolding: a new request, payout first, then control changes. This folder's screen replaces this file. -->
+  <section class="glass-panel" data-test="gvm-placeholder">
+    <EmptyState icon="mdi-file-document-edit-outline" :message="$t('common.comingSoon')" />
+  </section>
+</template>
+
+<script setup lang="ts">
+import EmptyState from '@/shared/components/feedback/EmptyState.vue';
+
+defineOptions({ name: 'MidnightNewRequest' });
+</script>

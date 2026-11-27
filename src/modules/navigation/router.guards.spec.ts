@@ -19,6 +19,7 @@ vi.mock('@/stores/walletStore', () => ({ default: { state: state.wallet }, walle
 vi.mock('@/stores/featureFlagsStore', () => {
   const flags = { state: { isInitialized: true }, ...Object.fromEntries([
     'GeroCard', 'GoMining', 'PoolOperator', 'RealFi', 'Governance', 'GovernanceVoting', 'Copilot', 'Bitcoin', 'HelpCenter', 'Vaults',
+    'GeroVaultMidnight',
   ].map(key => [`is${key}Enabled`, () => state.enabled])) };
   return { default: flags, featureFlagsStore: flags };
 });
@@ -145,6 +146,70 @@ describe('GeroVault routes', () => {
     await router.push('/vaults/abc/policy');
     expect(router.currentRoute.value.path).toBe('/welcome');
     expect(router.currentRoute.value.query['redirect']).toBe('/vaults/abc/policy');
+  });
+});
+
+describe('GeroVault on Midnight routes', () => {
+  const PREPROD = { chain: Blockchain.MIDNIGHT, network: 'Preprod' };
+  const PAGES: readonly [string, string][] = [
+    ['/midnight-vaults', 'gerovaultMidnight'],
+    ['/midnight-vaults/create', 'gerovaultMidnightCreate'],
+    ['/midnight-vaults/import', 'gerovaultMidnightImport'],
+    ['/midnight-vaults/sign', 'gerovaultMidnightSign'],
+    ['/midnight-vaults/guardian', 'gerovaultMidnightGuardian'],
+    ['/midnight-vaults/guardian/enrol', 'gerovaultMidnightGuardianEnrol'],
+    ['/midnight-vaults/guardian/sign', 'gerovaultMidnightGuardianSign'],
+    ['/midnight-vaults/abc/overview', 'gerovaultMidnightOverview'],
+    ['/midnight-vaults/abc/policy', 'gerovaultMidnightPolicy'],
+    ['/midnight-vaults/abc/recovery', 'gerovaultMidnightRecovery'],
+    ['/midnight-vaults/abc/technical', 'gerovaultMidnightTechnical'],
+    ['/midnight-vaults/abc/history', 'gerovaultMidnightHistory'],
+    ['/midnight-vaults/abc/deposit', 'gerovaultMidnightDeposit'],
+    ['/midnight-vaults/abc/request', 'gerovaultMidnightNewRequest'],
+    ['/midnight-vaults/abc/requests/def', 'gerovaultMidnightRequest'],
+    ['/midnight-vaults/abc/cancel-recovery', 'gerovaultMidnightCancelRecovery'],
+    ['/midnight-vaults/abc/move', 'gerovaultMidnightMove'],
+  ];
+
+  it.each(PAGES)('sends %s home while the flag is off', async path => {
+    state.wallet.loggedWallet = PREPROD;
+    state.enabled = false;
+    await router.push(path);
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('opens every page of a preprod Midnight wallet with the flag on', async () => {
+    state.wallet.loggedWallet = PREPROD;
+    await router.push('/midnight-vaults');
+    expect(router.currentRoute.value.name).toBe('gerovaultMidnight');
+    for (const [path, name] of PAGES) {
+      await router.push(path);
+      expect(router.currentRoute.value.name, path).toBe(name);
+    }
+    expect(router.currentRoute.value.params['vaultId']).toBe('abc');
+  });
+
+  it('opens a vault on its overview tab', async () => {
+    state.wallet.loggedWallet = PREPROD;
+    await router.push('/midnight-vaults/abc');
+    expect(router.currentRoute.value.path).toBe('/midnight-vaults/abc/overview');
+  });
+
+  it('keeps every page to Midnight wallets on the build-time networks, whatever the flag says', async () => {
+    for (const wallet of [{ chain: Blockchain.MIDNIGHT, network: 'Mainnet' }, { chain: Blockchain.MIDNIGHT, network: 'Preview' }, { chain: Blockchain.CARDANO, network: 'preprod' }]) {
+      state.wallet.loggedWallet = wallet;
+      for (const [path] of PAGES) {
+        await router.push('/staking');
+        await router.push(path);
+        expect(router.currentRoute.value.path, `${wallet.chain} ${wallet.network} ${path}`).toBe('/');
+      }
+    }
+  });
+
+  it('asks for a login first, like any wallet page', async () => {
+    await router.push('/midnight-vaults/abc/recovery');
+    expect(router.currentRoute.value.path).toBe('/welcome');
+    expect(router.currentRoute.value.query['redirect']).toBe('/midnight-vaults/abc/recovery');
   });
 });
 

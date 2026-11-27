@@ -82,6 +82,16 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   // spending password and open the root key in the worker (gerovaultHandlers.ts).
   'GEROVAULT_DERIVE_ACCOUNT_KEY',
   'GEROVAULT_SIGN_VAULT_BUNDLE',
+  // GeroVault on Midnight: vault keys, approvals, deployments and calls, all of them made with the
+  // seed in the worker (MidnightVaultMessages in modules/gerovault/midnight/contracts.ts).
+  'GEROVAULT_MIDNIGHT_DERIVE_CARD',
+  'GEROVAULT_MIDNIGHT_FIND_ROLES',
+  'GEROVAULT_MIDNIGHT_SIGN_REQUEST',
+  'GEROVAULT_MIDNIGHT_DEPLOY',
+  'GEROVAULT_MIDNIGHT_COMPLETE_DEPLOY',
+  'GEROVAULT_MIDNIGHT_SUBMIT',
+  'GEROVAULT_MIDNIGHT_PROGRESS',
+  'GEROVAULT_MIDNIGHT_CHECK_NOW',
   // Gero's fee station: seals a send with the wallet's key and spends a voucher of the user's
   // daily allowance. A web page must not be able to do either.
   'MIDNIGHT_STATION_STATUS',

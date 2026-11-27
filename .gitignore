@@ -23,6 +23,8 @@ extension/
 *.d.ts
 !components.d.ts
 !src/types/*.d.ts
+# The vendored GeroVault Midnight contract builds ship their compiler-written types.
+!src/chains/midnight/vault/build/*/contract/index.d.ts
 
 # Environment files (keep only .env.example)
 .env
