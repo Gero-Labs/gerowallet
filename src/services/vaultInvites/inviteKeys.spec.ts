@@ -8,7 +8,7 @@ import { accountXpub, cardanoAccountPath } from '@/shared/utils/walletAccount';
 import { deriveRoleKeys, deriveVaultPublicKeys, multisigAccountPublicKey, verifyAttestation } from '@/shared/gerovault';
 import { testAccounts } from '@/shared/gerovault/__fixtures__/manifest';
 import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
-import { openVaultKey, vaultKeysFromRaw, type VaultKeyDeps } from './inviteKeys';
+import { openVaultKey, type VaultKeyDeps } from './inviteKeys';
 
 const HARDENED = 0x80000000;
 let rootBytes: Uint8Array;
@@ -80,8 +80,4 @@ describe('openVaultKey', () => {
     expect(own.index).toBe(1);
   });
 
-  it('reads raw vault keys through the library, and refuses a key that is not one', () => {
-    expect(() => vaultKeysFromRaw('00'.repeat(32), '01'.repeat(32))).not.toThrow();
-    expect(() => vaultKeysFromRaw('00', '01'.repeat(32))).toThrow();
-  });
 });

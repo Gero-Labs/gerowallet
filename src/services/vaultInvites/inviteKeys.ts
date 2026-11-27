@@ -20,11 +20,9 @@
 import { Cardano } from '@cardano-sdk/core';
 import { Bip32PrivateKey, Ed25519PrivateKey, Hash28ByteBase16, ready } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { bech32 } from 'bech32';
 import type { Wallet } from '@/models/types';
 import {
   ATTESTATION_METHOD,
-  BECH32_PREFIX,
   CIP1854_ACCOUNT_PATH,
   ROLE,
   canonicalAttestation,
@@ -32,7 +30,6 @@ import {
   deriveRoleKeys,
   deriveVaultPublicKeys,
   multisigAccountPublicKey,
-  parseVaultPublicKeys,
   vaultKeyHashes,
   verifyAttestation,
   type AttestedDigest,
@@ -78,14 +75,6 @@ function bytesOf(hex: string): Uint8Array {
   const bytes = hexToBytes(hex);
   if (!bytes) throw new TypeError('Expected hex');
   return bytes;
-}
-
-/** The typed vault keys of two raw Ed25519 public keys, through the library's own reader. Throws `GeroVaultError`. */
-export function vaultKeysFromRaw(payment: string, stake: string): VaultPublicKeys {
-  return parseVaultPublicKeys({
-    payment: bech32.encode(BECH32_PREFIX.PAYMENT_VK, bech32.toWords(bytesOf(payment)), 200),
-    stake: bech32.encode(BECH32_PREFIX.STAKE_VK, bech32.toWords(bytesOf(stake)), 200),
-  });
 }
 
 function rootKeyOf(record: Wallet, wallets: Record<number, Wallet>, auth: VaultKeyAuth, deps: VaultKeyDeps): { bytes: Uint8Array; wallet: Wallet } {

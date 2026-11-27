@@ -133,17 +133,26 @@ export function templateProblem(choice: TemplateChoice): TemplateProblem | undef
  * candidates. No chain scan feeds it yet, so an index used from another install of the same
  * recovery phrase is not seen (a later discovery scan fills `onChain`).
  */
-export function ownIndexHistory(records: readonly Pick<VaultRecord, 'ownIndex' | 'status'>[]): ParticipantIndexHistory {
+export function ownIndexHistory(
+  records: readonly Pick<VaultRecord, 'ownIndex' | 'status'>[],
+  invites: Pick<ParticipantIndexHistory, 'held' | 'released'> = { held: [], released: [] },
+): ParticipantIndexHistory {
   return {
     onChain: [],
-    held: records.map(r => ({ index: r.ownIndex, kind: r.status === 'accepted' ? 'vault' as const : 'candidate' as const })),
-    released: [],
+    held: [...records.map(r => ({ index: r.ownIndex, kind: r.status === 'accepted' ? 'vault' as const : 'candidate' as const })), ...invites.held],
+    released: [...invites.released],
   };
 }
 
-/** This wallet's index for the new vault (`indexAllocation.ts`): never 0, never one it holds. */
-export function allocateOwnIndex(records: readonly Pick<VaultRecord, 'ownIndex' | 'status'>[]): VaultIndexAllocation {
-  return nextVaultIndex(ownIndexHistory(records));
+/**
+ * This wallet's index for the new vault (`indexAllocation.ts`): never 0, never one it holds. `invites`
+ * are the indexes its invitation setups and joined invitations hold (`GEROVAULT_INVITE_HOLDS`).
+ */
+export function allocateOwnIndex(
+  records: readonly Pick<VaultRecord, 'ownIndex' | 'status'>[],
+  invites?: Pick<ParticipantIndexHistory, 'held' | 'released'>,
+): VaultIndexAllocation {
+  return nextVaultIndex(ownIndexHistory(records, invites));
 }
 
 /** This wallet's contribution to the vault. Lives in memory for the flow only; nothing here is secret. */
@@ -217,7 +226,9 @@ export type CosignerProblem =
   | 'INDEX_REQUIRED'
   | 'INVALID_INDEX'
   | 'SAME_AS_YOURS'
-  | 'SAME_AS_ANOTHER';
+  | 'SAME_AS_ANOTHER'
+  /** Invited by name, QR or link, and not joined yet: their keys fill in when they accept. */
+  | 'INVITE_PENDING';
 
 export interface ReadyCosigner {
   readonly source: CosignerSource;

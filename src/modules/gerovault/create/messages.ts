@@ -41,6 +41,8 @@ export const UNLOCK_PROBLEM_KEYS: Readonly<Record<UnlockProblem, string>> = {
   INDEX_SPACE_EXHAUSTED: 'gerovault.create.own.problem.indexSpace',
   INVALID_HISTORY: 'gerovault.create.own.problem.history',
   STORE_UNAVAILABLE: 'gerovault.create.own.problem.store',
+  NETWORK: 'gerovault.invite.problem.NETWORK',
+  EXPIRED: 'gerovault.invite.problem.EXPIRED',
 };
 
 export const COSIGNER_PROBLEM_KEYS: Readonly<Record<CosignerProblem, string>> = {
@@ -57,6 +59,7 @@ export const COSIGNER_PROBLEM_KEYS: Readonly<Record<CosignerProblem, string>> = 
   INVALID_INDEX: 'gerovault.create.cosigner.problem.invalidIndex',
   SAME_AS_YOURS: 'gerovault.create.cosigner.problem.sameAsYours',
   SAME_AS_ANOTHER: 'gerovault.create.cosigner.problem.sameAsAnother',
+  INVITE_PENDING: 'gerovault.invite.card.pending',
 };
 
 export const QR_REFUSAL_KEYS: Readonly<Record<QrRefusal, string>> = {

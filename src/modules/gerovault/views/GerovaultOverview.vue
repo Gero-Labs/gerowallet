@@ -14,6 +14,16 @@
       </div>
     </header>
 
+    <VaultInvitationsPanel
+      v-if="state !== 'noWallet'"
+      :wallet-id="eligibility.ok ? eligibility.walletId : null"
+      :key-source="eligibility.ok ? eligibility.keySource : null"
+      :client="inviteClient"
+      :auth="inviteAuth"
+      :unlock-account-key="unlockAccountKey"
+      :store="vaultStore"
+    />
+
     <div v-if="state === 'loading'" class="g-skeleton gerovault-page__skeleton" role="status" :aria-label="$t('common.loading')"></div>
     <section v-else-if="state === 'unavailable'" class="glass-panel" data-test="overview-unavailable">
       <ErrorState :message="$t('gerovault.detail.storeUnavailable')" retryable @retry="reload()" />
@@ -63,6 +73,14 @@ import { useGerovaultWallet } from '@/modules/gerovault/detail/context';
 import { useVaultList } from '@/modules/gerovault/detail/useVaults';
 import VaultListCard from '@/modules/gerovault/detail/components/VaultListCard.vue';
 import RecoveryImportDialog from '@/modules/gerovault/recovery/RecoveryImportDialog.vue';
+import VaultInvitationsPanel from '@/modules/gerovault/invites/VaultInvitationsPanel.vue';
+import { inviteClient, passKeyAuth, type InviteAuth } from '@/modules/gerovault/invites/inviteClient';
+import { createEligibility } from '@/modules/gerovault/create/eligibility';
+import { passKeyMultisigAccountKey, requestMultisigAccountKey } from '@/modules/gerovault/create/ownAccountKey';
+import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
+import { vaultStore } from '@/db/vaultStore';
+import { walletStore } from '@/stores/walletStore';
+import type { MultisigAccountPublicKey } from '@/shared/gerovault';
 
 defineOptions({ name: 'GerovaultOverview' });
 
@@ -73,6 +91,25 @@ const walletNetwork = computed(() => wallet()?.network);
 const { state, vaults, accepted, candidates, reload } = useVaultList();
 
 const importOpen = ref(false);
+
+// Invitations answer with the logged wallet, behind its own credential (as the create flow).
+const eligibility = computed(() => createEligibility(walletStore.loggedWallet));
+
+async function inviteAuth(password: string): Promise<InviteAuth> {
+  const e = eligibility.value;
+  const logged = walletStore.loggedWallet;
+  if (!e.ok || !logged) throw new OwnAccountKeyError('not-found');
+  if (e.keySource === 'passkey') return passKeyAuth(logged);
+  return e.keySource === 'password' ? { password } : {};
+}
+
+async function unlockAccountKey(password: string): Promise<MultisigAccountPublicKey> {
+  const e = eligibility.value;
+  const logged = walletStore.loggedWallet;
+  if (!e.ok || !logged) throw new OwnAccountKeyError('not-found');
+  if (e.keySource === 'passkey') return passKeyMultisigAccountKey(logged);
+  return requestMultisigAccountKey(e.walletId, e.keySource === 'password' ? password : undefined);
+}
 
 /** A restored vault was kept or accepted: show it in the list. */
 function onSaved(): void {

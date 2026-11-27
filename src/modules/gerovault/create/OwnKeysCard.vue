@@ -8,8 +8,8 @@
       <span v-if="own" class="gvc-chip t-caption g-mono">{{ fingerprint(own.hashes.payment) }}</span>
     </div>
 
-    <template v-if="!own">
-      <p class="t-body-sm gvc-muted">{{ $t('gerovault.create.own.unlockText') }}</p>
+    <template v-if="!own || relock">
+      <p class="t-body-sm gvc-muted">{{ relock ? $t('gerovault.invite.own.relock') : invitesOn ? $t('gerovault.invite.own.unlockText') : $t('gerovault.create.own.unlockText') }}</p>
       <div class="own-keys__unlock">
         <v-text-field
           v-if="keySource === 'password'"
@@ -35,7 +35,16 @@
         </GButton>
       </div>
       <GNote v-if="unlockProblem" tone="error" icon="mdi-alert-circle-outline" role="alert">{{ $t(UNLOCK_PROBLEM_KEYS[unlockProblem]) }}</GNote>
+      <!-- TOO_MANY_PENDING: the setups this device holds open, each with Cancel (UX rule 6). -->
+      <ul v-if="pending.length" class="own-keys__pending" data-test="create-pending-setups">
+        <li v-for="p in pending" :key="p.setupId">
+          <span class="t-body-sm">{{ p.name ? displayLabel(p.name) : p.setupId.slice(0, 8) }}</span>
+          <GButton compact tier="tertiary" data-test="create-pending-cancel" @click="emit('cancelPending', p.setupId)">{{ $t('gerovault.invite.setup.cancel') }}</GButton>
+        </li>
+      </ul>
     </template>
+
+    <p v-else-if="invitesOn && !details" class="t-body-sm gvc-muted" data-test="create-own-added">{{ $t('gerovault.invite.own.added') }}</p>
 
     <template v-else>
       <div class="own-keys__share">
@@ -58,18 +67,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useId } from 'vue';
+import { computed, ref, useId } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 import InfoTooltip from '@/shared/components/InfoTooltip.vue';
+import { displayLabel } from '@/shared/gerovault';
 import { fingerprint, shareText } from './createVault';
 import type { KeySource } from './eligibility';
 import { UNLOCK_PROBLEM_KEYS } from './messages';
 import type { CreateVaultFlow } from './useCreateVault';
 
 const props = defineProps<{ flow: CreateVaultFlow; keySource: KeySource; details: boolean }>();
+const emit = defineEmits<{ (e: 'cancelPending', setupId: string): void }>();
 const { own, unlocking, unlockProblem, unlock } = props.flow;
+
+const invitesOn = computed(() => props.flow.inviteMode.value === 'on');
+/** The vault key closed in the worker (it stays open 30 minutes): invitations need the credential again. */
+const relock = computed(() => invitesOn.value && own.value !== null && props.flow.setup.value?.state === 'open' && props.flow.setup.value.signerReady === false);
+const pending = computed(() => {
+  const problem = props.flow.inviteProblem.value;
+  const open = problem?.code === 'TOO_MANY_PENDING' ? problem.details?.['open'] : undefined;
+  return Array.isArray(open) ? open.filter((p): p is { setupId: string; name?: string } => typeof p?.setupId === 'string') : [];
+});
 
 // The spending password lives here only until the unlock call returns.
 const password = ref('');
@@ -95,6 +115,20 @@ const titleId = `create-own-${useId()}`;
 }
 .own-keys__unlock :deep(.v-input) {
   flex: 1 1 220px;
+}
+.own-keys__pending {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.own-keys__pending li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
 }
 .own-keys__share {
   display: flex;

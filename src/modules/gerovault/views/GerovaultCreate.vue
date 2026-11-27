@@ -23,7 +23,7 @@
         <div class="gerovault-create__main">
           <TemplateStep v-if="flow.step.value === 'template'" :flow="flow" />
           <template v-else-if="flow.step.value === 'cosigners'">
-            <OwnKeysCard :flow="flow" :key-source="keySource" :details="detailsVisible" />
+            <OwnKeysCard :flow="flow" :key-source="keySource" :details="detailsVisible" @cancel-pending="cancelPending($event)" />
             <CosignerCard
               v-for="(draft, i) in flow.drafts.value"
               :key="draft.id"
@@ -32,7 +32,15 @@
               :reading="flow.readings.value[i]"
               :position="i + 2"
               :details="detailsVisible"
+              :invite="inviteProps"
+              @show-qr="qrOpen = true"
             />
+            <GNote v-if="setupStarted" icon="mdi-information-outline" role="status" data-test="create-can-close">
+              {{ $t('gerovault.invite.setup.canClose', { name: displayLabel(flow.setup.value?.name ?? '') }) }}
+            </GNote>
+            <GNote v-if="flow.inviteProblem.value && flow.inviteProblem.value.n === undefined && !flow.unlockProblem.value" tone="error" icon="mdi-alert-circle-outline" role="alert">
+              {{ $t(inviteProblemKey(flow.inviteProblem.value.code)) }}
+            </GNote>
             <GNote v-if="flow.buildProblem.value" tone="error" icon="mdi-alert-circle-outline" role="alert">
               {{ $t('gerovault.create.buildProblem', { code: flow.buildProblem.value }) }}
             </GNote>
@@ -52,6 +60,10 @@
           {{ $t('common.back') }}
         </GButton>
         <span v-else />
+        <span class="gerovault-create__next">
+        <GButton v-if="flow.step.value === 'cosigners' && setupStarted && !flow.cosignersReady.value" tier="secondary" :to="{ name: GEROVAULT_OVERVIEW_ROUTE }" data-test="create-done-for-now">
+          {{ $t('gerovault.invite.setup.doneForNow') }}
+        </GButton>
         <GButton
           v-if="flow.step.value === 'template'"
           tier="primary"
@@ -77,13 +89,16 @@
         <GButton v-else tier="primary" :loading="flow.saving.value" data-test="create-save" @click="flow.save()">
           {{ $t('gerovault.create.save') }}
         </GButton>
+        </span>
       </footer>
+      <InviteQrDialog v-if="qrOpen" :is-open="qrOpen" :flow="flow" :network="networkName" @close="qrOpen = false" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import DetailsToggle from '@/shared/components/DetailsToggle.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
@@ -104,6 +119,12 @@ import { passKeyMultisigAccountKey, requestMultisigAccountKey } from '@/modules/
 import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
 import { useCreateVault } from '@/modules/gerovault/create/useCreateVault';
 import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
+import InviteQrDialog from '@/modules/gerovault/invites/InviteQrDialog.vue';
+import { inviteClient, passKeyAuth, type InviteAuth } from '@/modules/gerovault/invites/inviteClient';
+import { inviteProblemKey } from '@/modules/gerovault/invites/messages';
+import { displayLabel } from '@/shared/gerovault';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import type { Contact } from '@/models/types';
 import '@/modules/gerovault/create/createCard.css';
 
 defineOptions({ name: 'GerovaultCreate' });
@@ -115,6 +136,18 @@ defineOptions({ name: 'GerovaultCreate' });
  */
 const eligibility = createEligibility(walletStore.loggedWallet);
 const keySource: KeySource = eligibility.ok ? eligibility.keySource : 'password';
+const { t } = useTranslation();
+const route = useRoute();
+// "Continue setup" from the Vaults overview: the setup this page reopens.
+const resumeSetupId = typeof route.query['setup'] === 'string' && /^[0-9a-f]{32}$/.test(route.query['setup']) ? route.query['setup'] : undefined;
+
+/** The credential of one invitation request: a password, the PassKey's root key bytes, or a Google session. */
+async function inviteAuth(password: string): Promise<InviteAuth> {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet || !eligibility.ok || wallet.id !== eligibility.walletId) throw new OwnAccountKeyError('not-found');
+  if (keySource === 'passkey') return passKeyAuth(wallet);
+  return keySource === 'password' ? { password } : {};
+}
 
 const flow = eligibility.ok
   ? useCreateVault({
@@ -128,8 +161,38 @@ const flow = eligibility.ok
       if (keySource === 'passkey') return passKeyMultisigAccountKey(wallet);
       return requestMultisigAccountKey(eligibility.walletId, keySource === 'password' ? password : undefined);
     },
+    invites: {
+      client: inviteClient,
+      auth: inviteAuth,
+      ...(resumeSetupId ? { resumeSetupId } : {}),
+      untitledName: t('gerovault.invite.untitled'),
+    },
   })
   : null;
+
+// A clock for "expires in 6 d", ticking with the page.
+const now = ref(Date.now());
+const clock = setInterval(() => { now.value = Date.now(); }, 30_000);
+onBeforeUnmount(() => clearInterval(clock));
+
+const contacts = computed(() => Object.values((walletStore.contacts ?? {}) as Record<string, Contact>)
+  .filter(c => typeof c?.name === 'string' && typeof c.address === 'string')
+  .map(c => ({ name: c.name, address: c.address, ...(c.handle ? { handle: c.handle } : {}) })));
+
+const inviteProps = computed(() => (eligibility.ok
+  ? { walletId: eligibility.walletId, contacts: contacts.value, resolve: inviteClient.resolve, now: now.value }
+  : undefined));
+
+/** Someone was invited or joined: the setup waits in Vaults, and this screen can close. */
+const setupStarted = computed(() => !!flow?.setup.value?.slots.some(s => s.status !== 'empty'));
+const qrOpen = ref(false);
+
+/** TOO_MANY_PENDING: cancel one of this device's open setups, then try again. */
+async function cancelPending(setupId: string): Promise<void> {
+  await inviteClient.cancelSetup(setupId).catch(() => undefined);
+  if (flow) flow.inviteProblem.value = null;
+  if (flow) flow.unlockProblem.value = null;
+}
 
 // The flow belongs to the wallet it started with; switching wallets mid-flow ends it.
 const walletChanged = computed(() => eligibility.ok && walletStore.loggedWallet?.id !== eligibility.walletId);
@@ -197,6 +260,11 @@ const { enabled: detailsOn, peeking, visible: detailsVisible } = useDetailsLayer
   flex-direction: column;
   gap: var(--g-s-4);
   min-width: 0;
+}
+.gerovault-create__next {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-2);
 }
 .gerovault-create__footer {
   display: flex;
