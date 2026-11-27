@@ -20,11 +20,11 @@
     </div>
     <span v-if="info" class="t-caption" data-test="sol-epoch">{{ $t('solana.staking.epoch', { epoch: info.epoch, percent: epochPercent }) }}</span>
 
-    <div v-if="failed && !stakes" class="sol-staking__failed" role="alert">
+    <div v-if="failed && (!stakes || !info)" class="sol-staking__failed" role="alert">
       <span class="t-caption">{{ $t('solana.staking.loadFailed') }}</span>
       <GButton tier="tertiary" compact :loading="loading" @click="load()">{{ $t('common.retry') }}</GButton>
     </div>
-    <p v-else-if="stakes && !stakes.accounts.length" class="t-caption sol-empty">{{ $t('solana.staking.empty', { ticker }) }}</p>
+    <p v-if="stakes && !stakes.accounts.length" class="t-caption sol-empty">{{ $t('solana.staking.empty', { ticker }) }}</p>
     <ul v-else-if="stakes" class="sol-list">
       <li v-for="account in stakes.accounts" :key="account.address" class="sol-stake-row" data-test="sol-stake-row">
         <div class="sol-stake-row__main">

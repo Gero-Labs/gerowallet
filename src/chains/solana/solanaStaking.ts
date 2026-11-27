@@ -216,8 +216,16 @@ export function parseSolanaStakeInfo(value: unknown): SolanaStakeInfo {
     rentExemptReserve: lamports(v['rentExemptReserve'], 'rentExemptReserve'),
   };
   if (info.slotsInEpoch === 0 || info.slotIndex > info.slotsInEpoch) throw new SolanaStakingShapeError('epoch progress');
+  if (info.rentExemptReserve === 0n || info.rentExemptReserve > MAX_STAKE_RESERVE_LAMPORTS) throw new SolanaStakingShapeError('reserve');
   return info;
 }
+
+/**
+ * Ceiling on the rent-exempt reserve Nexus may name for a 200-byte stake account. The real figure is
+ * (128 + 200) bytes × 3480 lamports × 2 years = 2,282,880; anything far above it is not believed,
+ * since the stake planner would move it into the new account on Nexus's word.
+ */
+export const MAX_STAKE_RESERVE_LAMPORTS = 10_000_000n;
 
 /** Lamports the wallet keeps after staking, for the fees of a later Unstake and Withdraw. */
 export const STAKE_KEEP_LAMPORTS = 5_000_000n;

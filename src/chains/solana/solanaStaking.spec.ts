@@ -90,5 +90,8 @@ describe('stake info', () => {
     expect(info).toMatchObject({ epoch: 700, minimumDelegation: 1_000_000_000n, rentExemptReserve: 2_282_880n });
     expect(() => parseSolanaStakeInfo({ epoch: 1, slotIndex: 2, slotsInEpoch: 1, minimumDelegation: '1', rentExemptReserve: '1' })).toThrow();
     expect(() => parseSolanaStakeInfo({ epoch: 1, slotIndex: 0, slotsInEpoch: 1, minimumDelegation: 1, rentExemptReserve: '1' })).toThrow();
+    // A reserve far above a stake account's real one is not believed.
+    expect(() => parseSolanaStakeInfo({ epoch: 1, slotIndex: 0, slotsInEpoch: 1, minimumDelegation: '1', rentExemptReserve: '10000001' })).toThrow();
+    expect(() => parseSolanaStakeInfo({ epoch: 1, slotIndex: 0, slotsInEpoch: 1, minimumDelegation: '1', rentExemptReserve: '0' })).toThrow();
   });
 });

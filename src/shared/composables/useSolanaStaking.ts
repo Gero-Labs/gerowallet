@@ -44,7 +44,8 @@ export function useSolanaStaking() {
       const [s, v, i] = await Promise.allSettled([api.getStakes(address), api.getValidators(), api.getStakeInfo()]);
       // A switch to another account while reading: its own load owns the state.
       if (mine !== generation) return;
-      failed.value = s.status === 'rejected';
+      // Stake needs the epoch info (minimum, reserve) as much as the list needs the accounts.
+      failed.value = s.status === 'rejected' || i.status === 'rejected';
       if (s.status === 'fulfilled') stakes.value = s.value;
       validatorsFailed.value = v.status === 'rejected';
       if (v.status === 'fulfilled') validators.value = v.value.validators;
