@@ -131,6 +131,7 @@ export type {
   JubjubPublicKey,
   JubjubSecretKey,
   JubjubSignature,
+  JubjubSignatureRefusal,
   KeyCardExpectation,
   KeyCardReadResult,
   KeyCardRefusal,
@@ -570,6 +571,7 @@ export type MidnightRefusalCode =
   // An approval file, on import
   | 'APPROVAL_MALFORMED'
   | 'APPROVAL_OTHER_REQUEST'
+  /** The keys library's `checkJubjubSignature` (or `verifyUpgrade`) refused it; its reason goes in the Details layer. */
   | 'APPROVAL_SIGNATURE_INVALID'
   | 'APPROVAL_NOT_A_SIGNER'
   | 'APPROVAL_UPGRADE_INVALID'
