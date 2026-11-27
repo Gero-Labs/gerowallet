@@ -6,6 +6,7 @@ import vectors from '@/chains/midnight/vault/build/vectors.json';
 import { MIDNIGHT_VAULT_BUILDS, loadMidnightVaultContract } from '@/chains/midnight/vault/build';
 import { MessageTypes } from '@/models/MessageTypes';
 import { EXTENSION_PAGE_ONLY_METHODS, CONTENT_SCRIPT_OPTIONS_METHODS } from '@/chrome/senderTrust';
+import { MIDNIGHT_NETWORKS } from '@/shared/gerovault/midnight/keys';
 import {
   GEROVAULT_MIDNIGHT_NETWORKS,
   JUBJUB_IDENTITY_HEX,
@@ -32,6 +33,11 @@ describe('the network gate', () => {
     expect(GEROVAULT_MIDNIGHT_NETWORKS).toEqual(['preprod']);
     expect(['Preprod', 'preprod', 'midnight-preprod'].map(isGeroVaultMidnightNetwork)).toEqual([true, true, true]);
     expect(['Mainnet', 'Preview', 'midnight-mainnet', '', undefined, 7].map(isGeroVaultMidnightNetwork)).toEqual([false, false, false, false, false, false]);
+  });
+
+  it('knows exactly the keys library\'s networks', () => {
+    expect(MIDNIGHT_NETWORKS.map(midnightVaultNetworkOf)).toEqual([...MIDNIGHT_NETWORKS]);
+    expect(GEROVAULT_MIDNIGHT_NETWORKS.every(network => MIDNIGHT_NETWORKS.includes(network))).toBe(true);
   });
 
   it('reads a wallet network field as a vault network', () => {

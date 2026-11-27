@@ -40,6 +40,7 @@
 import { blake2b } from '@noble/hashes/blake2.js';
 import type { DustLocalState, DustSecretKey, FinalizedTransaction, ProvingKeyMaterial, ProvingProvider, UnprovenTransaction } from '@midnightntwrk/ledger-v9';
 import type { MidnightVaultBuild, MidnightVaultCircuit, MidnightVaultNetwork, MidnightVaultProfile } from '@/chains/midnight/vault/build';
+import type { GuardianKeyCard, KeyCardRole, OwnerKeyCard, UpgradePublicKeyHex, WhitelistScope } from '@/shared/gerovault/midnight/keys';
 
 export type { MidnightVaultBuild, MidnightVaultCircuit, MidnightVaultNetwork, MidnightVaultProfile };
 
@@ -101,7 +102,7 @@ export interface JubjubSignatureHex {
   readonly response: FieldHex;
 }
 
-/** Version of every Midnight vault file format (key cards, requests, approvals, vault files). */
+/** Version of the request, approval and vault file formats. Key cards carry the keys library's own `KEY_CARD_VERSION`. */
 export const MIDNIGHT_FILE_VERSION = 1;
 
 /** The Jubjub identity point (0, 1): the contract's empty key. */
@@ -110,23 +111,55 @@ export const JUBJUB_IDENTITY_HEX: JubjubPointHex = `${'00'.repeat(32)}01${'00'.r
 // =================================================================================================
 // 3. Keys, key cards and the verification set: the keys library's
 //
-// `src/shared/gerovault/midnight/keys/` defines them: the network and role types, the path
-// `m/1854'/2400'/n'/r'/i'` and its levels, the tags, key derivation, Jubjub and upgrade-key signing
-// and verification, point validation, key cards (`OwnerKeyCard`, `GuardianKeyCard`,
-// `DelegateKeyCard`, `readKeyCard`), the verification set (`MidnightVerificationSet`) and number,
-// the request code and the index counter. Import them from there. This file defines no second copy:
-// once that folder is merged into this branch it re-exports those types here, and until then it
-// names a card or a set only in the wire forms the library writes.
+// `src/shared/gerovault/midnight/keys/` owns them, with the functions that make and check them: the
+// path `m/1854'/2400'/n'/r'/i'` and its levels, the tags, key derivation, Jubjub and upgrade-key
+// signing and verification, point validation, key cards (`readKeyCard`, `keyCardToJson`,
+// `keyCardToBech32`), the verification set and number, the request code and the index counter.
+// Their types are re-exported here, so a piece can name them from one place; import the functions
+// from the keys library itself. Its runtime types carry bigints, so a card or a set crosses a
+// message, a file or a record only in the wire forms below.
+
+export type {
+  DelegateKeyCard,
+  DelegateKeys,
+  FieldElement,
+  GuardianKeyCard,
+  GuardianKeys,
+  JubjubKeyPair,
+  JubjubPoint,
+  JubjubPointRefusal,
+  JubjubPublicKey,
+  JubjubSecretKey,
+  JubjubSignature,
+  KeyCardExpectation,
+  KeyCardReadResult,
+  KeyCardRefusal,
+  KeyCardRole,
+  KeyCardSigningOptions,
+  MidnightIndexCounter,
+  MidnightKeyCard,
+  MidnightKeyErrorCode,
+  MidnightKeyRole,
+  MidnightNetwork,
+  MidnightVerificationQr,
+  MidnightVerificationSet,
+  OwnerKeyCard,
+  OwnerKeys,
+  RequestCodeInput,
+  UpgradeKeyPair,
+  UpgradePublicKeyHex,
+  WhitelistScope,
+} from '@/shared/gerovault/midnight/keys';
 
 /**
  * A key card as text: a `.gvmkey.json` file's content (`keyCardToJson`) or its bech32m form
  * (`keyCardToBech32`). It crosses messages and sits in files and records only like this; read it
- * back with `readKeyCard`, which makes every check.
+ * back with `readKeyCard`, which makes every check and gives a `MidnightKeyCard`.
  */
 export type MidnightKeyCardText = string;
 
 /**
- * A verification set, pinned: its canonical CBOR (`verificationSetCbor`, hex) and its
+ * A `MidnightVerificationSet`, pinned: its canonical CBOR (`verificationSetCbor`, hex) and its
  * `verificationDigest`. Comparing a set rebuilt from the chain with the verified one compares these.
  */
 export interface MidnightVerificationSetPin {
@@ -255,10 +288,10 @@ export interface MidnightPayoutBody {
 }
 
 /**
- * `quorumOnly`: a threshold payout may go there; `any`: a delegate may pay there too. The values of
- * the keys library's `WhitelistScope` (the contract's enum 0 and 1).
+ * `quorumOnly`: a threshold payout may go there; `any`: a delegate may pay there too (the
+ * contract's enum 0 and 1). The keys library's `WhitelistScope`.
  */
-export type MidnightWhitelistScope = 'quorumOnly' | 'any';
+export type MidnightWhitelistScope = WhitelistScope;
 
 export interface MidnightWhitelistSlot {
   readonly recipient: MidnightUserAddress;
@@ -659,8 +692,7 @@ export type MidnightVaultLifecycle = 'deploying' | 'incomplete' | 'ready' | 'tem
 
 /** One role this seed holds in the vault, at its own index. */
 export interface MidnightSelfRole {
-  /** The keys library's `KeyCardRole`. */
-  readonly role: 'owner' | 'guardian' | 'delegate';
+  readonly role: KeyCardRole;
   /** This seed's own index, from the keys library's index counter. */
   readonly index: number;
 }
@@ -1039,14 +1071,22 @@ export interface MidnightFeePayer {
  * the keys library's `signUpgrade` or ledger `signData`, never a raw BIP-340 signature.
  */
 export interface MidnightCommitteeSigner {
-  readonly key: UpgradeKeyHex;
+  readonly key: UpgradePublicKeyHex;
   sign(dataToSign: Uint8Array): Promise<Bip340SignatureHex>;
 }
 
-/** A deployment's inputs: the agreed setup (owner and guardian cards, settings) and the deployer's key. */
-export interface MidnightVaultDeploySetup extends MidnightVaultSetup {
+/**
+ * A deployment's inputs, in the background: the agreed setup with its cards already read
+ * (`readKeyCard`, so every key is validated), owners and guardians in slot order without the empty
+ * slots (as `MidnightVerificationSet` lists them; the contract fills the rest), and the deployer's key.
+ */
+export interface MidnightVaultDeploySetup extends MidnightVaultSettings {
+  readonly network: MidnightVaultNetwork;
+  readonly build: string;
+  readonly owners: readonly OwnerKeyCard[];
+  readonly guardians: readonly GuardianKeyCard[];
   /** The interim committee, at threshold 1. */
-  readonly deployerUpgradeKey: UpgradeKeyHex;
+  readonly deployerUpgradeKey: UpgradePublicKeyHex;
 }
 
 /** Built and paid, not proved. Holds ledger objects: never crosses a message. */

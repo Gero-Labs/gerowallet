@@ -26,18 +26,16 @@
  * Both check what they load against the pins before handing it out.
  */
 import { sha256 } from '@noble/hashes/sha2.js';
+// The keys library's pure data module only: no curve or hash code comes with it.
+import { MIDNIGHT_NETWORKS, type MidnightNetwork } from '@/shared/gerovault/midnight/keys/types';
 import manifestJson from './manifest.json';
 import type * as CompiledVaultContract from './test/contract/index.js';
 
 // -------------------------------------------------------------------------------------------------
 // What the freeze defines
 
-/**
- * Midnight network ids as the contract's network tag word spells them. The same union as the keys
- * library's `MidnightNetwork`; once that folder is merged here this becomes an alias of it.
- */
-export type MidnightVaultNetwork = 'mainnet' | 'preprod' | 'preview';
-export const MIDNIGHT_VAULT_NETWORK_IDS: readonly MidnightVaultNetwork[] = Object.freeze(['mainnet', 'preprod', 'preview']);
+/** Midnight network ids as the contract's network tag word spells them: the keys library's `MidnightNetwork`. */
+export type MidnightVaultNetwork = MidnightNetwork;
 
 export type MidnightVaultProfile = 'test' | 'production';
 export const MIDNIGHT_VAULT_PROFILES: readonly MidnightVaultProfile[] = Object.freeze(['test', 'production']);
@@ -186,7 +184,7 @@ function readBuild(profile: MidnightVaultProfile, value: unknown): MidnightVault
   if (buildId !== `gvmn-${profile}-${buildHash.slice(0, 16)}`) fail(`${profile}.buildId does not match its preimage`);
 
   const networks = raw['networks'];
-  if (!Array.isArray(networks) || !networks.length || !networks.every(n => (MIDNIGHT_VAULT_NETWORK_IDS as readonly unknown[]).includes(n))) {
+  if (!Array.isArray(networks) || !networks.length || !networks.every(n => (MIDNIGHT_NETWORKS as readonly unknown[]).includes(n))) {
     fail(`${profile}.networks`);
   }
 
