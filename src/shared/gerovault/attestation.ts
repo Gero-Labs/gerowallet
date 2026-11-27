@@ -22,7 +22,8 @@
  *   hardware wallet can show the network of a transaction with no outputs), its witness set is exactly one vkey witness by the vault payment
  *   key, and its auxiliary data is exactly `{ 18541: { k: digest } }`, where `k` names what is
  *   attested: 0 a binding, 1 a verification digest, 2 a device removal, 3 an external import,
- *   4 an endorsement. Label 1854 is never used, because CIP-0146 wallets scan it for vault
+ *   4 an endorsement, 5 a cosigner invitation and 6 its acceptance (`invite/PROTOCOL.md`).
+ *   Label 1854 is never used, because CIP-0146 wallets scan it for vault
  *   registrations. The body stays byte for byte as signed, so a wallet that tags the input set
  *   and the signer set with 258, or orders the keys its own way, still verifies; its meaning is
  *   checked, not its spelling, and it holds no float or simple value. The wrapper, the witness set
@@ -79,10 +80,11 @@ export interface OwnerAttestation {
 
 /**
  * What an attestation is over: a binding digest, a vault's verification digest (an external
- * cosigner's own attestation), a device removal, an external import or an endorsement digest.
+ * cosigner's own attestation), a device removal, an external import, an endorsement digest, or a
+ * cosigner invitation and its acceptance (`invite/PROTOCOL.md`).
  */
 export interface AttestedDigest {
-  readonly kind: 'binding' | 'verification' | 'removal' | 'import' | 'endorsement';
+  readonly kind: 'binding' | 'verification' | 'removal' | 'import' | 'endorsement' | 'invite' | 'inviteAccept';
   /** 32 bytes, lowercase hex. */
   readonly digest: string;
   /** The vault's network, which an expired transaction names (`network_id`); CIP-8 does not use it. */
@@ -90,7 +92,7 @@ export interface AttestedDigest {
 }
 
 /** The metadatum key of each kind in the expired transaction. */
-const DIGEST_KEY = { binding: 0, verification: 1, removal: 2, import: 3, endorsement: 4 } as const;
+const DIGEST_KEY = { binding: 0, verification: 1, removal: 2, import: 3, endorsement: 4, invite: 5, inviteAccept: 6 } as const;
 
 export type AttestationRefusalCode =
   | 'INVALID_INPUT'
