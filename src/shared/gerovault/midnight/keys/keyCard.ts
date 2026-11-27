@@ -50,7 +50,7 @@ import { readLabel, writeLabel } from '../../labels';
 import { MidnightKeyError } from './errors';
 import { concatBytes, fromHex, le2ip, le32, toHex, utf8Bytes, bytesEqual } from './bytes';
 import { JubjubPointRefusal, checkJubjubPoint, decodeJubjubPoint, encodeJubjubPoint } from './jubjub';
-import { jubjubSign, jubjubVerify } from './schnorr';
+import { JubjubSignatureRefusal, checkJubjubSignature, jubjubSign } from './schnorr';
 import { isUpgradePublicKey, signUpgrade, verifyUpgrade } from './upgradeKey';
 import { isMidnightNetwork } from './paths';
 import { guardianCommitment } from './guardian';
@@ -58,7 +58,6 @@ import type { DelegateKeys, GuardianKeys, OwnerKeys } from './derive';
 import {
   FIELD_MODULUS,
   FieldElement,
-  JUBJUB_SCALAR_MODULUS,
   JubjubPublicKey,
   JubjubSignature,
   KEY_CARD_ROLES,
@@ -303,6 +302,8 @@ export type KeyCardReadResult =
       readonly point?: JubjubPointRefusal;
       /** For `INVALID_KEY` and `INVALID_SIGNATURE`: which key or signature. */
       readonly field?: 'approvalKey' | 'key' | 'approval' | 'upgrade';
+      /** For `INVALID_SIGNATURE` on a Jubjub signature: why `checkJubjubSignature` refused it. */
+      readonly signature?: JubjubSignatureRefusal;
     };
 
 type Refusal = Extract<KeyCardReadResult, { ok: false }>;
@@ -331,16 +332,26 @@ function hexField(v: unknown, bytes: number): string {
   return v as string;
 }
 
-function signatureField(v: unknown, field: 'approval' | 'key'): JubjubSignature {
+/**
+ * A Jubjub signature as written, unchecked: the announcement's two coordinates and the response
+ * as little-endian numbers. `checkJubjubSignature` alone decides whether they are in range.
+ */
+function signatureField(v: unknown): JubjubSignature {
   if (!isPlainObject(v)) return fail('MALFORMED');
   exactKeys(v, ['announcement', 'response']);
-  const announcementBytes = fromHex(v['announcement'], 64);
+  const announcement = fromHex(v['announcement'], 64);
   const response = fromHex(v['response'], 32);
-  if (!announcementBytes || !response) return fail('MALFORMED');
-  const announcement = decodeJubjubPoint(announcementBytes);
-  const s = le2ip(response);
-  if (!announcement || s >= JUBJUB_SCALAR_MODULUS) return fail('INVALID_SIGNATURE', { field });
-  return Object.freeze({ announcement, response: s });
+  if (!announcement || !response) return fail('MALFORMED');
+  return Object.freeze({
+    announcement: Object.freeze({ x: le2ip(announcement.subarray(0, 32)), y: le2ip(announcement.subarray(32, 64)) }),
+    response: le2ip(response),
+  });
+}
+
+/** Refuses with `INVALID_SIGNATURE` and the reason unless `signature` is `key`'s over the card digest. */
+function requireJubjubSignature(key: JubjubPublicKey, digest: Uint8Array, signature: JubjubSignature, field: 'approval' | 'key'): void {
+  const checked = checkJubjubSignature(key, digestField(digest), signature);
+  if (checked.ok === false) fail('INVALID_SIGNATURE', { field, signature: checked.code });
 }
 
 function pointField(v: unknown, field: 'approvalKey' | 'key'): JubjubPublicKey {
@@ -395,23 +406,23 @@ function validate(o: unknown, expect: KeyCardExpectation): MidnightKeyCard {
     const approvalKey = pointField(o['approvalKey'], 'approvalKey');
     if (!isUpgradePublicKey(o['upgradeKey'])) return fail('INVALID_UPGRADE_KEY');
     const upgradeKey = o['upgradeKey'];
-    const approval = signatureField(sigs['approval'], 'approval');
+    const approval = signatureField(sigs['approval']);
     const upgrade = sigs['upgrade'] as string;
     const digest = digestOf(network, { role: 'owner', approval: approvalKey, upgrade: upgradeKey });
-    if (!jubjubVerify(approvalKey, digestField(digest), approval)) return fail('INVALID_SIGNATURE', { field: 'approval' });
+    requireJubjubSignature(approvalKey, digest, approval, 'approval');
     if (!verifyUpgrade(upgradeKey, digest, upgrade)) return fail('INVALID_SIGNATURE', { field: 'upgrade' });
     return Object.freeze({ network, role, approvalKey, upgradeKey, signatures: Object.freeze({ approval, upgrade }), ...label });
   }
   const key = pointField(o['key'], 'key');
-  const signature = signatureField(sigs['key'], 'key');
+  const signature = signatureField(sigs['key']);
   if (role === 'guardian') {
     const salt = o['salt'] as string;
     const digest = digestOf(network, { role: 'guardian', key, salt });
-    if (!jubjubVerify(key, digestField(digest), signature)) return fail('INVALID_SIGNATURE', { field: 'key' });
+    requireJubjubSignature(key, digest, signature, 'key');
     return Object.freeze({ network, role, key, salt, signatures: Object.freeze({ key: signature }), ...label });
   }
   const digest = digestOf(network, { role: 'delegate', key });
-  if (!jubjubVerify(key, digestField(digest), signature)) return fail('INVALID_SIGNATURE', { field: 'key' });
+  requireJubjubSignature(key, digest, signature, 'key');
   return Object.freeze({ network, role: 'delegate', key, signatures: Object.freeze({ key: signature }), ...label });
 }
 

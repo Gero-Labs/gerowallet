@@ -126,7 +126,7 @@ describe('key cards: a card carrying another person\'s key is refused', () => {
   it('an owner card with someone else\'s approval key in place of the signer\'s', () => {
     const o = json(ownerCard);
     o['approvalKey'] = jubjubPointHex(bobOwner.approval.publicKey);
-    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'approval' });
+    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'approval', signature: 'MISMATCH' });
   });
 
   it('an owner card with someone else\'s upgrade key, approval signed afresh, upgrade signature copied from their card', () => {
@@ -143,16 +143,16 @@ describe('key cards: a card carrying another person\'s key is refused', () => {
   it('a guardian card with someone else\'s key, or with another salt', () => {
     const o = json(guardianCard);
     o['key'] = jubjubPointHex(bobGuardian.key.publicKey);
-    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key' });
+    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'MISMATCH' });
     const s = json(guardianCard);
     s['salt'] = toHex(bobGuardian.salt);
-    expect(refusal(text(s))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key' });
+    expect(refusal(text(s))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'MISMATCH' });
   });
 
   it('a delegate card with someone else\'s key', () => {
     const o = json(delegateCard);
     o['key'] = jubjubPointHex(deriveDelegateKeys(BOB, 'preprod', 3).key.publicKey);
-    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key' });
+    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'MISMATCH' });
   });
 });
 
@@ -221,7 +221,7 @@ describe('key cards: network and role', () => {
   it('refuses a preprod card relabelled as another network: the network is signed', () => {
     const o = json(ownerCard);
     o['network'] = 'mainnet';
-    expect(refusal(text(o), { network: 'mainnet' })).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'approval' });
+    expect(refusal(text(o), { network: 'mainnet' })).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'approval', signature: 'MISMATCH' });
   });
 
   it('refuses a card for another role than the one asked for', () => {
@@ -233,7 +233,7 @@ describe('key cards: network and role', () => {
     const o = json(delegateCard);
     o['role'] = 'guardian';
     o['salt'] = '00'.repeat(32);
-    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key' });
+    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'MISMATCH' });
   });
 });
 
@@ -266,7 +266,19 @@ describe('key cards: strict decoding', () => {
     const o = json(delegateCard);
     const sig = o.signatures['key'] as { announcement: string; response: string };
     sig.response = toHex(le32(le2ip(fromHex(sig.response) as Uint8Array) + JUBJUB_SCALAR_MODULUS));
-    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key' });
+    expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'RESPONSE_OUT_OF_RANGE' });
+  });
+
+  it('refuses a signature announcement off the curve or with a coordinate from the modulus up', () => {
+    const R = delegateCard.signatures.key.announcement;
+    for (const announcement of [{ x: R.x, y: R.y + 1n }, { x: R.x + FIELD_MODULUS, y: R.y }]) {
+      const o = json(delegateCard);
+      (o.signatures['key'] as { announcement: string }).announcement = toHex(concatBytes(le32(announcement.x), le32(announcement.y)));
+      expect(refusal(text(o))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'key', signature: 'ANNOUNCEMENT_NOT_ON_CURVE' });
+    }
+    const owner = json(ownerCard);
+    (owner.signatures['approval'] as { announcement: string }).announcement = 'ff'.repeat(64);
+    expect(refusal(text(owner))).toEqual({ ok: false, code: 'INVALID_SIGNATURE', field: 'approval', signature: 'ANNOUNCEMENT_NOT_ON_CURVE' });
   });
 
   it('refuses a JSON card above the size limit', () => {

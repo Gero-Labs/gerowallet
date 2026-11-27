@@ -11,7 +11,9 @@
  *   `rand32` gives the same signature rather than a leaked key.
  * - Signature over a field element `digest`: `R = r * G`,
  *   `c = transientHash([R.x, R.y, pk.x, pk.y, digest]) mod r_J`, `s = r + c * sk mod r_J`.
- * - Verification: `s < r_J`, `R` on the curve, `pk` a validated key, and `s * G = R + c * pk`.
+ * - Verification (`checkJubjubSignature`, which says why it refuses): `s < r_J`, `R` on the curve,
+ *   `pk` a validated key, and `s * G = R + c * pk`. The key check is not optional: under the
+ *   identity or a key with a small-order component, signatures are easy to forge.
  *
  * BigInt arithmetic is not constant time; that is accepted for a software wallet signing a few
  * statements and is part of the client-code audit scope.
@@ -20,7 +22,7 @@ import { blake2b } from '@noble/hashes/blake2.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 import { MidnightKeyError } from './errors';
 import { concatBytes, le2ip, le32, utf8Bytes } from './bytes';
-import { addPoints, affine, checkJubjubPoint, isOnJubjubCurve, jubjubMulGenerator, jubjubPointsEqual, mulGeneratorPublic, mulPublic } from './jubjub';
+import { addPoints, affine, checkJubjubPoint, isOnJubjubCurve, jubjubMulGenerator, jubjubPointsEqual, mulGeneratorPublic, mulPublic, snapshotJubjubPoint } from './jubjub';
 import { isFieldElement, transientHash } from './poseidon';
 import { FieldElement, JUBJUB_SCALAR_MODULUS, JubjubKeyPair, JubjubPoint, JubjubPublicKey, JubjubSecretKey, JubjubSignature } from './types';
 
@@ -48,7 +50,15 @@ function assertChildKey(k: Uint8Array): void {
 /** The Jubjub secret scalar of a 32-byte child key. Throws `ZERO_SCALAR` (use the next index). */
 export function jubjubSecretFromChildKey(k: Uint8Array): JubjubSecretKey {
   assertChildKey(k);
-  return scalarFromWideHash(blake2b(concatBytes(utf8Bytes(JUBJUB_SK_TAG), k), { dkLen: 64 })) as JubjubSecretKey;
+  const preimage = concatBytes(utf8Bytes(JUBJUB_SK_TAG), k);
+  let wide: Uint8Array | undefined;
+  try {
+    wide = blake2b(preimage, { dkLen: 64 });
+    return scalarFromWideHash(wide) as JubjubSecretKey;
+  } finally {
+    preimage.fill(0);
+    wide?.fill(0);
+  }
 }
 
 export function isJubjubSecretKey(sk: unknown): sk is JubjubSecretKey {
@@ -83,7 +93,17 @@ export function hedgedNonce(sk: JubjubSecretKey, digest: FieldElement, rand32: U
   assertSecret(sk);
   assertDigest(digest);
   assertRand(rand32);
-  return scalarFromWideHash(blake2b(concatBytes(utf8Bytes(JUBJUB_NONCE_TAG), le32(sk), le32(digest), rand32), { dkLen: 64 }));
+  const skBytes = le32(sk);
+  const preimage = concatBytes(utf8Bytes(JUBJUB_NONCE_TAG), skBytes, le32(digest), rand32);
+  let wide: Uint8Array | undefined;
+  try {
+    wide = blake2b(preimage, { dkLen: 64 });
+    return scalarFromWideHash(wide);
+  } finally {
+    skBytes.fill(0);
+    preimage.fill(0);
+    wide?.fill(0);
+  }
 }
 
 /** The challenge `transientHash([R.x, R.y, pk.x, pk.y, digest]) mod r_J`. */
@@ -106,17 +126,45 @@ export function jubjubSign(sk: JubjubSecretKey, digest: FieldElement, rand32: Ui
   return Object.freeze({ announcement, response: (r + c * sk) % RJ });
 }
 
-/** Whether `signature` is `publicKey`'s signature over `digest`. Never throws. */
-export function jubjubVerify(publicKey: JubjubPublicKey | JubjubPoint, digest: FieldElement | bigint, signature: JubjubSignature): boolean {
+/**
+ * Why a Jubjub signature does not verify, in the order checked:
+ * - `DIGEST_NOT_A_FIELD_ELEMENT`;
+ * - `MALFORMED`: not a signature object (or anything else that fails to compute);
+ * - `RESPONSE_OUT_OF_RANGE`: `s` is not from 0 below `r_J` (`s + r_J` is the same scalar, refused
+ *   so a signature has one form only);
+ * - `ANNOUNCEMENT_NOT_ON_CURVE`: `R` is off the curve or has a coordinate from the modulus up;
+ * - `INVALID_KEY`: the public key fails point validation (`checkJubjubPoint`). Without this check
+ *   a signature under the identity or a small-order key is easy to forge;
+ * - `MISMATCH`: `s * G` differs from `R + c * pk`.
+ */
+export type JubjubSignatureRefusal = 'DIGEST_NOT_A_FIELD_ELEMENT' | 'MALFORMED' | 'RESPONSE_OUT_OF_RANGE' | 'ANNOUNCEMENT_NOT_ON_CURVE' | 'INVALID_KEY' | 'MISMATCH';
+
+/**
+ * Checks that `signature` is `publicKey`'s signature over `digest`, and says why not. Never
+ * throws. Every value is read once from the caller's objects; the checks and the arithmetic use
+ * only the validated copies.
+ */
+export function checkJubjubSignature(publicKey: unknown, digest: unknown, signature: unknown): { readonly ok: true } | { readonly ok: false; readonly code: JubjubSignatureRefusal } {
+  const refuse = (code: JubjubSignatureRefusal) => ({ ok: false, code }) as const;
   try {
-    if (!isFieldElement(digest) || !signature || typeof signature !== 'object') return false;
-    const { announcement, response } = signature;
-    if (typeof response !== 'bigint' || response < 0n || response >= RJ) return false;
-    if (!isOnJubjubCurve(announcement)) return false;
-    if (checkJubjubPoint(publicKey).ok !== true) return false;
-    const c = jubjubChallenge(announcement, publicKey, digest);
-    return jubjubPointsEqual(addPoints(mulPublic(publicKey, c), announcement), affine(mulGeneratorPublic(response)));
+    if (!isFieldElement(digest)) return refuse('DIGEST_NOT_A_FIELD_ELEMENT');
+    if (!signature || typeof signature !== 'object') return refuse('MALFORMED');
+    const response = (signature as JubjubSignature).response;
+    const announcement = snapshotJubjubPoint((signature as JubjubSignature).announcement);
+    if (typeof response !== 'bigint' || !announcement) return refuse('MALFORMED');
+    if (response < 0n || response >= RJ) return refuse('RESPONSE_OUT_OF_RANGE');
+    if (!isOnJubjubCurve(announcement)) return refuse('ANNOUNCEMENT_NOT_ON_CURVE');
+    const key = checkJubjubPoint(publicKey);
+    if (key.ok === false) return refuse('INVALID_KEY');
+    const c = jubjubChallenge(announcement, key.key, digest);
+    const equal = jubjubPointsEqual(addPoints(mulPublic(key.key, c), announcement), affine(mulGeneratorPublic(response)));
+    return equal ? { ok: true } : refuse('MISMATCH');
   } catch {
-    return false;
+    return refuse('MALFORMED');
   }
+}
+
+/** Whether `signature` is `publicKey`'s signature over `digest` (`checkJubjubSignature` passes). Never throws. */
+export function jubjubVerify(publicKey: JubjubPublicKey | JubjubPoint, digest: FieldElement | bigint, signature: JubjubSignature): boolean {
+  return checkJubjubSignature(publicKey, digest, signature).ok === true;
 }
