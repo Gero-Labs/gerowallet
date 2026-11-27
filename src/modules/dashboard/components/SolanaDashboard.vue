@@ -1,7 +1,7 @@
 <template>
   <!-- The Solana portfolio: balance, SPL tokens and activity, all from Gero Sync
-       (walletStore.solana / solanaTransactions). Send and Receive open the shared
-       quick-action dialogs. -->
+       (walletStore.solana / solanaTransactions), and native staking (Nexus). Send and
+       Receive open the shared quick-action dialogs. -->
   <div class="sol-dash">
     <v-row no-gutters>
       <v-col cols="12" md="5" class="pa-2">
@@ -68,6 +68,12 @@
     </v-row>
 
     <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <SolanaStakingCard />
+      </v-col>
+    </v-row>
+
+    <v-row no-gutters>
       <v-col ref="collectiblesCol" cols="12" class="pa-2">
         <SolanaCollectibles />
       </v-col>
@@ -113,6 +119,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import SolanaCollectibles from './SolanaCollectibles.vue';
+import SolanaStakingCard from './SolanaStakingCard.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import networks from '@/utils/networks';

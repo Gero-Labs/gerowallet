@@ -37,6 +37,10 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'SIGN_SOLANA_MESSAGE',
   'SIGN_SOLANA_TRANSACTION',
   'SOLANA_SEND_QUOTE',
+  // Native staking from the logged Solana account (chrome/solanaStake.ts).
+  'SOLANA_STAKE_QUOTE',
+  'SOLANA_STAKE',
+  'PREPARE_SOLANA_STAKE',
   // Push notifications: subscribe / register / unregister this browser and its wallets.
   'NOTIFY_SET_BROWSER_ENABLED',
   'NOTIFY_ENABLE_WALLET',

@@ -20,6 +20,12 @@ export enum MessageTypes {
   PREPARE_SOLANA_SEND = 'PREPARE_SOLANA_SEND',
   /** Hardware Solana send, step 2: the device's signature over that message; the worker submits. */
   SUBMIT_SOLANA_SEND = 'SUBMIT_SOLANA_SEND',
+  /** What a Stake, Unstake or Withdraw would do (the worker plans and simulates it; nothing is held). */
+  SOLANA_STAKE_QUOTE = 'SOLANA_STAKE_QUOTE',
+  /** Stake, Unstake or Withdraw from a password or PassKey wallet (chrome/solanaStake.ts). */
+  SOLANA_STAKE = 'SOLANA_STAKE',
+  /** Hardware staking, step 1: the worker builds the message; step 2 is SUBMIT_SOLANA_SEND. */
+  PREPARE_SOLANA_STAKE = 'PREPARE_SOLANA_STAKE',
   /** Side panel only: sign a dApp's approved `solana:signMessage` bytes with the logged Solana account. */
   SIGN_SOLANA_MESSAGE = 'SIGN_SOLANA_MESSAGE',
   /** Side panel only: sign a dApp transaction the worker previewed (consumes its allowance). */
