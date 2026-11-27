@@ -137,4 +137,17 @@ describe('SolanaStakeDialog', () => {
     await flushPromises();
     expect(wrapper.find('[data-test="stake-quote-error"]').text()).toBe('solana.staking.error.notActive');
   });
+
+  it.each([
+    ['SIMULATION_FAILED', 'solana.staking.error.simulationFailed'],
+    ['COST_CHANGED', 'solana.staking.error.costChanged'],
+    ['SOMETHING_NEW', 'solana.staking.error.failed'],
+  ])('says %s in staking words, not a transfer one', async (code, key) => {
+    answer({ data: { success: false, error: code } });
+    const wrapper = render('withdraw', ACCOUNT);
+    await flushPromises();
+    await wrapper.find('[data-test="stake-continue"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test="stake-quote-error"]').text()).toBe(key);
+  });
 });

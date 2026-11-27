@@ -28,6 +28,7 @@
               item-title="title"
               item-value="value"
               :placeholder="t('solana.staking.validatorPlaceholder')"
+              :aria-label="t('solana.staking.validator')"
               :custom-filter="filterValidator"
               :loading="!props.validators && !props.validatorsFailed"
               variant="outlined"
@@ -372,10 +373,19 @@ const maxStake = computed(() => {
   return max > 0n ? max : 0n;
 });
 
+/** Codes the token send shares, in staking's own words (theirs speak of a transfer). */
+const STAKE_ERROR_KEYS: Record<string, string> = {
+  SIMULATION_FAILED: 'solana.staking.error.simulationFailed',
+  LOOKUP_FAILED: 'solana.staking.error.lookupFailed',
+  COST_CHANGED: 'solana.staking.error.costChanged',
+};
+
 function errorText(code: string): string {
+  const shared = solanaSendErrorKey(code);
+  const key = STAKE_ERROR_KEYS[code] ?? (shared === 'solana.sendFailed' ? 'solana.staking.error.failed' : shared);
   const amountFor = code === 'STAKE_BELOW_MINIMUM' ? props.info?.minimumDelegation ?? 0n
     : code === 'STAKE_KEEP_SOL' ? STAKE_KEEP_LAMPORTS : SOLANA_RENT_EXEMPT_MINIMUM;
-  return t(solanaSendErrorKey(code), { amount: formatSol(amountFor), ticker: ticker.value });
+  return t(key, { amount: formatSol(amountFor), ticker: ticker.value });
 }
 
 const amountError = computed(() => {
