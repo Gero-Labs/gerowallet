@@ -35,7 +35,8 @@
           </span>
           <span class="notify-inbox__meta"><span class="notify-inbox__dot notify-inbox__dot--warn" aria-hidden="true"></span></span>
         </button>
-        <button v-for="item in needsYou" :key="item.e" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': item.readAt !== null }" @click="open(item)">
+        <template v-for="item in needsYou" :key="item.e">
+        <button type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': item.readAt !== null }" @click="open(item)">
           <span class="notify-inbox__tile">
             <NotifyAssetIcons v-if="item.assets && item.assets.length" :assets="item.assets" :wallet-id="item.walletId" />
             <v-icon v-else size="15" color="var(--g-text-1)">{{ iconFor(item) }}</v-icon>
@@ -49,6 +50,12 @@
             <span v-if="item.readAt === null" class="notify-inbox__dot" aria-hidden="true"></span>
           </span>
         </button>
+        <!-- A vault invitation: Review opens its sheet, Decline answers without opening it. -->
+        <div v-if="vaultInviteRef(item)" class="notify-inbox__vault-actions">
+          <button type="button" class="notify-inbox__link" data-test="inbox-vault-review" @click="open(item)">{{ $t('gerovault.invite.overview.review') }}</button>
+          <button type="button" class="notify-inbox__link" data-test="inbox-vault-decline" @click="declineVaultInvite(item)">{{ $t('gerovault.invite.review.decline') }}</button>
+        </div>
+        </template>
         <!-- Last: a standing to-do of the wallet, not an event, so it never outranks a security row. -->
         <button v-if="legacyVisible" type="button" class="notify-inbox__row" @click="$emit('legacy')">
           <span class="notify-inbox__tile"><v-icon size="15" color="var(--g-text-1)">mdi-image-multiple-outline</v-icon></span>
@@ -132,6 +139,7 @@ import { requestSettingsTabOnLoad, writeNotifyKey } from '@/services/notify/noti
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 import { routeFor } from '@/services/notify/notifyRender';
+import { VAULT_INVITE_REF } from '@/services/notify/notifyPayload';
 import NotifyAssetIcons from '@/shared/components/NotifyAssetIcons.vue';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 
@@ -163,7 +171,28 @@ const pushOn = computed(() => !!notifySettingsStore.device()?.browserEnabled);
 const ICONS: Record<string, string> = {
   funds: 'mdi-arrow-down-circle-outline', staking: 'mdi-chart-timeline-variant', swap: 'mdi-swap-horizontal',
   remoteSigning: 'mdi-cellphone-link', adam: 'mdi-robot-outline', governance: 'mdi-vote-outline', system: 'mdi-bell-outline',
+  vault_invite: 'mdi-shield-account-outline',
 };
+
+/** The opened invitation a vault push led to (`x.ref`, set by the worker after it opened it). */
+function vaultInviteRef(item: NotifyInboxItem): string | null {
+  const ref = item.t === 'vault_invite' && item.d === 'vault' ? item.x?.['ref'] : undefined;
+  return typeof ref === 'string' && VAULT_INVITE_REF.test(ref) ? ref : null;
+}
+
+/** Decline from the bell: the worker sends a DECLINE, which says nothing about the wallet. */
+async function declineVaultInvite(item: NotifyInboxItem): Promise<void> {
+  const ref = vaultInviteRef(item);
+  if (!ref) return;
+  const { inviteClient } = await import('@/modules/gerovault/invites/inviteClient');
+  try {
+    await inviteClient.decline(ref);
+    void notifyInboxStore.markRead(item.e);
+  } catch {
+    // Already answered or gone: its review says which.
+    open(item);
+  }
+}
 function iconFor(item: NotifyInboxItem): string { return ICONS[item.c] ?? 'mdi-bell-outline'; }
 
 /** 2m · 3h · 1d, then a short date, as on the artboard. */
@@ -315,6 +344,13 @@ watch(() => props.open, (isOpen) => {
 .notify-inbox__row-body { font-size: 12px; color: var(--g-text-3); }
 /* An announcement's summary: the row never grows past its title and two lines. */
 .notify-inbox__row-body--clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.notify-inbox__vault-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-3);
+  padding: 0 14px var(--g-s-2);
+  border-bottom: 1px solid var(--g-hairline-1);
+}
 .notify-inbox__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .notify-inbox__time { font-size: 11px; color: var(--g-text-3); line-height: 1.2; word-break: normal; }
 .notify-inbox__dot {

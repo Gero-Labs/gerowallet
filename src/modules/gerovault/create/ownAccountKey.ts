@@ -40,6 +40,37 @@ export async function requestMultisigAccountKey(walletId: number, password?: str
   return multisigAccountPublicKey(data.publicKey);
 }
 
+/**
+ * A PassKey wallet's root key for one invitation request (`GEROVAULT_SETUP_START`,
+ * `GEROVAULT_INVITE_ACCEPT`): WebAuthn decrypts it here and the background derives and signs. The
+ * caller sends the array once and overwrites it (`invites/inviteClient.ts`); the background checks
+ * it is this wallet's own root key before using it.
+ */
+export async function passKeyRootKeyBytes(
+  wallet: Pick<Wallet, 'id' | 'webAuthnCredentialId' | 'webAuthnTransports' | 'prfEncryptedPrivateKey'> & { secretsWalletId?: number },
+): Promise<number[]> {
+  const { webAuthnCredentialId, prfEncryptedPrivateKey } = wallet;
+  if (!webAuthnCredentialId || !prfEncryptedPrivateKey) throw new OwnAccountKeyError('not-supported');
+  const [{ evaluateWalletPrf }, { decryptPrivateKeyWithPrf }] = await Promise.all([
+    import('@/shared/utils/passkeyPrf'),
+    import('@/shared/utils/webauthn-prf'),
+  ]);
+  let prf: ArrayBuffer;
+  try {
+    prf = await evaluateWalletPrf({ id: wallet.id, webAuthnCredentialId, webAuthnTransports: wallet.webAuthnTransports });
+  } catch {
+    throw new OwnAccountKeyError('cancelled');
+  }
+  let rootKeyBytes: Uint8Array | undefined;
+  try {
+    rootKeyBytes = await decryptPrivateKeyWithPrf(prfEncryptedPrivateKey, webAuthnCredentialId, String(secretsWalletId(wallet)), prf);
+    return Array.from(rootKeyBytes);
+  } finally {
+    rootKeyBytes?.fill(0);
+    new Uint8Array(prf).fill(0);
+  }
+}
+
 /** A PassKey wallet: WebAuthn decrypts the root key here, which is wiped before returning. */
 export async function passKeyMultisigAccountKey(
   wallet: Pick<Wallet, 'id' | 'publicKey' | 'webAuthnCredentialId' | 'webAuthnTransports' | 'prfEncryptedPrivateKey'> & { secretsWalletId?: number },

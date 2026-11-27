@@ -79,18 +79,25 @@
           </div>
           <div class="verify-step__actions">
             <template v-if="row.canVerify && !row.verified">
-              <template v-if="confirming === row.credential">
-                <span class="t-caption">{{ $t('gerovault.create.holders.confirmNumber', { label: row.label }) }}</span>
-                <GButton compact tier="secondary" data-test="create-number-yes" @click="confirmNumber(row.credential)">{{ $t('gerovault.create.holders.confirmYes') }}</GButton>
-                <GButton compact tier="tertiary" @click="confirming = null">{{ $t('common.cancel') }}</GButton>
-              </template>
+              <GButton v-if="confirming === row.credential" compact tier="tertiary" data-test="create-number-close" @click="confirming = null">{{ $t('common.cancel') }}</GButton>
               <template v-else>
-                <GButton compact tier="secondary" data-test="create-number-match" @click="confirming = row.credential">{{ $t('gerovault.create.holders.numbersMatch') }}</GButton>
+                <GButton compact tier="secondary" data-test="create-number-match" @click="confirming = row.credential">{{ $t('gerovault.invite.verify.onACall') }}</GButton>
                 <GButton compact tier="secondary" data-test="create-scan-qr" @click="scanning = row">{{ $t('gerovault.create.holders.scanQr') }}</GButton>
               </template>
             </template>
             <span class="gvc-chip t-caption" :class="row.verified ? 'gvc-chip--ok' : 'gvc-chip--wait'">{{ $t(row.stateKey) }}</span>
           </div>
+          <!-- The number read in turns: this side reads 1 to 4 and ticks 5 to 8 (GV-61, UX rule 8). -->
+          <VerifyTogether
+            v-if="view && confirming === row.credential && !row.verified"
+            class="verify-step__together"
+            :groups="view.groups"
+            role="initiator"
+            :peer="row.rawLabel"
+            :can-cancel="flow.setup.value?.state === 'open'"
+            @confirm="confirmNumber(row.credential)"
+            @cancel-setup="cancelSetup()"
+          />
         </li>
       </ul>
     </section>
@@ -141,12 +148,14 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
 import InfoTooltip from '@/shared/components/InfoTooltip.vue';
 import { displayLabel } from '@/shared/gerovault';
-import { GEROVAULT_VAULT_ROUTE } from '@/modules/gerovault/gerovaultRoutes';
+import { GEROVAULT_OVERVIEW_ROUTE, GEROVAULT_VAULT_ROUTE } from '@/modules/gerovault/gerovaultRoutes';
 import { fingerprint, scriptKeys } from './createVault';
 import { COSIGNER_STATE_KEYS, QR_REFUSAL_KEYS, VERIFIED_BY_KEYS } from './messages';
 import QrScanDialog from './QrScanDialog.vue';
 import RegistrationDialog from './RegistrationDialog.vue';
 import VerificationQr from './VerificationQr.vue';
+import VerifyTogether from '@/modules/gerovault/invites/VerifyTogether.vue';
+import { useRouter } from 'vue-router';
 import type { CreateVaultFlow } from './useCreateVault';
 
 const props = defineProps<{ flow: CreateVaultFlow; details: boolean }>();
@@ -155,6 +164,8 @@ const { vault, view, manifestState, verification, saved, addressActivity } = pro
 interface HolderRow {
   readonly credential: string;
   readonly label: string;
+  /** The label as stored, for components that isolate it themselves. */
+  readonly rawLabel: string;
   readonly initial: string;
   /** A Gero cosigner, verified by the number or the QR. External cosigners verify with a file. */
   readonly canVerify: boolean;
@@ -175,6 +186,7 @@ const rows = computed<HolderRow[]>(() => {
     return {
       credential: c.hashes.payment,
       label: displayLabel(c.label),
+      rawLabel: c.label,
       initial: [...c.label][0]?.toUpperCase() ?? '?',
       canVerify: !external && view.value !== null,
       verified,
@@ -218,6 +230,14 @@ const registrationTx = ref('');
 async function confirmNumber(credential: string): Promise<void> {
   confirming.value = null;
   await props.flow.confirmNumber(credential);
+}
+
+const router = useRouter();
+
+/** "Doesn't match": the setup stops (its invitations end, this wallet's index is released). */
+async function cancelSetup(): Promise<void> {
+  confirming.value = null;
+  if (await props.flow.cancelSetup()) await router.push({ name: GEROVAULT_OVERVIEW_ROUTE });
 }
 
 async function checkQr(payload: string): Promise<string | undefined> {
@@ -297,6 +317,9 @@ const ids = reactive({ vault: `${base}-vault`, number: `${base}-number`, holders
   flex: 1 1 160px;
   flex-direction: column;
   min-width: 0;
+}
+.verify-step__together {
+  flex: 1 1 100%;
 }
 .verify-step__actions {
   display: flex;

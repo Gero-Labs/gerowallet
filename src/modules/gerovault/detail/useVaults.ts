@@ -20,7 +20,8 @@ export function useVaultList() {
   const vaults = shallowRef<readonly VaultRecord[]>([]);
   let generation = 0;
 
-  async function reload(): Promise<void> {
+  /** `quiet` keeps the list on screen while it reads again (a return to the page, a push). */
+  async function reload(options: { quiet?: boolean } = {}): Promise<void> {
     const id = walletId.value;
     const mine = ++generation;
     if (id === undefined) {
@@ -28,7 +29,7 @@ export function useVaultList() {
       state.value = 'noWallet';
       return;
     }
-    state.value = 'loading';
+    if (!(options.quiet && state.value === 'ready')) state.value = 'loading';
     try {
       const rows = await store.list(id);
       if (mine !== generation) return;

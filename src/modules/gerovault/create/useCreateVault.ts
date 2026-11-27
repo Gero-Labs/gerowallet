@@ -6,8 +6,12 @@
  *
  * Dependencies are passed in, so the flow runs in a test without a wallet, a database or a page.
  */
-import { computed, reactive, ref, shallowRef, watch } from 'vue';
-import type { CosignerVerification, MultisigAccountPublicKey, VaultNetwork } from '@/shared/gerovault';
+import { computed, getCurrentInstance, getCurrentScope, onActivated, onDeactivated, onScopeDispose, reactive, ref, shallowRef, watch } from 'vue';
+import { encodeVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes, type CosignerVerification, type MultisigAccountPublicKey, type VaultNetwork } from '@/shared/gerovault';
+import { InviteClientError, type InviteAuth, type InviteClient, type InviteClientCode, type LinkAnswer, type SetupViewModel } from '@/modules/gerovault/invites/inviteClient';
+import { createPoller, pauseWhileHidden, type Poller } from '@/modules/gerovault/invites/poller';
+import { vaultKeysFromRaw } from '@/modules/gerovault/invites/rawKeys';
+import type { VaultPushEvent } from '@/modules/gerovault/invites/useVaultPush';
 import type { VaultChainReader, VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
 import {
   DEFAULT_TEMPLATE,
@@ -34,6 +38,7 @@ import {
   type ManifestState,
   type OwnVaultKeys,
   type QrRefusal,
+  type ReadyCosigner,
   type VerificationState,
   type VerificationView,
 } from './createVault';
@@ -56,6 +61,50 @@ export interface CreateVaultDeps {
   readonly reader?: Pick<VaultChainReader, 'history'>;
   /** Milliseconds since the epoch. */
   readonly now?: () => number;
+  /**
+   * Cosigners by invitation (`GEROVAULT_INVITE_*`). Absent, or a background that does not answer:
+   * the flow is the paste flow only.
+   */
+  readonly invites?: CreateInviteDeps;
+}
+
+export interface CreateInviteDeps {
+  readonly client: Pick<InviteClient, 'status' | 'holds' | 'startSetup' | 'unlockSetup' | 'updateTerms' | 'getSetup' | 'refreshSetup' | 'invite' | 'link' | 'withdrawLink' | 'remind' | 'revoke' | 'markVerified' | 'completeSetup' | 'cancelSetup'>;
+  /** The credential of one request from what the user typed (`passKeyAuth` for a PassKey wallet). */
+  readonly auth: (password: string) => Promise<InviteAuth>;
+  /** Reopen this setup (the Vaults overview's "Continue setup"). */
+  readonly resumeSetupId?: string;
+  /** The vault's name when the user left it empty: an invitation always names the vault. */
+  readonly untitledName: string;
+  /**
+   * The fallback poll of an open setup, in milliseconds (default one minute). A `vault_response`
+   * push refreshes at once; the poll only covers a push that never arrived, and runs only while
+   * the page is active and visible. gero-sync allows 120 reads an hour.
+   */
+  readonly pollMs?: number;
+  /** The poll while a one-time QR is on screen (default 10 s), for `FAST_POLL_WINDOW_MS` after it opens. */
+  readonly fastPollMs?: number;
+  /** Vault pushes that arrive while the page is open (`useVaultPush`). */
+  readonly push?: (onPush: (event: VaultPushEvent) => void) => void;
+  /** The document whose visibility pauses the poll. Absent: the page's own. */
+  readonly document?: Pick<Document, 'hidden' | 'addEventListener' | 'removeEventListener'>;
+}
+
+export const DEFAULT_POLL_MS = 60_000;
+export const DEFAULT_FAST_POLL_MS = 10_000;
+/** How long the QR dialog's faster poll lasts after it opens; then the slow one takes over. */
+export const FAST_POLL_WINDOW_MS = 120_000;
+/** The wait shown when gero-sync is busy and named none. */
+const DEFAULT_BUSY_MS = 60_000;
+
+/** `checking`: asking the background; `on`: invitations; `off`: the paste flow only. */
+export type InviteMode = 'checking' | 'on' | 'off';
+
+export interface InviteProblem {
+  readonly code: InviteClientCode;
+  /** The cosigner slot the problem is about, when there is one. */
+  readonly n?: number;
+  readonly details?: Record<string, unknown>;
 }
 
 /**
@@ -65,11 +114,47 @@ export interface CreateVaultDeps {
 export type AddressActivity = 'unknown' | 'checking' | 'none' | 'used' | 'unreadable';
 
 /** Why this wallet's keys could not be unlocked. */
-export type UnlockProblem = OwnAccountKeyErrorCode | 'TOO_MANY_PENDING' | 'INDEX_SPACE_EXHAUSTED' | 'INVALID_HISTORY' | 'STORE_UNAVAILABLE';
+export type UnlockProblem = OwnAccountKeyErrorCode | 'TOO_MANY_PENDING' | 'INDEX_SPACE_EXHAUSTED' | 'INVALID_HISTORY' | 'STORE_UNAVAILABLE' | 'NETWORK' | 'EXPIRED';
 
 export interface DraftRow extends CosignerDraft {
   /** A local key for lists. */
   readonly id: number;
+  /** `invite`: by name, QR or link (the setup's slot at this row's position); `paste`: keys typed or pasted. */
+  readonly mode: 'invite' | 'paste';
+}
+
+/** The unlock problem of an invitation error. */
+function unlockProblemOf(code: InviteClientCode): UnlockProblem {
+  switch (code) {
+    case 'WRONG_PASSWORD': return 'wrong-password';
+    case 'WALLET_LOCKED': return 'locked';
+    case 'CANCELLED': return 'cancelled';
+    case 'NOT_FOUND': return 'not-found';
+    case 'UNAVAILABLE': return 'unavailable';
+    case 'TOO_MANY_PENDING':
+    case 'INDEX_SPACE_EXHAUSTED':
+    case 'INVALID_HISTORY':
+    case 'EXPIRED':
+      return code;
+    case 'NETWORK':
+    case 'RATE_LIMITED':
+    case 'BROKEN_SERVER':
+    case 'SERVER':
+      return 'NETWORK';
+    default:
+      return 'not-supported';
+  }
+}
+
+/** A cosigner's keys from their checked ACCEPT, read as the paste flow reads keys. */
+async function acceptedCosigner(accept: { label: string; payment: string; stake: string }): Promise<CosignerReading> {
+  try {
+    const vaultKeys = vaultKeysFromRaw(accept.payment, accept.stake);
+    const cosigner: ReadyCosigner = Object.freeze({ source: 'gero', label: accept.label, vaultKeys, encoded: encodeVaultPublicKeys(vaultKeys), hashes: await vaultKeyHashes(vaultKeys) });
+    return { ok: true, cosigner };
+  } catch {
+    return { ok: false, problem: 'INVALID_VAULT_KEYS' };
+  }
 }
 
 function codeOf(error: unknown): string | undefined {
@@ -99,16 +184,245 @@ export function useCreateVault(deps: CreateVaultDeps) {
     template.acknowledged = false;
   }
 
+  // Invitations (GV-87): a setup in the background, one slot per cosigner -------------------------
+  const inviteMode = ref<InviteMode>(deps.invites ? 'checking' : 'off');
+  const setup = shallowRef<SetupViewModel | null>(null);
+  const inviteProblem = shallowRef<InviteProblem | null>(null);
+  const inviteBusy = ref<number | 'setup' | null>(null);
+
+  function setupFailure(error: unknown, n?: number): void {
+    const code = error instanceof InviteClientError ? error.code : 'SERVER';
+    const details = error instanceof InviteClientError ? error.details : undefined;
+    // The vault key closed in the worker: the own card asks for the credential again.
+    if (code === 'LOCKED' && setup.value) setup.value = { ...setup.value, signerReady: false };
+    inviteProblem.value = { code, ...(n !== undefined ? { n } : {}), ...(details ? { details } : {}) };
+  }
+
+  async function checkInvites(): Promise<void> {
+    const inv = deps.invites;
+    if (!inv) return;
+    try {
+      await inv.client.status();
+    } catch {
+      inviteMode.value = 'off';
+      return;
+    }
+    if (inv.resumeSetupId) {
+      try {
+        const resumed = await inv.client.getSetup(inv.resumeSetupId);
+        if (resumed.state === 'open' && resumed.walletId === deps.walletId && resumed.network === deps.network) {
+          setup.value = resumed;
+          template.name = resumed.name;
+          template.owners = clampOwners(resumed.owners);
+          template.threshold = clampThreshold(resumed.threshold, template.owners);
+          template.acknowledged = true;
+          syncDrafts();
+          step.value = 'cosigners';
+        } else {
+          inviteProblem.value = { code: resumed.state === 'expired' ? 'EXPIRED' : 'NOT_FOUND' };
+        }
+      } catch (error) {
+        setupFailure(error);
+      }
+    }
+    inviteMode.value = 'on';
+    if (setup.value) void refreshSetup();
+  }
+
+  /** Starts the setup (this wallet's index and keys, in the worker), or reopens its vault key. */
+  async function unlockByInvitation(inv: CreateInviteDeps, password: string): Promise<void> {
+    let answer: { setup: SetupViewModel; accountKey: string };
+    try {
+      const auth = await inv.auth(password);
+      answer = setup.value
+        ? await inv.client.unlockSetup(setup.value.setupId, auth)
+        : await inv.client.startSetup({ walletId: deps.walletId, name: template.name.trim() || inv.untitledName, owners: template.owners, threshold: template.threshold }, auth);
+    } catch (error) {
+      const code = error instanceof InviteClientError ? error.code : 'SERVER';
+      unlockProblem.value = unlockProblemOf(code);
+      if (error instanceof InviteClientError && error.details) inviteProblem.value = { code, details: error.details };
+      return;
+    }
+    const keys = await ownVaultKeys(multisigAccountPublicKey(answer.accountKey), { index: answer.setup.ownIndex, reused: false });
+    // The page derives the same keys the worker signs with, or nothing goes further.
+    if (keys.vaultKeys.payment !== answer.setup.ownPayment || keys.vaultKeys.stake !== answer.setup.ownStake) {
+      unlockProblem.value = 'not-supported';
+      return;
+    }
+    setup.value = answer.setup;
+    own.value = keys;
+    inviteProblem.value = null;
+  }
+
+  /** The template changed after the setup started: the background takes it while nobody is invited. */
+  async function syncTerms(): Promise<void> {
+    const current = setup.value;
+    if (!current || !deps.invites) return;
+    const name = template.name.trim() || deps.invites.untitledName;
+    if (current.name === name && current.owners === template.owners && current.threshold === template.threshold) return;
+    try {
+      setup.value = await deps.invites.client.updateTerms(current.setupId, { name, owners: template.owners, threshold: template.threshold });
+    } catch (error) {
+      // Invitations went out with the old terms: keep them.
+      template.name = current.name;
+      template.owners = current.owners;
+      template.threshold = current.threshold;
+      syncDrafts();
+      setupFailure(error);
+    }
+  }
+
+  async function onSetup(run: (inv: CreateInviteDeps, setupId: string) => Promise<SetupViewModel>, n?: number): Promise<boolean> {
+    const inv = deps.invites;
+    const current = setup.value;
+    if (!inv || !current || inviteBusy.value !== null) return false;
+    inviteBusy.value = n ?? 'setup';
+    inviteProblem.value = null;
+    try {
+      setup.value = await run(inv, current.setupId);
+      return true;
+    } catch (error) {
+      setupFailure(error, n);
+      return false;
+    } finally {
+      inviteBusy.value = null;
+    }
+  }
+
+  const inviteCosigner = (n: number, target: { stakeCredential: string; handle?: string; label?: string }) =>
+    onSetup((inv, id) => inv.client.invite(id, n, target), n);
+  /** The slot a reminder was just sent for, so the card can say so. */
+  const reminded = ref<{ n: number; at: number } | null>(null);
+  async function remindCosigner(n: number): Promise<boolean> {
+    reminded.value = null;
+    const ok = await onSetup((inv, id) => inv.client.remind(id, n), n);
+    if (ok) reminded.value = { n, at: now() };
+    return ok;
+  }
+  const revokeCosigner = (n: number) => onSetup((inv, id) => inv.client.revoke(id, n), n);
+
+  /** A one-time QR (10 minutes) or a link to copy. Null when it could not be made (`inviteProblem` says why). */
+  async function makeLink(kind: 'qr' | 'link'): Promise<LinkAnswer | null> {
+    const inv = deps.invites;
+    const current = setup.value;
+    if (!inv || !current) return null;
+    inviteProblem.value = null;
+    try {
+      const answer = await inv.client.link(current.setupId, kind);
+      setup.value = answer.setup;
+      return answer;
+    } catch (error) {
+      setupFailure(error);
+      return null;
+    }
+  }
+
+  async function withdrawLink(joinTokenHash: string): Promise<void> {
+    const current = setup.value;
+    if (!current || !deps.invites) return;
+    setup.value = await deps.invites.client.withdrawLink(current.setupId, joinTokenHash).catch(() => current);
+  }
+
+  let refreshing: Promise<void> | null = null;
+  let poller: Poller | null = null;
+  /** gero-sync answered 429: no read before this time (ms), and the screen says "busy, retrying in N s". */
+  const busyUntil = ref<number | null>(null);
+  /** Reads the answers gero-sync holds (a cosigner's keys fill in once their ACCEPT checked out). */
+  function refreshSetup(): Promise<void> {
+    const inv = deps.invites;
+    const current = setup.value;
+    if (!inv || !current || current.state !== 'open') return Promise.resolve();
+    // Rate limited: nothing is asked until the wait is over (the poll resumes by itself).
+    if (busyUntil.value !== null && now() < busyUntil.value) return Promise.resolve();
+    refreshing ??= inv.client.refreshSetup(current.setupId)
+      .then(next => {
+        setup.value = next;
+        busyUntil.value = null;
+      })
+      .catch(error => {
+        const code = error instanceof InviteClientError ? error.code : 'SERVER';
+        if (code === 'RATE_LIMITED') {
+          const wait = error instanceof InviteClientError ? error.details?.['retryAfterMs'] : undefined;
+          busyUntil.value = now() + (typeof wait === 'number' && wait > 0 ? wait : DEFAULT_BUSY_MS);
+          poller?.holdUntil(busyUntil.value);
+          return;
+        }
+        // A poll that fails offline is quiet; the next one tries again.
+        if (code !== 'NETWORK' && code !== 'UNAVAILABLE') setupFailure(error);
+      })
+      .finally(() => { refreshing = null; });
+    return refreshing;
+  }
+
+  async function markSlotVerified(credential: string): Promise<void> {
+    const inv = deps.invites;
+    const current = setup.value;
+    const cosigner = vault.value?.cosigners.find(c => c.hashes.payment === credential);
+    if (!inv || !current || !cosigner) return;
+    const slot = current.slots.find(s => s.accept?.payment === cosigner.vaultKeys.payment);
+    if (!slot) return;
+    setup.value = await inv.client.markVerified(current.setupId, slot.n).catch(() => current);
+  }
+
+  /** Ends the setup: its invitations read as cancelled, and this wallet's index is released. */
+  async function cancelSetup(): Promise<boolean> {
+    return onSetup((inv, id) => inv.client.cancelSetup(id));
+  }
+
+  // The poll: slow, and only while this page is the one on screen ---------------------------------
+  let fastUntil = 0;
+  /** A one-time QR is on screen: read more often for a short while (one scan, one card). */
+  function setFastPoll(on: boolean): void {
+    fastUntil = on ? now() + FAST_POLL_WINDOW_MS : 0;
+    poller?.reschedule();
+  }
+  /** Stops the poll while `reason` holds (the page was left inside keep-alive, the tab is hidden). */
+  const pausePolling = (reason: string): void => poller?.pause(reason);
+  const resumePolling = (reason: string): void => poller?.resume(reason);
+
+  if (deps.invites) {
+    const inv = deps.invites;
+    void checkInvites();
+    poller = createPoller({
+      run: () => (step.value !== 'template' && !saved.value ? refreshSetup() : undefined),
+      intervalMs: () => (now() < fastUntil ? inv.fastPollMs ?? DEFAULT_FAST_POLL_MS : inv.pollMs ?? DEFAULT_POLL_MS),
+      now,
+    });
+    poller.start();
+    const unhide = pauseWhileHidden(poller, inv.document);
+    // A response was filed: the worker has opened it, and this reads the result at once.
+    inv.push?.(event => {
+      if (event.t !== 'vault_response' || !setup.value) return;
+      if (event.setupId === undefined || event.setupId === setup.value.setupId) void refreshSetup();
+    });
+    if (getCurrentInstance()) {
+      // The routes live inside <keep-alive>: leaving the page deactivates it, it is not unmounted.
+      onDeactivated(() => pausePolling('inactive'));
+      onActivated(() => resumePolling('inactive'));
+    }
+    if (getCurrentScope()) {
+      onScopeDispose(() => {
+        poller?.stop();
+        unhide();
+      });
+    }
+  }
+
   // 2 and 3. This wallet's keys ------------------------------------------------------------------
   const own = shallowRef<OwnVaultKeys | null>(null);
   const unlocking = ref(false);
   const unlockProblem = ref<UnlockProblem | null>(null);
 
   async function unlock(password: string): Promise<void> {
-    if (unlocking.value || own.value) return;
+    if (unlocking.value) return;
+    if (own.value && !(inviteMode.value === 'on' && setup.value && !setup.value.signerReady)) return;
     unlocking.value = true;
     unlockProblem.value = null;
     try {
+      if (inviteMode.value === 'on' && deps.invites) {
+        await unlockByInvitation(deps.invites, password);
+        return;
+      }
       let records: readonly VaultRecord[];
       try {
         records = await deps.store.list(deps.walletId);
@@ -116,7 +430,14 @@ export function useCreateVault(deps: CreateVaultDeps) {
         unlockProblem.value = 'STORE_UNAVAILABLE';
         return;
       }
-      const allocation = allocateOwnIndex(records);
+      // The indexes the wallet's invitations hold count too: a pasted vault never takes one.
+      let holds;
+      try {
+        holds = inviteMode.value === 'off' || !deps.invites ? undefined : await deps.invites.client.holds(deps.walletId);
+      } catch {
+        holds = undefined;
+      }
+      const allocation = allocateOwnIndex(records, holds);
       if (allocation.ok === false) {
         unlockProblem.value = allocation.code;
         return;
@@ -143,23 +464,29 @@ export function useCreateVault(deps: CreateVaultDeps) {
   function syncDrafts(): void {
     const wanted = Math.max(0, template.owners - 1);
     const rows = drafts.value.slice(0, wanted);
-    while (rows.length < wanted) rows.push({ id: nextId++, ...EMPTY_COSIGNER });
+    while (rows.length < wanted) rows.push({ id: nextId++, ...EMPTY_COSIGNER, mode: 'invite' });
     drafts.value = rows;
   }
   syncDrafts();
 
-  function updateDraft(id: number, patch: Partial<CosignerDraft>): void {
+  function updateDraft(id: number, patch: Partial<CosignerDraft> & { mode?: DraftRow['mode'] }): void {
     drafts.value = drafts.value.map(row => (row.id === id ? { ...row, ...patch } : row));
+  }
+
+  async function readRow(row: DraftRow, position: number): Promise<CosignerReading> {
+    if (inviteMode.value !== 'on' || row.mode === 'paste') return readCosigner(row);
+    const accept = setup.value?.slots[position]?.accept;
+    return accept ? acceptedCosigner(accept) : { ok: false, problem: 'INVITE_PENDING' };
   }
 
   async function readAll(): Promise<readonly CosignerReading[]> {
     const seq = ++readSeq;
-    const raw = await Promise.all(drafts.value.map(row => readCosigner(row)));
+    const raw = await Promise.all(drafts.value.map((row, i) => readRow(row, i)));
     const checked = withoutDuplicates(own.value?.hashes, raw);
     if (seq === readSeq) readings.value = checked;
     return checked;
   }
-  watch([drafts, own], () => { void readAll(); }, { immediate: true });
+  watch([drafts, own, setup, inviteMode], () => { void readAll(); }, { immediate: true });
 
   const cosignersReady = computed(() => own.value !== null
     && readings.value.length === drafts.value.length
@@ -199,6 +526,7 @@ export function useCreateVault(deps: CreateVaultDeps) {
     if (templateIssue.value !== undefined || saved.value) return;
     syncDrafts();
     step.value = 'cosigners';
+    void syncTerms();
   }
 
   async function goToVerify(): Promise<void> {
@@ -265,6 +593,7 @@ export function useCreateVault(deps: CreateVaultDeps) {
     const state = manifestState.value;
     if (!vault.value || !state?.ok) return;
     await keepRecords(recordNumberMatch(vault.value, state.manifest, records.value, credential, nowSeconds()));
+    await markSlotVerified(credential);
   }
 
   /** The cosigner's scanned or pasted QR. Resolves with why it was refused, or undefined when recorded. */
@@ -290,6 +619,11 @@ export function useCreateVault(deps: CreateVaultDeps) {
       const state = manifestState.value;
       const input = candidateInput(vault.value, template.name, state?.ok ? state.manifest : undefined);
       saved.value = await saveCreatedVault(deps.store, deps.walletId, input, records.value);
+      // The vault holds the index now: the setup closes on gero-sync (its open invitations end).
+      if (setup.value && deps.invites) {
+        const done = await deps.invites.client.completeSetup(setup.value.setupId, saved.value.vaultId).catch(() => null);
+        if (done) setup.value = done;
+      }
       return saved.value;
     } catch (error) {
       saveProblem.value = codeOf(error) ?? 'UNKNOWN';
@@ -310,6 +644,22 @@ export function useCreateVault(deps: CreateVaultDeps) {
     unlocking,
     unlockProblem,
     unlock,
+    inviteMode,
+    setup,
+    inviteProblem,
+    inviteBusy,
+    inviteCosigner,
+    remindCosigner,
+    reminded,
+    busyUntil,
+    setFastPoll,
+    pausePolling,
+    resumePolling,
+    revokeCosigner,
+    makeLink,
+    withdrawLink,
+    refreshSetup,
+    cancelSetup,
     drafts,
     readings,
     updateDraft,

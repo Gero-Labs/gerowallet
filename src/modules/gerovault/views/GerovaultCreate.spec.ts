@@ -189,8 +189,10 @@ describe('creating a vault', () => {
     expect(byTest(wrapper, 'create-verify-qr').exists()).toBe(true);
     await vi.waitFor(() => expect(byTest(wrapper, 'create-address-used').exists()).toBe(true));
 
-    // Dana read the same number: confirm it.
+    // Dana read the same number: read in turns, this side ticks groups 5 to 8, then confirms.
     await click(wrapper, 'create-number-match');
+    expect(byTest(wrapper, 'create-number-yes').attributes('disabled')).toBeDefined();
+    for (const n of [5, 6, 7, 8]) await click(wrapper, `verify-tick-${n}`);
     await click(wrapper, 'create-number-yes');
     expect(wrapper.text()).toContain('gerovault.create.holders.state.byNumber');
     expect(wrapper.text()).toContain('gerovault.create.holders.progress {"verified":1,"total":2}');

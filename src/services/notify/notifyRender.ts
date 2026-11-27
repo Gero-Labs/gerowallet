@@ -183,6 +183,11 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
     case 'nftListings': return withHighlight({ dashboard: '/?view=collectibles', sidepanel: null });
     case 'governance': return withHighlight({ dashboard: deepLinks && x?.drepId ? `/governance/dreps/${x.drepId}` : '/governance/me', sidepanel: null });
     case 'pairedDevices': return withHighlight({ dashboard: '/', sidepanel: null, settingsTab: 'security' });
+    // A GeroVault invitation (its review sheet) or a setup's answer (the Vaults overview). No side-panel view.
+    case 'vault': return {
+      dashboard: deepLinks && x?.ref ? `/vaults?invite=${x.ref}` : deepLinks && x?.setupId ? `/vaults?setup=${x.setupId}` : '/vaults',
+      sidepanel: null,
+    };
     // A broadcast announcement: the page opens it by id from what the worker verified and stored.
     // Without a verified id there is nothing to open, so it is home.
     case 'announcement': return deepLinks && x?.aid ? { dashboard: `/?announcement=${x.aid}`, sidepanel: `/?announcement=${x.aid}` } : { dashboard: '/', sidepanel: '/' };
@@ -193,7 +198,7 @@ export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: 
 // Every route routeFor() can return, and nothing else. The tx and DRep patterns are the ones
 // notifyPayload.ts accepts for `x`. Add a destination to routeFor() and here together:
 // notifyRender.spec.ts runs each destination through isPushRoute().
-const DASHBOARD_ROUTE = /^\/(?:|transactions(?:\?tx=[0-9a-f]{64})?|staking|swap|\?view=collectibles|governance\/(?:me|dreps\/drep1[a-z0-9]{6,}))$/;
+const DASHBOARD_ROUTE = /^\/(?:|transactions(?:\?tx=[0-9a-f]{64})?|staking|swap|\?view=collectibles|governance\/(?:me|dreps\/drep1[a-z0-9]{6,})|vaults(?:\?invite=(?:[0-9a-f]{32}|l[0-9a-f]{64})|\?setup=[0-9a-f]{32})?)$/;
 const SIDEPANEL_ROUTES: ReadonlySet<string> = new Set(['/', '/activity', '/staking']);
 // An announcement opens by id on both surfaces; the id pattern is notifyPayload.ts's for `aid`.
 const ANNOUNCEMENT_ROUTE = /^\/\?announcement=[0-9A-HJKMNP-TV-Z]{26}$/;

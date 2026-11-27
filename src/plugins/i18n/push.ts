@@ -27,6 +27,10 @@ export type PushStringKey =
   // A broadcast announcement the worker could not fetch and verify in time: the only words such a
   // notification may carry. Verified announcements bring their own, signed, title and summary.
   | 'PUSH_ANNOUNCEMENT_TITLE' | 'PUSH_ANNOUNCEMENT_BODY' | 'PUSH_ANNOUNCEMENT_BLOG'
+  // GeroVault invitations: the worker fetches and opens the invitation or answer first and names who
+  // and what from its signed content; the plain lines are shown when it could not.
+  | 'PUSH_VAULT_INVITE_TITLE' | 'PUSH_VAULT_INVITE_BODY' | 'PUSH_VAULT_INVITE_NAMED'
+  | 'PUSH_VAULT_RESPONSE_TITLE' | 'PUSH_VAULT_RESPONSE_BODY' | 'PUSH_VAULT_JOINED' | 'PUSH_VAULT_DECLINED'
   | 'PUSH_AMOUNT_ADA' | 'PUSH_AMOUNT_OTHER_ONE' | 'PUSH_AMOUNT_OTHER' | 'PUSH_AMOUNT_JOIN'
   | 'PUSH_TOAST_VIEW' | 'PUSH_TOAST_DISMISS';
 
@@ -75,6 +79,13 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_ANNOUNCEMENT_TITLE: 'News from Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Open Gero Wallet to read it.',
     PUSH_ANNOUNCEMENT_BLOG: 'On the Gero blog',
+    PUSH_VAULT_INVITE_TITLE: 'Vault invitation',
+    PUSH_VAULT_INVITE_BODY: 'You have a vault invitation',
+    PUSH_VAULT_INVITE_NAMED: '{name} invited you to co-sign {vault}',
+    PUSH_VAULT_RESPONSE_TITLE: 'Vault setup',
+    PUSH_VAULT_RESPONSE_BODY: 'A cosigner answered your vault invitation',
+    PUSH_VAULT_JOINED: '{name} joined {vault}. Verify them on a call.',
+    PUSH_VAULT_DECLINED: '{name} declined to co-sign {vault}',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 other token',
     PUSH_AMOUNT_OTHER: '{n} other tokens',
@@ -126,6 +137,13 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_ANNOUNCEMENT_TITLE: 'Neuigkeiten von Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Öffne Gero Wallet, um sie zu lesen.',
     PUSH_ANNOUNCEMENT_BLOG: 'Im Gero-Blog',
+    PUSH_VAULT_INVITE_TITLE: 'Tresor-Einladung',
+    PUSH_VAULT_INVITE_BODY: 'Du hast eine Tresor-Einladung',
+    PUSH_VAULT_INVITE_NAMED: '{name} lädt dich ein, {vault} mitzuzeichnen',
+    PUSH_VAULT_RESPONSE_TITLE: 'Tresor-Einrichtung',
+    PUSH_VAULT_RESPONSE_BODY: 'Ein Mitunterzeichner hat auf deine Tresor-Einladung geantwortet',
+    PUSH_VAULT_JOINED: '{name} ist {vault} beigetreten. Prüft es gemeinsam in einem Anruf.',
+    PUSH_VAULT_DECLINED: '{name} hat abgelehnt, {vault} mitzuzeichnen',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 weiterer Token',
     PUSH_AMOUNT_OTHER: '{n} weitere Token',
@@ -177,6 +195,13 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_ANNOUNCEMENT_TITLE: 'Novedades de Gero',
     PUSH_ANNOUNCEMENT_BODY: 'Abre Gero Wallet para leerlas.',
     PUSH_ANNOUNCEMENT_BLOG: 'En el blog de Gero',
+    PUSH_VAULT_INVITE_TITLE: 'Invitación a una bóveda',
+    PUSH_VAULT_INVITE_BODY: 'Tienes una invitación a una bóveda',
+    PUSH_VAULT_INVITE_NAMED: '{name} te invitó a cofirmar {vault}',
+    PUSH_VAULT_RESPONSE_TITLE: 'Configuración de bóveda',
+    PUSH_VAULT_RESPONSE_BODY: 'Un cofirmante respondió a tu invitación',
+    PUSH_VAULT_JOINED: '{name} se unió a {vault}. Verifícalo en una llamada.',
+    PUSH_VAULT_DECLINED: '{name} rechazó cofirmar {vault}',
     PUSH_AMOUNT_ADA: '{ada} ADA',
     PUSH_AMOUNT_OTHER_ONE: '1 token más',
     PUSH_AMOUNT_OTHER: '{n} tokens más',

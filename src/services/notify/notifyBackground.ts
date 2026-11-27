@@ -25,10 +25,13 @@ import { createAnnouncementFeed, DEFAULT_ANNOUNCEMENTS_API_URL } from '@/service
 import { announcementHooks } from '@/services/announcements/announcementHooks';
 import { announcementEventTag, createAnnouncementStore, type StoredAnnouncement } from '@/services/announcements/announcementStore';
 import { readFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
+import { registrationInviteKey } from '@/services/vaultInvites/vaultInviteBackground';
+import { vaultInviteHooks } from '@/services/vaultInvites/vaultInviteHooks';
+import type { InviteTransport } from '@/services/vaultInvites/inviteApi';
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
-  createNotifyRegistration, DEVICE_CAPS, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47, wireNetworkOf,
+  createNotifyRegistration, DEVICE_CAPS, VAULT_INVITES_CAP, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47, wireNetworkOf,
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchListingsInput, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
@@ -65,6 +68,14 @@ const announcementCaps = (): string[] => (announcementKeys.editorial.length || a
  */
 const announcementsOn = async (): Promise<boolean> => (await readFeatureFlagMirror())['isAnnouncementsEnabled'] !== false;
 
+/**
+ * This device's GeroVault invite public key, made on the first registration or re-assertion where
+ * vault invitations are available (`deviceInviteKey.ts`), not only when Create vault is opened.
+ * PUT /device carries it with the `vault_invites` cap; without one the device is never a directory
+ * entry, and an invitation to its wallet reaches only decoys. Never throws.
+ */
+const vaultInviteKey = (): Promise<string | null> => registrationInviteKey(log);
+
 const notifyClient = createNotifyClient({
   baseUrl: import.meta.env['VITE_NOTIFY_API_URL'] || DEFAULT_NOTIFY_API_URL,
   fetch: (input, init) => fetch(input, init),
@@ -87,8 +98,9 @@ const notifyClient = createNotifyClient({
       transport: j && device.vapidKid ? 'webpush' : 'none',
       ...(j && device.vapidKid ? { webpush: { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, vapidKid: device.vapidKid, expirationTime: j.expirationTime ?? null } } : {}),
       // The same announcement fields the registration machine sends, so a recovery does not lose them.
-      caps: announcementCaps(),
+      caps: [...announcementCaps(), ...((await vaultInviteKey()) ? [VAULT_INVITES_CAP] : [])],
       announcementsOff: (await announcementStore.getPrefs()).off,
+      ...(await vaultInviteKey().then((inviteKey) => (inviteKey ? { inviteKey } : {}))),
     };
   },
   log,
@@ -125,8 +137,12 @@ export const notifyRegistration: NotifyRegistration = createNotifyRegistration({
   produceProof: (auth) => walletManager.produceDeviceRegisterProof(auth),
   announcementsOff: async () => (await announcementStore.getPrefs()).off,
   caps: announcementCaps,
+  inviteKey: vaultInviteKey,
   log,
 });
+
+/** The signed transport of the GeroVault invitation routes (`vaultInvites/inviteApi.ts`). */
+export const vaultInviteTransport: InviteTransport = { send: (method, path, body) => notifyClient.send(method, path, body) };
 
 /** What the UI (B-M3) and the debug commands read. */
 export interface NotifyState {
@@ -327,6 +343,7 @@ export const notifyPushHandlers = createNotifyPushHandlers({
   showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
   presentToPages,
   announcement: (aid, kind) => announcementHooks.forPush(aid, kind),
+  vaultInvite: (t, setupId) => vaultInviteHooks.forPush(t, setupId),
   locale: storedLocale,
   tokenInfo: storedTokenInfo,
   walletName: storedWalletName,

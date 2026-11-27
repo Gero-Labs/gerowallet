@@ -16,6 +16,7 @@
 // Dependencies are injected for the unit tests; notifyBackground.ts binds them.
 
 import { pushStrings } from '@/plugins/i18n/push';
+import { displayLabel } from '@/shared/gerovault/labels';
 import type { PushLookup, StoredAnnouncement } from '@/services/announcements/announcementStore';
 import { announcementTag, parsePushPayload, type PushPayload } from './notifyPayload';
 import { pushLocale, renderPush, routeFor, type NotificationData, type NotifyAsset, type RenderedPush, type RouteIntent, type TokenLookup } from './notifyRender';
@@ -23,6 +24,17 @@ import type { NotifyStore } from './notifyStore';
 
 /** The one tag every announcement push that could not be verified is shown under. */
 export const GENERIC_ANNOUNCEMENT_TAG = 'announcement-generic';
+
+/**
+ * What a GeroVault push pointed at, once the worker fetched and opened it (`inviteService.forPush`):
+ * an invitation for this device, or a cosigner's answer to one of its setups.
+ */
+export type VaultPushLookup =
+  | { readonly kind: 'invite'; readonly ref: string; readonly inviter: string; readonly vault: string; readonly known: boolean }
+  | { readonly kind: 'joined' | 'declined'; readonly setupId: string; readonly cosigner: string; readonly vault: string };
+
+/** The two push types of GeroVault invitations (`gerovault/invite/PROTOCOL.md` 7.8). */
+export const VAULT_PUSH_TYPES: readonly string[] = ['vault_invite', 'vault_response'];
 
 export interface ToastRequest {
   e: string;
@@ -53,6 +65,11 @@ export interface NotifyPushDeps {
    * kind the user switched off. Absent: every announcement push shows the generic text.
    */
   announcement?: (aid: string, kind?: string) => Promise<PushLookup>;
+  /**
+   * Fetch and open what a vault push points at (`t`, `setupId`), so the notification says who and
+   * what. Absent, failing or null: the generic line ("You have a vault invitation").
+   */
+  vaultInvite?: (t: string, setupId: string) => Promise<VaultPushLookup | null>;
   iconUrl: string;
   now?: () => number;
   log?: (message: string) => void;
@@ -130,10 +147,57 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
     return { title, body, tag, requireInteraction: false, timestamp, data, route, unknownWalletTag: null };
   }
 
+  /**
+   * A GeroVault push (t = vault_invite / vault_response). Its payload is a pointer (`setupId`, no
+   * text): the worker fetches and decrypts the invitation or the answer first, and the words come
+   * from that signed content, else from the fixed lines. An invitation from a contact or someone
+   * this device already shares a vault with is a "Needs you" row; any other goes to Activity (and
+   * to the Requests list on the Vaults screen).
+   */
+  async function handleVaultPush(p: PushPayload, raw: string | null): Promise<RenderedPush> {
+    const locale = pushLocale(await deps.locale());
+    const strings = pushStrings[locale];
+    let setupId: string | null = null;
+    try {
+      const value = (JSON.parse(raw ?? 'null') as { setupId?: unknown } | null)?.setupId;
+      setupId = typeof value === 'string' && /^[0-9a-f]{32}$/.test(value) ? value : null;
+    } catch { setupId = null; }
+    let found: VaultPushLookup | null = null;
+    if (setupId && deps.vaultInvite) {
+      try { found = await deps.vaultInvite(p.t, setupId); } catch (e) { log(`vault push lookup failed: ${String(e)}`); }
+    }
+    const invite = p.t === 'vault_invite';
+    const fill = (template: string, name: string, vault: string) => template.replace('{name}', displayLabel(name)).replace('{vault}', displayLabel(vault));
+    const title = invite ? strings.PUSH_VAULT_INVITE_TITLE : strings.PUSH_VAULT_RESPONSE_TITLE;
+    let body = invite ? strings.PUSH_VAULT_INVITE_BODY : strings.PUSH_VAULT_RESPONSE_BODY;
+    if (found?.kind === 'invite') body = fill(strings.PUSH_VAULT_INVITE_NAMED, found.inviter, found.vault);
+    else if (found?.kind === 'joined') body = fill(strings.PUSH_VAULT_JOINED, found.cosigner, found.vault);
+    else if (found?.kind === 'declined') body = fill(strings.PUSH_VAULT_DECLINED, found.cosigner, found.vault);
+    const x = { ...(setupId ? { setupId } : {}), ...(found?.kind === 'invite' ? { ref: found.ref } : {}) };
+    const route = routeFor('vault', x, true);
+    const tag = p.e;
+    const timestamp = p.ts || now();
+    const verified = found !== null;
+    const data: NotificationData = { v: p.v, t: p.t, c: p.c || 'vault_invite', w: '', e: tag, d: 'vault', x, walletId: null, degraded: verified ? 'none' : 'generic' };
+    const needsYou = found?.kind === 'invite' && found.known;
+    await deps.store.markSeen(tag, now());
+    await deps.store.addInbox({ e: tag, t: p.t, c: data.c, d: 'vault', x, walletId: null, walletName: null, title, body, ts: timestamp, readAt: null, needsYou });
+    let presented = false;
+    try {
+      presented = await deps.presentToPages({ e: tag, title, body, route, walletId: null });
+    } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
+    if (!presented) {
+      await deps.showNotification(title, { body, icon: deps.iconUrl, tag, silent: false, renotify: false, requireInteraction: needsYou, timestamp, data });
+    }
+    log(`vault push shown: t=${p.t} opened=${verified} inPage=${presented}`);
+    return { title, body, tag, requireInteraction: needsYou, timestamp, data, route, unknownWalletTag: null };
+  }
+
   return {
     async handlePush(text) {
       const parsed = parsePushPayload(text ?? '');
       if (parsed.ok && parsed.payload.t === 'announcement') return handleAnnouncementPush(parsed.payload);
+      if (parsed.ok && VAULT_PUSH_TYPES.includes(parsed.payload.t)) return handleVaultPush(parsed.payload, text);
       const wallet = parsed.ok ? await walletFor(parsed.payload.w) : null;
       const rendered = renderPush({ parsed, wallet, locale: await deps.locale(), now: now(), tokenInfo: deps.tokenInfo });
       if (rendered.unknownWalletTag) {
