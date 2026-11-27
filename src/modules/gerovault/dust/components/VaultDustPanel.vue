@@ -87,6 +87,10 @@
         </div>
 
         <div v-else class="vault-dust__action" data-test="vault-dust-deregister">
+          <!-- Until a preprod test shows otherwise, removing the registration may not stop generation. -->
+          <GNote v-if="registeredTo" icon="mdi-information-outline" role="status" data-test="vault-dust-keeps-going">
+            {{ $t('gerovault.dust.keepsGoing', { address: registeredTo }) }}
+          </GNote>
           <v-checkbox v-model="alsoStake" density="compact" hide-details color="primary" :disabled="!!busy" data-test="vault-dust-also-stake">
             <template #label>
               <span class="t-body-sm">{{ $t('gerovault.dust.action.alsoStake', { amount: depositText }) }}</span>

@@ -20,7 +20,7 @@ import {
 } from '@/shared/gerovault';
 import type { VaultRecord } from '@/modules/gerovault/contracts';
 import { TEST_PARAMS, type FundingTx, type TestOwner, testVaultRecord } from '@/modules/gerovault/spend/__fixtures__/testVault';
-import type { OperationProtocolParameters } from '../buildOperation';
+import type { EvaluatedRedeemer, OperationProtocolParameters, ScriptEvaluator } from '../buildOperation';
 import { encodeScriptMappingDatum, mappingValidatorFor } from '../mappingValidator';
 import { PREPROD_V3_COST_MODEL_EPOCH_327 } from './experimentTxs';
 
@@ -126,3 +126,21 @@ export async function sharedCredentialVaultRecord(owners: readonly TestOwner[], 
     })),
   };
 }
+
+/**
+ * A stand-in for the chain's evaluator: what the preprod node measured for these redeemers on
+ * 27 November 2026 (`Create`, the spend of the registration, `Burn` with two inputs).
+ */
+export const measuredEvaluator: ScriptEvaluator = async (txCbor: string) => {
+  const redeemers = Serialization.Transaction.fromCbor(txCbor as Serialization.TxCBOR).witnessSet().redeemers()?.toCore() ?? [];
+  return redeemers.map((redeemer): EvaluatedRedeemer => {
+    const data = Serialization.PlutusData.fromCore(redeemer.data).toCbor();
+    if (redeemer.purpose === Cardano.RedeemerPurpose.spend) return { purpose: 'spend', index: redeemer.index, memory: 79_118, steps: 26_357_885 };
+    return data === 'd87a80'
+      ? { purpose: 'mint', index: redeemer.index, memory: 44_921, steps: 17_920_479 }
+      : { purpose: 'mint', index: redeemer.index, memory: 80_682, steps: 30_217_720 };
+  });
+};
+
+/** The protocol's collateral percentage on preprod, as the sheet takes it. */
+export const COLLATERAL_PERCENTAGE = 150;

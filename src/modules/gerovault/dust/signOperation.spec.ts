@@ -15,7 +15,7 @@ import { fundingTransaction, lovelaceOutput, testOwner, testReader, testVaultRec
 import { buildVaultOperation, type OperationRequest } from './buildOperation';
 import { dustAddressOf } from './mappingValidator';
 import { witnessPlanOf } from './operations';
-import { OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, ownerOfWallet, type CollateralWallet } from './__fixtures__/dustVault';
+import { COLLATERAL_PERCENTAGE, OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, measuredEvaluator, ownerOfWallet, type CollateralWallet } from './__fixtures__/dustVault';
 
 const TIP = 80_000_000;
 const TX_ID = 'c0'.repeat(32);
@@ -44,6 +44,7 @@ async function bundleFor(request: OperationRequest): Promise<UnsignedTxBundle> {
     protocolParameters: OPERATION_PARAMS,
     currentSlot: TIP,
     collateral: { address: wallet.address, utxos: walletFunding.utxos },
+    evaluate: measuredEvaluator,
   });
   return createUnsignedBundle(vault, built, reader.txCbor, 1_700_000_000_000);
 }
@@ -91,6 +92,7 @@ function background(who: number) {
     getVault: vi.fn(async (_walletId: number, vaultId: string) => (vaultId === records[who].vaultId ? records[who] : undefined)),
     acceptedVaults: vi.fn(async () => [records[who]]),
     currentSlot: () => TIP + 30,
+    collateralPercentage: () => COLLATERAL_PERCENTAGE,
     now: () => 1_700_000_005_000,
   };
   return { deps, walletRecord, opened: () => opened };
@@ -99,7 +101,7 @@ function background(who: number) {
 describe('signing an operation in the background', () => {
   it('signs a DUST registration with the payment and stake keys, and the proposer\'s collateral', async () => {
     const bundle = await bundleFor({ kind: 'dust_register', dustAddress: dustAddressOf('preprod', TEST_DUST_HEX) });
-    const review = await reviewBundle(bundle, vault, { currentSlot: TIP });
+    const review = await reviewBundle(bundle, vault, { currentSlot: TIP, collateralPercentage: COLLATERAL_PERCENTAGE });
     if (review.status !== 'ready') throw new Error('refused');
     const plan = witnessPlanOf(review.operation, vault);
 
@@ -116,6 +118,15 @@ describe('signing an operation in the background', () => {
     const theirs = await signVaultBundleFlow({ walletId: cosigner.walletRecord.id, vaultId: records[1].vaultId, bundle, password: 'right' }, cosigner.deps);
     expect(theirs.vkeyWitnesses.map(w => w.vkey)).toEqual([owners[1].keys.payment, owners[1].keys.stake]);
     expect((await verifyWitnessFile(theirs, bundle, vault, plan)).collateralWitness).toBeUndefined();
+  });
+
+  it('checks the collateral on the device before opening any key: no protocol percentage, no signature', async () => {
+    const bundle = await bundleFor({ kind: 'dust_register', dustAddress: dustAddressOf('preprod', TEST_DUST_HEX) });
+    const proposer = background(0);
+    proposer.deps.collateralPercentage = () => null;
+    await expect(signVaultBundleFlow({ walletId: proposer.walletRecord.id, vaultId: records[0].vaultId, bundle, password: 'right' }, proposer.deps))
+      .rejects.toMatchObject({ code: 'bundle-refused', detail: 'collateral_shape' });
+    expect(proposer.deps.decryptRootKey).not.toHaveBeenCalled();
   });
 
   it('signs a stake registration with the payment and stake keys only', async () => {

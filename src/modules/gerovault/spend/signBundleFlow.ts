@@ -124,6 +124,8 @@ export interface SignVaultBundleDeps {
   acceptedVaults(walletId: number, network: VaultNetwork): Promise<readonly VaultRecord[]>;
   /** The worker's chain tip slot on `network`, or null when it has none for that network (`slotOnNetwork`). */
   currentSlot(network: VaultNetwork): number | null;
+  /** The worker's own collateral percentage of the protocol, for a DUST operation's collateral bound. */
+  collateralPercentage?(network: VaultNetwork): number | null;
   now?(): number;
 }
 
@@ -166,9 +168,11 @@ export async function signVaultBundleFlow(
   } catch (error) {
     return asSpendFailure(error);
   }
+  const collateralPercentage = deps.collateralPercentage?.(record.network) ?? null;
   const review = await reviewBundle(bundle, context, {
     currentSlot: deps.currentSlot(record.network),
     knownVaults: knownVaultsOf(await deps.acceptedVaults(wallet.id, record.network), record.vaultId),
+    ...(collateralPercentage !== null ? { collateralPercentage } : {}),
   });
   if (review.status !== 'ready') return fail('bundle-refused', review.refusals.map(refusal => refusal.code).join(','));
   const plan = witnessPlanOf(review.operation, context);

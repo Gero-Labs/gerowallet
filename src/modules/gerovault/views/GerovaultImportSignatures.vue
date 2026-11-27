@@ -56,6 +56,7 @@
           :network="ready.context.network"
           :payment-script-hash="ready.context.paymentScriptHash"
           :own-collateral-key-hash="ownCollateralKeyHash"
+          :collateral-provider="collateralProvider"
           :details="detailsVisible"
         />
         <SpendSignersCard :progress="progress" :details="detailsVisible" />
@@ -179,8 +180,21 @@ const support = computed(() => signerSupport(wallet.value));
 const sessionKey = computed(() => (ready.value && walletId.value !== null ? spendSessionKey(walletId.value, ready.value.context.vaultId) : null));
 const session = computed(() => (sessionKey.value ? spendSession(sessionKey.value) ?? null : null));
 const review = ref<SpendReview | null>(null);
+/** The protocol's collateral percentage, which bounds a DUST operation's collateral on the sheet. */
+const collateralOption = (): { collateralPercentage?: number } => {
+  const percentage = networkStore.epochParams?.collateralPercentage;
+  return typeof percentage === 'number' ? { collateralPercentage: percentage } : {};
+};
 /** What the witness set needs beyond payment signatures: read from this device's own sheet. */
 const plan = computed(() => (ready.value && review.value?.status === 'ready' ? witnessPlanOf(review.value.operation, ready.value.context) : PLAIN_SPEND_PLAN));
+/** The owner whose signature file carried the collateral witness: the proposer, by their label. */
+const collateralProvider = computed(() => {
+  const current = ready.value;
+  const provider = session.value?.collection.signatures.find(s => s.collateralWitness);
+  if (!current || !provider) return null;
+  const index = current.context.owners.indexOf(provider.signer.credential);
+  return participantName(provider.signer, t('gerovault.spend.signers.owner', { n: index + 1 }));
+});
 /** This wallet's first address key hash, so the sheet can say a DUST operation's collateral is its own. */
 const ownCollateralKeyHash = ref<string | null>(null);
 watch(() => wallet.value?.publicKey, key => {
@@ -205,7 +219,7 @@ async function refreshReview(): Promise<void> {
   const current = ready.value;
   const active = session.value;
   review.value = current && active
-    ? await reviewBundle(active.bundle, current.context, { currentSlot: currentSlot.value, knownVaults: current.knownVaults })
+    ? await reviewBundle(active.bundle, current.context, { currentSlot: currentSlot.value, knownVaults: current.knownVaults, ...collateralOption() })
     : null;
 }
 

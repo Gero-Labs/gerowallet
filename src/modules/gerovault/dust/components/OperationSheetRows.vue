@@ -16,6 +16,10 @@
         <dt class="t-body">{{ $t(operation.kind === 'dust_register' ? 'gerovault.dust.sheet.dustAddress' : 'gerovault.dust.sheet.stopsFor') }}</dt>
         <dd><ChunkedAddress :address="operation.dustAddress" /></dd>
       </div>
+      <!-- Until a preprod test shows otherwise, removing the registration may not stop generation. -->
+      <div v-if="operation.kind === 'dust_deregister'" class="operation-rows__row" data-test="sheet-dust-keeps-going">
+        <dd class="t-body-sm operation-rows__note">{{ $t('gerovault.dust.keepsGoing', { address: operation.dustAddress }) }}</dd>
+      </div>
       <div class="operation-rows__row">
         <dt class="t-body">{{ $t(operation.kind === 'dust_register' ? 'gerovault.dust.sheet.locked' : 'gerovault.dust.sheet.released') }}</dt>
         <dd class="t-body g-num operation-rows__value">{{ ada(operation.kind === 'dust_register' ? operation.lockedLovelace : operation.releasedLovelace) }}</dd>
@@ -37,12 +41,26 @@
     </div>
 
     <div v-if="collateral" class="operation-rows__row operation-rows__row--stack" data-test="sheet-collateral">
-      <dt class="t-body">
-        {{ ownCollateral ? $t('gerovault.dust.sheet.collateralOwn') : $t('gerovault.dust.sheet.collateral') }}
-      </dt>
+      <dt class="t-body">{{ $t('gerovault.dust.sheet.collateral') }}</dt>
       <dd class="operation-rows__collateral">
-        <ChunkedAddress :address="collateral.address" />
-        <span class="t-caption">{{ $t('gerovault.dust.sheet.collateralLoss', { amount: ada(collateral.maxLoss) }) }}</span>
+        <span class="t-body-sm" data-test="sheet-collateral-text">{{ collateralText }}</span>
+        <!-- Technical layer: the full addresses the collateral fields name. -->
+        <dl v-if="details" class="operation-rows__details t-caption" data-test="sheet-collateral-details">
+          <div>
+            <dt>{{ $t('gerovault.dust.sheet.collateralInput') }}</dt>
+            <dd class="g-mono">{{ collateral.input }}</dd>
+            <dd><ChunkedAddress :address="collateral.address" /></dd>
+          </div>
+          <div>
+            <dt>{{ $t('gerovault.dust.sheet.collateralTotal') }}</dt>
+            <dd class="g-num">{{ ada(collateral.total) }}</dd>
+          </div>
+          <div v-if="collateral.returnAddress">
+            <dt>{{ $t('gerovault.dust.sheet.collateralReturn') }}</dt>
+            <dd class="g-num">{{ ada(collateral.returned) }}</dd>
+            <dd><ChunkedAddress :address="collateral.returnAddress" /></dd>
+          </div>
+        </dl>
       </dd>
     </div>
 
@@ -66,11 +84,17 @@ import ChunkedAddress from '@/modules/gerovault/spend/components/ChunkedAddress.
 import { adaText } from '@/modules/gerovault/spend/display';
 import type { VaultOperation } from '../operations';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   operation: VaultOperation;
-  /** This wallet's own first address key hash, when known: the collateral is then "your wallet". */
+  /** The fee the transaction pays, from the vault. */
+  fee: bigint;
+  /** This wallet's own first address key hash, when known: the collateral is then this wallet's own. */
   ownCollateralKeyHash?: string | null;
-}>();
+  /** The name of the owner whose wallet gives the collateral, when a signature file has shown it. */
+  collateralProvider?: string | null;
+  /** The Details layer is on: the full collateral addresses. */
+  details?: boolean;
+}>(), { ownCollateralKeyHash: null, collateralProvider: null, details: false });
 
 const { t } = useTranslation();
 const ada = (lovelace: bigint) => t('gerovault.spend.ada', { amount: adaText(lovelace) });
@@ -96,9 +120,26 @@ const withdrawal = computed<bigint | null>(() => {
 const collateral = computed(() => {
   const op = props.operation;
   if (op.kind !== 'dust_register' && op.kind !== 'dust_deregister') return null;
-  return { address: op.collateral.inputs[0].output.address.bech32, maxLoss: op.collateral.maxLossLovelace, payer: op.collateral.payer.hash };
+  const [input] = op.collateral.inputs;
+  const back = op.collateral.collateralReturn;
+  return {
+    input: `${input.txId}#${input.index}`,
+    address: input.output.address.bech32,
+    total: op.collateral.totalCollateral ?? op.collateral.forfeitLovelace,
+    returned: back?.value.lovelace ?? 0n,
+    returnAddress: back?.address.bech32 ?? null,
+    payer: op.collateral.payer.hash,
+  };
 });
 const ownCollateral = computed(() => !!collateral.value && !!props.ownCollateralKeyHash && collateral.value.payer === props.ownCollateralKeyHash);
+/** The proposer reads what they can lose; a co-owner reads that none of the vault's funds are at stake. */
+const collateralText = computed(() => {
+  const c = collateral.value;
+  if (!c) return '';
+  return ownCollateral.value
+    ? t('gerovault.dust.sheet.collateralProposer', { total: adaText(c.total), amount: adaText(c.returned), fee: adaText(props.fee) })
+    : t('gerovault.dust.sheet.collateralCosigner', { proposer: props.collateralProvider ?? t('gerovault.dust.sheet.theProposer') });
+});
 </script>
 
 <style scoped>
@@ -144,6 +185,22 @@ const ownCollateral = computed(() => !!collateral.value && !!props.ownCollateral
   display: flex;
   flex-direction: column;
   gap: var(--g-s-1);
+}
+.operation-rows__note {
+  margin: 0;
+  color: var(--g-text-2);
+  overflow-wrap: anywhere;
+}
+.operation-rows__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+}
+.operation-rows__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--g-text-2);
 }
 .operation-rows__facts {
   margin: 0;

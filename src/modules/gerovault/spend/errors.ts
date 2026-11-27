@@ -25,6 +25,8 @@
  *   wallet never builds a second one. `DUST_NOT_REGISTERED`: there is none to remove.
  * - `INVALID_DUST_ADDRESS`: not a DUST address of the vault's network.
  * - `NO_COLLATERAL`: the proposer's wallet has no ADA-only UTxO to put up as collateral.
+ * - `SCRIPT_EVALUATION_FAILED`: a DUST operation's scripts failed the chain's evaluator, it could not
+ *   be reached, or it measured more than the declared budgets. Nothing is offered for signing.
  */
 export type VaultSpendErrorCode =
   | 'VAULT_INVALID'
@@ -53,7 +55,8 @@ export type VaultSpendErrorCode =
   | 'DUST_ALREADY_REGISTERED'
   | 'DUST_NOT_REGISTERED'
   | 'INVALID_DUST_ADDRESS'
-  | 'NO_COLLATERAL';
+  | 'NO_COLLATERAL'
+  | 'SCRIPT_EVALUATION_FAILED';
 
 export class VaultSpendError extends Error {
   readonly code: VaultSpendErrorCode;

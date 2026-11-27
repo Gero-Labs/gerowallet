@@ -10,7 +10,7 @@ import { spendContextOf, type VaultSpendContext } from '@/modules/gerovault/spen
 import { fundingTransaction, lovelaceOutput, payeeAddress, testOwner, testReader, testVaultRecord, type FundingTx } from '@/modules/gerovault/spend/__fixtures__/testVault';
 import { buildVaultOperation, type OperationRequest } from './buildOperation';
 import { dustAddressOf, mappingValidatorFor } from './mappingValidator';
-import { OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, registrationFunding, type CollateralWallet } from './__fixtures__/dustVault';
+import { COLLATERAL_PERCENTAGE, OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, measuredEvaluator, registrationFunding, type CollateralWallet } from './__fixtures__/dustVault';
 
 const TIP = 80_000_000;
 const validator = mappingValidatorFor('preprod')!;
@@ -41,6 +41,7 @@ async function built(request: OperationRequest, registered = true) {
     protocolParameters: OPERATION_PARAMS,
     currentSlot: TIP,
     collateral: { address: wallet.address, utxos: walletFunding.utxos },
+    evaluate: measuredEvaluator,
   });
 }
 
@@ -90,7 +91,7 @@ async function sheetOf(
   const cbor = next.toCbor();
   const { reader } = testReader([funding, walletFunding, registration, ...extra]);
   const bundle = await createUnsignedBundle(vault, { bodyCbor: cbor, txId: Serialization.TransactionBody.fromCbor(HexBlob(cbor)).hash() }, reader.txCbor);
-  return reviewBundle(bundle, vault, { currentSlot: TIP });
+  return reviewBundle(bundle, vault, { currentSlot: TIP, collateralPercentage: COLLATERAL_PERCENTAGE });
 }
 
 const codes = (review: SpendReview) => (review.status === 'refused' ? review.refusals.map(r => r.code) : ['ready']);
@@ -159,15 +160,81 @@ describe('the sheet of a DUST registration refuses', () => {
     expect(codes(await sheetOf(body, core => { core.mint = new Map([[TOKEN, 2n]]); }))).toContain('operation_unknown');
   });
 
-  it('no collateral, a collateral return to someone else, and no script data hash', async () => {
+  it('no collateral, and no script data hash', async () => {
     expect(codes(await sheetOf(body, core => {
       delete core.collaterals;
       delete core.collateralReturn;
       delete core.totalCollateral;
     }))).toContain('collateral_shape');
-    expect(codes(await sheetOf(body, core => { core.collateralReturn = { ...core.collateralReturn!, address: Cardano.PaymentAddress(payeeAddress()) }; })))
-      .toContain('collateral_shape');
     expect(codes(await sheetOf(body, core => { delete core.scriptIntegrityHash; }))).toContain('script_data_hash_shape');
+  });
+
+  it('collateral at a vault address', async () => {
+    // The vault's own UTxO as collateral: a script address can never give it.
+    const review = await sheetOf(body, core => {
+      core.collaterals = [{ txId: funding.utxos[0][0].txId, index: funding.utxos[0][0].index }];
+      core.collateralReturn = { address: Cardano.PaymentAddress(vault.baseAddress), value: { coins: 30_000_000n - core.totalCollateral! } };
+    });
+    expect(codes(review)).toContain('collateral_input_script_locked');
+  });
+
+  it('tokens in the collateral', async () => {
+    const token = Cardano.AssetId(`${'cd'.repeat(28)}`);
+    const tokenFunding = fundingTransaction([lovelaceOutput(wallet.address, 9_000_000n, new Map([[token, 5n]]))], 31);
+    const review = await sheetOf(body, core => {
+      core.collaterals = [{ txId: tokenFunding.utxos[0][0].txId, index: 0 }];
+      // The tokens come back with the return, so only ADA could be lost: still refused.
+      core.collateralReturn = { address: Cardano.PaymentAddress(wallet.address), value: { coins: 9_000_000n - core.totalCollateral!, assets: new Map([[token, 5n]]) } };
+    }, [tokenFunding]);
+    expect(codes(review)).toEqual(['collateral_not_ada']);
+  });
+
+  it('no total collateral, and a total above the ledger minimum plus 1 ADA', async () => {
+    expect(codes(await sheetOf(body, core => { delete core.totalCollateral; }))).toEqual(['collateral_total_missing']);
+    const review = await sheetOf(body, core => {
+      const total = (core.fee * 150n + 99n) / 100n + 1_000_001n;
+      core.totalCollateral = total;
+      core.collateralReturn = { ...core.collateralReturn!, value: { coins: 10_000_000n - total } };
+    });
+    expect(codes(review)).toEqual(['collateral_total_too_high']);
+    // At the bound itself it is fine.
+    const atBound = await sheetOf(body, core => {
+      const total = (core.fee * 150n + 99n) / 100n + 1_000_000n;
+      core.totalCollateral = total;
+      core.collateralReturn = { ...core.collateralReturn!, value: { coins: 10_000_000n - total } };
+    });
+    expect(codes(atBound)).toEqual(['ready']);
+  });
+
+  it('a collateral return to another address, even of the same wallet', async () => {
+    expect(codes(await sheetOf(body, core => { core.collateralReturn = { ...core.collateralReturn!, address: Cardano.PaymentAddress(payeeAddress()) }; })))
+      .toEqual(['collateral_return_elsewhere']);
+    // Same payment key, no stake part: not the collateral input's own address.
+    const enterprise = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16(wallet.paymentKeyHash),
+    }).toAddress().toBech32();
+    expect(codes(await sheetOf(body, core => { core.collateralReturn = { ...core.collateralReturn!, address: Cardano.PaymentAddress(enterprise) }; })))
+      .toEqual(['collateral_return_elsewhere']);
+  });
+
+  it('a second Plutus script', async () => {
+    // An input at another script's address runs that script too.
+    const otherScript = Cardano.EnterpriseAddress.fromCredentials(Cardano.NetworkId.Testnet, {
+      type: Cardano.CredentialType.ScriptHash,
+      hash: Hash28ByteBase16(OTHER_HASH),
+    }).toAddress().toBech32();
+    const elsewhere = fundingTransaction([lovelaceOutput(otherScript, 3_000_000n)], 41);
+    const review = await sheetOf(body, core => { core.inputs = [...core.inputs, { txId: elsewhere.utxos[0][0].txId, index: 0 }]; }, [elsewhere]);
+    expect(codes(review)).toContain('operation_other_script');
+  });
+
+  it('a DUST operation checked without the collateral percentage', async () => {
+    const built2 = Serialization.TransactionBody.fromCbor(HexBlob(body)).toCbor();
+    const { reader } = testReader([funding, walletFunding, registration]);
+    const bundle = await createUnsignedBundle(vault, { bodyCbor: built2, txId: Serialization.TransactionBody.fromCbor(HexBlob(built2)).hash() }, reader.txCbor);
+    const review = await reviewBundle(bundle, vault, { currentSlot: TIP });
+    expect(review.status === 'refused' && review.refusals.map(r => `${r.code}:${r.detail}`)).toEqual(['collateral_shape:parameters_unknown']);
   });
 
   it('more inputs than the declared script budgets are sized for', async () => {

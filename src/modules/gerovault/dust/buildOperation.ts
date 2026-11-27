@@ -10,9 +10,13 @@
  *   threshold of payment signatures, the threshold of stake signatures when the stake script is its
  *   own, the collateral signature, the scripts and, for a DUST operation, the mapping validator,
  *   the redeemers with their declared budgets, and the same encoding allowance as a spend.
- * - Collateral (DUST operations only): one ADA-only UTxO of the proposer's own first address, with
- *   a collateral return to that address and the total stated, so at most the total can be lost,
- *   and only if the validator fails. A script address cannot give collateral, so a vault cannot.
+ * - Collateral (DUST operations only): one ADA-only UTxO of the proposer's own first address (its
+ *   CIP-1852 payment key at `0/0`), the total collateral stated at the ledger minimum (the fee times
+ *   the collateral percentage, rounded up) and the collateral return to that same address, so at
+ *   most the total can be lost, and only if the transaction fails on chain. A script address cannot
+ *   give collateral, so a vault cannot. The vault still pays the fee.
+ * - The scripts are evaluated before anyone signs (`evaluate`, the preprod node through Nexus): a
+ *   failure, an unavailable evaluator or a cost above the declared budgets refuses the proposal.
  * - Validity: 48 hours for a stake operation; 24 hours for a DUST operation, inside the ledger's
  *   time forecast for Plutus scripts.
  *
@@ -41,7 +45,7 @@ import {
 } from './mappingValidator';
 
 export { MAX_OPERATION_INPUTS };
-import { operationRedeemers, type VaultOperation } from './operations';
+import { ledgerMinimumCollateral, operationRedeemers, type VaultOperation } from './operations';
 import { plutusV3CostModel, redeemersCbor, scriptDataHashOf, type OperationRedeemer } from './scriptData';
 
 /** A DUST operation is valid for 24 hours: inside the ledger's slot-to-time forecast (about 36 hours). */
@@ -92,7 +96,42 @@ export interface BuildOperationInput {
   readonly currentSlot: number;
   /** Required for a DUST operation. */
   readonly collateral?: CollateralSource;
+  /** Required for a DUST operation: runs its scripts on the chain's own evaluator. */
+  readonly evaluate?: ScriptEvaluator;
   readonly validitySlots?: number;
+}
+
+/** One redeemer as an evaluator measured it. */
+export interface EvaluatedRedeemer {
+  readonly purpose: string;
+  readonly index: number;
+  readonly memory: number;
+  readonly steps: number;
+}
+
+/** Evaluates a transaction's scripts (body, scripts and redeemers, no signatures). Throws on failure. */
+export type ScriptEvaluator = (txCbor: string) => Promise<readonly EvaluatedRedeemer[]>;
+
+/**
+ * Whether an evaluation covers exactly the declared redeemers, each within its declared budget.
+ * Returns the reason it does not, or null.
+ */
+export function evaluationProblem(declared: readonly OperationRedeemer[], evaluated: readonly EvaluatedRedeemer[]): string | null {
+  if (!Array.isArray(evaluated) || evaluated.length !== declared.length) return 'redeemers';
+  for (const redeemer of declared) {
+    const measured = evaluated.find(e => e.purpose === redeemer.purpose && e.index === redeemer.index);
+    if (!measured) return 'redeemers';
+    if (!Number.isSafeInteger(measured.memory) || !Number.isSafeInteger(measured.steps)) return 'units';
+    if (measured.memory > redeemer.exUnits.memory || measured.steps > redeemer.exUnits.steps) return 'over_budget';
+  }
+  return null;
+}
+
+/** The transaction an evaluator runs: the body, the scripts and the redeemers, no signatures. */
+export function evaluationTransaction(bodyCbor: string, scripts: readonly Cardano.Script[], redeemersField: string): string {
+  const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures: new Map(), scripts: [...scripts] });
+  witnessSet.setRedeemers(Serialization.Redeemers.fromCbor(HexBlob(redeemersField)));
+  return `84${bodyCbor}${witnessSet.toCbor()}f5f6`;
 }
 
 export interface BuiltOperation extends BuiltSpend {
@@ -255,7 +294,8 @@ function placeholderSignatures(count: number): Map<Ed25519PublicKeyHex, Ed25519S
 /**
  * Builds the body of a stake or DUST operation. Throws `VaultSpendError`: `STAKE_ALREADY_REGISTERED`,
  * `STAKE_NOT_REGISTERED`, `DUST_ALREADY_REGISTERED`, `DUST_NOT_REGISTERED`, `INVALID_DUST_ADDRESS`,
- * `NO_COLLATERAL`, `OPERATION_UNAVAILABLE`, `INSUFFICIENT_FUNDS`, `FEE_TOO_HIGH`, `PARAMS_UNAVAILABLE`.
+ * `NO_COLLATERAL`, `OPERATION_UNAVAILABLE`, `INSUFFICIENT_FUNDS`, `FEE_TOO_HIGH`, `PARAMS_UNAVAILABLE`,
+ * `SCRIPT_EVALUATION_FAILED`.
  */
 export async function buildVaultOperation(input: BuildOperationInput): Promise<BuiltOperation> {
   const { context, protocolParameters: params } = input;
@@ -316,7 +356,7 @@ export async function buildVaultOperation(input: BuildOperationInput): Promise<B
       const change = Serialization.TransactionOutput.fromCore({ address: changeAddress, value: { coins: changeLovelace, assets: changeAssets } });
       let collateral: Partial<Cardano.TxBody> = {};
       if (shape.collateral && redeemersField && costModel) {
-        const totalCollateral = (fee * BigInt(params.collateralPercentage) + 99n) / 100n;
+        const totalCollateral = ledgerMinimumCollateral(fee, params.collateralPercentage);
         const [collateralIn, collateralOut] = shape.collateral;
         collateral = {
           collaterals: [{ txId: collateralIn.txId, index: collateralIn.index }],
@@ -372,6 +412,18 @@ export async function buildVaultOperation(input: BuildOperationInput): Promise<B
       if (!back || back.amount().coin() < minLovelace(back, params.coinsPerUtxoByte)) spendError('NO_COLLATERAL', 'The collateral UTxO is too small for its return');
     }
     const bodyCbor = body.toCbor();
+    if (redeemersField) {
+      // The scripts run on the chain's evaluator before anyone signs; any failure refuses.
+      if (!input.evaluate) spendError('SCRIPT_EVALUATION_FAILED', 'No script evaluator to run the scripts with', 'unavailable');
+      let evaluated: readonly EvaluatedRedeemer[];
+      try {
+        evaluated = await input.evaluate(evaluationTransaction(bodyCbor, scripts, redeemersField));
+      } catch {
+        return spendError('SCRIPT_EVALUATION_FAILED', 'The scripts did not pass evaluation', 'failed');
+      }
+      const problem = evaluationProblem(redeemers, evaluated);
+      if (problem) spendError('SCRIPT_EVALUATION_FAILED', 'The evaluation does not match the declared redeemers', problem);
+    }
     const written = Serialization.TransactionBody.fromCbor(HexBlob(bodyCbor));
     return Object.freeze({
       kind: shape.kind,

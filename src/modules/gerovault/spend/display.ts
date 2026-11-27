@@ -63,6 +63,7 @@ const ERROR_KEYS: Readonly<Record<VaultSpendErrorCode, string>> = {
   DUST_NOT_REGISTERED: 'gerovault.dust.error.dustNotRegistered',
   INVALID_DUST_ADDRESS: 'gerovault.dust.error.invalidDustAddress',
   NO_COLLATERAL: 'gerovault.dust.error.noCollateral',
+  SCRIPT_EVALUATION_FAILED: 'gerovault.dust.error.evaluationFailed',
 };
 
 /** The text key of a spend error code. */
@@ -91,6 +92,13 @@ const REFUSAL_KEYS: Partial<Record<SpendRefusalCode, string>> = {
   registration_output_invalid: 'gerovault.dust.refusal.registrationOutput',
   registration_input_invalid: 'gerovault.dust.refusal.registrationInput',
   collateral_shape: 'gerovault.dust.refusal.collateral',
+  collateral_at_vault: 'gerovault.dust.refusal.collateralAtVault',
+  collateral_input_script_locked: 'gerovault.dust.refusal.collateralAtVault',
+  collateral_not_ada: 'gerovault.dust.refusal.collateralNotAda',
+  collateral_total_missing: 'gerovault.dust.refusal.collateralTotalMissing',
+  collateral_total_too_high: 'gerovault.dust.refusal.collateralTotalTooHigh',
+  collateral_return_elsewhere: 'gerovault.dust.refusal.collateralReturnElsewhere',
+  operation_other_script: 'gerovault.dust.refusal.otherScript',
   script_data_hash_shape: 'gerovault.dust.refusal.scriptDataHash',
   operation_unavailable: 'gerovault.dust.refusal.unavailable',
 };

@@ -11,6 +11,7 @@
  * - Generation on Midnight: Nexus `dust/status` for the vault's reward address, the Midnight
  *   indexer's `dustGenerationStatus`, which takes script reward addresses as well.
  * - The proposer's collateral: the UTxOs of this wallet's own first address.
+ * - Script evaluation before signing: Nexus `POST /api/transactions/evaluate` (the node's evaluator).
  */
 import axios from 'axios';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -19,11 +20,12 @@ import { bech32, bech32m } from 'bech32';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { getMidnightApi, type MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
 import { Network } from '@/models/types';
+import type { AxiosInstance } from 'axios';
 import { createNexusReadClient, type VaultReadHttp } from '@/modules/gerovault/chain/vaultChainReader';
 import type { VaultChainReader } from '@/modules/gerovault/contracts';
 import type { VaultNetwork } from '@/shared/gerovault';
 import type { VaultSpendContext } from '@/modules/gerovault/spend/vaultSpendContext';
-import { vaultRegistrations, type StakeChainState } from './buildOperation';
+import { vaultRegistrations, type EvaluatedRedeemer, type ScriptEvaluator, type StakeChainState } from './buildOperation';
 import { cnightAssetOf, decodeScriptMappingDatum, dustAddressOf, mappingValidatorFor } from './mappingValidator';
 
 const WALLET_NETWORK: Readonly<Record<VaultNetwork, string>> = {
@@ -117,4 +119,33 @@ export async function walletFirstAddress(accountPublicKey: unknown, network: Vau
   } catch {
     return undefined;
   }
+}
+
+const count = (value: unknown): number | undefined => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined);
+
+/** One entry of Nexus's evaluation answer, in either field style, or undefined. */
+function evaluatedRedeemer(row: unknown): EvaluatedRedeemer | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  const entry = row as Record<string, unknown>;
+  const units = (entry['exUnits'] ?? entry['ex_units']) as Record<string, unknown> | undefined;
+  const purpose = entry['redeemerTag'] ?? entry['redeemer_tag'];
+  const index = count(entry['index']);
+  const memory = count(units?.['mem'] ?? units?.['memory']);
+  const steps = count(units?.['steps'] ?? units?.['cpu']);
+  if (typeof purpose !== 'string' || index === undefined || memory === undefined || steps === undefined) return undefined;
+  return { purpose, index, memory, steps };
+}
+
+/**
+ * The chain's own evaluator through Nexus. Throws when the evaluation fails, the service cannot be
+ * reached, or an answer does not read: the builder then refuses the proposal.
+ */
+export function nexusScriptEvaluator(network: VaultNetwork, http: Pick<AxiosInstance, 'post'> = createNexusReadClient()): ScriptEvaluator {
+  return async (txCbor: string) => {
+    const { data } = await http.post('/api/transactions/evaluate', { cbor: txCbor }, { params: { network: toNexusNetwork(WALLET_NETWORK[network]) } });
+    if (!Array.isArray(data)) throw new Error('The evaluator answered with something other than a list');
+    const rows = data.map(evaluatedRedeemer);
+    if (rows.some(row => row === undefined)) throw new Error('An evaluation entry does not read');
+    return rows as EvaluatedRedeemer[];
+  };
 }

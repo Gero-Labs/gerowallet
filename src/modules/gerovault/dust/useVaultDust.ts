@@ -23,6 +23,7 @@ import {
   cnightHeld,
   readGeneration,
   readStakeAccount,
+  nexusScriptEvaluator,
   readVaultRegistrations,
   registrationDustAddress,
   stakeChainState,
@@ -157,7 +158,7 @@ export function useVaultDust(record: Ref<VaultRecord | undefined>, utxos: Ref<re
       chain: stakeChainState(account.value ?? { registered: null, rewards: 0n }, registrations.value),
       protocolParameters: params,
       currentSlot: currentSlot.value,
-      ...(collateral ? { collateral } : {}),
+      ...(collateral ? { collateral, evaluate: nexusScriptEvaluator(current.network) } : {}),
     });
     const bundle = await createUnsignedBundle(ctx, built, reader.txCbor);
     startSpendSession(spendSessionKey(walletId, ctx.vaultId), bundle);

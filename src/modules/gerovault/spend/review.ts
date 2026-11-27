@@ -164,6 +164,8 @@ export interface ReviewOptions {
   readonly currentSlot: number | null;
   /** Other vaults this wallet has accepted. */
   readonly knownVaults?: readonly KnownVault[];
+  /** The protocol's collateral percentage, for a DUST operation's collateral bound. */
+  readonly collateralPercentage?: number;
 }
 
 class TokenSum {
@@ -201,7 +203,7 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
   const isOperation = hasOperationFields(summary);
   let operation: VaultOperation | undefined;
   if (isOperation) {
-    const reading = readOperation(summary, context);
+    const reading = readOperation(summary, context, options.collateralPercentage !== undefined ? { collateralPercentage: options.collateralPercentage } : {});
     if (reading.status === 'operation') operation = reading.operation;
     else for (const refusal of reading.refusals) refuse(refusal.code, refusal.path, refusal.detail);
   }
@@ -231,10 +233,13 @@ export function reviewSummary(summary: VaultTxSummary, context: VaultSpendContex
     const hasReferenceScript = output.referenceScript !== null;
     if (isOperation) {
       // An operation pays nothing out: change to the vault, and the registration output it locks.
+      // When the operation itself was refused, its own refusals say why; outputs are not judged again.
       const registration = isOperationOutput(operation, index);
-      if (!registration && output.address.hex !== context.baseAddressHex) refuse('operation_output', `body.1[${index}]`);
-      else if (!registration && hasDatum) refuse('vault_output_datum', `body.1[${index}]`);
-      else if (!registration && hasReferenceScript) refuse('vault_output_script', `body.1[${index}]`);
+      if (operation && !registration) {
+        if (output.address.hex !== context.baseAddressHex) refuse('operation_output', `body.1[${index}]`);
+        else if (hasDatum) refuse('vault_output_datum', `body.1[${index}]`);
+        else if (hasReferenceScript) refuse('vault_output_script', `body.1[${index}]`);
+      }
       return { index, kind: registration ? 'dust_registration' : 'change', address: output.address.bech32, value: output.value, hasDatum, hasReferenceScript };
     }
     const { kind, vault } = classify(output, context, known);

@@ -26,9 +26,10 @@ import { signingFileText } from '@/modules/gerovault/spend/bundle';
 import { witnessKeyHashes } from '@/modules/gerovault/spend/witnesses';
 import { fundingTransaction, lovelaceOutput, testOwner, testReader, testVaultRecord, type TestOwner } from '@/modules/gerovault/spend/__fixtures__/testVault';
 import { WalletType } from '@/models/types';
+import us from '@/plugins/i18n/us';
 import VaultDustPanel from './components/VaultDustPanel.vue';
 import { cnightAssetOf, dustAddressOf, mappingValidatorFor } from './mappingValidator';
-import { OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, ownerOfWallet, type CollateralWallet } from './__fixtures__/dustVault';
+import { OPERATION_PARAMS, TEST_DUST_HEX, collateralWallet, ownerOfWallet, registrationFunding, type CollateralWallet } from './__fixtures__/dustVault';
 
 const files = vi.hoisted(() => ({ saved: [] as { name: string; text: string }[] }));
 vi.mock('@/modules/gerovault/spend/files', async (original) => ({
@@ -49,6 +50,7 @@ vi.mock('./dustChain', async (original) => ({
   ...(await original<typeof import('./dustChain')>()),
   readStakeAccount: async () => ({ registered: chainState.registered, rewards: 0n }),
   readGeneration: async (_network: string, rewardAccount: string) => ({ cardanoRewardAddress: rewardAccount, dustAddress: null, ...chainState.generation }),
+  nexusScriptEvaluator: () => (async (txCbor: string) => (await import('./__fixtures__/dustVault')).measuredEvaluator(txCbor)),
 }));
 
 const keys = vi.hoisted(() => ({ rootKey: new Uint8Array() as Uint8Array }));
@@ -67,6 +69,7 @@ vi.mock('@/modules/gerovault/spend/signClient', async (original) => {
           getVault: async (walletId: number, vaultId: string) => store.records.get(walletId)?.find(r => r.vaultId === vaultId),
           acceptedVaults: async (walletId: number) => store.records.get(walletId) ?? [],
           currentSlot: () => TIP,
+          collateralPercentage: () => 150,
         });
         return { data: { success: true, witnessFile } };
       } catch (error) {
@@ -158,6 +161,17 @@ async function openSignatures(who: number): Promise<VueWrapper> {
   return wrapper;
 }
 
+describe('the ruled wording', () => {
+  it('is the exact text of the collateral and deregistration copy', () => {
+    expect(us['gerovault.dust.keepsGoing']).toBe('DUST keeps going to {address} until the cNIGHT leaves this vault address.');
+    expect(us['gerovault.dust.sheet.collateralProposer']).toBe(
+      'Collateral from your own wallet: up to {total} ADA can be lost, and only if the transaction fails on chain. {amount} ADA comes back to your address in any case. The vault pays the fee of {fee} ADA.',
+    );
+    expect(us['gerovault.dust.sheet.collateralCosigner']).toBe('Collateral is provided by {proposer} from their own wallet. No vault funds are collateral.');
+    expect(us['gerovault.dust.fact.key']).toBe('The DUST key belongs to one person: it pays Midnight fees and cannot move NIGHT.');
+  });
+});
+
 describe('the vault DUST panel', () => {
   it('shows the cNIGHT, the stake state and this wallet\'s DUST addresses, and offers no stake registration when there is one', async () => {
     loginAs(0);
@@ -181,6 +195,21 @@ describe('the vault DUST panel', () => {
     expect(panel.get('[data-test="vault-dust-register-dust"]').attributes('disabled')).toBeDefined();
   });
 
+  it('says, while a registration exists, that DUST keeps going until the cNIGHT leaves', async () => {
+    loginAs(0);
+    const registration = registrationFunding(records[0].stakeScriptHash, TEST_DUST_HEX);
+    const vaultRead = reader.utxos;
+    reader.utxos = vi.fn(async (address: string) => (address === mappingValidatorFor('preprod')!.address ? registration.utxos : vaultRead(address)));
+    const panel = mount(VaultDustPanel, { props: { record: records[0], utxos: vaultUtxos }, global: global() });
+    await settle();
+    expect(panel.get('[data-test="vault-dust-registration"]').text()).toContain(DUST_ADDRESS.slice(0, 5));
+    const note = panel.get('[data-test="vault-dust-keeps-going"]').text();
+    expect(note).toContain('gerovault.dust.keepsGoing');
+    expect(note).toContain(DUST_ADDRESS);
+    // One registration per credential: no second one is offered.
+    expect(panel.find('[data-test="vault-dust-register-dust"]').exists()).toBe(false);
+  });
+
   it('is not offered for a candidate vault', async () => {
     loginAs(0);
     const panel = mount(VaultDustPanel, { props: { record: { ...records[0], status: 'candidate' }, utxos: vaultUtxos }, global: global() });
@@ -202,6 +231,16 @@ describe('the vault DUST panel', () => {
     expect(session).toBeDefined();
     panel.unmount();
 
+    // The co-owner opens the same file on their own device: none of their funds are collateral.
+    const cosignerView = await openSignatures(1);
+    const input = () => cosignerView.get('[data-test="bundle-input"]').element as HTMLInputElement;
+    Object.defineProperty(input(), 'files', { configurable: true, value: [new File([files.saved[0].text], 'proposal.gvtx.json', { type: 'application/json' })] });
+    await cosignerView.get('[data-test="bundle-input"]').trigger('change');
+    await settle();
+    expect(cosignerView.get('[data-test="sheet-collateral-text"]').text())
+      .toBe('Collateral is provided by the proposer from their own wallet. No vault funds are collateral.');
+    cosignerView.unmount();
+
     // The co-owner signs on their own device (their background, their keys).
     loginAs(1);
     const theirs = await signVaultBundleFlow({ walletId: 11, vaultId: records[1].vaultId, bundle: session.bundle, password: 'right' }, {
@@ -211,13 +250,18 @@ describe('the vault DUST panel', () => {
       getVault: async () => records[1],
       acceptedVaults: async () => [records[1]],
       currentSlot: () => TIP,
+      collateralPercentage: () => 150,
     });
 
     const collect = await openSignatures(0);
     const sheet = collect.get('[data-test="approval-sheet"]');
     expect(sheet.get('[data-test="sheet-operation"]').text()).toContain('gerovault.dust.op.dustRegister');
     expect(sheet.get('[data-test="sheet-dust-address"]').text()).toContain(DUST_ADDRESS.slice(0, 5));
-    expect(sheet.get('[data-test="sheet-collateral"]').text()).toContain('gerovault.dust.sheet.collateralOwn');
+    // The proposer reads what their own wallet can lose; the full addresses sit under Details.
+    expect(sheet.get('[data-test="sheet-collateral-text"]').text()).toMatch(
+      /^Collateral from your own wallet: up to 0\.\d+ ADA can be lost, and only if the transaction fails on chain\. \d+\.\d+ ADA comes back to your address in any case\. The vault pays the fee of 0\.\d+ ADA\.$/,
+    );
+    expect(sheet.find('[data-test="sheet-collateral-details"]').exists()).toBe(false);
     expect(collect.get('[data-test="signer-collateral"]').text()).toContain('gerovault.spend.signers.waiting');
 
     await collect.get('[data-test="sign-panel"] input[type="password"]').setValue('right');
@@ -226,8 +270,8 @@ describe('the vault DUST panel', () => {
     expect(collect.find('[data-test="sign-error"]').exists()).toBe(false);
     expect(collect.get('[data-test="signer-collateral"]').text()).toContain('gerovault.spend.signers.signed');
 
-    const input = collect.get('[data-test="witness-input"]').element as HTMLInputElement;
-    Object.defineProperty(input, 'files', { configurable: true, value: [new File([signingFileText(theirs)], 'co-owner.gvsig.json', { type: 'application/json' })] });
+    const witnessInput = collect.get('[data-test="witness-input"]').element as HTMLInputElement;
+    Object.defineProperty(witnessInput, 'files', { configurable: true, value: [new File([signingFileText(theirs)], 'co-owner.gvsig.json', { type: 'application/json' })] });
     await collect.get('[data-test="witness-input"]').trigger('change');
     await settle();
     expect(collect.get('[data-test="signers-progress"]').text()).toContain('"collected":2');

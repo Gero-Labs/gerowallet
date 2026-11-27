@@ -30,14 +30,16 @@ import {
   type FundingTx,
   type TestOwner,
 } from '@/modules/gerovault/spend/__fixtures__/testVault';
-import { buildVaultOperation, DUST_OPERATION_VALIDITY_SLOTS, type BuildOperationInput, type OperationRequest } from './buildOperation';
+import { buildVaultOperation, DUST_OPERATION_VALIDITY_SLOTS, type BuildOperationInput, type OperationRequest, type ScriptEvaluator } from './buildOperation';
 import { cnightAssetOf, dustAddressOf, mappingValidatorFor } from './mappingValidator';
 import { witnessPlanOf, type WitnessPlan } from './operations';
 import { plutusV3CostModel, scriptDataHashOf } from './scriptData';
 import {
+  COLLATERAL_PERCENTAGE,
   OPERATION_PARAMS,
   TEST_DUST_HEX,
   collateralWallet,
+  measuredEvaluator,
   ownerOfWallet,
   registrationFunding,
   sharedCredentialVaultRecord,
@@ -84,13 +86,14 @@ async function propose(request: OperationRequest, options: { context?: VaultSpen
     protocolParameters: OPERATION_PARAMS,
     currentSlot: TIP,
     collateral: { address: wallet.address, utxos: walletFunding.utxos },
+    evaluate: measuredEvaluator,
   });
   const bundle = await createUnsignedBundle(context, built, reader.txCbor, 1_700_000_000_000);
   return { built, bundle, reader, submitted };
 }
 
 async function ready(bundle: UnsignedTxBundle, context: VaultSpendContext = vault): Promise<SpendReviewReady> {
-  const review = await reviewBundle(bundle, context, { currentSlot: TIP });
+  const review = await reviewBundle(bundle, context, { currentSlot: TIP, collateralPercentage: COLLATERAL_PERCENTAGE });
   if (review.status !== 'ready') throw new Error(`refused: ${JSON.stringify(review.refusals)}`);
   return review;
 }
@@ -193,7 +196,52 @@ describe('registering DUST generation', () => {
       protocolParameters: OPERATION_PARAMS,
       currentSlot: TIP,
       collateral: { address: wallet.address, utxos: [] },
+      evaluate: measuredEvaluator,
     })).rejects.toMatchObject({ code: 'NO_COLLATERAL' });
+  });
+
+  it('takes one ADA-only UTxO of the proposer\'s first address as collateral, at the ledger minimum', async () => {
+    const token = Cardano.AssetId('cd'.repeat(28));
+    const mixed = fundingTransaction([
+      lovelaceOutput(wallet.address, 20_000_000n, new Map([[token, 1n]])),
+      lovelaceOutput(wallet.address, 3_000_000n),
+      lovelaceOutput(wallet.address, 6_000_000n),
+    ], 51);
+    const { reader } = testReader([funding, mixed]);
+    const built = await buildVaultOperation({
+      context: vault, utxos: funding.utxos, request: { kind: 'dust_register', dustAddress: DUST_ADDRESS }, chain: chain(),
+      protocolParameters: OPERATION_PARAMS, currentSlot: TIP, collateral: { address: wallet.address, utxos: mixed.utxos }, evaluate: measuredEvaluator,
+    });
+    const core = Serialization.TransactionBody.fromCbor(HexBlob(built.bodyCbor)).toCore();
+    expect(core.collaterals).toEqual([{ txId: mixed.id, index: 2 }]);
+    expect(core.totalCollateral).toBe((built.fee * 150n + 99n) / 100n);
+    expect(core.collateralReturn?.address).toBe(wallet.address);
+    expect(core.collateralReturn?.value.coins).toBe(6_000_000n - core.totalCollateral!);
+    expect(core.collateralReturn?.value.assets?.size ?? 0).toBe(0);
+    // Every regular input is the vault's: the vault pays the fee.
+    expect(core.inputs.every(input => input.txId === funding.id)).toBe(true);
+    expect((await reviewBundle(await createUnsignedBundle(vault, built, reader.txCbor), vault, { currentSlot: TIP, collateralPercentage: COLLATERAL_PERCENTAGE })).status).toBe('ready');
+  });
+
+  it('is evaluated before anyone signs, and refused when the scripts fail, the evaluator is gone or a budget is short', async () => {
+    const attempt = (evaluate?: ScriptEvaluator) => buildVaultOperation({
+      context: vault, utxos: funding.utxos, request: { kind: 'dust_register', dustAddress: DUST_ADDRESS }, chain: chain(),
+      protocolParameters: OPERATION_PARAMS, currentSlot: TIP, collateral: { address: wallet.address, utxos: walletFunding.utxos },
+      ...(evaluate ? { evaluate } : {}),
+    });
+    let seen = '';
+    await attempt(async (txCbor) => {
+      seen = txCbor;
+      return measuredEvaluator(txCbor);
+    });
+    // The evaluator gets the body with the scripts and redeemers, and no signature.
+    const evaluated = tx(seen);
+    expect(evaluated.witnessSet().vkeys()).toBeUndefined();
+    expect(evaluated.witnessSet().plutusV3Scripts()!.size()).toBe(1);
+    await expect(attempt(async () => { throw new Error('script failed'); })).rejects.toMatchObject({ code: 'SCRIPT_EVALUATION_FAILED', detail: 'failed' });
+    await expect(attempt()).rejects.toMatchObject({ code: 'SCRIPT_EVALUATION_FAILED', detail: 'unavailable' });
+    await expect(attempt(async () => [{ purpose: 'mint', index: 0, memory: 300_000, steps: 1 }])).rejects.toMatchObject({ code: 'SCRIPT_EVALUATION_FAILED', detail: 'over_budget' });
+    await expect(attempt(async () => [])).rejects.toMatchObject({ code: 'SCRIPT_EVALUATION_FAILED', detail: 'redeemers' });
   });
 
   it('is signed by the payment and stake keys of each owner, and by the proposer\'s wallet for the collateral', async () => {
@@ -305,6 +353,7 @@ describe('an imported vault whose stake credential is its payment script', () =>
       protocolParameters: OPERATION_PARAMS,
       currentSlot: TIP,
       collateral: { address: wallet.address, utxos: walletFunding.utxos },
+      evaluate: measuredEvaluator,
     });
     const bundle = await createUnsignedBundle(shared, built, reader.txCbor);
     const review = await ready(bundle, shared);

@@ -14,8 +14,15 @@
  *
  * Every operation spends vault inputs only (and, for `dust_deregister`, exactly the registration
  * UTxO), pays everything back to the vault's full address, names no required signers and no
- * reference inputs. Anything else that carries a certificate, a withdrawal, a mint, collateral or
- * a script data hash is refused: the sheet names it rather than approximate it.
+ * reference inputs, and runs no script but the vault's two native scripts and the pinned mapping
+ * validator. Anything else that carries a certificate, a withdrawal, a mint, collateral or a script
+ * data hash is refused: the sheet names it rather than approximate it.
+ *
+ * The two DUST operations take collateral from the proposer's own wallet, and every signer's device
+ * checks it before any key is opened: exactly one collateral input, not at a script (so never a
+ * vault) address, holding ADA only; the total collateral stated and at most the ledger minimum plus
+ * 1 ADA; the collateral return to that input's own address. None of the vault's funds are
+ * collateral, and the vault pays the fee.
  *
  * Pure: the background imports it.
  */
@@ -88,20 +95,47 @@ export type VaultOperationKind = VaultOperation['kind'];
  * - `registration_output_invalid`: the registration output is not exactly the validator's address,
  *   ADA plus the one token, and the datum this wallet writes.
  * - `registration_input_invalid`: the spent registration is not one with this vault's credential.
- * - `collateral_shape`: a Plutus operation without collateral, or one whose collateral return does not
- *   pay the collateral's own wallet, or states no total; or collateral on an operation that runs no script.
+ * - `operation_other_script`: the body spends from, mints under or withdraws for a script other than
+ *   the vault's two native scripts and the pinned mapping validator.
+ * - `collateral_shape`: a Plutus operation without collateral or with more than one collateral input,
+ *   collateral on an operation that runs no script, or no collateral percentage to check it with.
+ * - `collateral_at_vault`: a collateral input sits at a script address, a vault's included.
+ * - `collateral_not_ada`: a collateral input holds anything but ADA.
+ * - `collateral_total_missing`: the body states no total collateral (key 17).
+ * - `collateral_total_too_high`: the total collateral is above the ledger minimum plus 1 ADA.
+ * - `collateral_return_elsewhere`: there is no collateral return, or it pays another address than the
+ *   collateral input's own.
  * - `script_data_hash_shape`: a Plutus operation without the script data hash, or one where no script runs.
  * - `operation_unavailable`: the vault's network has no mapping validator in this release.
  */
 export type OperationRefusalCode =
   | 'operation_unknown'
   | 'operation_other_credential'
+  | 'operation_other_script'
   | 'operation_output'
   | 'registration_output_invalid'
   | 'registration_input_invalid'
   | 'collateral_shape'
+  | 'collateral_at_vault'
+  | 'collateral_not_ada'
+  | 'collateral_total_missing'
+  | 'collateral_total_too_high'
+  | 'collateral_return_elsewhere'
   | 'script_data_hash_shape'
   | 'operation_unavailable';
+
+/** A collateral above the ledger minimum by more than this is refused. */
+export const COLLATERAL_TOLERANCE_LOVELACE = 1_000_000n;
+
+/** The ledger's minimum total collateral: the fee times the collateral percentage, rounded up. */
+export function ledgerMinimumCollateral(fee: bigint, collateralPercentage: number): bigint {
+  return (fee * BigInt(collateralPercentage) + 99n) / 100n;
+}
+
+export interface ReadOperationOptions {
+  /** The protocol's collateral percentage. Without it a Plutus operation is refused. */
+  readonly collateralPercentage?: number;
+}
 
 export interface OperationRefusal {
   readonly code: OperationRefusalCode;
@@ -134,10 +168,26 @@ function isRegistrationToken(output: OutputView, validator: MappingValidator): b
  * Reads the operation a summary is, against this device's vault record. Inputs, outputs and the
  * expiry are the sheet's own rules (`review.ts`); here are the rules of each operation's fields.
  */
-export function readOperation(summary: VaultTxSummary, context: VaultSpendContext): OperationReading {
+export function readOperation(summary: VaultTxSummary, context: VaultSpendContext, options: ReadOperationOptions = {}): OperationReading {
   const refusals: OperationRefusal[] = [];
   const refuse = (code: OperationRefusalCode, path: string, detail?: string) => refusals.push(detail === undefined ? { code, path } : { code, path, detail });
   const done = (operation: VaultOperation): OperationReading => (refusals.length > 0 ? { status: 'refused', refusals } : { status: 'operation', operation });
+
+  // The scripts the body runs: the vault's payment and stake scripts, and the pinned validator only.
+  const pinned = mappingValidatorFor(context.network);
+  const allowed = new Set([context.paymentScriptHash, context.stakeScriptHash, ...(pinned ? [pinned.scriptHash] : [])]);
+  summary.inputs.forEach((input, i) => {
+    const payment = input.output.address.payment;
+    if (payment.kind === 'script' && !allowed.has(payment.hash)) refuse('operation_other_script', `body.0[${i}]`);
+  });
+  summary.mint.forEach((token, i) => { if (!allowed.has(token.policyId)) refuse('operation_other_script', `body.9[${i}]`); });
+  summary.withdrawals.forEach((withdrawal, i) => {
+    const credential = withdrawal.rewardAccount.credential;
+    if (credential.kind === 'script' && !allowed.has(credential.hash)) refuse('operation_other_script', `body.5[${i}]`);
+  });
+  summary.certificates.forEach((cert, i) => {
+    if (cert.credential.kind === 'script' && !allowed.has(cert.credential.hash)) refuse('operation_other_script', `body.4[${i}]`);
+  });
 
   const certificates = summary.certificates;
   certificates.forEach((cert: CertificateView, i) => {
@@ -181,9 +231,21 @@ export function readOperation(summary: VaultTxSummary, context: VaultSpendContex
   // The validator's cost grows with the inputs; past this the declared budgets may not cover it.
   if (summary.inputs.length > MAX_OPERATION_INPUTS + 1) refuse('operation_unknown', 'body.0', 'too_many_inputs');
   if (summary.scriptDataHash === null) refuse('script_data_hash_shape', 'body.11', 'missing');
+  // Collateral: exactly one ADA-only input of a key-held wallet, the total stated and at most the
+  // ledger minimum plus 1 ADA, the return to that input's own address.
   const collateral = summary.collateral;
   if (!collateral) refuse('collateral_shape', 'body.13', 'missing');
-  else if (!collateral.returnPaysPayer || collateral.totalCollateral === null) refuse('collateral_shape', 'body.16', 'return');
+  else {
+    if (collateral.inputs.length !== 1) refuse('collateral_shape', 'body.13', 'inputs');
+    if (collateral.inputs.some(input => input.output.address.payment.kind === 'script')) refuse('collateral_at_vault', 'body.13');
+    if (collateral.inputs.some(input => input.output.value.tokens.length > 0)) refuse('collateral_not_ada', 'body.13');
+    const total = collateral.totalCollateral;
+    if (total === null) refuse('collateral_total_missing', 'body.17');
+    else if (!Number.isSafeInteger(options.collateralPercentage) || (options.collateralPercentage ?? 0) <= 0) refuse('collateral_shape', 'body.17', 'parameters_unknown');
+    else if (total > ledgerMinimumCollateral(summary.fee, options.collateralPercentage!) + COLLATERAL_TOLERANCE_LOVELACE) refuse('collateral_total_too_high', 'body.17');
+    const back = collateral.collateralReturn;
+    if (!back || collateral.inputs.length === 0 || back.address.hex !== collateral.inputs[0].output.address.hex) refuse('collateral_return_elsewhere', 'body.16');
+  }
   if (token === 1n && certificates.length > 0) refuse('operation_unknown', 'body.4', 'certificates');
   if (token === -1n && registers) refuse('operation_unknown', 'body.4', 'certificates');
   if (refusals.length > 0 || !collateral || withdrawal === null) return { status: 'refused', refusals };

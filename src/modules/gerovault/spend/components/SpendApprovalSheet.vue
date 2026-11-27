@@ -21,7 +21,14 @@
       </div>
 
       <!-- A stake or DUST operation: what it does, by name; it pays nothing out of the vault. -->
-      <OperationSheetRows v-if="review.operation" :operation="review.operation" :own-collateral-key-hash="ownCollateralKeyHash" />
+      <OperationSheetRows
+        v-if="review.operation"
+        :operation="review.operation"
+        :fee="review.fee"
+        :own-collateral-key-hash="ownCollateralKeyHash"
+        :collateral-provider="collateralProvider"
+        :details="details"
+      />
 
       <dl class="approval-sheet__rows">
         <div v-if="!review.operation" class="approval-sheet__row approval-sheet__row--lead">
@@ -115,9 +122,11 @@ const props = withDefaults(defineProps<{
   paymentScriptHash: string;
   /** The Details layer is on. */
   details?: boolean;
-  /** This wallet's own first address key hash: a DUST operation's collateral from it is "your wallet". */
+  /** This wallet's own first address key hash: a DUST operation's collateral from it is this wallet's own. */
   ownCollateralKeyHash?: string | null;
-}>(), { details: false, ownCollateralKeyHash: null });
+  /** The owner whose wallet gives a DUST operation's collateral, when a signature file has shown it. */
+  collateralProvider?: string | null;
+}>(), { details: false, ownCollateralKeyHash: null, collateralProvider: null });
 
 const txId = computed(() => props.review.txId);
 const outgoing = computed<ReviewOutput[]>(() => (props.review.status === 'ready' && !props.review.operation ? props.review.outputs.filter(o => o.kind !== 'change') : []));
