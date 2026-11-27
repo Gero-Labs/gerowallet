@@ -82,6 +82,7 @@ import {
   resolveAsset,
 } from '@/shared/utils/resolver';
 import { carriesSigningCreds, isMarkedToFail, paymentKeyHash } from '@/shared/utils/keyCreds';
+import { assertNoVaultSignature } from '@/shared/utils/vaultSignGuard';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
@@ -2731,6 +2732,12 @@ export class WalletBg {
       debugLog('NFT market: refusing to sign, unverified market transaction:', marketHits);
       throw new Error(NFT_MARKET_SIGN_REFUSAL_MESSAGE);
     }
+
+    // GeroVault: a vault owner's signature is given on the vault screen only. Refused here, before
+    // the root key is decrypted: a CIP-1854 key other than 0/0 in the plan, or a transaction that
+    // touches a known vault (vaultSignGuard.ts). This signer derives every key under its 1852'
+    // account, so it never made a 1854' witness; the rule keeps it that way for every caller.
+    await assertNoVaultSignature(transaction, addresses, utxos);
 
     // Get root private key
     let rootPrivateKey: Bip32PrivateKey;

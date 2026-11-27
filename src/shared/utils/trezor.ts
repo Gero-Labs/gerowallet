@@ -28,6 +28,7 @@ import {
   accountKeyIndices,
   assertTrezorCanSign,
   extraWitnessRequests,
+  requestSigningPaths,
   trezorCertificates,
   trezorInputs,
   trezorKeyContext,
@@ -41,6 +42,7 @@ import { solanaAccountPath } from '@/chains/solana/solanaPaths';
 import { solanaDeviceAccount, type SolanaDeviceAccount } from '@/chains/solana/solanaHardwarePolicy';
 import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import { accountIndexFromKeys, assertAccountIndices, cardanoAccountPath, accountXpub, type AccountXpub } from '@/shared/utils/walletAccount';
+import { assertGenericSigningPaths, assertNoVaultSignature } from '@/shared/utils/vaultSignGuard';
 
 /**
  * Trezor transaction transformer context
@@ -109,7 +111,10 @@ const TREZOR_MANIFEST = {
   email: 'support@gerowallet.io',
 };
 
-/** The CIP-1854 multisig witness of the wallet's own account (the SDK's agent always asks for account 0's). */
+/**
+ * The CIP-1854 multisig witness of the wallet's own account (the SDK's agent always asks for account 0's).
+ * Only key 0/0: any other 1854' key is a vault owner's, signed for on the vault screen alone (vaultSignGuard.ts).
+ */
 const multiSigWitnessPaths = (accountIndex: number): BIP32Path[] => [
   util.accountKeyDerivationPathToBip32Path(accountIndex, { index: 0, role: KeyRole.External }, KeyPurpose.MULTI_SIG)
 ];
@@ -614,6 +619,9 @@ export default {
       ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
       : Serialization.Transaction.fromCore(tx);
     assertTrezorCanSign(deserializedTx);
+    const txCore = deserializedTx.toCore();
+    // No vault owner's signature outside the vault screen (vaultSignGuard.ts), before the device is asked.
+    await assertNoVaultSignature(txCore, keys, utxos);
     const accountIndex = accountIndexFromKeys(keys);
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
 
@@ -627,7 +635,7 @@ export default {
 
     // Which keys sign is the shared plan's rule (keyCreds.ts), as for software wallets and Keystone.
     const keyContext = trezorKeyContext(keys, utxos);
-    const walletPaths = walletWitnessPaths(deserializedTx.toCore(), keys, utxos);
+    const walletPaths = walletWitnessPaths(txCore, keys, utxos);
 
     const txBody: Serialization.TransactionBody = deserializedTx.body();
     try {
@@ -675,6 +683,9 @@ export default {
           }
           : {})
       };
+      // The device witnesses every path the request carries (a Plutus one keeps them all, below):
+      // none may be a CIP-1854 key other than 0/0.
+      assertGenericSigningPaths(requestSigningPaths(fullTrezorParams));
 
       const result = await TrezorConnect.cardanoSignTransaction(fullTrezorParams);
 
