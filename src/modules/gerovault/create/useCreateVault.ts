@@ -6,10 +6,12 @@
  *
  * Dependencies are passed in, so the flow runs in a test without a wallet, a database or a page.
  */
-import { computed, getCurrentScope, onScopeDispose, reactive, ref, shallowRef, watch } from 'vue';
+import { computed, getCurrentInstance, getCurrentScope, onActivated, onDeactivated, onScopeDispose, reactive, ref, shallowRef, watch } from 'vue';
 import { encodeVaultPublicKeys, multisigAccountPublicKey, vaultKeyHashes, type CosignerVerification, type MultisigAccountPublicKey, type VaultNetwork } from '@/shared/gerovault';
 import { InviteClientError, type InviteAuth, type InviteClient, type InviteClientCode, type LinkAnswer, type SetupViewModel } from '@/modules/gerovault/invites/inviteClient';
+import { createPoller, pauseWhileHidden, type Poller } from '@/modules/gerovault/invites/poller';
 import { vaultKeysFromRaw } from '@/modules/gerovault/invites/rawKeys';
+import type { VaultPushEvent } from '@/modules/gerovault/invites/useVaultPush';
 import type { VaultChainReader, VaultRecord, VaultStore } from '@/modules/gerovault/contracts';
 import {
   DEFAULT_TEMPLATE,
@@ -74,9 +76,26 @@ export interface CreateInviteDeps {
   readonly resumeSetupId?: string;
   /** The vault's name when the user left it empty: an invitation always names the vault. */
   readonly untitledName: string;
-  /** How often an open setup reads its answers, in milliseconds. */
+  /**
+   * The fallback poll of an open setup, in milliseconds (default one minute). A `vault_response`
+   * push refreshes at once; the poll only covers a push that never arrived, and runs only while
+   * the page is active and visible. gero-sync allows 120 reads an hour.
+   */
   readonly pollMs?: number;
+  /** The poll while a one-time QR is on screen (default 10 s), for `FAST_POLL_WINDOW_MS` after it opens. */
+  readonly fastPollMs?: number;
+  /** Vault pushes that arrive while the page is open (`useVaultPush`). */
+  readonly push?: (onPush: (event: VaultPushEvent) => void) => void;
+  /** The document whose visibility pauses the poll. Absent: the page's own. */
+  readonly document?: Pick<Document, 'hidden' | 'addEventListener' | 'removeEventListener'>;
 }
+
+export const DEFAULT_POLL_MS = 60_000;
+export const DEFAULT_FAST_POLL_MS = 10_000;
+/** How long the QR dialog's faster poll lasts after it opens; then the slow one takes over. */
+export const FAST_POLL_WINDOW_MS = 120_000;
+/** The wait shown when gero-sync is busy and named none. */
+const DEFAULT_BUSY_MS = 60_000;
 
 /** `checking`: asking the background; `on`: invitations; `off`: the paste flow only. */
 export type InviteMode = 'checking' | 'on' | 'off';
@@ -272,7 +291,14 @@ export function useCreateVault(deps: CreateVaultDeps) {
 
   const inviteCosigner = (n: number, target: { stakeCredential: string; handle?: string; label?: string }) =>
     onSetup((inv, id) => inv.client.invite(id, n, target), n);
-  const remindCosigner = (n: number) => onSetup((inv, id) => inv.client.remind(id, n), n);
+  /** The slot a reminder was just sent for, so the card can say so. */
+  const reminded = ref<{ n: number; at: number } | null>(null);
+  async function remindCosigner(n: number): Promise<boolean> {
+    reminded.value = null;
+    const ok = await onSetup((inv, id) => inv.client.remind(id, n), n);
+    if (ok) reminded.value = { n, at: now() };
+    return ok;
+  }
   const revokeCosigner = (n: number) => onSetup((inv, id) => inv.client.revoke(id, n), n);
 
   /** A one-time QR (10 minutes) or a link to copy. Null when it could not be made (`inviteProblem` says why). */
@@ -298,15 +324,29 @@ export function useCreateVault(deps: CreateVaultDeps) {
   }
 
   let refreshing: Promise<void> | null = null;
+  let poller: Poller | null = null;
+  /** gero-sync answered 429: no read before this time (ms), and the screen says "busy, retrying in N s". */
+  const busyUntil = ref<number | null>(null);
   /** Reads the answers gero-sync holds (a cosigner's keys fill in once their ACCEPT checked out). */
   function refreshSetup(): Promise<void> {
     const inv = deps.invites;
     const current = setup.value;
     if (!inv || !current || current.state !== 'open') return Promise.resolve();
+    // Rate limited: nothing is asked until the wait is over (the poll resumes by itself).
+    if (busyUntil.value !== null && now() < busyUntil.value) return Promise.resolve();
     refreshing ??= inv.client.refreshSetup(current.setupId)
-      .then(next => { setup.value = next; })
+      .then(next => {
+        setup.value = next;
+        busyUntil.value = null;
+      })
       .catch(error => {
         const code = error instanceof InviteClientError ? error.code : 'SERVER';
+        if (code === 'RATE_LIMITED') {
+          const wait = error instanceof InviteClientError ? error.details?.['retryAfterMs'] : undefined;
+          busyUntil.value = now() + (typeof wait === 'number' && wait > 0 ? wait : DEFAULT_BUSY_MS);
+          poller?.holdUntil(busyUntil.value);
+          return;
+        }
         // A poll that fails offline is quiet; the next one tries again.
         if (code !== 'NETWORK' && code !== 'UNAVAILABLE') setupFailure(error);
       })
@@ -329,12 +369,43 @@ export function useCreateVault(deps: CreateVaultDeps) {
     return onSetup((inv, id) => inv.client.cancelSetup(id));
   }
 
+  // The poll: slow, and only while this page is the one on screen ---------------------------------
+  let fastUntil = 0;
+  /** A one-time QR is on screen: read more often for a short while (one scan, one card). */
+  function setFastPoll(on: boolean): void {
+    fastUntil = on ? now() + FAST_POLL_WINDOW_MS : 0;
+    poller?.reschedule();
+  }
+  /** Stops the poll while `reason` holds (the page was left inside keep-alive, the tab is hidden). */
+  const pausePolling = (reason: string): void => poller?.pause(reason);
+  const resumePolling = (reason: string): void => poller?.resume(reason);
+
   if (deps.invites) {
+    const inv = deps.invites;
     void checkInvites();
-    const timer = setInterval(() => {
-      if (step.value !== 'template' && !saved.value) void refreshSetup();
-    }, deps.invites.pollMs ?? 8000);
-    if (getCurrentScope()) onScopeDispose(() => clearInterval(timer));
+    poller = createPoller({
+      run: () => (step.value !== 'template' && !saved.value ? refreshSetup() : undefined),
+      intervalMs: () => (now() < fastUntil ? inv.fastPollMs ?? DEFAULT_FAST_POLL_MS : inv.pollMs ?? DEFAULT_POLL_MS),
+      now,
+    });
+    poller.start();
+    const unhide = pauseWhileHidden(poller, inv.document);
+    // A response was filed: the worker has opened it, and this reads the result at once.
+    inv.push?.(event => {
+      if (event.t !== 'vault_response' || !setup.value) return;
+      if (event.setupId === undefined || event.setupId === setup.value.setupId) void refreshSetup();
+    });
+    if (getCurrentInstance()) {
+      // The routes live inside <keep-alive>: leaving the page deactivates it, it is not unmounted.
+      onDeactivated(() => pausePolling('inactive'));
+      onActivated(() => resumePolling('inactive'));
+    }
+    if (getCurrentScope()) {
+      onScopeDispose(() => {
+        poller?.stop();
+        unhide();
+      });
+    }
   }
 
   // 2 and 3. This wallet's keys ------------------------------------------------------------------
@@ -579,6 +650,11 @@ export function useCreateVault(deps: CreateVaultDeps) {
     inviteBusy,
     inviteCosigner,
     remindCosigner,
+    reminded,
+    busyUntil,
+    setFastPoll,
+    pausePolling,
+    resumePolling,
     revokeCosigner,
     makeLink,
     withdrawLink,

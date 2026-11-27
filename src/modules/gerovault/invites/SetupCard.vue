@@ -31,6 +31,10 @@
 
     <p class="t-body-sm gvc-muted" data-test="overview-setup-next">{{ next }}</p>
     <p v-if="setup.refused > 0" class="t-caption gvc-error" role="status">{{ $t('gerovault.invite.setup.refused', { count: setup.refused }) }}</p>
+    <p v-for="(d, i) in setup.duplicates ?? []" :key="i" class="t-caption gvc-muted" role="status" data-test="overview-duplicate-join">
+      {{ $t('gerovault.invite.setup.duplicate', { name: displayLabel(d.label) }) }}
+    </p>
+    <p v-if="reminded" class="t-caption gvc-muted" role="status" data-test="overview-reminded">{{ $t('gerovault.invite.card.reminded') }}</p>
 
     <footer class="setup-card__actions">
       <GButton v-if="firstWaiting" tier="tertiary" compact data-test="overview-remind" @click="emit('remind', firstWaiting.n)">
@@ -59,7 +63,7 @@ import { timeAgo, timeLeft, type RelativeTime } from './inviteTime';
  * cosigner's status with the same chips as the create screen, the next step, "Remind" for whoever
  * has not joined and "Continue setup", which opens the create screen on this setup.
  */
-const props = defineProps<{ setup: SetupViewModel; now: number }>();
+const props = defineProps<{ setup: SetupViewModel; now: number; /** A reminder for this setup just went out. */ reminded?: boolean }>();
 const emit = defineEmits<{ (e: 'remind', n: number): void; (e: 'cancel'): void }>();
 const { t } = useTranslation();
 

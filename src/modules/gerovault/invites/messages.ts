@@ -23,6 +23,7 @@ export const INVITE_PROBLEM_KEYS: Readonly<Record<InviteClientCode, string>> = {
   EXPIRED: 'gerovault.invite.problem.EXPIRED',
   REVOKED: 'gerovault.invite.problem.REVOKED',
   ALREADY_ANSWERED: 'gerovault.invite.problem.ALREADY_ANSWERED',
+  ALREADY_JOINED: 'gerovault.invite.problem.ALREADY_JOINED',
   LIMIT_EXCEEDED: 'gerovault.invite.problem.LIMIT_EXCEEDED',
   RATE_LIMITED: 'gerovault.invite.problem.RATE_LIMITED',
   SLOT_TAKEN: 'gerovault.invite.problem.SLOT_TAKEN',
@@ -50,5 +51,17 @@ export function inviteProblemKey(code: string): string {
   return (INVITE_PROBLEM_KEYS as Record<string, string>)[code] ?? INVITE_PROBLEM_KEYS.SERVER;
 }
 
+/** "Gero Sync is busy. Retrying in N s." (a 429 from gero-sync), by how long is left. */
+export const BUSY_KEYS = { seconds: 'gerovault.invite.busy.seconds', minutes: 'gerovault.invite.busy.minutes' } as const;
+
+/** The busy line for a wait that ends at `until` (ms): seconds under two minutes, minutes above. */
+export function busyMessage(until: number, now: number): { key: string; n: number } {
+  const seconds = Math.max(1, Math.ceil((until - now) / 1000));
+  return seconds < 120 ? { key: BUSY_KEYS.seconds, n: seconds } : { key: BUSY_KEYS.minutes, n: Math.ceil(seconds / 60) };
+}
+
+/** Other lines of the invitation screens that no code maps to. */
+export const INVITE_NOTE_KEYS: readonly string[] = ['gerovault.invite.card.reminded', 'gerovault.invite.setup.duplicate', ...Object.values(BUSY_KEYS)];
+
 /** Every key above, for the catalog spec. */
-export const ALL_INVITE_MESSAGE_KEYS: readonly string[] = [...new Set([...Object.values(INVITE_PROBLEM_KEYS), ...Object.values(RESOLVE_PROBLEM_KEYS), ...TIME_KEYS])];
+export const ALL_INVITE_MESSAGE_KEYS: readonly string[] = [...new Set([...Object.values(INVITE_PROBLEM_KEYS), ...Object.values(RESOLVE_PROBLEM_KEYS), ...TIME_KEYS, ...INVITE_NOTE_KEYS])];

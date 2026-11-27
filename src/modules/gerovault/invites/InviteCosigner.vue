@@ -88,6 +88,7 @@
       </button>
     </template>
 
+    <GNote v-if="reminded" icon="mdi-check" role="status" data-test="invite-reminded">{{ $t('gerovault.invite.card.reminded') }}</GNote>
     <GNote v-if="problem" tone="error" icon="mdi-alert-circle-outline" role="alert" data-test="invite-problem">{{ $t(inviteProblemKey(problem.code)) }}</GNote>
 
     <dl v-if="details && slot?.accept" class="gvc-facts t-caption" data-test="invite-details">
@@ -147,6 +148,9 @@ const problem = computed(() => {
   const p = props.flow.inviteProblem.value;
   return p && p.n === props.n ? p : null;
 });
+
+// The reminder for this slot went out (the same line whether or not a device will get it).
+const reminded = computed(() => props.flow.reminded?.value?.n === props.n && slot.value?.status === 'waiting');
 
 const who = computed(() => {
   const s = slot.value;

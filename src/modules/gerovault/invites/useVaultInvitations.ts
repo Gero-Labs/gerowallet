@@ -8,34 +8,67 @@
  */
 import { computed, ref, shallowRef } from 'vue';
 import type { InviteClient, ReceivedView, SetupViewModel } from './inviteClient';
-import { inviteErrorCode, type InviteClientCode } from './inviteClient';
+import { InviteClientError, inviteErrorCode, type InviteClientCode } from './inviteClient';
 
 export type InvitationsState = 'idle' | 'loading' | 'ready' | 'unavailable';
+/** The wait shown when gero-sync is busy and named none. */
+const DEFAULT_BUSY_MS = 60_000;
 
 export function useVaultInvitations(deps: {
   readonly client: Pick<InviteClient, 'listSetups' | 'refreshSetup' | 'listInvites' | 'remind' | 'cancelSetup' | 'decline' | 'block' | 'openLink' | 'getInvite'>;
   readonly walletId: () => number | undefined;
+  readonly now?: () => number;
 }) {
   const state = ref<InvitationsState>('idle');
   const setups = shallowRef<readonly SetupViewModel[]>([]);
   const invites = shallowRef<readonly ReceivedView[]>([]);
   const refused = ref(0);
   const problem = ref<InviteClientCode | null>(null);
+  /** gero-sync answered 429: what is shown is what this device holds, and the next read waits until this time (ms). */
+  const busyUntil = ref<number | null>(null);
+  /** The setup a reminder was just sent for. */
+  const reminded = ref<{ setupId: string; n: number } | null>(null);
+  const now = deps.now ?? (() => Date.now());
 
-  async function reload(): Promise<void> {
+  let loading: Promise<void> | null = null;
+  /**
+   * Reads the setups and the mailbox. `quiet` keeps the lists on screen while it reads (a return
+   * to the page, a push); the first load shows the loading state. One read at a time.
+   */
+  function reload(options: { quiet?: boolean } = {}): Promise<void> {
+    loading ??= load(options.quiet === true).finally(() => { loading = null; });
+    return loading;
+  }
+
+  async function load(quiet: boolean): Promise<void> {
     const walletId = deps.walletId();
-    state.value = 'loading';
+    if (!quiet || state.value === 'idle') state.value = 'loading';
+    let wait = 0;
+    const limited = (error: unknown): boolean => {
+      if (inviteErrorCode(error) !== 'RATE_LIMITED') return false;
+      const ms = error instanceof InviteClientError ? error.details?.['retryAfterMs'] : undefined;
+      wait = Math.max(wait, typeof ms === 'number' && ms > 0 ? ms : DEFAULT_BUSY_MS);
+      return true;
+    };
     try {
       const listed = walletId === undefined ? [] : await deps.client.listSetups(walletId);
+      // Rate limited a moment ago: the stored setups show, and nothing is asked before the wait is over.
+      const held = busyUntil.value !== null && now() < busyUntil.value;
       // Each open setup reads its answers, so the chips are current when the page opens.
-      setups.value = await Promise.all(listed.map(s => (s.state === 'open' ? deps.client.refreshSetup(s.setupId).catch(() => s) : s)));
+      setups.value = await Promise.all(listed.map(s => (s.state === 'open' && !held
+        ? deps.client.refreshSetup(s.setupId).catch((error: unknown) => { limited(error); return s; })
+        : s)));
       const answer = await deps.client.listInvites();
       invites.value = answer.invites;
       refused.value = answer.refused;
+      if (answer.busy) wait = Math.max(wait, answer.busy.retryAfterMs);
+      if (wait > 0) busyUntil.value = now() + wait;
+      else if (!held) busyUntil.value = null;
       state.value = 'ready';
     } catch (error) {
       state.value = inviteErrorCode(error) === 'UNAVAILABLE' ? 'unavailable' : 'ready';
-      if (state.value === 'ready') problem.value = inviteErrorCode(error);
+      if (state.value === 'ready' && !limited(error)) problem.value = inviteErrorCode(error);
+      if (wait > 0) busyUntil.value = now() + wait;
     }
   }
 
@@ -75,9 +108,16 @@ export function useVaultInvitations(deps: {
     toVerify,
     refused,
     problem,
+    busyUntil,
+    reminded,
     reload,
     replaceInvite,
-    remind: (setupId: string, n: number) => act(() => deps.client.remind(setupId, n), replaceSetup),
+    async remind(setupId: string, n: number): Promise<boolean> {
+      reminded.value = null;
+      const ok = await act(() => deps.client.remind(setupId, n), replaceSetup);
+      if (ok) reminded.value = { setupId, n };
+      return ok;
+    },
     cancelSetup: (setupId: string) => act(() => deps.client.cancelSetup(setupId), next => { setups.value = setups.value.filter(s => s.setupId !== next.setupId); }),
     decline: (ref: string) => act(() => deps.client.decline(ref), replaceInvite),
     block: (ref: string) => act(() => deps.client.block(ref), replaceInvite),

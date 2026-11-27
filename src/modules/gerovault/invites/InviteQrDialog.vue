@@ -28,6 +28,7 @@
         <p class="t-caption gvc-muted">{{ $t('gerovault.invite.qr.afterJoin') }}</p>
       </template>
       <div v-else-if="loading" class="g-skeleton invite-qr__skeleton" role="status" :aria-label="$t('common.loading')"></div>
+      <InviteBusyNote v-if="flow.busyUntil.value !== null" :until="flow.busyUntil.value" />
       <GNote v-if="problem" tone="error" icon="mdi-alert-circle-outline" role="alert">{{ $t(inviteProblemKey(problem)) }}</GNote>
 
       <section v-if="joined.length" class="invite-qr__joined" :aria-label="$t('gerovault.invite.qr.joinedHere')">
@@ -58,6 +59,7 @@ import { displayLabel } from '@/shared/gerovault';
 import { drawVerificationQr } from '@/modules/gerovault/create/verificationQr';
 import type { CreateVaultFlow } from '@/modules/gerovault/create/useCreateVault';
 import type { LinkAnswer } from './inviteClient';
+import InviteBusyNote from './InviteBusyNote.vue';
 import { countdown } from './inviteTime';
 import { inviteProblemKey } from './messages';
 
@@ -86,7 +88,6 @@ const now = ref(Date.now());
 const joined = ref<{ n: number; label: string }[]>([]);
 let baseline = new Set<number>();
 let ticker: ReturnType<typeof setInterval> | undefined;
-let poller: ReturnType<typeof setInterval> | undefined;
 
 async function draw(): Promise<void> {
   await nextTick();
@@ -124,13 +125,15 @@ function start(): void {
     now.value = Date.now();
     if (current.value && now.value >= current.value.expiresAt) void freshCode();
   }, 1000);
-  // While the code is on screen, answers are read often: one scan, one card.
-  poller = setInterval(() => { void props.flow.refreshSetup(); }, 3000);
+  // While the code is on screen the flow's own poll runs faster for a while (one scan, one card).
+  // It is the same poll, so it pauses with the page and waits out a rate limit; the push
+  // (`vault_response`) is what shows a join at once.
+  props.flow.setFastPoll(true);
 }
 
 function stop(): void {
   clearInterval(ticker);
-  clearInterval(poller);
+  props.flow.setFastPoll(false);
   const open = current.value;
   current.value = null;
   // The code on screen is withdrawn: nobody can use it after the dialog closed.

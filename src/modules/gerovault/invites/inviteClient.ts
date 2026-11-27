@@ -101,7 +101,7 @@ export const inviteClient = {
   listSetups: (walletId?: number) => call<SetupViewModel[]>('GEROVAULT_SETUP_LIST', walletId === undefined ? {} : { walletId }),
   getSetup: (setupId: string) => call<SetupViewModel>('GEROVAULT_SETUP_GET', { setupId }),
 
-  listInvites: () => call<{ invites: ReceivedView[]; refused: number }>('GEROVAULT_INVITES_LIST'),
+  listInvites: () => call<{ invites: ReceivedView[]; refused: number; busy?: { retryAfterMs: number } }>('GEROVAULT_INVITES_LIST'),
   getInvite: (ref: string) => call<ReceivedView>('GEROVAULT_INVITE_GET', { ref }),
   openLink: (text: string) => call<ReceivedView>('GEROVAULT_INVITE_OPEN_LINK', { text }),
   accept: (input: { ref: string; walletId: number; label?: string }, auth: InviteAuth) =>

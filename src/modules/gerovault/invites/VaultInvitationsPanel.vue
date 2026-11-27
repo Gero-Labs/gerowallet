@@ -33,6 +33,7 @@
         :key="s.setupId"
         :setup="s"
         :now="now"
+        :reminded="inv.reminded.value?.setupId === s.setupId"
         @remind="inv.remind(s.setupId, $event)"
         @cancel="inv.cancelSetup(s.setupId)"
       />
@@ -52,6 +53,7 @@
       </ul>
     </section>
 
+    <InviteBusyNote v-if="inv.busyUntil.value !== null" :until="inv.busyUntil.value" />
     <GNote v-if="inv.problem.value" tone="error" icon="mdi-alert-circle-outline" role="alert">{{ $t(inviteProblemKey(inv.problem.value)) }}</GNote>
     <p v-if="inv.refused.value > 0" class="t-caption gvc-faint" role="status">{{ $t('gerovault.invite.overview.refused', { count: inv.refused.value }) }}</p>
 
@@ -84,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import GNote from '@/shared/components/GNote.vue';
@@ -96,6 +98,8 @@ import type { InviteAuth, InviteClient, ReceivedView } from './inviteClient';
 import { timeLeft, type RelativeTime } from './inviteTime';
 import { inviteProblemKey } from './messages';
 import { useVaultInvitations } from './useVaultInvitations';
+import { useVaultPush } from './useVaultPush';
+import InviteBusyNote from './InviteBusyNote.vue';
 import InviteReviewDialog from './InviteReviewDialog.vue';
 import JoinedVerifyDialog from './JoinedVerifyDialog.vue';
 import OpenInviteDialog from './OpenInviteDialog.vue';
@@ -168,7 +172,32 @@ onMounted(async () => {
 });
 watch(() => route.query['invite'], () => { void openFromRoute(); });
 watch(() => props.walletId, () => { void inv.reload(); });
-onBeforeUnmount(() => clearInterval(clock));
+
+// The route lives inside <keep-alive>: coming back to the page is an activation, not a mount, so
+// the lists are read again then, and when a vault push arrives while the page is open. Both keep
+// what is on screen while they read.
+let shown = true;
+onActivated(() => {
+  shown = true;
+  void inv.reload({ quiet: true });
+});
+onDeactivated(() => { shown = false; });
+useVaultPush(() => { if (shown) void inv.reload({ quiet: true }); });
+
+// gero-sync was busy: read again once the wait is over, while the page is on screen.
+let retry: ReturnType<typeof setTimeout> | undefined;
+watch(inv.busyUntil, until => {
+  clearTimeout(retry);
+  if (until === null) return;
+  retry = setTimeout(() => {
+    if (shown && !document.hidden) void inv.reload({ quiet: true });
+  }, Math.max(0, until - Date.now()) + 500);
+});
+
+onBeforeUnmount(() => {
+  clearInterval(clock);
+  clearTimeout(retry);
+});
 </script>
 
 <style scoped>

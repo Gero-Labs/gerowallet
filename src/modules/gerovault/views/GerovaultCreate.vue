@@ -38,6 +38,10 @@
             <GNote v-if="setupStarted" icon="mdi-information-outline" role="status" data-test="create-can-close">
               {{ $t('gerovault.invite.setup.canClose', { name: displayLabel(flow.setup.value?.name ?? '') }) }}
             </GNote>
+            <InviteBusyNote v-if="flow.busyUntil.value !== null" :until="flow.busyUntil.value" />
+            <GNote v-for="(d, i) in flow.setup.value?.duplicates ?? []" :key="`dup-${i}`" icon="mdi-account-multiple-remove-outline" role="status" data-test="create-duplicate-join">
+              {{ $t('gerovault.invite.setup.duplicate', { name: displayLabel(d.label) }) }}
+            </GNote>
             <GNote v-if="flow.inviteProblem.value && flow.inviteProblem.value.n === undefined && !flow.unlockProblem.value" tone="error" icon="mdi-alert-circle-outline" role="alert">
               {{ $t(inviteProblemKey(flow.inviteProblem.value.code)) }}
             </GNote>
@@ -119,9 +123,11 @@ import { passKeyMultisigAccountKey, requestMultisigAccountKey } from '@/modules/
 import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
 import { useCreateVault } from '@/modules/gerovault/create/useCreateVault';
 import { createVaultChainReader } from '@/modules/gerovault/chain/vaultChainReader';
+import InviteBusyNote from '@/modules/gerovault/invites/InviteBusyNote.vue';
 import InviteQrDialog from '@/modules/gerovault/invites/InviteQrDialog.vue';
 import { inviteClient, passKeyAuth, type InviteAuth } from '@/modules/gerovault/invites/inviteClient';
 import { inviteProblemKey } from '@/modules/gerovault/invites/messages';
+import { useVaultPush } from '@/modules/gerovault/invites/useVaultPush';
 import { displayLabel } from '@/shared/gerovault';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { Contact } from '@/models/types';
@@ -166,6 +172,8 @@ const flow = eligibility.ok
       auth: inviteAuth,
       ...(resumeSetupId ? { resumeSetupId } : {}),
       untitledName: t('gerovault.invite.untitled'),
+      // A cosigner answered: the push refreshes the cards at once (the poll is only a slow fallback).
+      push: useVaultPush,
     },
   })
   : null;

@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onActivated, onDeactivated, ref } from 'vue';
 import DetailsToggle from '@/shared/components/DetailsToggle.vue';
 import InfoTooltip from '@/shared/components/InfoTooltip.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -75,6 +75,7 @@ import VaultListCard from '@/modules/gerovault/detail/components/VaultListCard.v
 import RecoveryImportDialog from '@/modules/gerovault/recovery/RecoveryImportDialog.vue';
 import VaultInvitationsPanel from '@/modules/gerovault/invites/VaultInvitationsPanel.vue';
 import { inviteClient, passKeyAuth, type InviteAuth } from '@/modules/gerovault/invites/inviteClient';
+import { useVaultPush } from '@/modules/gerovault/invites/useVaultPush';
 import { createEligibility } from '@/modules/gerovault/create/eligibility';
 import { passKeyMultisigAccountKey, requestMultisigAccountKey } from '@/modules/gerovault/create/ownAccountKey';
 import { OwnAccountKeyError } from '@/modules/gerovault/create/ownAccountKeyFlow';
@@ -89,6 +90,16 @@ const { enabled: detailsOn, peeking, visible: detailsVisible } = useDetailsLayer
 const wallet = useGerovaultWallet();
 const walletNetwork = computed(() => wallet()?.network);
 const { state, vaults, accepted, candidates, reload } = useVaultList();
+
+// The route lives inside <keep-alive>: a vault saved on the create screen, or joined from an
+// invitation, shows when this page is come back to, and when a vault push arrives while it is open.
+let shown = true;
+onActivated(() => {
+  shown = true;
+  void reload({ quiet: true });
+});
+onDeactivated(() => { shown = false; });
+useVaultPush(() => { if (shown) void reload({ quiet: true }); });
 
 const importOpen = ref(false);
 
