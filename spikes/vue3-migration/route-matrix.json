@@ -604,6 +604,15 @@
       ],
       "manual": "Sign from the side panel with a Ledger Nano X over Bluetooth."
     },
+    "options:/tx-flow/:id": {
+      "checks": [
+        {
+          "kind": "unit",
+          "ref": "src/modules/transactions/views/TxFlowWindow.spec.ts"
+        }
+      ],
+      "manual": "Open a Cardano transaction in the side panel and use Show flow diagram; open a second one while the window is open."
+    },
     "options:/gomining": {
       "checks": [
         {

@@ -97,7 +97,7 @@ describe('TxFlowDiagram', () => {
   it('traces a token to every box that holds it', async () => {
     const wrapper = await mountDiagram();
     try {
-      await wrapper.find('.tx-flow__chip[data-chip]').trigger('mouseenter');
+      await wrapper.find('.tx-flow__chip[data-chip]').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       const lit = wrapper.findAll('.tx-flow__box--hi');
       expect(lit).toHaveLength(2);
@@ -170,6 +170,39 @@ describe('TxFlowDiagram', () => {
     } finally {
       narrow.unmount();
       wide.unmount();
+    }
+  });
+
+  it('pins a tapped box, which a second tap clears; a touch pointer does not hover', async () => {
+    const wrapper = await mountDiagram();
+    try {
+      const mine = () => wrapper.findAll('.tx-flow__box').find((box) => box.classes().includes('tx-flow__box--own'))!;
+      await mine().trigger('pointerenter', { pointerType: 'touch' });
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(0);
+
+      await mine().trigger('click');
+      expect(mine().classes()).toEqual(expect.arrayContaining(['tx-flow__box--hi', 'tx-flow__box--pinned']));
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(1);
+      expect(wrapper.find('.tx-flow__band--hi').exists()).toBe(true);
+      expect(wrapper.find('.tx-flow__info').text()).toContain('governance.you');
+
+      await mine().trigger('click');
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(0);
+      expect(wrapper.find('.tx-flow__info').text()).toBe('transactions.flow.hint');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('a tapped chip pins its token in place of a pinned box', async () => {
+    const wrapper = await mountDiagram();
+    try {
+      await wrapper.findAll('.tx-flow__box').find((box) => box.classes().includes('tx-flow__box--own'))!.trigger('click');
+      await wrapper.find('.tx-flow__chip[data-chip]').trigger('click');
+      expect(wrapper.findAll('.tx-flow__box--pinned')).toHaveLength(0);
+      expect(wrapper.findAll('.tx-flow__box--hi')).toHaveLength(2);
+    } finally {
+      wrapper.unmount();
     }
   });
 });

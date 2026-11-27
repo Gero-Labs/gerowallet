@@ -85,13 +85,27 @@
         </div>
       </div>
 
+      <!-- Flow diagram: too wide for the panel, so it opens in a popup window -->
+      <v-btn
+        v-if="flowModel"
+        block
+        variant="outlined"
+        size="small"
+        :color="primaryColor"
+        class="mt-4 tx-flow-button"
+        @click="openFlowWindow()"
+      >
+        <v-icon size="small" start>mdi-transit-connection-variant</v-icon>
+        {{ $t('transactions.flow.open') }}
+      </v-btn>
+
       <!-- Explorer link -->
       <v-btn
         block
         variant="outlined"
         size="small"
         :color="primaryColor"
-        class="mt-4"
+        class="mt-2"
         @click="openExplorer"
       >
         <v-icon size="small" start>mdi-open-in-new</v-icon>
@@ -105,6 +119,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import type { SponsoredTx } from '@/chains/midnight/midnightSponsorLinks';
 import BottomSheet from '../BottomSheet.vue';
+import type { FlowTxRecord } from '@/shared/utils/txFlow';
+import { useTxFlow } from '@/shared/composables/useTxFlow';
+import { openTxFlowWindow } from '@/shared/utils/openTxFlowWindow';
 import filters from '@/shared/utils/filters';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { useChainContext } from '../../composables/useChainContext';
@@ -131,6 +148,8 @@ type TxDetail = {
   // formatAda coerces through Number() either way.
   body?: { fee?: number | string | bigint; certificates?: unknown[] };
   assets?: TxAsset[];
+  isValid?: FlowTxRecord['isValid'];
+  utxo?: FlowTxRecord['utxo'];
 };
 
 // Vue 2.7 compiles type-only defineProps to `{ tx: { type: Object, required: true } }`,
@@ -223,6 +242,14 @@ function formatTime(timestamp: number): string {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
+}
+
+// The flow diagram opens in a popup window, offered only where there is one to draw
+// (Cardano, both sides recorded: not while pending, not for failed scripts).
+const { flowModel } = useTxFlow(computed(() => props.tx as FlowTxRecord | null));
+
+function openFlowWindow() {
+  if (props.tx?.id) void openTxFlowWindow(props.tx.id);
 }
 
 // Chain, network and chosen explorer all come from the logged wallet.

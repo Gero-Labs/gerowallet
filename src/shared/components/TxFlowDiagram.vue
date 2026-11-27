@@ -15,8 +15,8 @@
           :d="band.path"
           :class="['tx-flow__band', { 'tx-flow__band--hi': highlighted.has(band.key) }]"
           :style="{ fill: KIND_COLOR[band.kind] }"
-          @mouseenter="hoverNode(band.key)"
-          @mouseleave="clearHover"
+          @pointerenter="pointerHover($event, band.key)"
+          @pointerleave="pointerLeave"
         />
         <line
           v-for="divider in layout.dividers"
@@ -55,7 +55,10 @@
           'tx-flow__box',
           'glass-tier',
           `tx-flow__box--${box.node.kind}`,
-          { 'tx-flow__box--hi': highlighted.has(box.node.key) },
+          {
+            'tx-flow__box--hi': highlighted.has(box.node.key),
+            'tx-flow__box--pinned': pinnedNode === box.node.key,
+          },
         ]"
         :style="{
           left: `${box.x}px`,
@@ -64,9 +67,9 @@
           height: `${box.height}px`,
           '--flow-c': KIND_COLOR[box.node.kind],
         }"
-        @mouseenter="hoverNode(box.node.key)"
-        @mouseleave="clearHover"
-        @click="box.node.kind === 'more' ? expand(box.side) : undefined"
+        @pointerenter="pointerHover($event, box.node.key)"
+        @pointerleave="pointerLeave"
+        @click="box.node.kind === 'more' ? expand(box.side) : pinNode(box.node.key)"
       >
         <div class="tx-flow__head">
           <span v-if="!compact" class="tx-flow__icon"><v-icon size="16">{{ KIND_ICON[box.node.kind] }}</v-icon></span>
@@ -88,9 +91,9 @@
             class="tx-flow__chip t-caption"
             data-chip
             :title="tokenTitle(token)"
-            @mouseenter.stop="traceToken(token.unit)"
-            @mouseleave.stop="clearHover"
-            @focus="traceToken(token.unit)"
+            @pointerenter.stop="pointerTrace($event, token.unit)"
+            @pointerleave.stop="pointerLeave"
+            @focus="focusTrace($event, token.unit)"
             @blur="clearHover"
             @click.stop="pinToken(token.unit)"
           >
@@ -227,6 +230,8 @@ const compact = computed(() => width.value > 0 && width.value < COMPACT_WIDTH);
 const open = ref<{ in: boolean; out: boolean }>({ in: false, out: false });
 watch(() => props.model, () => {
   open.value = { in: false, out: false };
+  pinnedNode.value = null;
+  pinned.value = null;
 });
 
 const inputs = computed(() => collapseFlowNodes(props.model.inputs, COLUMN_LIMIT, open.value.in));
@@ -341,11 +346,13 @@ async function fitChips() {
 watch([width, layout], () => void fitChips(), { flush: 'post' });
 
 // ---------------------------------------------------------------------------
-// Highlight: a hovered box with its band, or every box holding a traced token
+// Highlight: a hovered box with its band, or every box holding a traced token.
+// Touch has no hover: a tap pins a box (or a chip's token) until tapped again.
 // ---------------------------------------------------------------------------
 const hovered = ref<string | null>(null);
 const traced = ref<string | null>(null);
 const pinned = ref<string | null>(null);
+const pinnedNode = ref<string | null>(null);
 
 const allBoxes = computed(() => layout.value.boxes.map((box) => box.node));
 
@@ -354,8 +361,42 @@ const highlighted = computed<Set<string>>(() => {
   if (unit) {
     return new Set(allBoxes.value.filter((node) => node.tokens.some((token) => token.unit === unit)).map((node) => node.key));
   }
-  return hovered.value ? new Set([hovered.value]) : new Set();
+  const node = hovered.value ?? pinnedNode.value;
+  return node ? new Set([node]) : new Set();
 });
+
+// A tap also sends pointerenter, and no pointerleave until the next tap elsewhere:
+// hover follows the mouse only, so a second tap on a pinned box really clears it.
+const isMouse = (event: PointerEvent) => !event.pointerType || event.pointerType === 'mouse';
+
+function pointerHover(event: PointerEvent, key: string) {
+  if (isMouse(event)) hoverNode(key);
+}
+
+function pointerTrace(event: PointerEvent, unit: string) {
+  if (isMouse(event)) traceToken(unit);
+}
+
+function pointerLeave(event: PointerEvent) {
+  if (isMouse(event)) clearHover();
+}
+
+/** Keyboard focus traces a token; the focus a tap leaves behind does not (the tap pins it). */
+function focusTrace(event: FocusEvent, unit: string) {
+  const target = event.target as HTMLElement | null;
+  let visible = true;
+  try {
+    visible = !target || target.matches(':focus-visible');
+  } catch {
+    visible = true;
+  }
+  if (visible) traceToken(unit);
+}
+
+function pinNode(key: string) {
+  pinned.value = null;
+  pinnedNode.value = pinnedNode.value === key ? null : key;
+}
 
 function hoverNode(key: string) {
   hovered.value = key;
@@ -367,6 +408,7 @@ function traceToken(unit: string) {
 }
 
 function pinToken(unit: string) {
+  pinnedNode.value = null;
   pinned.value = pinned.value === unit ? null : unit;
 }
 
@@ -387,7 +429,8 @@ const info = computed(() => {
       to: names(outputs.value) || t('transactions.flow.burned'),
     });
   }
-  const node = hovered.value ? allBoxes.value.find((item) => item.key === hovered.value) : undefined;
+  const key = hovered.value ?? pinnedNode.value;
+  const node = key ? allBoxes.value.find((item) => item.key === key) : undefined;
   return node ? nodeLine(node) : t('transactions.flow.hint');
 });
 </script>
@@ -458,6 +501,10 @@ const info = computed(() => {
 .tx-flow__canvas--dim .tx-flow__box--hi {
   opacity: 1;
   border-color: var(--g-hairline-3);
+}
+
+.tx-flow__box--pinned {
+  border-color: var(--flow-c);
 }
 
 .tx-flow__box--fee,
