@@ -23,7 +23,10 @@ export interface InviteTransport {
  *   `already_answered`, `expired`, `revoked`, `too_many_pending`, `limit_exceeded`,
  *   `rate_limited`, `invalid_field`, `device_unknown`, ...), passed through;
  * - `network`: no answer; `invalid_response`: an answer this client refuses to read;
- * - `deferred`: the notify client scheduled a retry (a long Retry-After).
+ * - `deferred`: the notify client scheduled a retry (a long Retry-After) for something other than
+ *   a rate limit;
+ * - `rate_limited` always carries `retryAfterMs`: gero-sync's `Retry-After`, or this client's own
+ *   backoff when it sent none. Until then the same kind of request is not sent again (below).
  */
 export class InviteApiError extends Error {
   constructor(
@@ -276,10 +279,14 @@ function readResponses(v: unknown, setupId: string): SetupResponses {
 // ---------------------------------------------------------------------------------------------
 
 /** The notify client's `NotifyError` (status, code, details, retryAfterMs) or `NotifyDeferred`, as an `InviteApiError`. */
-function asApiError(error: unknown): InviteApiError {
+function asApiError(error: unknown, now: number): InviteApiError {
   if (error instanceof InviteApiError) return error;
-  const e = error as { name?: unknown; status?: unknown; code?: unknown; details?: unknown; retryAfterMs?: unknown } | null;
-  if (e?.name === 'NotifyDeferred') return new InviteApiError('deferred', 0);
+  const e = error as { name?: unknown; status?: unknown; code?: unknown; details?: unknown; retryAfterMs?: unknown; dueAt?: unknown } | null;
+  if (e?.name === 'NotifyDeferred') {
+    // A Retry-After the notify client would not sit through: still a rate limit, with its wait.
+    if (e.code === 'rate_limited') return new InviteApiError('rate_limited', 429, undefined, typeof e.dueAt === 'number' ? Math.max(0, e.dueAt - now) : undefined);
+    return new InviteApiError('deferred', 0);
+  }
   if (e && typeof e.code === 'string' && typeof e.status === 'number') {
     return new InviteApiError(
       e.status === 0 ? 'network' : e.code,
@@ -291,12 +298,52 @@ function asApiError(error: unknown): InviteApiError {
   return new InviteApiError('network', 0);
 }
 
-export function createInviteApi(transport: InviteTransport): InviteApi {
+/** The wait after a 429 that named none, doubling with every further one. */
+export const RATE_LIMIT_BACKOFF_MS = 60_000;
+export const RATE_LIMIT_BACKOFF_CAP_MS = 15 * 60_000;
+
+/**
+ * Which of gero-sync's rate limits a request counts against (PROTOCOL 7.6), or null for a route
+ * without one of its own. Both lists (`GET /vault-invites`, `GET …/responses`) share one.
+ */
+export function rateLimitScope(method: InviteMethod, path: string): string | null {
+  if (method === 'GET') return 'read';
+  if (method !== 'POST') return null;
+  if (path === '/vault-invites/recipients') return 'directory';
+  if (path === '/vault-invites/by-link') return 'by-link';
+  if (/\/invites$/.test(path)) return 'invite';
+  if (/\/responses$/.test(path)) return 'respond';
+  const remind = path.match(/\/invites\/([0-9a-f]{32})\/remind$/);
+  return remind ? `remind:${remind[1]}` : null;
+}
+
+export interface InviteApiOptions {
+  readonly now?: () => number;
+}
+
+export function createInviteApi(transport: InviteTransport, options: InviteApiOptions = {}): InviteApi {
+  const now = options.now ?? (() => Date.now());
+  // After a 429 the same kind of request waits out Retry-After here, without reaching gero-sync:
+  // a screen that keeps asking would only spend the next window too. Worker memory only.
+  const limited = new Map<string, { until: number; strikes: number }>();
+
   async function call<T>(method: InviteMethod, path: string, body?: unknown): Promise<T> {
+    const scope = rateLimitScope(method, path);
+    const held = scope ? limited.get(scope) : undefined;
+    if (held && now() < held.until) throw new InviteApiError('rate_limited', 429, undefined, held.until - now());
     try {
-      return await transport.send<T>(method, path, body);
+      const answer = await transport.send<T>(method, path, body);
+      if (scope) limited.delete(scope);
+      return answer;
     } catch (error) {
-      throw asApiError(error);
+      const failure = asApiError(error, now());
+      if (failure.code !== 'rate_limited') throw failure;
+      // Never sooner than Retry-After; without one, or when it keeps happening, back off further.
+      const strikes = (held?.strikes ?? 0) + 1;
+      const backoff = Math.min(RATE_LIMIT_BACKOFF_CAP_MS, (failure.retryAfterMs ?? RATE_LIMIT_BACKOFF_MS) * 2 ** (strikes - 1));
+      const wait = Math.max(failure.retryAfterMs ?? 0, backoff);
+      if (scope) limited.set(scope, { until: now() + wait, strikes });
+      throw new InviteApiError('rate_limited', failure.status || 429, failure.details, wait);
     }
   }
   const id = (value: string, re: RegExp): string => {
