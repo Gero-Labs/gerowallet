@@ -1,0 +1,271 @@
+{
+  "note": "Hex strings are big-endian numbers when prefixed 0x, raw bytes otherwise. Computed with the test build's pureCircuits and checked equal with the production build's (the two differ only in constants). Recomputed by node scripts/freeze.mjs --check and test/freeze.test.mjs.",
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about (the public BIP-39 test vector, empty passphrase)",
+  "derivation": {
+    "spec": "lib/derive.mjs header: path m/1854'/2400'/n'/r'/i', Jubjub sk by BLAKE2b-512 wide reduction, BIP-340 upgrade key = child key, guardian salt by BLAKE2b-256 of the guardian child key",
+    "keys": [
+      {
+        "path": "m/1854'/2400'/1'/0'/1'",
+        "network": "preprod",
+        "role": "approval",
+        "index": 1,
+        "childKey": "db56455d1c79a08fffc4dd4c83aee31d92fad7cd07fcda63b5c33e4bdbb756b9",
+        "jubjubSk": "0x77b24a6ccf699af0863243aabc078535adc9823d365c479204530baa55afc92",
+        "publicKey": {
+          "x": "0x4755036421fb09fbfa223778c34be575ffba7f83e3c0df8a0445a9abd3be445f",
+          "y": "0x18c5b62f0272c177d4a4f438be6187d1999fba3fa47db401e66a13bf47ce1fc2"
+        }
+      },
+      {
+        "path": "m/1854'/2400'/1'/1'/1'",
+        "network": "preprod",
+        "role": "upgrade",
+        "index": 1,
+        "childKey": "c8d47be33ce3d1240349fb1ab4d2947665ff641323462cbf9490644102e7d166",
+        "bip340XOnlyPublicKey": "ed01213c563074e6a4fdc29571a3aa0f6a3e538fa4517b3ca542da9479a08d8a"
+      },
+      {
+        "path": "m/1854'/2400'/1'/2'/2'",
+        "network": "preprod",
+        "role": "guardian",
+        "index": 2,
+        "childKey": "a76ba2dc7b733e4f94fd51fd15599af47021081e0b04aea849eebbc3c02d9131",
+        "jubjubSk": "0x6765e51948775eca59e00b657ce28dc9b65be450e3ebc7169dad6ef1a6e3d74",
+        "publicKey": {
+          "x": "0x1f40f9851e5ac36e50455babc06077bd7c4c795decbe86e5278681dc618d2cdf",
+          "y": "0x2b29fcf7fe7c106e4848e627dda7f7a05d5456d4a9141ab82a1148aaab216f47"
+        },
+        "guardianSalt": "80f6bad1b35e80168316ba086919e34bf82f20a891846d31042bcf38e49c857f",
+        "guardianCommitment": "0x2fd62bf9d0e8807ef59d34a2ef9c8b7f91a92610d68e3f59ac9ea3df26e38602"
+      },
+      {
+        "path": "m/1854'/2400'/1'/3'/3'",
+        "network": "preprod",
+        "role": "delegate",
+        "index": 3,
+        "childKey": "89e6aa47d0175caa369b69158d02ced42834920c9cda858be42ebc8dbc5e14c4",
+        "jubjubSk": "0xb292e2ea62759d83edf772ed1f8647f4c9751d6ece0c4233b77c748fe7ec0e6",
+        "publicKey": {
+          "x": "0x44ac13461f137ea3da5ed5b1958c9e9333ec58c6d88c4e050b5af8eb8ac45fc1",
+          "y": "0x14ae1226a0f916bf393911b52cdcdfce5b8ec4de3905720c9bb0f2d16364e57b"
+        }
+      },
+      {
+        "path": "m/1854'/2400'/0'/0'/1'",
+        "network": "mainnet",
+        "role": "approval",
+        "index": 1,
+        "childKey": "64346de028435f92c15f3bee4c6f300cdf2b78a0b5cd4a1d691d84363f31a0a8",
+        "jubjubSk": "0x110d7aed691e3ec78ce7fca6e04971cbdddfba6e854ec0d96f29c18e1a5e0b2",
+        "publicKey": {
+          "x": "0xaa03ea06e9e3479dd5ca1364dfd42d5ade78367ef42a2192c0c8ba1cfafeb93",
+          "y": "0x1a41db54ec484c94ce646b05478f80f664b57277683a1e31ea3a3e061b37c60e"
+        }
+      },
+      {
+        "path": "m/1854'/2400'/2'/0'/1'",
+        "network": "preview",
+        "role": "approval",
+        "index": 1,
+        "childKey": "c8268013d3da540b3e2978882d8f0c33d626ec96a81d0e89dcac774f39e8f231",
+        "jubjubSk": "0xe3f5bf6e90f74847c59785bc014b1605942ddd0fcdbb04b267bb46d7234ae71",
+        "publicKey": {
+          "x": "0x5d5641d3e795e0532120b36118ce6f9fc309d5c4065a8b7178c02eaa2bce5b68",
+          "y": "0x4fca4472ce5ed97d2e024b3b7b38019d8cedfa844fc684419df77ee9bb48db83"
+        }
+      }
+    ]
+  },
+  "statementDigests": [
+    {
+      "kind": "payout:v4",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 3,
+        "expiry": "0x6b49d200",
+        "recipient": "3333333333333333333333333333333333333333333333333333333333333333",
+        "amount": 1000
+      },
+      "value": "0x14a677bdf945b24bf3100c64855fccdaaf6d5bcc229f4470b3c8b8b3811c26ec"
+    },
+    {
+      "kind": "delegate-pay:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "slot": 1,
+        "delegateNonce": 4,
+        "expiry": "0x6b49d200",
+        "recipient": "3333333333333333333333333333333333333333333333333333333333333333",
+        "amount": 1000
+      },
+      "value": "0x49beca604a61f10ba64e63bfa4a508b441a6833bee1571d144a05f51d9ffe1bb"
+    },
+    {
+      "kind": "propose-owners:v2",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 7,
+        "expiry": "0x6b49d200",
+        "subject": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+      },
+      "value": "0x401a32ecb0edf73219e84ffb166574e580cdde4313ac073970c0caf7b669fe7"
+    },
+    {
+      "kind": "cancel-owners:v2",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 8,
+        "expiry": "0x6b49d200",
+        "subject": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+      },
+      "value": "0x3f8342d59ba0eec73223ae2d370f5bf69a978424e9c9f8a7be959c86ec472cee"
+    },
+    {
+      "kind": "propose-policy:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 9,
+        "expiry": "0x6b49d200",
+        "subject": "0x61b724303c423cde829a96165f6aed47463ca2cc951285f939e6e1f7d6c56a99"
+      },
+      "value": "0x502e5ce20b1e51f71add454279a46ce48837a97aafd02627f46f980072351112"
+    },
+    {
+      "kind": "cancel-policy:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 10,
+        "expiry": "0x6b49d200",
+        "subject": "0x61b724303c423cde829a96165f6aed47463ca2cc951285f939e6e1f7d6c56a99"
+      },
+      "value": "0x6e1fb835a14230729398862346491474d898b57188de5a20c20f68386df2174d"
+    },
+    {
+      "kind": "narrow-policy:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 11,
+        "expiry": "0x6b49d200",
+        "subject": "0x61b724303c423cde829a96165f6aed47463ca2cc951285f939e6e1f7d6c56a99"
+      },
+      "value": "0x18296a2af5c614e3dfbb6527175580d2de462bc68e3805880a04e0cabc9785ee"
+    },
+    {
+      "kind": "propose-guard:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 12,
+        "expiry": "0x6b49d200",
+        "subject": "0x7f3f59684717c139009e4187c605f52c123f54264b627dc11c8f708ab67ba34"
+      },
+      "value": "0xc8970e538a699a1b6969dbc6ab00e02b610f8d2a23c7238ab3a890f8c0f577f"
+    },
+    {
+      "kind": "cancel-guard:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 13,
+        "expiry": "0x6b49d200",
+        "subject": "0x7f3f59684717c139009e4187c605f52c123f54264b627dc11c8f708ab67ba34"
+      },
+      "value": "0x718ac3d49a2e403bf3bd40308b6cf5831056607d9c8436707df2c40875b18824"
+    },
+    {
+      "kind": "cancel-recov:v2",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 14,
+        "expiry": "0x6b49d200",
+        "subject": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+      },
+      "value": "0x1445ac0c53c87abbbddd7b00be0808de55f6e4a36e1946e7ee6be844ee494652"
+    },
+    {
+      "kind": "propose-recov:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 15,
+        "expiry": "0x6b49d200",
+        "subject": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+      },
+      "value": "0x66a971c35c95db130866f0610429ffb3d0511e12b4bf2a888c2a9c88a14b24d8"
+    },
+    {
+      "kind": "withdraw-recov:v1",
+      "inputs": {
+        "vault": "2222222222222222222222222222222222222222222222222222222222222222",
+        "network": "preprod",
+        "nonce": 16,
+        "expiry": "0x6b49d200",
+        "subject": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+      },
+      "value": "0x319fd685634386799e2abdbd098d70a72ec139787ab2e97ad615f2448f743ffa"
+    }
+  ],
+  "commitments": {
+    "ownerSetCommitment": {
+      "inputs": {
+        "owners": "derived preprod approval key 1 with derived preprod upgrade key 1; then ecMulGenerator(0xfedcba0987654321) with upgrade key 0x12 x 32; 3 empty slots",
+        "threshold": 2
+      },
+      "value": "0x68045f4a13c6ad64e59a3a400adb53f5ec43c6213534733229c90ef91e57ea5c"
+    },
+    "policyCommitment": {
+      "inputs": "whitelist on; entry 0 = 0x33 x 32, scope Any; delegate slot 0 = derived preprod delegate key 3, cap 100, period 3600",
+      "value": "0x61b724303c423cde829a96165f6aed47463ca2cc951285f939e6e1f7d6c56a99"
+    },
+    "recoveryConfigCommitment": {
+      "inputs": "guardians [derived preprod guardian 2 commitment, 0, 0, 0, 0], threshold 1, delay 604800, cool-down 172800, expiry window 2592000",
+      "value": "0x7f3f59684717c139009e4187c605f52c123f54264b627dc11c8f708ab67ba34"
+    },
+    "guardianCommitments": [
+      {
+        "key": "derived preprod guardian key 2",
+        "salt": "80f6bad1b35e80168316ba086919e34bf82f20a891846d31042bcf38e49c857f",
+        "value": "0x2fd62bf9d0e8807ef59d34a2ef9c8b7f91a92610d68e3f59ac9ea3df26e38602"
+      },
+      {
+        "key": {
+          "scalar": "0x1234567890abcdef",
+          "x": "0x3a2d82bd9b38bff436c1b7f80baba7c1bfad918d9c3357200ff4e6d1c457f52f",
+          "y": "0xf150490dc9fb35bcf66e60a969d0b324faf27b4336a59243683e8061ca2bd9"
+        },
+        "salt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "value": "0x35069d23c26534deed39e0656e9223b4c95deff29812231c1c28ec0e97ff15f2"
+      }
+    ]
+  },
+  "signature": {
+    "scheme": "Jubjub Schnorr as jubjubSchnorrVerify<1> checks it, hedged deterministic nonce",
+    "signer": "derived preprod approval key 1",
+    "digest": "0x1445ac0c53c87abbbddd7b00be0808de55f6e4a36e1946e7ee6be844ee494652",
+    "digestOf": "the cancel-recov:v2 statement above",
+    "rand32": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "nonce": "0x5dc8f9c6dae65e9402030581564d74c0ad0b1376365abdba4c2b4128ee4fe8",
+    "challenge": "0x61a3cbead2f4b3b82c1cbc7904fba91d5cf2854d083db1ba9871b3e32097150",
+    "publicKey": {
+      "x": "0x4755036421fb09fbfa223778c34be575ffba7f83e3c0df8a0445a9abd3be445f",
+      "y": "0x18c5b62f0272c177d4a4f438be6187d1999fba3fa47db401e66a13bf47ce1fc2"
+    },
+    "signature": {
+      "announcement": {
+        "x": "0x22dc73c5e1d834e3106a272f6e5f2889a902c8f939336e7f8c9642955e7227eb",
+        "y": "0x6a3ad0910af09d746bc0ffedafc48ea73b2970e8398482cbeb65fcbc554af468"
+      },
+      "response": "0xe50333a239f18982ee5bf4d3a9c517a4d9caf5108b97d24998910c634ef408d"
+    },
+    "verifies": true,
+    "verifiesForDigestPlusOne": false
+  }
+}

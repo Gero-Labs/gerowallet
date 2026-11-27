@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { baseCompile } from '@intlify/message-compiler';
@@ -8,10 +8,15 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const locales = ['us', 'de', 'es'];
 const prefix = 'virtual:gero-locales/';
 
-/** Read data-only TS catalogs without evaluating arbitrary module code. */
-export function readLiteralModule(source, filename, exported = 'default') {
+/**
+ * Read data-only TS catalogs without evaluating arbitrary module code. A catalog may spread other
+ * catalogs into its top-level object (`import part from './dir/part.us'` and `...part`): `parts`
+ * maps each such import's name to the messages read from it (`readCatalog` fills it). A key may not
+ * come both from a part and from the catalog or another part.
+ */
+export function readLiteralModule(source, filename, exported = 'default', parts = new Map()) {
   const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  function literal(node) {
+  function literal(node, top = false) {
     if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node)) return literal(node.expression);
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
     if (ts.isNumericLiteral(node)) return Number(node.text);
@@ -20,8 +25,18 @@ export function readLiteralModule(source, filename, exported = 'default') {
     if (ts.isArrayLiteralExpression(node)) return node.elements.map(literal);
     if (ts.isObjectLiteralExpression(node)) {
       const result = {};
+      const fromParts = new Set();
       for (const property of node.properties) {
+        if (top && ts.isSpreadAssignment(property) && ts.isIdentifier(property.expression) && parts.has(property.expression.text)) {
+          for (const [key, value] of Object.entries(parts.get(property.expression.text))) {
+            if (Object.hasOwn(result, key)) throw new Error(`${filename}: ${key} is defined twice`);
+            result[key] = value;
+            fromParts.add(key);
+          }
+          continue;
+        }
         if (!ts.isPropertyAssignment(property) || !property.name || ts.isComputedPropertyName(property.name)) throw new Error(`${filename}: catalog must contain literal properties only`);
+        if (fromParts.has(property.name.text)) throw new Error(`${filename}: ${property.name.text} is defined twice`);
         result[property.name.text] = literal(property.initializer);
       }
       return result;
@@ -29,12 +44,33 @@ export function readLiteralModule(source, filename, exported = 'default') {
     throw new Error(`${filename}: unsupported catalog expression ${ts.SyntaxKind[node.kind]}`);
   }
   for (const statement of file.statements) {
-    if (exported === 'default' && ts.isExportAssignment(statement)) return literal(statement.expression);
+    if (exported === 'default' && ts.isExportAssignment(statement)) return literal(statement.expression, true);
     if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === exported && declaration.initializer) return literal(declaration.initializer);
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === exported && declaration.initializer) return literal(declaration.initializer, true);
     }
   }
   throw new Error(`${filename}: missing ${exported} catalog export`);
+}
+
+/**
+ * The catalogs `filename` spreads, by import name: default imports of a relative path inside
+ * `directory`. Any other import is refused, so a catalog stays data.
+ */
+function catalogImports(source, filename, directory) {
+  const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const imports = new Map();
+  for (const statement of file.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const clause = statement.importClause;
+    const specifier = ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : '';
+    if (!clause?.name || clause.namedBindings || clause.isTypeOnly || !specifier.startsWith('./')) {
+      throw new Error(`${filename}: a catalog imports only other catalogs, as a default import of a relative path`);
+    }
+    const target = resolve(dirname(filename), specifier.endsWith('.ts') ? specifier : `${specifier}.ts`);
+    if (!target.startsWith(directory + sep)) throw new Error(`${filename}: ${specifier} is outside ${directory}`);
+    imports.set(clause.name.text, target);
+  }
+  return imports;
 }
 
 export function compileMessages(messages, locale) {
@@ -56,8 +92,24 @@ function catalogCompiler(root) {
   const paths = Object.fromEntries(locales.map(locale => [locale, resolve(directory, `${locale}.ts`)]));
   let push;
   const compiled = new Map();
+  // Catalogs read only because a locale spreads them, so the plugin can watch them too.
+  const parts = new Set();
+  async function readCatalog(path, chain = []) {
+    if (chain.includes(path)) throw new Error(`${path}: a catalog spreads itself`);
+    const source = await readFile(path, 'utf8');
+    const read = new Map();
+    const files = [path];
+    for (const [name, target] of catalogImports(source, path, directory)) {
+      parts.add(target);
+      const part = await readCatalog(target, [...chain, path]);
+      read.set(name, part.messages);
+      files.push(...part.paths);
+    }
+    return { messages: readLiteralModule(source, path, 'default', read), paths: files };
+  }
   return {
     paths: [...Object.values(paths), pushPath],
+    parts,
     localePaths(locale) { return [paths[locale], pushPath]; },
     compile(locale) {
       if (!compiled.has(locale)) {
@@ -65,9 +117,8 @@ function catalogCompiler(root) {
         // share both the push catalog read and each locale's compilation.
         push ??= readFile(pushPath, 'utf8').then(source => readLiteralModule(source, pushPath, 'pushStrings'));
         compiled.set(locale, (async () => {
-          const [source, pushMessages] = await Promise.all([readFile(paths[locale], 'utf8'), push]);
-          const messages = readLiteralModule(source, paths[locale]);
-          return { ...compileMessages({ ...messages, ...pushMessages[locale] }, locale), paths: [paths[locale], pushPath] };
+          const [catalog, pushMessages] = await Promise.all([readCatalog(paths[locale]), push]);
+          return { ...compileMessages({ ...catalog.messages, ...pushMessages[locale] }, locale), paths: [...catalog.paths, pushPath] };
         })());
       }
       return compiled.get(locale);
@@ -84,6 +135,14 @@ export async function compileCatalogs(root = repository) {
 export function localeMessagesPlugin(root = repository) {
   let compiler = catalogCompiler(root);
   const watchedPaths = new Set(compiler.paths);
+  // Watch the catalogs a locale spreads as well, once a compile has found them.
+  const watchParts = context => {
+    for (const path of compiler.parts) {
+      if (compiler.paths.includes(path)) continue;
+      watchedPaths.add(path);
+      context.addWatchFile(path);
+    }
+  };
   return {
     name: 'gero-precompiled-locale-messages', enforce: 'pre',
     resolveId(id) { if (id.startsWith(prefix)) return `\0${id}`; },
@@ -92,7 +151,11 @@ export function localeMessagesPlugin(root = repository) {
       // Watch every shipped catalog even if it is not imported (or fails to
       // compile), so correcting it can recover a failed watch build.
       for (const path of compiler.paths) this.addWatchFile(path);
-      await Promise.all(locales.map(locale => compiler.compile(locale)));
+      try {
+        await Promise.all(locales.map(locale => compiler.compile(locale)));
+      } finally {
+        watchParts(this);
+      }
     },
     watchChange(file) {
       if (watchedPaths.has(resolve(file))) compiler = catalogCompiler(root);
@@ -102,8 +165,12 @@ export function localeMessagesPlugin(root = repository) {
       const locale = id.slice(prefix.length + 1);
       if (!locales.includes(locale)) throw new Error(`Unsupported shipped locale: ${locale}`);
       for (const path of compiler.localePaths(locale)) this.addWatchFile(path);
-      const compiled = await compiler.compile(locale);
-      return { code: compiled.code, map: null };
+      try {
+        const compiled = await compiler.compile(locale);
+        return { code: compiled.code, map: null };
+      } finally {
+        watchParts(this);
+      }
     },
   };
 }

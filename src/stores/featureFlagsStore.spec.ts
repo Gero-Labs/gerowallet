@@ -209,6 +209,56 @@ test('a local test build with VITE_GEROVAULT_FORCE_ON keeps GeroVault on whateve
   }
 });
 
+test('exposes isGeroVaultMidnightEnabled, off by default, on with the remote flag for preprod wallets only', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Preprod')).toBe(false);
+
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isGeroVaultMidnightEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Preprod')).toBe(true);
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('midnight-preprod')).toBe(true);
+  // The build-time network list holds whatever the service says.
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Mainnet')).toBe(false);
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Preview')).toBe(false);
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled(undefined)).toBe(false);
+  // The Cardano vault flag is a separate switch.
+  expect(featureFlagsStore.isVaultsEnabled()).toBe(false);
+
+  featureFlagsStore.subscribeToFlagChanges();
+  const listener = vi.mocked(featureFlagService.onFlagChange).mock.calls.find(([key]) => key === 'isGeroVaultMidnightEnabled')?.[1];
+  listener?.(false, true);
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Preprod')).toBe(false);
+
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isGeroVaultMidnightEnabled('Preprod')).toBe(false);
+});
+
+test('VITE_GEROVAULT_FORCE_ON also keeps GeroVault on Midnight on, still for preprod wallets only', async () => {
+  vi.stubEnv('VITE_GEROVAULT_FORCE_ON', 'true');
+  vi.resetModules();
+  try {
+    const { featureFlagsStore: forced } = await import('@/stores/featureFlagsStore');
+    const service = (await import('@/services/featureFlag.service')).default;
+    expect(forced.isGeroVaultMidnightEnabled('Preprod')).toBe(true);
+    expect(forced.isGeroVaultMidnightEnabled('Mainnet')).toBe(false);
+
+    vi.mocked(service.getFlag).mockImplementation((_key: string, fallback: unknown) => fallback);
+    forced.loadFlags();
+    forced.subscribeToFlagChanges();
+    const listener = vi.mocked(service.onFlagChange).mock.calls.filter(([key]) => key === 'isGeroVaultMidnightEnabled').at(-1)?.[1];
+    expect(listener).toBeDefined();
+    listener?.(false, true);
+    expect(forced.isGeroVaultMidnightEnabled('Preprod')).toBe(true);
+    forced.reset();
+    expect(forced.isGeroVaultMidnightEnabled('Preprod')).toBe(true);
+  } finally {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  }
+});
+
 // After a failed first fetch the service retries (issue 1195); the store must
 // pick the real values up then, and must not hand the background all-off
 // fallbacks in the meantime.

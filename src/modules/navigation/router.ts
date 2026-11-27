@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordNormalized, type RouteRecordRaw } from 'vue-router';
 import { Blockchain } from '@/models/types';
 import { isMidnightSwapNetwork } from '@/chains/midnight/midnightSwapConfig';
+import { isGeroVaultMidnightNetwork } from '@/modules/gerovault/midnight/contracts';
 import { lazyPage } from './lazyPage';
 import HelpLayout from '@/modules/help/HelpLayout.vue';
 import { blogHelpRedirect } from './helpAccess';
@@ -73,6 +74,7 @@ import {
   GEROVAULT_TABS,
   GEROVAULT_VAULT_ROUTE,
 } from '@/modules/gerovault/gerovaultRoutes';
+import { GEROVAULT_MIDNIGHT_CHILD_ROUTES, GEROVAULT_MIDNIGHT_ROUTE_NAMES } from '@/modules/gerovault/midnight/routes';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -272,6 +274,18 @@ const routes: RouteRecordRaw[] = [
       { path: ':vaultId/spend', name: GEROVAULT_SPEND_ROUTE, component: GerovaultSpend },
       { path: ':vaultId/import-signatures', name: GEROVAULT_IMPORT_SIGNATURES_ROUTE, component: GerovaultImportSignatures },
     ],
+  },
+  // GeroVault on Midnight (contract vaults). Every route under /midnight-vaults is gated by the
+  // isGeroVaultMidnightEnabled flag, a Midnight wallet and the build-time network list (the guards
+  // below), so with the flag off none is reachable. One parent without a component of its own;
+  // the children and the files each one loads are in modules/gerovault/midnight/routes.ts.
+  {
+    path: '/midnight-vaults',
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+    children: GEROVAULT_MIDNIGHT_CHILD_ROUTES,
   },
   {
     path: '/media-player',
@@ -675,6 +689,10 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
       // GeroVault: a Cardano wallet AND the live flag, read here too so a cold refresh
       // before the flags load cannot open a vault route. Matches the drawer item.
       ...Object.fromEntries(GEROVAULT_ROUTE_NAMES.map(name => [name, (c: string) => c === Blockchain.CARDANO && featureFlagsStore.isVaultsEnabled()])),
+      // GeroVault on Midnight: a Midnight wallet on a network of GEROVAULT_MIDNIGHT_NETWORKS (build
+      // time, checked again here) AND the live flag, so a cold refresh before the flags load opens none.
+      ...Object.fromEntries(GEROVAULT_MIDNIGHT_ROUTE_NAMES.map(name => [name, (c: string, n: string) =>
+        c === Blockchain.MIDNIGHT && isGeroVaultMidnightNetwork(n) && featureFlagsStore.isGeroVaultMidnightEnabled(n)])),
     };
     const guard = routeNetworkGuards[String(to.name)];
     if (guard && !guard(chain, network)) {

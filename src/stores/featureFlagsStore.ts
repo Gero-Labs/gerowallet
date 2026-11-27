@@ -2,14 +2,16 @@ import { plainStoreSnapshot } from '@/stores/serialization';
 import { writeFeatureFlagMirror } from '@/shared/utils/featureFlagMirror';
 import { reactive } from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
+import { isGeroVaultMidnightNetwork } from '@/modules/gerovault/midnight/contracts';
 
 // Build-time default for the CIP-45 flag (dev/test only); a flag-service value still wins.
 const CIP45_DEFAULT_ENABLED =
   (import.meta as { env?: Record<string, unknown> }).env?.['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
 
 // Local test builds only: VITE_GEROVAULT_FORCE_ON=true at build time turns GeroVault on whatever
-// the flag service says, so a test extension can open the vault screens while the remote flag
-// stays off for everyone. Release builds never set it (scripts/write-production-env.mjs), and
+// the flag service says (the Cardano vaults and the Midnight vaults, the latter still on the
+// build-time networks only), so a test extension can open the vault screens while the remote flags
+// stay off for everyone. Release builds never set it (scripts/write-production-env.mjs), and
 // scripts/check-release-artifact.mjs refuses a candidate built with it on.
 // Read as a plain `import.meta.env[...]`: the build replaces it with the value, and vitest
 // does not see through a cast of `import.meta`.
@@ -138,6 +140,10 @@ export interface FeatureFlags {
   // GeroVault (multisig vaults): the /vaults routes and the Vaults navigation item.
   // Default OFF, ships dark. Gates the UI ONLY; nothing in the background reads it.
   isVaultsEnabled: boolean;
+  // GeroVault on Midnight (contract vaults): the /midnight-vaults routes. Default OFF, ships dark.
+  // On only for a network of GEROVAULT_MIDNIGHT_NETWORKS (build time, preprod): the getter takes the
+  // wallet's network. The background reads it from the flag mirror and holds the same network list.
+  isGeroVaultMidnightEnabled: boolean;
   // Gero Card "Complete your cardholder details" step. Default ON and a remote KILL-SWITCH:
   // false skips Zione's cardholder-details endpoints, and an order refused for missing
   // details then points the user to Zione support. Only an explicit false turns it off.
@@ -210,6 +216,7 @@ const featureFlagsState = reactive<FeatureFlagsState>({
     isNftMarketEnabled: false,
     isMultiAccountEnabled: false,
     isVaultsEnabled: GEROVAULT_FORCED_ON,
+    isGeroVaultMidnightEnabled: GEROVAULT_FORCED_ON,
     isCardholderDetailsEnabled: true,
     isAnnouncementsEnabled: true,
     isKeyEnvelopeV2Enabled: false,
@@ -316,6 +323,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isMultiAccountEnabled = featureFlagService.getFlag('isMultiAccountEnabled', false);
     // GeroVault ships DARK (default false); UI-only gate for the routes and the nav item.
     featureFlagsState.flags.isVaultsEnabled = GEROVAULT_FORCED_ON || featureFlagService.getFlag('isVaultsEnabled', false);
+    // GeroVault on Midnight ships DARK (default false); the getter also holds the network list.
+    featureFlagsState.flags.isGeroVaultMidnightEnabled = GEROVAULT_FORCED_ON || featureFlagService.getFlag('isGeroVaultMidnightEnabled', false);
     // Cardholder-details step ships ON; only an explicit false from the service turns it off.
     featureFlagsState.flags.isCardholderDetailsEnabled =
       featureFlagService.getFlag<boolean>('isCardholderDetailsEnabled', true) !== false;
@@ -446,6 +455,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isVaultsEnabled', (newValue) => {
       featureFlagsState.flags['isVaultsEnabled'] = GEROVAULT_FORCED_ON || newValue === true;
+    });
+    featureFlagService.onFlagChange('isGeroVaultMidnightEnabled', (newValue) => {
+      featureFlagsState.flags['isGeroVaultMidnightEnabled'] = GEROVAULT_FORCED_ON || newValue === true;
     });
     featureFlagService.onFlagChange('isCardholderDetailsEnabled', (newValue) => {
       featureFlagsState.flags['isCardholderDetailsEnabled'] = newValue !== false;
@@ -790,6 +802,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if GeroVault on Midnight (contract vaults) is offered to a wallet on `network`: the
+   * remote flag, and the network one of GEROVAULT_MIDNIGHT_NETWORKS (build time, preprod only).
+   * Ships DARK (default false).
+   */
+  isGeroVaultMidnightEnabled(network: unknown): boolean {
+    return featureFlagsState.flags.isGeroVaultMidnightEnabled && isGeroVaultMidnightNetwork(network);
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -830,6 +851,7 @@ export const featureFlagsStore = {
       isNftMarketEnabled: false,
       isMultiAccountEnabled: false,
       isVaultsEnabled: GEROVAULT_FORCED_ON,
+      isGeroVaultMidnightEnabled: GEROVAULT_FORCED_ON,
       isCardholderDetailsEnabled: true,
       isAnnouncementsEnabled: true,
       isKeyEnvelopeV2Enabled: false,
