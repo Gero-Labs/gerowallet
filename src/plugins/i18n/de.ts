@@ -1,6 +1,11 @@
 /**
  * DE translations
  */
+import gerovaultMidnightCreate from './gerovaultMidnight/create.de';
+import gerovaultMidnightApprove from './gerovaultMidnight/approve.de';
+import gerovaultMidnightRecovery from './gerovaultMidnight/recovery.de';
+import gerovaultMidnightVault from './gerovaultMidnight/vault.de';
+
 export default {
   "help.loadingUpdates": "Aktuelles wird geladen…",
   "help.cachedUpdates": "Gespeicherte Meldungen werden angezeigt. Neue Meldungen sind vorübergehend nicht verfügbar.",
@@ -7415,4 +7420,11 @@ export default {
   'midnight.swap.error.private.contract': 'Dieses Angebot ruft einen Vertrag auf, daher nimmt Gero es nicht an.',
   'midnight.swap.error.private.dust': 'Dieses Angebot bewegt DUST, daher nimmt Gero es nicht an.',
   'midnight.swap.error.private.expiry': 'Dieses Angebot läuft zu früh oder zu spät ab, um es anzunehmen.',
+
+  // GeroVault on Midnight: one module per screen group in ./gerovaultMidnight/ (keys
+  // gerovaultMidnight.*). Add keys there, never here.
+  ...gerovaultMidnightCreate,
+  ...gerovaultMidnightApprove,
+  ...gerovaultMidnightRecovery,
+  ...gerovaultMidnightVault,
 }

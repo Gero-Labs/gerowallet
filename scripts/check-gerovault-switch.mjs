@@ -1,8 +1,10 @@
 /**
  * A release bundle never carries the GeroVault test switch turned on.
  *
- * `VITE_GEROVAULT_FORCE_ON=true` at build time keeps `isVaultsEnabled` on whatever the flag
- * service says (src/stores/featureFlagsStore.ts). It is for local test builds only. Set, the build
+ * `VITE_GEROVAULT_FORCE_ON=true` at build time keeps `isVaultsEnabled` and
+ * `isGeroVaultMidnightEnabled` (the Midnight vaults, still on their build-time networks only) on
+ * whatever the flag service says (src/stores/featureFlagsStore.ts). One switch for both, so this
+ * check covers both. It is for local test builds only. Set, the build
  * writes `const GEROVAULT_FORCED_ON = true;`, and an env object the bundler inlines whole holds
  * `"VITE_GEROVAULT_FORCE_ON": "true"`. Unset, the declaration reads a value that is not there
  * (`= __vite_import_meta_env__["VITE_GEROVAULT_FORCE_ON"] === "true"`) or is folded to `false`.

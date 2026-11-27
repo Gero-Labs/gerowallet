@@ -167,3 +167,44 @@ describe('locale compilation cache', () => {
     }
   });
 });
+
+describe('catalogs a locale spreads', () => {
+  const partPath = () => resolve(root, 'src/plugins/i18n/parts', 'part.us.ts');
+  const writePart = value => writeFile(partPath(), `export default ${JSON.stringify({ partKey: value })};`);
+  const writeSpreading = (extra = '') => writeFile(catalogPath('us'), `import part from './parts/part.us';\nexport default { title: 'us original', ${extra}...part };`);
+
+  beforeEach(async () => {
+    await mkdir(resolve(root, 'src/plugins/i18n/parts'), { recursive: true });
+    await writePart('Part original');
+    await writeSpreading();
+    vi.mocked(readFile).mockClear();
+  });
+
+  it('merges a spread catalog into the locale, watches it, and recompiles when it changes', async () => {
+    const plugin = localeMessagesPlugin(root);
+    const build = context();
+    await plugin.buildStart.call(build);
+    expect(build.addWatchFile.mock.calls.flat()).toContain(partPath());
+    const first = await plugin.load.call(context(), virtualId('us'));
+    expect(first.code).toContain('Part original');
+    expect(first.code).toContain('us original');
+
+    await writePart('Part changed');
+    plugin.watchChange(partPath());
+    expect((await plugin.load.call(context(), virtualId('us'))).code).toContain('Part changed');
+  });
+
+  it('refuses a key that comes both from a spread catalog and from the locale', async () => {
+    await writeSpreading("partKey: 'twice', ");
+    await expect(localeMessagesPlugin(root).load.call(context(), virtualId('us'))).rejects.toThrow('partKey is defined twice');
+  });
+
+  it('imports nothing but other catalogs inside the catalog folder', async () => {
+    await writeFile(catalogPath('us'), "import part from './../outside';\nexport default { ...part };");
+    await expect(localeMessagesPlugin(root).load.call(context(), virtualId('us'))).rejects.toThrow('is outside');
+    await writeFile(catalogPath('us'), "import { part } from './parts/part.us';\nexport default { title: 'x' };");
+    await expect(localeMessagesPlugin(root).load.call(context(), virtualId('us'))).rejects.toThrow('imports only other catalogs');
+    await writeFile(catalogPath('us'), "export default { title: 'x', ...unknownPart };");
+    await expect(localeMessagesPlugin(root).load.call(context(), virtualId('us'))).rejects.toThrow('literal properties only');
+  });
+});

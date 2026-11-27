@@ -49,6 +49,25 @@ export enum MessageTypes {
   GEROVAULT_DERIVE_ACCOUNT_KEY = 'GEROVAULT_DERIVE_ACCOUNT_KEY',
   /** GeroVault: the wallet's own witness file for a vault spend, signed in the background. */
   GEROVAULT_SIGN_VAULT_BUNDLE = 'GEROVAULT_SIGN_VAULT_BUNDLE',
+  // GeroVault on Midnight (contract vaults, preprod behind isGeroVaultMidnightEnabled): requests
+  // and replies are MidnightVaultMessages in modules/gerovault/midnight/contracts.ts, answered by
+  // chrome/gerovaultMidnightHandlers.ts. Every one is extension-page only (senderTrust.ts).
+  /** This seed's own key card for a vault role, at the next index or a given one. */
+  GEROVAULT_MIDNIGHT_DERIVE_CARD = 'GEROVAULT_MIDNIGHT_DERIVE_CARD',
+  /** Import by address: this seed's roles in a contract, found by scanning its own indices. */
+  GEROVAULT_MIDNIGHT_FIND_ROLES = 'GEROVAULT_MIDNIGHT_FIND_ROLES',
+  /** This seed's approval file for a request file, signed in the background after every check. */
+  GEROVAULT_MIDNIGHT_SIGN_REQUEST = 'GEROVAULT_MIDNIGHT_SIGN_REQUEST',
+  /** Deploys a vault with the interim committee and stores its record. */
+  GEROVAULT_MIDNIGHT_DEPLOY = 'GEROVAULT_MIDNIGHT_DEPLOY',
+  /** The completion update: the deferred circuits, and the committee handed to the owners. */
+  GEROVAULT_MIDNIGHT_COMPLETE_DEPLOY = 'GEROVAULT_MIDNIGHT_COMPLETE_DEPLOY',
+  /** Builds, pays, proves on this computer and submits one vault call. */
+  GEROVAULT_MIDNIGHT_SUBMIT = 'GEROVAULT_MIDNIGHT_SUBMIT',
+  /** Progress of a running vault operation, polled by the page that started it. */
+  GEROVAULT_MIDNIGHT_PROGRESS = 'GEROVAULT_MIDNIGHT_PROGRESS',
+  /** Reads a vault's (or every accepted vault's) state now. */
+  GEROVAULT_MIDNIGHT_CHECK_NOW = 'GEROVAULT_MIDNIGHT_CHECK_NOW',
   // Live support chat: one-time-per-wallet identity handshake. BG asks Nexus for a
   // nonce, CIP-8 signs the challenge subject with the wallet's STAKE key (same
   // machinery as PRODUCE_DEVICE_REGISTER_PROOF), and returns the pseudonymous

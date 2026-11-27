@@ -1,0 +1,937 @@
+{
+  "format": "gero-vault/v1|midnight-build-manifest",
+  "builds": {
+    "test": {
+      "buildId": "gvmn-test-45d16eda70751d57",
+      "buildIdPreimage": "gero-vault/v1|midnight-build|test|compactc-0.36.1\napplyGuardians 3006980faf25df6cd5f89577c3a63273579048ee525832a7a8b8f9a8598a80e1\napplyOwners 1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2\napplyPolicy fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7\napplyRecovery 79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71\ncancelGuardians d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b\ncancelOwners 18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4\ncancelPolicy 3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876\ncancelRecovery b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3\nclearExpiredRecovery 07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605\ndelegatePayout bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd\ndeposit 54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88\nexecute dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543\nnarrowPolicy b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410\nproposeGuardians b5d602ba425cf01deb5031664995e03facacb0fd2762d26e9cff02b6b194b8c1\nproposeOwners bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9\nproposePolicy be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4\nproposeRecovery 3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1\nwithdrawRecovery 2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88",
+      "networks": [
+        "preprod"
+      ],
+      "toolchain": {
+        "compactc": "0.36.1",
+        "compilerCommit": "7fa3a117c5e7efe9d2c51da04263e5f0b3509144",
+        "language": "0.28.0",
+        "runtime": "0.21.0",
+        "compactcZipSha256Aarch64Darwin": "96ee68a59d9e8b093f05c97479a4cf08c79760015dcc26ecc797ec0160ca27f9",
+        "ledger": "@midnightntwrk/ledger-v9 1.0.2",
+        "proofServer": "midnightntwrk/proof-server:9.0.2@sha256:787ef99db4b4706eb14d94ad389ca45f1c09bcdf740afecb01899bfbda63dc64"
+      },
+      "entry": "src/main-test.compact",
+      "constants": {
+        "ownerSlots": 5,
+        "whitelistEntries": 8,
+        "delegateSlots": 2,
+        "guardianSlots": 5,
+        "minRecoveryDelaySeconds": 60,
+        "expiryWindowSeconds": 600,
+        "cooldownSeconds": 120,
+        "rules": {
+          "recoveryDelay": "at least minRecoveryDelaySeconds",
+          "expiryWindow": "exactly expiryWindowSeconds",
+          "cooldown": "exactly cooldownSeconds",
+          "guardianThreshold": "0 with no guardians (recovery off), else 1 <= t <= n and 2t > n",
+          "ownerThreshold": "1 <= t <= number of owners",
+          "delegatePeriod": "at least 600 s",
+          "delegateCap": "positive",
+          "notBeforeAndAt": "not in the past and at most 3600 s ahead of block time",
+          "nodeTimeMargin": "30 s on every block-time comparison",
+          "committee": "interim: the deployer's upgrade key alone at threshold 1; final (asserted at completion): the owners' upgrade keys at the owner threshold, at least 1"
+        }
+      },
+      "deferredForSplitDeployment": [
+        "deposit",
+        "withdrawRecovery",
+        "clearExpiredRecovery",
+        "applyRecovery",
+        "proposeGuardians",
+        "cancelGuardians",
+        "applyGuardians"
+      ],
+      "circuits": {
+        "applyGuardians": {
+          "k": 9,
+          "rows": 392,
+          "tableRows": 289,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 532858,
+            "sha256": "3604c4beddedf7b6284bc04a6fcd97c0da6f4a9fb9b722d884df7c13d6aeddde"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "3006980faf25df6cd5f89577c3a63273579048ee525832a7a8b8f9a8598a80e1",
+            "fingerprint": "3006980faf25df6cd5f89577c3a63273579048ee525832a7a8b8f9a8598a80e1"
+          },
+          "zkir": {
+            "bytes": 11726,
+            "sha256": "634c41d345ebdb1b92c18876610115696767dbf830db81fc8be44fa043199d3c"
+          },
+          "bzkir": {
+            "bytes": 5302,
+            "sha256": "d38d698e1bedbbad22d17c1d2dfc062057a3469966d8acd22b3449732160e52b"
+          }
+        },
+        "applyOwners": {
+          "k": 10,
+          "rows": 665,
+          "tableRows": 24,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 1059975,
+            "sha256": "5fb1875ccfb575d5badc16046550f7bfb51cb63936042f3da055e50c0adf4be7"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2",
+            "fingerprint": "1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2"
+          },
+          "zkir": {
+            "bytes": 17775,
+            "sha256": "4f68d26abd1408f50d0e0dd6682462be29c77379b956a3fe7f45ac340db19661"
+          },
+          "bzkir": {
+            "bytes": 8131,
+            "sha256": "dd9572eb41697d6f50d635cc0857171d525ebba1c288bfc251826573d33920af"
+          }
+        },
+        "applyPolicy": {
+          "k": 10,
+          "rows": 976,
+          "tableRows": 641,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 1061800,
+            "sha256": "f2c9a6437ab9eb3aedc8522b0b541abf9babca94905039aa755f3edeccc6f06f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7",
+            "fingerprint": "fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7"
+          },
+          "zkir": {
+            "bytes": 26979,
+            "sha256": "146466d97f70684b0d6d21d946dcb59691644983fe625c7cebe8c5d3f33abfd6"
+          },
+          "bzkir": {
+            "bytes": 9956,
+            "sha256": "d2043b02f52bc7c8022120ce735c11edb95af636612882e015b94bfaa620d562"
+          }
+        },
+        "applyRecovery": {
+          "k": 10,
+          "rows": 827,
+          "tableRows": 27,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 1061747,
+            "sha256": "bfaba0cd39a9b958a9fe4312f88edc3eafc105e005c46bc4b41205ec501dd3c1"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71",
+            "fingerprint": "79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71"
+          },
+          "zkir": {
+            "bytes": 20568,
+            "sha256": "bab4e4d0555178c6c24e271d4ff5b897a79b1f88f9cbd36392eb70a96aaa768a"
+          },
+          "bzkir": {
+            "bytes": 9903,
+            "sha256": "9ded9642b2e74db5763867ead18b5a4a315f42e47160135daa74d0445561cd07"
+          }
+        },
+        "cancelGuardians": {
+          "k": 14,
+          "rows": 8973,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16793585,
+            "sha256": "01fb79a378d5c1adea9efbf155621b4523494a3f745853695f424aa9f352990f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b",
+            "fingerprint": "d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b"
+          },
+          "zkir": {
+            "bytes": 36627,
+            "sha256": "6eb01f5706a1488f621d89d788f92d6696c4ca639250addd34ae76708c15cca4"
+          },
+          "bzkir": {
+            "bytes": 13101,
+            "sha256": "24d5efad5e6fea576a937ec856fbe5430226f84bd853d03acfc7bd49d33d498b"
+          }
+        },
+        "cancelOwners": {
+          "k": 14,
+          "rows": 9175,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16795318,
+            "sha256": "104c17b557ccee816751c16a2eb59db7779dd837f462f579df0cd0b5ecbfd16e"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4",
+            "fingerprint": "18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4"
+          },
+          "zkir": {
+            "bytes": 39619,
+            "sha256": "8501a5a0d6790f2d962f74bdbe61c3a57752822872ceaac19181f614144bb925"
+          },
+          "bzkir": {
+            "bytes": 14834,
+            "sha256": "ba8bfbabb1de95d1d4030b4d7c4dafd71b22b4ac6023b175fcfe7a44c11fddc8"
+          }
+        },
+        "cancelPolicy": {
+          "k": 14,
+          "rows": 9512,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16795364,
+            "sha256": "c90e0eca384f35a6a8d7ac072785ac19940ff42a439c2fb419705711b76391ee"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876",
+            "fingerprint": "3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876"
+          },
+          "zkir": {
+            "bytes": 42037,
+            "sha256": "bccef8f10bb69d96bf8b1a812acf3072203a4f8c0865a17d78a67f55c7eff975"
+          },
+          "bzkir": {
+            "bytes": 14880,
+            "sha256": "9615069d82b2121a935665a9695e46923c035254f699503eec48c4e945aec70d"
+          }
+        },
+        "cancelRecovery": {
+          "k": 14,
+          "rows": 9487,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16798756,
+            "sha256": "35a5ecbddf1283dba78ece8b0d8a1e07fd8716f351214093bf406040e0d32099"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3",
+            "fingerprint": "b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3"
+          },
+          "zkir": {
+            "bytes": 48296,
+            "sha256": "73381def1e0593b4ad7e7ba8454c83209b9f37c1ef243e15256509da9d999109"
+          },
+          "bzkir": {
+            "bytes": 18270,
+            "sha256": "2ecb35041ff491bd599d733646c1d3e94a51b2330e3b9a95ab2a2d1155ba671a"
+          }
+        },
+        "clearExpiredRecovery": {
+          "k": 9,
+          "rows": 305,
+          "tableRows": 259,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 531391,
+            "sha256": "db75e43e26b0121566f8b5df2ade406fa8d012bae08620e5c1ffbeff64b2ce5f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605",
+            "fingerprint": "07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605"
+          },
+          "zkir": {
+            "bytes": 7643,
+            "sha256": "17020d1469d4fb261c6184d9b098fa7d6207435f83469931d6ff7acd48bafc94"
+          },
+          "bzkir": {
+            "bytes": 3835,
+            "sha256": "59668db0cd3fb6e2998dcc454074ee20abfaf504481fc16db840a6c1455d4f05"
+          }
+        },
+        "delegatePayout": {
+          "k": 12,
+          "rows": 3122,
+          "tableRows": 3847,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 4205351,
+            "sha256": "317bd3db188af4084f7a9ce0cc27b925357fc3333fac563539ba61c9717fae90"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd",
+            "fingerprint": "bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd"
+          },
+          "zkir": {
+            "bytes": 24662,
+            "sha256": "1a5cd5b8b291d49dd7e0e26ace57e0922f2c0cb5a3925cd574565ad259cfa2c6"
+          },
+          "bzkir": {
+            "bytes": 7779,
+            "sha256": "e772e7e01e92204b37ff173b06d4b2efcae4d76c3b8568df0998e13b34eca03e"
+          }
+        },
+        "deposit": {
+          "k": 9,
+          "rows": 109,
+          "tableRows": 259,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 445635,
+            "sha256": "33d8cac830c1fa5c40f9801b06cd7dd3d233220c5ce7c5b9a743332bd9a5d7b9"
+          },
+          "verifierKey": {
+            "bytes": 1353,
+            "sha256": "54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88",
+            "fingerprint": "54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88"
+          },
+          "zkir": {
+            "bytes": 1532,
+            "sha256": "cd1193f9d6c4351679115835e00714e61b51d3c4b181bd949adc00680b830f54"
+          },
+          "bzkir": {
+            "bytes": 499,
+            "sha256": "55ad3b8d1d1725cbb0b3fd23ec34a53090936bafd07fffe4cb7e782b30d57e3d"
+          }
+        },
+        "execute": {
+          "k": 14,
+          "rows": 9287,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16796254,
+            "sha256": "a9ca9f483e7f50850366182042b1c798bd134f0fa394c2ba1bb151b05d639cd9"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543",
+            "fingerprint": "dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543"
+          },
+          "zkir": {
+            "bytes": 47201,
+            "sha256": "755da34af5f2b30009e74d332c457c7dadac4707ea43bee98b077774e8529fc4"
+          },
+          "bzkir": {
+            "bytes": 15770,
+            "sha256": "6b40b0cbe33a446f00d5ea9dacc6dcb3d6f3fd8ab1aa4a072afa95489a7d96c3"
+          }
+        },
+        "narrowPolicy": {
+          "k": 14,
+          "rows": 12259,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16824993,
+            "sha256": "2e65ed615ec0e360d25a9aedc011373b0acdd35aea0ddc16ce678fdb6ffc0c03"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410",
+            "fingerprint": "b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410"
+          },
+          "zkir": {
+            "bytes": 126271,
+            "sha256": "cdbe3d575296281c80fe2aabc14058fe1c31737726edbce979992589879a9753"
+          },
+          "bzkir": {
+            "bytes": 44507,
+            "sha256": "8fc80f32ede93e117bceb1a8e381a8c67a569fb9c69595e23a5879b7ce1dbeb4"
+          }
+        },
+        "proposeGuardians": {
+          "k": 14,
+          "rows": 12732,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16824529,
+            "sha256": "dd14a12f54d7a34a0bc43c3fe3cf413dfc9e36af6342968f58d91f391631f043"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "b5d602ba425cf01deb5031664995e03facacb0fd2762d26e9cff02b6b194b8c1",
+            "fingerprint": "b5d602ba425cf01deb5031664995e03facacb0fd2762d26e9cff02b6b194b8c1"
+          },
+          "zkir": {
+            "bytes": 124257,
+            "sha256": "5651f4fe008abd8e11f26cc9cd03536ffe986a1c03e614d1eaf47df6e46c4a8d"
+          },
+          "bzkir": {
+            "bytes": 44043,
+            "sha256": "7215763fd21391350360d60ceb8b0263044c68adcbeba9cccc5f92885417ae50"
+          }
+        },
+        "proposeOwners": {
+          "k": 14,
+          "rows": 11759,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16816059,
+            "sha256": "6309be79e35630b9ed42f6e2f83fc1ab2e417d9310ce32a00d27cde1b991a113"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9",
+            "fingerprint": "bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9"
+          },
+          "zkir": {
+            "bytes": 101431,
+            "sha256": "f4ac9656fb202a021ebfdd2d5cc54aa550d141c39195b02b942f1a6194002e7d"
+          },
+          "bzkir": {
+            "bytes": 35573,
+            "sha256": "816135b37a010000dc3699e27b2672bd555ebed078ce35f35bfa55011c496f98"
+          }
+        },
+        "proposePolicy": {
+          "k": 14,
+          "rows": 11956,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16814276,
+            "sha256": "8b0c208ea555781fdb3ebe6bba60e087e87d62593b88d1948d83032dd5bed85e"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4",
+            "fingerprint": "be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4"
+          },
+          "zkir": {
+            "bytes": 96138,
+            "sha256": "39aadc1e0317a1a1e5034952470034b384c2f829299d818462ec2c702c67c5b9"
+          },
+          "bzkir": {
+            "bytes": 33790,
+            "sha256": "486d5830f2a9d544a466473af8b28609cdd4eb449d512af32af50e14d8cc0f60"
+          }
+        },
+        "proposeRecovery": {
+          "k": 14,
+          "rows": 12617,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16819443,
+            "sha256": "cfada0ca298af3a59f55df35147eefdf7cc74db5fc73b256f1228494abdf17c8"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1",
+            "fingerprint": "3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1"
+          },
+          "zkir": {
+            "bytes": 115603,
+            "sha256": "ab7a9afd98c52c723fe57234daee11e8b1b12ebb9b19534c60e518a809f47695"
+          },
+          "bzkir": {
+            "bytes": 38957,
+            "sha256": "5d410996139635fcbb294157f7e400af723912673cfaa2d06ed6e95bc9802b99"
+          }
+        },
+        "withdrawRecovery": {
+          "k": 14,
+          "rows": 9939,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16799053,
+            "sha256": "142a43713c8100a5358dff1829919a8f1a940ec6e8f1bfbebee2f7e452dc3269"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88",
+            "fingerprint": "2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88"
+          },
+          "zkir": {
+            "bytes": 49240,
+            "sha256": "df4d3e9584a207508cf70245a69f890c3bcf269c85dac5afeefd08cb7ccc3b15"
+          },
+          "bzkir": {
+            "bytes": 18567,
+            "sha256": "862badd98a0e81917d6e14fb1f81da0225997666910aef7c256b1609dc199ae7"
+          }
+        }
+      }
+    },
+    "production": {
+      "buildId": "gvmn-production-c4585eee75a8b850",
+      "buildIdPreimage": "gero-vault/v1|midnight-build|production|compactc-0.36.1\napplyGuardians bc84e98221dc5a78befcb28eecaff0fd9f51cf684033bcea23334f426fb2e20b\napplyOwners 1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2\napplyPolicy fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7\napplyRecovery 79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71\ncancelGuardians d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b\ncancelOwners 18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4\ncancelPolicy 3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876\ncancelRecovery b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3\nclearExpiredRecovery 07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605\ndelegatePayout bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd\ndeposit 54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88\nexecute dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543\nnarrowPolicy b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410\nproposeGuardians cf2d14f73d11a38d04285e3a683e6dba129bdc0af698b243235ce9f17cfde4c2\nproposeOwners bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9\nproposePolicy be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4\nproposeRecovery 3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1\nwithdrawRecovery 2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88",
+      "networks": [
+        "preprod",
+        "mainnet"
+      ],
+      "toolchain": {
+        "compactc": "0.36.1",
+        "compilerCommit": "7fa3a117c5e7efe9d2c51da04263e5f0b3509144",
+        "language": "0.28.0",
+        "runtime": "0.21.0",
+        "compactcZipSha256Aarch64Darwin": "96ee68a59d9e8b093f05c97479a4cf08c79760015dcc26ecc797ec0160ca27f9",
+        "ledger": "@midnightntwrk/ledger-v9 1.0.2",
+        "proofServer": "midnightntwrk/proof-server:9.0.2@sha256:787ef99db4b4706eb14d94ad389ca45f1c09bcdf740afecb01899bfbda63dc64"
+      },
+      "entry": "src/main-production.compact",
+      "constants": {
+        "ownerSlots": 5,
+        "whitelistEntries": 8,
+        "delegateSlots": 2,
+        "guardianSlots": 5,
+        "minRecoveryDelaySeconds": 604800,
+        "expiryWindowSeconds": 2592000,
+        "cooldownSeconds": 172800,
+        "rules": {
+          "recoveryDelay": "at least minRecoveryDelaySeconds",
+          "expiryWindow": "exactly expiryWindowSeconds",
+          "cooldown": "exactly cooldownSeconds",
+          "guardianThreshold": "0 with no guardians (recovery off), else 1 <= t <= n and 2t > n",
+          "ownerThreshold": "1 <= t <= number of owners",
+          "delegatePeriod": "at least 600 s",
+          "delegateCap": "positive",
+          "notBeforeAndAt": "not in the past and at most 3600 s ahead of block time",
+          "nodeTimeMargin": "30 s on every block-time comparison",
+          "committee": "interim: the deployer's upgrade key alone at threshold 1; final (asserted at completion): the owners' upgrade keys at the owner threshold, at least 1"
+        }
+      },
+      "deferredForSplitDeployment": [
+        "deposit",
+        "withdrawRecovery",
+        "clearExpiredRecovery",
+        "applyRecovery",
+        "proposeGuardians",
+        "cancelGuardians",
+        "applyGuardians"
+      ],
+      "circuits": {
+        "applyGuardians": {
+          "k": 9,
+          "rows": 392,
+          "tableRows": 289,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 532868,
+            "sha256": "2ef0110e979537ec7030b515e7ba23242cd5ea14777e143110160f69050466da"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "bc84e98221dc5a78befcb28eecaff0fd9f51cf684033bcea23334f426fb2e20b",
+            "fingerprint": "bc84e98221dc5a78befcb28eecaff0fd9f51cf684033bcea23334f426fb2e20b"
+          },
+          "zkir": {
+            "bytes": 11736,
+            "sha256": "fd6802ec7e16043e727079660e4bca31087aae74e80c117735176c3209dcbd61"
+          },
+          "bzkir": {
+            "bytes": 5312,
+            "sha256": "ac7803a55ed0bffdfb3cf3cac10b8352f43be28299ffaccbcf693bbbc34b9d00"
+          }
+        },
+        "applyOwners": {
+          "k": 10,
+          "rows": 665,
+          "tableRows": 24,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 1059975,
+            "sha256": "5fb1875ccfb575d5badc16046550f7bfb51cb63936042f3da055e50c0adf4be7"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2",
+            "fingerprint": "1826170088aa31600b67440574709b854b9bb3c9793203672f622db0c0838ac2"
+          },
+          "zkir": {
+            "bytes": 17775,
+            "sha256": "4f68d26abd1408f50d0e0dd6682462be29c77379b956a3fe7f45ac340db19661"
+          },
+          "bzkir": {
+            "bytes": 8131,
+            "sha256": "dd9572eb41697d6f50d635cc0857171d525ebba1c288bfc251826573d33920af"
+          }
+        },
+        "applyPolicy": {
+          "k": 10,
+          "rows": 976,
+          "tableRows": 641,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 1061800,
+            "sha256": "f2c9a6437ab9eb3aedc8522b0b541abf9babca94905039aa755f3edeccc6f06f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7",
+            "fingerprint": "fbf36134d61564a28f1b77654189bc7a7a3f7f9d92b50a71ac1c0a89c29112b7"
+          },
+          "zkir": {
+            "bytes": 26979,
+            "sha256": "146466d97f70684b0d6d21d946dcb59691644983fe625c7cebe8c5d3f33abfd6"
+          },
+          "bzkir": {
+            "bytes": 9956,
+            "sha256": "d2043b02f52bc7c8022120ce735c11edb95af636612882e015b94bfaa620d562"
+          }
+        },
+        "applyRecovery": {
+          "k": 10,
+          "rows": 827,
+          "tableRows": 27,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 1061747,
+            "sha256": "bfaba0cd39a9b958a9fe4312f88edc3eafc105e005c46bc4b41205ec501dd3c1"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71",
+            "fingerprint": "79171f897d90880eedbf992b089a0ab065d9af1aae8137e7d9fe7cbd9db91c71"
+          },
+          "zkir": {
+            "bytes": 20568,
+            "sha256": "bab4e4d0555178c6c24e271d4ff5b897a79b1f88f9cbd36392eb70a96aaa768a"
+          },
+          "bzkir": {
+            "bytes": 9903,
+            "sha256": "9ded9642b2e74db5763867ead18b5a4a315f42e47160135daa74d0445561cd07"
+          }
+        },
+        "cancelGuardians": {
+          "k": 14,
+          "rows": 8973,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16793585,
+            "sha256": "01fb79a378d5c1adea9efbf155621b4523494a3f745853695f424aa9f352990f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b",
+            "fingerprint": "d3be8e09f38b6066e99c72352913feae7dd97032b688549bf14819537978bc4b"
+          },
+          "zkir": {
+            "bytes": 36627,
+            "sha256": "6eb01f5706a1488f621d89d788f92d6696c4ca639250addd34ae76708c15cca4"
+          },
+          "bzkir": {
+            "bytes": 13101,
+            "sha256": "24d5efad5e6fea576a937ec856fbe5430226f84bd853d03acfc7bd49d33d498b"
+          }
+        },
+        "cancelOwners": {
+          "k": 14,
+          "rows": 9175,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16795318,
+            "sha256": "104c17b557ccee816751c16a2eb59db7779dd837f462f579df0cd0b5ecbfd16e"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4",
+            "fingerprint": "18a78eb7186d7d3e238dd5231fc3bcf180bd1cc69f2761f53d94e5079b35baa4"
+          },
+          "zkir": {
+            "bytes": 39619,
+            "sha256": "8501a5a0d6790f2d962f74bdbe61c3a57752822872ceaac19181f614144bb925"
+          },
+          "bzkir": {
+            "bytes": 14834,
+            "sha256": "ba8bfbabb1de95d1d4030b4d7c4dafd71b22b4ac6023b175fcfe7a44c11fddc8"
+          }
+        },
+        "cancelPolicy": {
+          "k": 14,
+          "rows": 9512,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16795364,
+            "sha256": "c90e0eca384f35a6a8d7ac072785ac19940ff42a439c2fb419705711b76391ee"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876",
+            "fingerprint": "3e08c20e952110f86affc0e26e0776d19bbd38b806efd1d556184b5da6df0876"
+          },
+          "zkir": {
+            "bytes": 42037,
+            "sha256": "bccef8f10bb69d96bf8b1a812acf3072203a4f8c0865a17d78a67f55c7eff975"
+          },
+          "bzkir": {
+            "bytes": 14880,
+            "sha256": "9615069d82b2121a935665a9695e46923c035254f699503eec48c4e945aec70d"
+          }
+        },
+        "cancelRecovery": {
+          "k": 14,
+          "rows": 9487,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16798756,
+            "sha256": "35a5ecbddf1283dba78ece8b0d8a1e07fd8716f351214093bf406040e0d32099"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3",
+            "fingerprint": "b63bc05c02a740eede067ce1e4f767974f3abbec24e83845b452850e38c820a3"
+          },
+          "zkir": {
+            "bytes": 48296,
+            "sha256": "73381def1e0593b4ad7e7ba8454c83209b9f37c1ef243e15256509da9d999109"
+          },
+          "bzkir": {
+            "bytes": 18270,
+            "sha256": "2ecb35041ff491bd599d733646c1d3e94a51b2330e3b9a95ab2a2d1155ba671a"
+          }
+        },
+        "clearExpiredRecovery": {
+          "k": 9,
+          "rows": 305,
+          "tableRows": 259,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 531391,
+            "sha256": "db75e43e26b0121566f8b5df2ade406fa8d012bae08620e5c1ffbeff64b2ce5f"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605",
+            "fingerprint": "07ba1c8f736bdd416f06ae4aa485bf3bcc4cbe2e40851b77edd1c2b533be5605"
+          },
+          "zkir": {
+            "bytes": 7643,
+            "sha256": "17020d1469d4fb261c6184d9b098fa7d6207435f83469931d6ff7acd48bafc94"
+          },
+          "bzkir": {
+            "bytes": 3835,
+            "sha256": "59668db0cd3fb6e2998dcc454074ee20abfaf504481fc16db840a6c1455d4f05"
+          }
+        },
+        "delegatePayout": {
+          "k": 12,
+          "rows": 3122,
+          "tableRows": 3847,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 4205351,
+            "sha256": "317bd3db188af4084f7a9ce0cc27b925357fc3333fac563539ba61c9717fae90"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd",
+            "fingerprint": "bbfbaa16b2d93b391b285a6cac1571589f90adeaa789018be0c47aeaf16322fd"
+          },
+          "zkir": {
+            "bytes": 24662,
+            "sha256": "1a5cd5b8b291d49dd7e0e26ace57e0922f2c0cb5a3925cd574565ad259cfa2c6"
+          },
+          "bzkir": {
+            "bytes": 7779,
+            "sha256": "e772e7e01e92204b37ff173b06d4b2efcae4d76c3b8568df0998e13b34eca03e"
+          }
+        },
+        "deposit": {
+          "k": 9,
+          "rows": 109,
+          "tableRows": 259,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 445635,
+            "sha256": "33d8cac830c1fa5c40f9801b06cd7dd3d233220c5ce7c5b9a743332bd9a5d7b9"
+          },
+          "verifierKey": {
+            "bytes": 1353,
+            "sha256": "54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88",
+            "fingerprint": "54ed511dbde77cbfa96fe6f8e6d7003e69297169563e31f0d5408a55c0370d88"
+          },
+          "zkir": {
+            "bytes": 1532,
+            "sha256": "cd1193f9d6c4351679115835e00714e61b51d3c4b181bd949adc00680b830f54"
+          },
+          "bzkir": {
+            "bytes": 499,
+            "sha256": "55ad3b8d1d1725cbb0b3fd23ec34a53090936bafd07fffe4cb7e782b30d57e3d"
+          }
+        },
+        "execute": {
+          "k": 14,
+          "rows": 9287,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16796254,
+            "sha256": "a9ca9f483e7f50850366182042b1c798bd134f0fa394c2ba1bb151b05d639cd9"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543",
+            "fingerprint": "dca1150a4e0686dc3d8f90ce5a006e49d23566ea6a283fe8e881697841403543"
+          },
+          "zkir": {
+            "bytes": 47201,
+            "sha256": "755da34af5f2b30009e74d332c457c7dadac4707ea43bee98b077774e8529fc4"
+          },
+          "bzkir": {
+            "bytes": 15770,
+            "sha256": "6b40b0cbe33a446f00d5ea9dacc6dcb3d6f3fd8ab1aa4a072afa95489a7d96c3"
+          }
+        },
+        "narrowPolicy": {
+          "k": 14,
+          "rows": 12259,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16824993,
+            "sha256": "2e65ed615ec0e360d25a9aedc011373b0acdd35aea0ddc16ce678fdb6ffc0c03"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410",
+            "fingerprint": "b8e3f2a38fa1e2eece38f4f84a106aff8b1de80bff2113915af402b55a2c5410"
+          },
+          "zkir": {
+            "bytes": 126271,
+            "sha256": "cdbe3d575296281c80fe2aabc14058fe1c31737726edbce979992589879a9753"
+          },
+          "bzkir": {
+            "bytes": 44507,
+            "sha256": "8fc80f32ede93e117bceb1a8e381a8c67a569fb9c69595e23a5879b7ce1dbeb4"
+          }
+        },
+        "proposeGuardians": {
+          "k": 14,
+          "rows": 12732,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16824539,
+            "sha256": "7e2fcb5f84d33209aa85e7215b42f30dae297e0d85af4a86b6968da222929bc8"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "cf2d14f73d11a38d04285e3a683e6dba129bdc0af698b243235ce9f17cfde4c2",
+            "fingerprint": "cf2d14f73d11a38d04285e3a683e6dba129bdc0af698b243235ce9f17cfde4c2"
+          },
+          "zkir": {
+            "bytes": 124267,
+            "sha256": "fecc0cc9b2a4dbe88d8143b2a0acdea9b381b9d5156d93c27b5282ecda4d2159"
+          },
+          "bzkir": {
+            "bytes": 44053,
+            "sha256": "08db13fc0a3b68b32529f34d35bd3e41bb792a4eda78b7b40e70903d4030de18"
+          }
+        },
+        "proposeOwners": {
+          "k": 14,
+          "rows": 11759,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16816059,
+            "sha256": "6309be79e35630b9ed42f6e2f83fc1ab2e417d9310ce32a00d27cde1b991a113"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9",
+            "fingerprint": "bee73a7f962f3f893dcc64a79cab298cf7b7f6a1511fe0a9ce9c244b6285d2f9"
+          },
+          "zkir": {
+            "bytes": 101431,
+            "sha256": "f4ac9656fb202a021ebfdd2d5cc54aa550d141c39195b02b942f1a6194002e7d"
+          },
+          "bzkir": {
+            "bytes": 35573,
+            "sha256": "816135b37a010000dc3699e27b2672bd555ebed078ce35f35bfa55011c496f98"
+          }
+        },
+        "proposePolicy": {
+          "k": 14,
+          "rows": 11956,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16814276,
+            "sha256": "8b0c208ea555781fdb3ebe6bba60e087e87d62593b88d1948d83032dd5bed85e"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4",
+            "fingerprint": "be9f7a7b44c555e22145d18e4ebfca9cf383a3ad4851b4df60861da227b7bae4"
+          },
+          "zkir": {
+            "bytes": 96138,
+            "sha256": "39aadc1e0317a1a1e5034952470034b384c2f829299d818462ec2c702c67c5b9"
+          },
+          "bzkir": {
+            "bytes": 33790,
+            "sha256": "486d5830f2a9d544a466473af8b28609cdd4eb449d512af32af50e14d8cc0f60"
+          }
+        },
+        "proposeRecovery": {
+          "k": 14,
+          "rows": 12617,
+          "tableRows": 15623,
+          "deferred": false,
+          "proverKey": {
+            "bytes": 16819443,
+            "sha256": "cfada0ca298af3a59f55df35147eefdf7cc74db5fc73b256f1228494abdf17c8"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1",
+            "fingerprint": "3bb687626d941a18ed33ceec116258372a19bc1ffa3b01a09ea0354bb4eb18a1"
+          },
+          "zkir": {
+            "bytes": 115603,
+            "sha256": "ab7a9afd98c52c723fe57234daee11e8b1b12ebb9b19534c60e518a809f47695"
+          },
+          "bzkir": {
+            "bytes": 38957,
+            "sha256": "5d410996139635fcbb294157f7e400af723912673cfaa2d06ed6e95bc9802b99"
+          }
+        },
+        "withdrawRecovery": {
+          "k": 14,
+          "rows": 9939,
+          "tableRows": 15623,
+          "deferred": true,
+          "proverKey": {
+            "bytes": 16799053,
+            "sha256": "142a43713c8100a5358dff1829919a8f1a940ec6e8f1bfbebee2f7e452dc3269"
+          },
+          "verifierKey": {
+            "bytes": 1593,
+            "sha256": "2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88",
+            "fingerprint": "2b4240eb611caa02d6dd51eab9f64b18eb029741d837a0d22d4f9debfcbefa88"
+          },
+          "zkir": {
+            "bytes": 49240,
+            "sha256": "df4d3e9584a207508cf70245a69f890c3bcf269c85dac5afeefd08cb7ccc3b15"
+          },
+          "bzkir": {
+            "bytes": 18567,
+            "sha256": "862badd98a0e81917d6e14fb1f81da0225997666910aef7c256b1609dc199ae7"
+          }
+        }
+      }
+    }
+  },
+  "notes": {
+    "fingerprint": "verifierKeyHashOf from @midnight-ntwrk/compact-runtime 0.21.0 (the SHA-256 of keys/<circuit>.verifier as lowercase hex)",
+    "buildId": "gvmn-<profile>-<first 16 hex of SHA-256(buildIdPreimage)>; the preimage lists every circuit with its verifier key SHA-256",
+    "proverKeys": "not committed; scripts/build.sh regenerates them byte for byte with the pinned toolchain and parameters (checked against proverKey.sha256)"
+  }
+}
