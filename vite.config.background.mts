@@ -8,6 +8,7 @@ import wasm from 'vite-plugin-wasm';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'node:path';
 import { createRequire } from 'module';
+import { workerListenersFirstEvaluation } from './scripts/worker-listener-guard.mjs';
 
 const _require = createRequire(import.meta.url);
 
@@ -267,6 +268,8 @@ export default defineConfig({
     ...(Array.isArray(sharedConfig.plugins) ? sharedConfig.plugins : []),
     cjsInteropPlugin,
     bundleTdzGuard,
+    // Push listeners must be added before the iife's first top-level await (workerEventGate.ts).
+    workerListenersFirstEvaluation,
   ],
   resolve: {
     ...sharedConfig.resolve,

@@ -1,4 +1,7 @@
-// Keep first: lands every locale before its reader (see backgroundLocales.ts).
+// Keep first: adds the push listeners before the bundle's first top-level await, or a push
+// that wakes the worker is lost (workerEventGate.ts; scripts/worker-listener-guard.mjs).
+import './workerEventGate';
+// Then: lands every locale before its reader (see backgroundLocales.ts).
 import './backgroundLocales';
 // Next: wraps fetch before anything can call it (signed-response check).
 import '@/api/signedFetchInstall';
@@ -236,9 +239,8 @@ loadConfig().then(() => {
 // call throws and, at top level, would kill the whole service worker.
 const sidePanelSupported = !!chrome.sidePanel;
 
-// Push notifications (handover B2/B3): service-worker listeners must be added in the
-// worker's first turn, synchronously, or a push wake never sees them. Feature-detected
-// inside (no-op where the worker has no push registration).
+// Push notifications (handover B2/B3): installs the handlers behind the listeners that
+// workerEventGate.ts added in the worker's first evaluation, releasing any push that woke it.
 installNotifyListeners();
 
 // Broadcast announcements: read the public feed once per worker start. Not awaited, and behind no

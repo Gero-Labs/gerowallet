@@ -135,6 +135,7 @@ jobs:
           if [ -n "$EXPECTED_EXTENSION_ID" ]; then identity_args=(--expected-id "$EXPECTED_EXTENSION_ID"); fi
           node scripts/check-release-artifact.mjs extension --expected-version "$CANDIDATE_VERSION" "${identity_args[@]}" --report release-evidence/artifact.json
           node scripts/check-bundle-tdz.mjs
+          node scripts/worker-listener-guard.mjs
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const report = JSON.parse(fs.readFileSync('release-evidence/artifact.json', 'utf8'));
