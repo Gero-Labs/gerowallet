@@ -46,7 +46,6 @@ import {
   sealWithLinkKey,
   toBase64Url,
   vaultNetworkOf,
-  x25519PublicKey,
   type InviteBody,
   type InviteNetwork,
   type InviteParticipant,
@@ -58,9 +57,10 @@ import { bytesToHex, hexToBytes } from '@/shared/gerovault/cbor';
 import { nextVaultIndex, writeLabel, type HeldIndex, type ParticipantIndexHistory, type ReleasedIndex, type VaultNetwork } from '@/shared/gerovault';
 import type { Wallet } from '@/models/types';
 import { OwnAccountKeyError, canHoldVaultKeys } from '@/modules/gerovault/create/ownAccountKeyFlow';
+import { ensureDeviceInviteKey, readDeviceInviteKey } from './deviceInviteKey';
 import { InviteApiError, type InviteApi, type SetupResponse } from './inviteApi';
 import type { VaultKeyAuth, VaultKeyMaterial } from './inviteKeys';
-import type { InviteRecords, ReceivedState, SetupSlot, StoredLink, StoredReceived, StoredSetup } from './inviteRecords';
+import type { InviteRecords, ReceivedState, SetupSlot, StoredInvite, StoredLink, StoredReceived, StoredSetup } from './inviteRecords';
 import { resolveCosignerEntry, type ResolveProblem, type ResolvedCosigner } from './resolveCosigner';
 
 // -------------------------------------------------------------------------------------------------
@@ -83,6 +83,7 @@ export type InviteErrorCode =
   | 'EXPIRED'
   | 'REVOKED'
   | 'ALREADY_ANSWERED'
+  | 'ALREADY_JOINED'
   | 'LIMIT_EXCEEDED'
   | 'RATE_LIMITED'
   | 'SLOT_TAKEN'
@@ -138,6 +139,8 @@ export interface SetupViewModel {
   readonly links: readonly { readonly joinTokenHash: string; readonly kind: 'qr' | 'link'; readonly expiresAt: number; readonly state: string }[];
   /** Answers gero-sync handed over that did not open or check (never used). */
   readonly refused: number;
+  /** Wallets that answered a second time: their first answer holds its slot, the second was not used. */
+  readonly duplicates?: readonly { readonly label: string; readonly via: 'invite' | 'qr' | 'link' }[];
   readonly vaultId?: string;
 }
 
@@ -309,25 +312,11 @@ export function createInviteService(deps: InviteServiceDeps) {
   // ---- device key --------------------------------------------------------------------------
 
   async function deviceKey(create: boolean): Promise<{ secret: Uint8Array; publicKey: Uint8Array } | null> {
-    const stored = await records.deviceKey();
-    if (stored) {
-      const secret = hexToBytes(stored.secret);
-      const publicKey = hexToBytes(stored.publicKey);
-      if (secret?.length === 32 && publicKey && isUsableX25519Key(publicKey) && bytesToHex(x25519PublicKey(secret)) === stored.publicKey) {
-        return { secret, publicKey };
-      }
-      log('vault invite key unreadable: a new one is made');
-    }
-    if (!create) return null;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const secret = deps.random(32);
-      const publicKey = x25519PublicKey(secret);
-      if (!isUsableX25519Key(publicKey)) continue;
-      await records.setDeviceKey({ secret: bytesToHex(secret), publicKey: bytesToHex(publicKey), createdAt: nowMs() });
-      deps.onDeviceKeyCreated?.();
-      return { secret, publicKey };
-    }
-    return fail('NOT_SUPPORTED');
+    if (!create) return readDeviceInviteKey(records, log);
+    const { key, created } = await ensureDeviceInviteKey(records, { random: deps.random, now: nowMs, log });
+    if (!key) return fail('NOT_SUPPORTED');
+    if (created) deps.onDeviceKeyCreated?.();
+    return key;
   }
 
   async function requireDeviceKey() {
@@ -462,6 +451,7 @@ export function createInviteService(deps: InviteServiceDeps) {
       })),
       links: s.links.map(l => ({ joinTokenHash: l.joinTokenHash, kind: l.kind, expiresAt: l.expiresAt * 1000, state: l.state === 'open' && t >= l.expiresAt ? 'expired' : l.state })),
       refused: refusedCounts.get(s.setupId) ?? 0,
+      ...(s.duplicates?.length ? { duplicates: s.duplicates.map(d => ({ label: d.label, via: d.via })) } : {}),
       ...(s.vaultId ? { vaultId: s.vaultId } : {}),
     };
   }
@@ -489,7 +479,8 @@ export function createInviteService(deps: InviteServiceDeps) {
       setupId: r.setupId,
       network: vaultNetworkOf(r.network),
       state: expired ? 'expired' : r.state,
-      known: r.known,
+      // Also someone verified since it arrived: it moves out of Requests.
+      known: r.known || await isKnown(vaultNetworkOf(r.network), s.inviterCredential),
       receivedAt: r.receivedAt,
       expiresAt: s.expiresAt * 1000,
       ...(r.endedAt !== undefined ? { endedAt: r.endedAt } : {}),
@@ -663,6 +654,56 @@ export function createInviteService(deps: InviteServiceDeps) {
     return resolveCosignerEntry(input.entry, network, { resolveHandle: deps.resolveHandle, ownCredential: deps.wallets.stakeCredential(wallet) ?? undefined });
   }
 
+  /** The directory of a stake credential: five usable keys, or a broken server (PROTOCOL 6, step 3). */
+  async function directoryOf(s: StoredSetup, credential: string): Promise<{ slot: number; key: Uint8Array }[]> {
+    let entries: readonly { slot: number; inviteKey: string }[];
+    try {
+      entries = await api.directory(wireNetwork(s.network), credential);
+    } catch (error) {
+      return apiFailure(error);
+    }
+    const recipients = entries.map(e => ({ slot: e.slot, key: hexToBytes(e.inviteKey) ?? new Uint8Array() }));
+    if (recipients.some(r => !isUsableX25519Key(r.key))) return fail('BROKEN_SERVER');
+    return recipients;
+  }
+
+  /** Signs and seals one INVITE for a slot to the given directory and files it with gero-sync. */
+  async function sendInvite(
+    s: StoredSetup,
+    n: number,
+    credential: string,
+    material: VaultKeyMaterial,
+    replyKey: Uint8Array,
+    recipients: readonly { slot: number; key: Uint8Array }[],
+    handle?: string,
+  ): Promise<StoredInvite> {
+    const revokeSecret = deps.random(32);
+    try {
+      const body = inviteBody(s, n, inviteExpiry(s), revokeSecret, replyKey, credential);
+      const sig = await material.attest(inviteSubject(body));
+      const sealed = sealForRecipients('INVITE', body.setupId, encodeSignedInvite(body, sig), recipients, sealRandomness(5));
+      let posted: { inviteId: string; expiresAt: number };
+      try {
+        posted = await api.postInvite(s.setupId, { stakeCredential: credential, ...sealed });
+      } catch (error) {
+        return apiFailure(error);
+      }
+      return {
+        inviteId: posted.inviteId,
+        stakeCredential: credential,
+        ...(handle ? { handle } : {}),
+        digest: inviteSubject(body).digest,
+        revokeSecret: bytesToHex(revokeSecret),
+        issuedAt: body.issuedAt,
+        expiresAt: body.expiresAt,
+        state: 'open',
+        recipientKeys: recipients.map(r => bytesToHex(r.key)),
+      };
+    } finally {
+      revokeSecret.fill(0);
+    }
+  }
+
   async function invite(input: { setupId?: unknown; n?: unknown; stakeCredential?: unknown; handle?: unknown; label?: unknown }) {
     return serial(async () => {
       let s = openSetup(await loadSetup(input.setupId));
@@ -680,47 +721,16 @@ export function createInviteService(deps: InviteServiceDeps) {
       const device = await requireDeviceKey();
       s = await register(s);
 
-      let entries: readonly { slot: number; inviteKey: string }[];
-      try {
-        entries = await api.directory(wireNetwork(s.network), credential);
-      } catch (error) {
-        return apiFailure(error);
-      }
-      // A key that is not a usable X25519 key is a broken server: stop (PROTOCOL 6, step 3).
-      const recipients = entries.map(e => ({ slot: e.slot, key: hexToBytes(e.inviteKey) ?? new Uint8Array() }));
-      if (recipients.some(r => !isUsableX25519Key(r.key))) return fail('BROKEN_SERVER');
-
-      const revokeSecret = deps.random(32);
-      const body = inviteBody(s, slot.n, inviteExpiry(s), revokeSecret, device.publicKey, credential);
-      const sig = await material.attest(inviteSubject(body));
-      const plaintext = encodeSignedInvite(body, sig);
-      const sealed = sealForRecipients('INVITE', body.setupId, plaintext, recipients, sealRandomness(5));
-      let posted: { inviteId: string; expiresAt: number };
-      try {
-        posted = await api.postInvite(s.setupId, { stakeCredential: credential, ...sealed });
-      } catch (error) {
-        return apiFailure(error);
-      }
-      const digest = inviteSubject(body).digest;
+      const sent = await sendInvite(s, slot.n, credential, material, device.publicKey, await directoryOf(s, credential), handle);
       const fresh = (await records.setup(s.setupId)) ?? s;
       const next: StoredSetup = {
         ...fresh,
         slots: fresh.slots.map(x => (x.n !== slot.n ? x : {
           n: x.n,
           ...(label ?? x.label ? { label: label ?? x.label } : {}),
-          invite: {
-            inviteId: posted.inviteId,
-            stakeCredential: credential,
-            ...(handle ? { handle } : {}),
-            digest,
-            revokeSecret: bytesToHex(revokeSecret),
-            issuedAt: body.issuedAt,
-            expiresAt: body.expiresAt,
-            state: 'open',
-          },
+          invite: sent,
         })),
       };
-      revokeSecret.fill(0);
       await records.putSetup(next);
       return setupView(next);
     });
@@ -786,11 +796,13 @@ export function createInviteService(deps: InviteServiceDeps) {
   async function applyResponse(s: StoredSetup, r: SetupResponse, replySecret: Uint8Array): Promise<StoredSetup | 'refused'> {
     const setupIdBytes = bytes(s.setupId);
     const network = wireNetwork(s.network);
-    const slot = r.inviteId ? s.slots.find(x => x.invite?.inviteId === r.inviteId) : undefined;
+    // The slot's invitation, or one a reminder replaced after this answer was already sent.
+    const slot = r.inviteId ? s.slots.find(x => x.invite?.inviteId === r.inviteId || x.superseded?.some(p => p.inviteId === r.inviteId)) : undefined;
+    const answered = slot ? (slot.invite?.inviteId === r.inviteId ? slot.invite : slot.superseded?.find(p => p.inviteId === r.inviteId)) : undefined;
     const link = r.joinTokenHash ? s.links.find(l => l.joinTokenHash === r.joinTokenHash) : undefined;
-    if (!slot && !link) return 'refused';
-    const ctx = slot?.invite
-      ? { setupId: setupIdBytes, network, inviteDigest: slot.invite.digest, inviteExpiresAt: slot.invite.expiresAt }
+    if (!answered && !link) return 'refused';
+    const ctx = answered
+      ? { setupId: setupIdBytes, network, inviteDigest: answered.digest, inviteExpiresAt: answered.expiresAt }
       : { setupId: setupIdBytes, network, inviteDigest: link!.digest, inviteExpiresAt: link!.inviteExpiresAt, macKey: deriveLinkSecrets(bytes(link!.cap), setupIdBytes).macKey };
 
     if (r.kind === 'decline') {
@@ -814,11 +826,27 @@ export function createInviteService(deps: InviteServiceDeps) {
     const stake = bytesToHex(accepted.body.vaultKeys.stake);
     // Keys already in the setup (this wallet's, or another cosigner's) are refused (PROTOCOL 4.2).
     const used = new Set([s.ownPayment, s.ownStake, ...s.slots.flatMap(x => (x.accept ? [x.accept.payment, x.accept.stake] : []))]);
+    const via: 'invite' | 'qr' | 'link' = slot ? 'invite' : link!.kind;
+    const credential = bytesToHex(accepted.body.stakeCredential);
+    // One wallet, one slot: a wallet that already joined (by invitation, then by QR or link, or the
+    // initiator's own) never takes a second one, whatever vault keys the second answer carries.
+    // The first answer keeps its slot; this one is kept only to tell the initiator.
+    if (credential === s.ownStakeCredential || s.slots.some(x => x.accept?.stakeCredential === credential)) {
+      log('vault invite: a second ACCEPT from a wallet already in the setup was not used');
+      return {
+        ...s,
+        seenResponses: [...s.seenResponses, accepted.digest],
+        duplicates: [...(s.duplicates ?? []), { label: accepted.body.label, stakeCredential: credential, via, receivedAt: nowMs() }],
+        links: s.links.map(l => (l === link ? { ...l, state: 'used' as const } : l)),
+      };
+    }
     if (used.has(payment) || used.has(stake)) return 'refused';
-    const target = slot ?? s.slots.find(x => !x.accept && !x.invite && x.declinedAt === undefined)
+    // By link from someone who was also invited by name: their own slot fills, not another one.
+    const target = slot
+      ?? s.slots.find(x => !x.accept && x.invite?.stakeCredential === credential)
+      ?? s.slots.find(x => !x.accept && !x.invite && x.declinedAt === undefined)
       ?? s.slots.find(x => !x.accept && slotStatus(x, nowS()) !== 'waiting');
     if (!target || target.accept) return 'refused';
-    const via: 'invite' | 'qr' | 'link' = slot ? 'invite' : link!.kind;
     const next: StoredSetup = {
       ...s,
       seenResponses: [...s.seenResponses, accepted.digest],
@@ -899,18 +927,47 @@ export function createInviteService(deps: InviteServiceDeps) {
     });
   }
 
+  /**
+   * Remind (PROTOCOL 3.1, 7.5.3): a fresh directory lookup first. The same five keys as the
+   * invitation was sealed to: gero-sync pushes it again. Other keys (the cosigner's device made or
+   * lost its key since): the invitation is signed and sealed again to the new directory, and
+   * replaces the open one (7.5.2). The caller is told the same either way, and gero-sync answers
+   * 202 to both, so a reminder says nothing about who holds a device.
+   */
   async function remind(input: { setupId?: unknown; n?: unknown }) {
-    const s = openSetup(await loadSetup(input.setupId));
-    const slot = s.slots.find(x => x.n === input.n);
-    if (!slot?.invite || slotStatus(slot, nowS()) !== 'waiting') return fail('INVALID_INPUT');
-    try {
-      await api.remind(s.setupId, slot.invite.inviteId);
-    } catch (error) {
-      return apiFailure(error);
-    }
-    const next: StoredSetup = { ...s, slots: s.slots.map(x => (x === slot ? { ...x, invite: { ...x.invite!, remindedAt: nowMs() } } : x)) };
-    await records.putSetup(next);
-    return setupView(next);
+    return serial(async () => {
+      let s = openSetup(await loadSetup(input.setupId));
+      const slot = s.slots.find(x => x.n === input.n);
+      const old = slot?.invite;
+      if (!slot || !old || slotStatus(slot, nowS()) !== 'waiting') return fail('INVALID_INPUT');
+      const recipients = await directoryOf(s, old.stakeCredential);
+      const keys = recipients.map(r => bytesToHex(r.key));
+      const unchanged = old.recipientKeys !== undefined && old.recipientKeys.length === keys.length && old.recipientKeys.every((k, i) => k === keys[i]);
+      let invite: StoredInvite;
+      let superseded = slot.superseded ?? [];
+      if (unchanged) {
+        try {
+          await api.remind(s.setupId, old.inviteId);
+        } catch (error) {
+          return apiFailure(error);
+        }
+        invite = { ...old, remindedAt: nowMs() };
+      } else {
+        const material = signer(s.setupId) ?? fail('LOCKED');
+        const device = await requireDeviceKey();
+        s = await register(s);
+        invite = { ...(await sendInvite(s, slot.n, old.stakeCredential, material, device.publicKey, recipients, old.handle)), remindedAt: nowMs() };
+        // An answer to the replaced invitation may already be with gero-sync: it still opens.
+        superseded = [...superseded, { inviteId: old.inviteId, digest: old.digest, expiresAt: old.expiresAt }];
+      }
+      const fresh = (await records.setup(s.setupId)) ?? s;
+      const next: StoredSetup = {
+        ...fresh,
+        slots: fresh.slots.map(x => (x.n !== slot.n ? x : { ...x, invite, ...(superseded.length ? { superseded } : {}) })),
+      };
+      await records.putSetup(next);
+      return setupView(next);
+    });
   }
 
   async function revoke(input: { setupId?: unknown; n?: unknown }) {
@@ -947,6 +1004,8 @@ export function createInviteService(deps: InviteServiceDeps) {
     if (!slot?.accept) return fail('INVALID_INPUT');
     const next: StoredSetup = { ...s, slots: s.slots.map(x => (x === slot ? { ...x, verifiedAt: nowMs() } : x)) };
     await records.putSetup(next);
+    // Kept apart from the setup, which is deleted a month after it closes: their later invitations are "for you".
+    await records.addKnownCosigner({ network: s.network, stakeCredential: slot.accept.stakeCredential, verifiedAt: nowMs() });
     return setupView(next);
   }
 
@@ -998,11 +1057,20 @@ export function createInviteService(deps: InviteServiceDeps) {
 
   // ---- invitations (cosigner) --------------------------------------------------------------
 
+  /**
+   * "Known" sorts an invitation into "for you" instead of Requests (PROTOCOL 8.1): a contact, an
+   * inviter this device joined a vault with, or a cosigner this device verified (GV-61) in one of
+   * its own setups or vaults. Decided on the device, never by gero-sync.
+   */
   async function isKnown(network: VaultNetwork, inviterCredential: string): Promise<boolean> {
     const contacts = await deps.wallets.contactCredentials(network).catch(() => new Set<string>());
     if (contacts.has(inviterCredential)) return true;
     // Someone this device already joined a vault with.
-    return (await records.receivedAll()).some(r => r.summary.inviterCredential === inviterCredential && r.join !== undefined);
+    if ((await records.receivedAll()).some(r => r.summary.inviterCredential === inviterCredential && r.join !== undefined)) return true;
+    // A cosigner verified here: the list outlives the setup; the setups cover ones verified before it was kept.
+    if ((await records.knownCosigners()).some(k => k.network === network && k.stakeCredential === inviterCredential)) return true;
+    return (await records.setups()).some(s => s.network === network
+      && s.slots.some(slot => slot.verifiedAt !== undefined && slot.accept?.stakeCredential === inviterCredential));
   }
 
   function summaryOf(signed: SignedInvite) {
@@ -1039,10 +1107,13 @@ export function createInviteService(deps: InviteServiceDeps) {
   }
 
   /** `GET /vault-invites`: opens every new invitation with this device's secret (fail closed). */
-  async function refreshInvites(): Promise<{ invites: ReceivedView[]; refused: number }> {
+  async function refreshInvites(): Promise<{ invites: ReceivedView[]; refused: number; busy?: { retryAfterMs: number } }> {
     return serial(async () => {
-      const device = await deviceKey(false);
+      // A device that reads its mailbox has a key and publishes it: without one it is in no
+      // directory, and an invitation sent to this wallet would reach only decoys.
+      const device = await deviceKey(true).catch(() => null);
       let refused = 0;
+      let busy: { retryAfterMs: number } | undefined;
       if (device) {
         let rows;
         try {
@@ -1050,7 +1121,11 @@ export function createInviteService(deps: InviteServiceDeps) {
         } catch (error) {
           // Offline or a server fault: what this device already holds still shows.
           if (!(error instanceof InviteApiError) || error.code === 'device_unknown') rows = [];
-          else if (['network', 'deferred', 'invalid_response', 'rate_limited'].includes(error.code) || error.status >= 500) rows = [];
+          else if (error.code === 'rate_limited') {
+            // Rate limited: the stored invitations show, and the page says when it asks again.
+            busy = { retryAfterMs: error.retryAfterMs ?? 60_000 };
+            rows = [];
+          } else if (['network', 'deferred', 'invalid_response'].includes(error.code) || error.status >= 500) rows = [];
           else return apiFailure(error);
         }
         // An accepted invitation whose setup ran out before the vault was saved here releases its
@@ -1105,7 +1180,7 @@ export function createInviteService(deps: InviteServiceDeps) {
       }
       const all = (await records.receivedAll()).filter(r => r.state !== 'completed' || nowMs() - (r.endedAt ?? r.receivedAt) < DELETE_AFTER_MS);
       all.sort((a, b) => b.receivedAt - a.receivedAt);
-      return { invites: await Promise.all(all.map(receivedView)), refused };
+      return { invites: await Promise.all(all.map(receivedView)), refused, ...(busy ? { busy } : {}) };
     });
   }
 
@@ -1187,6 +1262,12 @@ export function createInviteService(deps: InviteServiceDeps) {
       if (walletNetwork(wallet) !== vaultNetworkOf(r.network)) return fail('WRONG_NETWORK');
       const credential = deps.wallets.stakeCredential(wallet) ?? fail('NOT_SUPPORTED');
       if (r.source === 'mailbox' && credential !== r.addressedTo) return fail('NOT_ADDRESSED');
+      // One wallet, one slot: not the vault's own initiator, and not a wallet that already joined
+      // this setup through another invitation, QR or link.
+      if (credential === r.summary.inviterCredential) return fail('ALREADY_JOINED', { own: true });
+      const joinedBefore = (await records.receivedAll()).some(other => other.ref !== r.ref && other.setupId === r.setupId
+        && other.join?.walletId === wallet.id && (other.state === 'accepted' || other.state === 'completed'));
+      if (joinedBefore) return fail('ALREADY_JOINED');
       if (!(await deps.wallets.backedUp(wallet.id))) return fail('NOT_BACKED_UP');
       const label = labelOf(input.label === undefined || input.label === '' ? wallet.name : input.label);
       const replyKey = bytes(r.summary.replyKey);
@@ -1288,7 +1369,7 @@ export function createInviteService(deps: InviteServiceDeps) {
     return { inviteKey: bytesToHex(key.publicKey) };
   }
 
-  /** The device's invite public key for `PUT /device`, or null before any vault screen asked for one. */
+  /** The device's invite public key, or null when none was made yet. */
   async function devicePublicKey(): Promise<string | null> {
     const key = await deviceKey(false);
     return key ? bytesToHex(key.publicKey) : null;

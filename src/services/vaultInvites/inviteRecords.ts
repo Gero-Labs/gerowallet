@@ -8,6 +8,9 @@
  * - `vaultInviteReceived:<ref>`: an invitation this device opened (the cosigner side); `ref` is the
  *   server's `inviteId`, or `l` and the join token hash for one opened from a QR or link.
  *
+ * - `vaultInviteKnownCosigners`: the stake credentials of cosigners this device verified (GV-61) in
+ *   its own setups, so their later invitations are "for you", not requests. No secret.
+ *
  * Pages never read these keys: they get views without secrets through the background
  * (`inviteService.ts`). Storage is injected so the service runs in a test without IndexedDB.
  */
@@ -25,6 +28,17 @@ export interface InviteKv {
 export const DEVICE_KEY = 'vaultInviteDeviceKey';
 export const SETUP_PREFIX = 'vaultInviteSetup:';
 export const RECEIVED_PREFIX = 'vaultInviteReceived:';
+export const KNOWN_COSIGNERS_KEY = 'vaultInviteKnownCosigners';
+/** The newest entries kept; older ones fall off. */
+export const KNOWN_COSIGNERS_MAX = 200;
+
+/** A cosigner this device read the verification number with. */
+export interface KnownCosigner {
+  readonly network: VaultNetwork;
+  /** The cosigner wallet's stake credential, hex (from their checked ACCEPT). */
+  readonly stakeCredential: string;
+  readonly verifiedAt: number;
+}
 
 export interface StoredDeviceKey {
   /** 32 random bytes, hex. Never leaves the worker. */
@@ -46,6 +60,28 @@ export interface StoredInvite {
   readonly expiresAt: number;
   readonly state: InviteState;
   readonly remindedAt?: number;
+  /**
+   * The five directory keys this invitation was sealed to, in slot order. A reminder compares them
+   * with a fresh directory: other keys mean the cosigner's devices changed and the invitation is
+   * sent again. Absent on an invitation from before this was kept (treated as changed).
+   */
+  readonly recipientKeys?: readonly string[];
+}
+
+/** An invitation a reminder replaced: an answer to it that was already on its way still opens. */
+export interface SupersededInvite {
+  readonly inviteId: string;
+  readonly digest: string;
+  /** Unix seconds, as signed. */
+  readonly expiresAt: number;
+}
+
+/** A second ACCEPT from a wallet that already fills a slot of the setup: never used. */
+export interface DuplicateJoin {
+  readonly label: string;
+  readonly stakeCredential: string;
+  readonly via: 'invite' | 'qr' | 'link';
+  readonly receivedAt: number;
 }
 
 /** A QR shown or a link copied: one capability each (PROTOCOL 5). */
@@ -82,6 +118,8 @@ export interface SetupSlot {
   readonly n: number;
   readonly label?: string;
   readonly invite?: StoredInvite;
+  /** Earlier invitations of this slot that a reminder replaced. */
+  readonly superseded?: readonly SupersededInvite[];
   readonly accept?: StoredAccept;
   readonly declinedAt?: number;
   /** The number was read with this cosigner on this device (GV-61). */
@@ -110,6 +148,8 @@ export interface StoredSetup {
   readonly links: readonly StoredLink[];
   /** Response ids already handled, and ACCEPT digests already used (gero-sync may redeliver). */
   readonly seenResponses: readonly string[];
+  /** Wallets that answered a second time (by link after an invitation, or twice by link). */
+  readonly duplicates?: readonly DuplicateJoin[];
   readonly state: 'open' | 'closed' | 'expired' | 'completed';
   readonly vaultId?: string;
 }
@@ -184,11 +224,19 @@ export interface InviteRecords {
   received(ref: string): Promise<StoredReceived | undefined>;
   receivedAll(): Promise<StoredReceived[]>;
   putReceived(received: StoredReceived): Promise<void>;
+  knownCosigners(): Promise<KnownCosigner[]>;
+  addKnownCosigner(cosigner: KnownCosigner): Promise<void>;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export function createInviteRecords(kv: InviteKv): InviteRecords {
+  async function knownCosigners(): Promise<KnownCosigner[]> {
+    const rows = await kv.get<unknown>(KNOWN_COSIGNERS_KEY);
+    return Array.isArray(rows)
+      ? rows.filter((r): r is KnownCosigner => isRecord(r) && typeof r['network'] === 'string' && typeof r['stakeCredential'] === 'string' && typeof r['verifiedAt'] === 'number')
+      : [];
+  }
   return {
     deviceKey: () => kv.get<StoredDeviceKey>(DEVICE_KEY),
     setDeviceKey: key => kv.set(DEVICE_KEY, key),
@@ -205,6 +253,11 @@ export function createInviteRecords(kv: InviteKv): InviteRecords {
       return rows.map(([, v]) => v).filter((v): v is StoredReceived => isRecord(v) && v['v'] === 1);
     },
     putReceived: received => kv.set(RECEIVED_PREFIX + received.ref, received),
+    knownCosigners,
+    async addKnownCosigner(cosigner) {
+      const rest = (await knownCosigners()).filter(k => !(k.network === cosigner.network && k.stakeCredential === cosigner.stakeCredential));
+      await kv.set(KNOWN_COSIGNERS_KEY, [cosigner, ...rest].slice(0, KNOWN_COSIGNERS_MAX));
+    },
   };
 }
 
