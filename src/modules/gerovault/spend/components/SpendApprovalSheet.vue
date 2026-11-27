@@ -20,8 +20,18 @@
         <span>{{ $t('gerovault.spend.sheet.proven', { count: review.inputCount }) }}</span>
       </div>
 
+      <!-- A stake or DUST operation: what it does, by name; it pays nothing out of the vault. -->
+      <OperationSheetRows
+        v-if="review.operation"
+        :operation="review.operation"
+        :fee="review.fee"
+        :own-collateral-key-hash="ownCollateralKeyHash"
+        :collateral-provider="collateralProvider"
+        :details="details"
+      />
+
       <dl class="approval-sheet__rows">
-        <div class="approval-sheet__row approval-sheet__row--lead">
+        <div v-if="!review.operation" class="approval-sheet__row approval-sheet__row--lead">
           <dt class="t-body">{{ $t('gerovault.spend.sheet.leaves') }}</dt>
           <dd><VaultValue :value="review.leaves" emphasis negative :details="details" align-end /></dd>
         </div>
@@ -102,6 +112,7 @@ import GNote from '@/shared/components/GNote.vue';
 import { displayLabel, type VaultNetwork } from '@/shared/gerovault';
 import type { ReviewOutput, SpendReview, SpendWarning } from '../review';
 import { adaText, refusalKey, slotTimeMs, warningKey } from '../display';
+import OperationSheetRows from '@/modules/gerovault/dust/components/OperationSheetRows.vue';
 import ChunkedAddress from './ChunkedAddress.vue';
 import VaultValue from './VaultValue.vue';
 
@@ -111,10 +122,14 @@ const props = withDefaults(defineProps<{
   paymentScriptHash: string;
   /** The Details layer is on. */
   details?: boolean;
-}>(), { details: false });
+  /** This wallet's own first address key hash: a DUST operation's collateral from it is this wallet's own. */
+  ownCollateralKeyHash?: string | null;
+  /** The owner whose wallet gives a DUST operation's collateral, when a signature file has shown it. */
+  collateralProvider?: string | null;
+}>(), { details: false, ownCollateralKeyHash: null, collateralProvider: null });
 
 const txId = computed(() => props.review.txId);
-const outgoing = computed<ReviewOutput[]>(() => (props.review.status === 'ready' ? props.review.outputs.filter(o => o.kind !== 'change') : []));
+const outgoing = computed<ReviewOutput[]>(() => (props.review.status === 'ready' && !props.review.operation ? props.review.outputs.filter(o => o.kind !== 'change') : []));
 const hasChange = computed(() => props.review.status === 'ready' && (props.review.change.lovelace > 0n || props.review.change.tokens.length > 0));
 const warnings = computed<readonly SpendWarning[]>(() => (props.review.status === 'ready' ? props.review.warnings : []));
 const generalWarnings = computed(() => warnings.value.filter(w => w.output === undefined));

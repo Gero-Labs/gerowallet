@@ -34,6 +34,12 @@
               : $t('gerovault.spend.signers.waiting') }}
         </span>
       </li>
+      <li v-if="progress.collateralSigned !== null" class="signers-card__row" data-test="signer-collateral">
+        <span class="t-body signers-card__name">{{ $t('gerovault.dust.signers.collateral') }}</span>
+        <span class="t-caption signers-card__status" :class="progress.collateralSigned ? 'signers-card__status--signed' : ''">
+          {{ progress.collateralSigned ? $t('gerovault.spend.signers.signed') : $t('gerovault.spend.signers.waiting') }}
+        </span>
+      </li>
     </ul>
   </section>
 </template>

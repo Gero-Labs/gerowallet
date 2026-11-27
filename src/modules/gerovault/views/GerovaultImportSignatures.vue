@@ -55,6 +55,8 @@
           :review="review"
           :network="ready.context.network"
           :payment-script-hash="ready.context.paymentScriptHash"
+          :own-collateral-key-hash="ownCollateralKeyHash"
+          :collateral-provider="collateralProvider"
           :details="detailsVisible"
         />
         <SpendSignersCard :progress="progress" :details="detailsVisible" />
@@ -144,15 +146,19 @@ import { errorText, participantName, unavailableKey } from '@/modules/gerovault/
 import { VaultSpendError } from '@/modules/gerovault/spend/errors';
 import { readTextFile, saveTextFile } from '@/modules/gerovault/spend/files';
 import { reviewBundle, type SpendReview } from '@/modules/gerovault/spend/review';
-import { signerSupport } from '@/modules/gerovault/spend/signer';
+import { accountCollateralKeyHash, signerSupport } from '@/modules/gerovault/spend/signer';
+import { PLAIN_SPEND_PLAN, witnessPlanOf } from '@/modules/gerovault/dust/operations';
 import { requestVaultWitnessFile } from '@/modules/gerovault/spend/signClient';
 import { clearSpendSession, spendSession, spendSessionKey, startSpendSession, updateSpendSession } from '@/modules/gerovault/spend/spendSession';
 import { useVaultSpend } from '@/modules/gerovault/spend/useVaultSpend';
+import { plutusV3CostModel } from '@/modules/gerovault/dust/scriptData';
+import { networkStore } from '@/stores/networkStore';
 import {
   addSignature,
   assembleTransaction,
   createWitnessFile,
   parseWitnessFile,
+  signatureWitnesses,
   signingProgress,
   verifyWitnessFile,
   witnessFileName,
@@ -174,7 +180,27 @@ const support = computed(() => signerSupport(wallet.value));
 const sessionKey = computed(() => (ready.value && walletId.value !== null ? spendSessionKey(walletId.value, ready.value.context.vaultId) : null));
 const session = computed(() => (sessionKey.value ? spendSession(sessionKey.value) ?? null : null));
 const review = ref<SpendReview | null>(null);
-const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context) : null));
+/** The protocol's collateral percentage, which bounds a DUST operation's collateral on the sheet. */
+const collateralOption = (): { collateralPercentage?: number } => {
+  const percentage = networkStore.epochParams?.collateralPercentage;
+  return typeof percentage === 'number' ? { collateralPercentage: percentage } : {};
+};
+/** What the witness set needs beyond payment signatures: read from this device's own sheet. */
+const plan = computed(() => (ready.value && review.value?.status === 'ready' ? witnessPlanOf(review.value.operation, ready.value.context) : PLAIN_SPEND_PLAN));
+/** The owner whose signature file carried the collateral witness: the proposer, by their label. */
+const collateralProvider = computed(() => {
+  const current = ready.value;
+  const provider = session.value?.collection.signatures.find(s => s.collateralWitness);
+  if (!current || !provider) return null;
+  const index = current.context.owners.indexOf(provider.signer.credential);
+  return participantName(provider.signer, t('gerovault.spend.signers.owner', { n: index + 1 }));
+});
+/** This wallet's first address key hash, so the sheet can say a DUST operation's collateral is its own. */
+const ownCollateralKeyHash = ref<string | null>(null);
+watch(() => wallet.value?.publicKey, key => {
+  void accountCollateralKeyHash(key).then(hash => { ownCollateralKeyHash.value = hash ?? null; });
+}, { immediate: true });
+const progress = computed(() => (session.value && ready.value ? signingProgress(session.value.collection, ready.value.context, plan.value) : null));
 const ownSignature = computed(() => session.value?.collection.signatures.find(s => s.signer.credential === ready.value?.context.self.credential) ?? null);
 const describe = (error: unknown) => errorText(error, t);
 
@@ -193,7 +219,7 @@ async function refreshReview(): Promise<void> {
   const current = ready.value;
   const active = session.value;
   review.value = current && active
-    ? await reviewBundle(active.bundle, current.context, { currentSlot: currentSlot.value, knownVaults: current.knownVaults })
+    ? await reviewBundle(active.bundle, current.context, { currentSlot: currentSlot.value, knownVaults: current.knownVaults, ...collateralOption() })
     : null;
 }
 
@@ -237,7 +263,7 @@ async function sign(password: string): Promise<void> {
     if (walletId.value === null) throw new VaultSpendError('UNSUPPORTED_WALLET', 'No wallet');
     // Signed in the background worker, where the root key is; only the witness file comes back.
     const file = await requestVaultWitnessFile({ walletId: walletId.value, vaultId: current.context.vaultId, bundle: active.bundle, password });
-    const verified = await verifyWitnessFile(file, active.bundle, current.context);
+    const verified = await verifyWitnessFile(file, active.bundle, current.context, plan.value);
     updateSpendSession(key, { collection: addSignature(active.collection, verified).collection });
   } catch (error) {
     signError.value = describe(error);
@@ -250,7 +276,7 @@ function saveOwnSignature(): void {
   const active = session.value;
   const own = ownSignature.value;
   if (!active || !own) return;
-  const file = createWitnessFile(active.bundle, own.signer, [own.witness]);
+  const file = createWitnessFile(active.bundle, own.signer, signatureWitnesses(own));
   saveTextFile(witnessFileName(file), signingFileText(file));
 }
 
@@ -266,7 +292,7 @@ async function addWitnessFiles(event: Event): Promise<void> {
     try {
       const text = await readTextFile(file, MAX_WITNESS_FILE_BYTES);
       if (text === null) throw new VaultSpendError('WITNESS_INVALID', 'Too large', 'malformed');
-      const verified = await verifyWitnessFile(parseWitnessFile(text), active.bundle, current.context);
+      const verified = await verifyWitnessFile(parseWitnessFile(text), active.bundle, current.context, plan.value);
       const { collection, added } = addSignature(active.collection, verified);
       updateSpendSession(key, { collection });
       const index = current.context.owners.indexOf(verified.signer.credential);
@@ -293,7 +319,11 @@ async function submit(): Promise<void> {
     // The sheet is computed again first: an expired proposal is not submitted.
     await refreshReview();
     if (review.value?.status !== 'ready') return;
-    const txCbor = assembleTransaction(active.bundle, current.context, active.collection);
+    const sheet = review.value;
+    const txCbor = assembleTransaction(active.bundle, current.context, active.collection, {
+      review: sheet,
+      ...(sheet.operation ? { plutusV3CostModel: plutusV3CostModel(networkStore.epochParams?.costModels) } : {}),
+    });
     const txId = await current.reader.submit(txCbor);
     updateSpendSession(key, { submittedTxId: txId || active.bundle.txId });
   } catch (error) {

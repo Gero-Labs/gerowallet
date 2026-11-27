@@ -10,3 +10,4 @@ export type { ProvenInputView } from './inputs';
 export type { DatumView, OutputView, ScriptLanguage, ScriptRefView } from './outputs';
 export type { TokenAmount, ValueView } from './value';
 export type { WithdrawalView } from './withdrawals';
+export type { MintAmount } from './mint';

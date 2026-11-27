@@ -3089,6 +3089,11 @@ app.addToOptions(MessageTypes.GEROVAULT_SIGN_VAULT_BUNDLE, gerovaultSignVaultBun
       const tip = NetworkStore.state.tip;
       return tip && !isBitcoinTip(tip) ? slotOnNetwork(network, Number(tip.slot), Date.now()) : null;
     },
+    // The worker's own protocol parameters (the wallet's network, which the vault's must be).
+    collateralPercentage: () => {
+      const percentage = NetworkStore.state.epochParams?.collateralPercentage;
+      return typeof percentage === 'number' && Number.isSafeInteger(percentage) && percentage > 0 ? percentage : null;
+    },
   };
 }));
 

@@ -304,14 +304,19 @@ export interface VaultVkeyWitness {
 }
 
 /**
- * What a cosigner hands back. It may hold two witnesses: the payment key (spending) and the stake
- * key (withdrawals and certificates).
+ * What a cosigner hands back. It may hold three witnesses: the payment key (spending), the stake
+ * key (the stake and DUST operations: certificates and withdrawals) and, for a DUST operation, the
+ * collateral key of the signer's own wallet when the body's collateral is that wallet's first
+ * address (a Plutus script runs, and a script address cannot give collateral).
  *
  * The importer accepts it only when `bundleHash` is its own bundle's, every `vkey` is a key of
- * this vault's scripts belonging to the participant `signerKeyHash` names, and every signature
- * verifies over `txId`. The final transaction is the body, the collected vkey witnesses and the
- * native scripts the body needs, from the vault record: a plain spend carries the payment script
- * only, since the ledger refuses a script witness the transaction does not need.
+ * this vault's scripts belonging to the participant `signerKeyHash` names (or the collateral key
+ * the body names), the stake witness is there exactly when the operation needs it, and every
+ * signature verifies over `txId`. The final transaction is the body, the collected vkey witnesses
+ * and the scripts the body needs, from the vault record: a plain spend carries the payment script
+ * only, since the ledger refuses a script witness the transaction does not need; a stake operation
+ * adds the stake script; a DUST operation adds the mapping validator and its redeemers, rebuilt on
+ * the assembling device and checked against the body's script data hash.
  */
 export interface VaultWitnessFile {
   readonly type: typeof WITNESS_FILE_TYPE;
