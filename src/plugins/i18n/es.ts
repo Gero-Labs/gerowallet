@@ -3476,6 +3476,7 @@ export default {
   'transactions.flow.address': 'Otra dirección',
   'transactions.flow.rewards': 'Recompensas retiradas',
   'transactions.flow.rewardsHint': 'De una cuenta de recompensas',
+  'transactions.flow.coinbaseHint': 'Subsidio de bloque y comisiones',
   'transactions.flow.deposit': 'Depósito',
   'transactions.flow.depositHint': 'Bloqueado, reembolsable',
   'transactions.flow.depositRefund': 'Depósito devuelto',

@@ -110,4 +110,25 @@ describe('Bitcoin transaction details', () => {
       wrapper.unmount();
     }
   });
+
+  it('draws the flow diagram in BTC: inputs, outputs and the fee, nothing Cardano-only', () => {
+    const wrapper = mountDetails(received);
+    try {
+      const diagram = wrapper.findComponent({ name: 'TxFlowDiagram' });
+      expect(diagram.exists()).toBe(true);
+      expect(diagram.props('decimals')).toBe(8);
+      expect(diagram.props('currencySuffix')).toBe(' BTC');
+      const model = diagram.props('model');
+      expect(model.inputs.map((node: { kind: string }) => node.kind)).toEqual(['other']);
+      expect(model.outputs.map((node: { kind: string; lovelace: number }) => [node.kind, node.lovelace])).toEqual([
+        ['own', 123_456],
+        ['other', 75_134],
+        ['fee', 1_410],
+      ]);
+      expect(diagram.find('.tx-flow__unspent').exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+    }
+  });
 });
+

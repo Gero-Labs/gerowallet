@@ -93,6 +93,17 @@
       </dl>
     </header>
 
+    <!-- Flow: inputs → transaction → outputs and fee, at a glance -->
+    <TxFlowDiagram
+      v-if="flowModel"
+      :model="flowModel"
+      :token-info="flowTokenInfo"
+      currency-symbol=""
+      :currency-suffix="` ${ticker}`"
+      :decimals="BTC_DECIMALS"
+      :fraction-digits="BTC_DECIMALS"
+    />
+
     <!-- Inputs → fee → outputs, in the same glass disclosure list as Cardano's sections -->
     <div v-if="ioSummary" class="tx-sections glass-tier">
       <section :class="['tx-section', { 'tx-section--open': ioOpen }]">
@@ -188,6 +199,8 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
+import TxFlowDiagram, { type FlowTokenInfo } from '@/shared/components/TxFlowDiagram.vue';
+import { buildBitcoinTxFlow } from '@/chains/bitcoin/bitcoinTxFlow';
 import filters from '@/shared/utils/filters';
 import time from '@/plugins/time';
 import networks from '@/utils/networks';
@@ -209,6 +222,8 @@ const props = defineProps<{
 
 /** Rows shown per side before "Show all". */
 const IO_LIMIT = 10;
+/** Satoshis per bitcoin, as a power of ten. */
+const BTC_DECIMALS = 8;
 /** Six blocks deep is the customary point a Bitcoin payment counts as final. */
 const FINAL_CONFIRMATIONS = 6;
 
@@ -328,6 +343,10 @@ const ownAddresses = computed(() => {
   if (loggedWallet.value?.baseAddress) walletAddresses.add(loggedWallet.value.baseAddress);
   return walletAddresses;
 });
+
+const flowModel = computed(() => buildBitcoinTxFlow(tx.value, ownAddresses.value));
+// Bitcoin carries no tokens, so the diagram never asks; this only satisfies its prop.
+const flowTokenInfo = (unit: string): FlowTokenInfo => ({ name: unit, decimals: 0 });
 
 const btcAmount = (sats: number) => `${formatBtc(sats)} ${ticker.value}`;
 

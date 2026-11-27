@@ -4064,6 +4064,7 @@ export default {
   'transactions.flow.address': 'Andere Adresse',
   'transactions.flow.rewards': 'Abgehobene Rewards',
   'transactions.flow.rewardsHint': 'Aus einem Reward-Konto',
+  'transactions.flow.coinbaseHint': 'Block-Subvention und Gebühren',
   'transactions.flow.deposit': 'Kaution',
   'transactions.flow.depositHint': 'Gesperrt, erstattbar',
   'transactions.flow.depositRefund': 'Kaution erstattet',
