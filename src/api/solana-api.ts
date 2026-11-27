@@ -14,6 +14,14 @@ import { isValidSolanaAddress } from '@/chains/solana/solanaKeyManager';
 import { SOLANA_NFT_BATCH, parseSolanaNftRows, type SolanaNft } from '@/chains/solana/solanaNfts';
 import { parseSolanaAssetTransfer, parseSolanaAssets, type SolanaAssetTransferInputs } from '@/chains/solana/solanaAssets';
 import {
+  parseSolanaStakeInfo,
+  parseSolanaStakes,
+  parseSolanaValidators,
+  type SolanaStakeInfo,
+  type SolanaStakes,
+  type SolanaValidator,
+} from '@/chains/solana/solanaStaking';
+import {
   parseSolanaAccounts,
   parseSolanaSimulation,
   type SolanaRemoteAccount,
@@ -177,6 +185,24 @@ export class SolanaApi {
   async getAssetTransfer(id: string): Promise<SolanaAssetTransferInputs> {
     const { data } = await this.http.get<unknown>(`/api/sol/assets/${this.address(id)}/transfer`, { params: this.params() });
     return parseSolanaAssetTransfer(data, id);
+  }
+
+  /** `GET /api/sol/addresses/{a}/stakes`: stake accounts `owner` is staker or withdrawer of (solanaStaking.ts reads it strictly). */
+  async getStakes(owner: string): Promise<SolanaStakes> {
+    const { data } = await this.http.get<unknown>(`/api/sol/addresses/${this.address(owner)}/stakes`, { params: this.params() });
+    return parseSolanaStakes(data, owner);
+  }
+
+  /** `GET /api/sol/validators`: voting validators, most stake first. Names are self-declared. */
+  async getValidators(): Promise<{ epoch: number; validators: SolanaValidator[] }> {
+    const { data } = await this.http.get<unknown>('/api/sol/validators', { params: this.params() });
+    return parseSolanaValidators(data);
+  }
+
+  /** `GET /api/sol/stake/info`: the epoch, the minimum delegation and a stake account's reserve. */
+  async getStakeInfo(): Promise<SolanaStakeInfo> {
+    const { data } = await this.http.get<unknown>('/api/sol/stake/info', { params: this.params() });
+    return parseSolanaStakeInfo(data);
   }
 
   /**

@@ -215,6 +215,7 @@ import {
   solanaSendErrorCode,
   submitSolanaHardwareSend,
 } from '@/chrome/solanaSend';
+import { prepareSolanaHardwareStake, quoteSolanaStake, sendSolanaStake } from '@/chrome/solanaStake';
 import { isSolanaHardware } from '@/chains/solana/solanaHardwarePolicy';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
@@ -4149,6 +4150,41 @@ app.addToOptions(MessageTypes.SUBMIT_SOLANA_SEND, async (request, sendResponse) 
     sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     console.error('Solana hardware send failed:', solanaSendErrorCode(error));
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+// Solana native staking (chrome/solanaStake.ts): the page names the action, the validator or
+// stake account, an amount (Stake) and a fee level; the worker reads, builds and simulates.
+app.addToOptions(MessageTypes.SOLANA_STAKE_QUOTE, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    const result = await quoteSolanaStake(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.SOLANA_STAKE, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Solana signing');
+    const result = await sendSolanaStake(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    console.error('Solana staking failed:', solanaSendErrorCode(error));
+    sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.addToOptions(MessageTypes.PREPARE_SOLANA_STAKE, async (request, sendResponse) => {
+  try {
+    if (refuseSettingsWhileLocked(request, sendResponse)) return;
+    if (!isSolanaHardware(WalletStore.state.loggedWallet?.type)) throw new SolanaSendError('NOT_SOLANA');
+    const result = await prepareSolanaHardwareStake(walletManager.getWallet(), request.data ?? {});
+    sendResponse({ id: request.id, data: { success: true, result }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: solanaSendErrorCode(error) }, target: TARGET, sender: SENDER.extension });
   }
 });

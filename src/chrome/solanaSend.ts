@@ -49,6 +49,7 @@ import {
   type SolanaTokenSendRefusal,
   type SolanaTokenSendRequest,
 } from '@/chrome/solanaTokenSend';
+import type { SolanaStakeRefusal } from '@/chrome/solanaStake';
 
 /** The part of WalletBg this module uses. */
 export interface SolanaSendWallet {
@@ -65,7 +66,7 @@ export interface SolanaSendWallet {
 }
 
 export type SolanaSendErrorCode =
-  | SolanaSendRefusal | SolanaTokenSendRefusal
+  | SolanaSendRefusal | SolanaTokenSendRefusal | SolanaStakeRefusal
   | 'NOT_SOLANA' | 'INVALID_REQUEST' | 'BUILD_FAILED' | 'SUBMIT_FAILED' | 'SEND_EXPIRED' | 'BAD_SIGNATURE';
 
 export class SolanaSendError extends Error {
@@ -232,11 +233,12 @@ export async function prepareSolanaHardwareSend(
   } catch (error) {
     throw Object.assign(new SolanaSendError('BUILD_FAILED'), { cause: error });
   }
-  holdForSignature(sender, message, now);
+  holdSolanaMessageForSignature(sender, message, now);
   return { message: Array.from(message) };
 }
 
-function holdForSignature(sender: SolanaSendWallet, message: Uint8Array, now: number): void {
+/** Holds a message the worker built for `SUBMIT_SOLANA_SEND` (also staking: solanaStake.ts). */
+export function holdSolanaMessageForSignature(sender: SolanaSendWallet, message: Uint8Array, now: number): void {
   // Drop sends no account came back for (another account's, or one abandoned before signing).
   for (const [key, pending] of pendingHardwareSends) if (pending.expires <= now) pendingHardwareSends.delete(key);
   pendingHardwareSends.set(pendingKey(sender), { message, expires: now + SOLANA_HARDWARE_SEND_TTL_MS });
@@ -314,7 +316,7 @@ export async function prepareSolanaHardwareTokenSend(
 ): Promise<{ message: number[]; tokenAccounts: SolanaTokenAccountInfo[] }> {
   const sender = requireSolana(wallet);
   const plan = await plannedTokenSend(sender, request, api);
-  holdForSignature(sender, plan.message, now);
+  holdSolanaMessageForSignature(sender, plan.message, now);
   return { message: Array.from(plan.message), tokenAccounts: solanaTokenAccountInfos(plan) };
 }
 
@@ -349,6 +351,16 @@ export async function submitSolanaHardwareSend(
   transaction.set(compactU16(1), 0);
   transaction.set(signature, 1);
   transaction.set(pending.message, 65);
+  if (transaction.length > MAX_TRANSACTION_BYTES) throw new SolanaSendError('BUILD_FAILED');
+  return submitSigned(api, bytesToBase64(transaction), base58Encode(signature));
+}
+
+/** Submits a single-signer transaction the worker built and signed (staking: solanaStake.ts). */
+export async function submitSignedSolana(
+  api: Pick<SolanaApi, 'submit'>,
+  transaction: Uint8Array,
+  signature: Uint8Array,
+): Promise<{ signature: string }> {
   if (transaction.length > MAX_TRANSACTION_BYTES) throw new SolanaSendError('BUILD_FAILED');
   return submitSigned(api, bytesToBase64(transaction), base58Encode(signature));
 }

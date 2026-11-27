@@ -2348,7 +2348,8 @@ export class WalletBg {
 
   /**
    * Signs a message the worker built for Gero's own send (a token transfer, chrome/solanaSend.ts
-   * `sendSolanaToken`): never a page's or a dApp's bytes.
+   * `sendSolanaToken`) or staking (chrome/solanaStake.ts `sendSolanaStake`): never a page's or a
+   * dApp's bytes.
    */
   async signSolanaSendMessage(message: Uint8Array, password?: string, prfSecret?: Uint8Array): Promise<Uint8Array> {
     return this.withSolanaKeypair(password, prfSecret, (keypair) => signSolanaBytes(message, keypair.secretKey));

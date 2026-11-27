@@ -108,6 +108,13 @@ export function solanaSendErrorKey(code: string | undefined): string {
     case 'SIMULATION_FAILED': return 'solana.token.simulationFailed';
     case 'LOOKUP_FAILED': return 'solana.token.lookupFailed';
     case 'COST_CHANGED': return 'solana.token.costChanged';
+    case 'VALIDATOR_UNKNOWN': return 'solana.staking.error.validatorUnknown';
+    case 'VALIDATOR_DELINQUENT': return 'solana.staking.error.validatorDelinquent';
+    case 'STAKE_BELOW_MINIMUM': return 'solana.staking.error.belowMinimum';
+    case 'STAKE_KEEP_SOL': return 'solana.staking.error.keepSol';
+    case 'STAKE_UNKNOWN': return 'solana.staking.error.unknown';
+    case 'STAKE_NOT_ACTIVE': return 'solana.staking.error.notActive';
+    case 'STAKE_NOT_WITHDRAWABLE': return 'solana.staking.error.notWithdrawable';
     default: return 'solana.sendFailed';
   }
 }
