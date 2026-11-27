@@ -151,7 +151,7 @@ jobs:
       # that keeps app chunks out of the offscreen Midnight prover page (it fails
       # the same build:web step): its spec rebuilds the regression with Vite.
       - name: Bundle TDZ, remote-code and offscreen prover guard logic
-        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs scripts/offscreen-prover-guard.spec.mjs scripts/precommit-lint.spec.mjs
+        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs scripts/offscreen-prover-guard.spec.mjs scripts/worker-listener-guard.spec.mjs scripts/precommit-lint.spec.mjs
 
       # The release gate and the Chrome Web Store step run only when a release is
       # cut, so a regression in either would otherwise surface on release day.

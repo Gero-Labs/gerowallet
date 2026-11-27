@@ -37,13 +37,14 @@ import { systemIntroWanted } from './notifyIntro';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
 import { pushLocale, type RouteIntent, type TokenInfo } from './notifyRender';
 import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
+import { setWorkerEventHandler, type GatedWorkerHandler } from '@/chrome/workerEventGate';
 
 interface WorkerRegistration {
   pushManager?: PushManagerLike;
   showNotification?: (title: string, options: NotificationOptions) => Promise<void>;
   getNotifications?: (filter?: { tag?: string }) => Promise<Array<{ close(): void }>>;
 }
-declare const self: { registration?: WorkerRegistration; addEventListener: (type: string, listener: (event: never) => void) => void } & typeof globalThis;
+declare const self: { registration?: WorkerRegistration } & typeof globalThis;
 
 const log = (m: string) => debugLog('🔔', m);
 
@@ -337,24 +338,20 @@ export const notifyPushHandlers = createNotifyPushHandlers({
 });
 
 /**
- * Top-level, synchronous: an MV3 worker woken by a push only sees listeners added in
- * the first turn. Feature-detected: a no-op where the worker has no push registration.
+ * Installs the push, notificationclick and pushsubscriptionchange handlers. The
+ * listeners themselves are added by `src/chrome/workerEventGate.ts` in the
+ * worker's first evaluation (this module runs after the wasm awaits, too late
+ * for a push that wakes the worker); the gate holds such an event until now.
  * `push` starts its work BEFORE waitUntil (a synthetic PushEvent has no usable one).
  */
 export function installNotifyListeners(): void {
+  setWorkerEventHandler('push', ((event: { data?: { text(): string } | null }) =>
+    notifyPushHandlers.handlePush(event.data ? event.data.text() : null).then(() => undefined, (e) => log(`push handler failed: ${String(e)}`))) as GatedWorkerHandler);
+  setWorkerEventHandler('notificationclick', ((event: { notification: { data?: unknown; tag?: string; close(): void } }) =>
+    notifyPushHandlers.handleNotificationClick(event.notification).then(() => undefined, (e) => log(`notificationclick failed: ${String(e)}`))) as GatedWorkerHandler);
+  setWorkerEventHandler('pushsubscriptionchange', (() => reassert('pushsubscriptionchange')) as GatedWorkerHandler);
+  // Feature-detected: no daily re-assert where the worker has no push registration.
   if (!self.registration?.pushManager) return;
-  self.addEventListener('push', ((event: { data?: { text(): string } | null; waitUntil?: (p: Promise<unknown>) => void }) => {
-    const p = notifyPushHandlers.handlePush(event.data ? event.data.text() : null).then(() => undefined, (e) => log(`push handler failed: ${String(e)}`));
-    try { event.waitUntil?.(p); } catch { /* synthetic event */ }
-  }) as (event: never) => void);
-  self.addEventListener('notificationclick', ((event: { notification: { data?: unknown; tag?: string; close(): void }; waitUntil?: (p: Promise<unknown>) => void }) => {
-    const p = notifyPushHandlers.handleNotificationClick(event.notification).then(() => undefined, (e) => log(`notificationclick failed: ${String(e)}`));
-    try { event.waitUntil?.(p); } catch { /* synthetic event */ }
-  }) as (event: never) => void);
-  self.addEventListener('pushsubscriptionchange', ((event: { waitUntil?: (p: Promise<unknown>) => void }) => {
-    const p = reassert('pushsubscriptionchange');
-    try { event.waitUntil?.(p); } catch { /* not extendable */ }
-  }) as (event: never) => void);
   chrome.alarms.create(NOTIFY_REASSERT_ALARM, { delayInMinutes: 24 * 60, periodInMinutes: 24 * 60 });
 }
 
