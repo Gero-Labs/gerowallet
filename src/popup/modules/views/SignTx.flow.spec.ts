@@ -70,6 +70,7 @@ vi.mock('@/shared/components/TransactionDetailsCard.vue', () => ({ default: { te
 vi.mock('@/shared/components/ToggleSwitch.vue', () => ({ default: { template: '<div />' } }));
 
 import SignTx from './SignTx.vue';
+import TxApprovalFlow from '@/shared/components/TxApprovalFlow.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 
@@ -147,6 +148,33 @@ describe('popup dApp approval: the flow diagram', () => {
     expect(flow(view).exists()).toBe(false);
     expect(view.find('[data-testid="tx-decode-failed-banner"]').exists()).toBe(true);
     expect(signButton(view).attributes('disabled')).toBeDefined();
+  });
+
+  it('draws nothing beside the decode-failed warning when the body parsed but the summary could not be built', async () => {
+    // The flow could draw this body; the summary, which reads more of it, could not. The warning
+    // must not stand next to a simpler, confident picture of the same transaction.
+    mocks.summary.mockReturnValue(null);
+    const view = await render();
+    expect(view.find('[data-testid="tx-decode-failed-banner"]').exists()).toBe(true);
+    expect(flow(view).exists()).toBe(false);
+  });
+
+  it('keeps an expanded column expanded when the page renders again', async () => {
+    const outputs = Array.from({ length: 8 }, (_, i) => txOut(`${EXT_ADDR.slice(0, -2)}${String(i).padStart(2, '0')}`, 1_000_000n));
+    mocks.decode.mockReturnValue({ body: { inputs: [txIn(OWN_TX, 0)], outputs, fee: 200_000n }, witness: {} });
+    const view = await render();
+    const more = flow(view).find('.tx-flow__box--more');
+    expect(more.exists()).toBe(true);
+    await more.trigger('click');
+    expect(flow(view).find('.tx-flow__box--more').exists()).toBe(false);
+    // Any render of the page (a keystroke) must not hand the diagram new inputs: a new object
+    // rebuilt its model and folded the column again.
+    const deposits = view.findComponent(TxApprovalFlow).props('deposits');
+    // The same wallet again: re-renders what reads it (the currency symbol beside the diagram).
+    walletStore.loggedWallet = { ...walletStore.loggedWallet } as never;
+    await flushPromises();
+    expect(view.findComponent(TxApprovalFlow).props('deposits')).toBe(deposits);
+    expect(flow(view).find('.tx-flow__box--more').exists()).toBe(false);
   });
 
   it('sits after the warnings and leaves the market acknowledgement holding Sign', async () => {

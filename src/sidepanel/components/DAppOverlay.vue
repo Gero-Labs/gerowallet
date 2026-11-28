@@ -198,13 +198,14 @@
         </div>
 
         <!-- Display only, after every warning above: inputs to outputs, an input the wallet can't
-             resolve shown as unknown. Draws nothing when the transaction did not parse. -->
+             resolve shown as unknown. Drawn only beside a summary: when the summary could not be built,
+             the decode-failed warning stands alone rather than next to a simpler, confident picture. -->
         <TxApprovalFlow
           class="mb-3"
-          :tx="approvalTx"
+          :tx="approvalSummary ? approvalTx : null"
           :own-addresses="flowOwnAddresses"
           :own-utxos="provenOwnUtxos"
-          :deposits="approvalDepositsFrom(networkStore.epochParams)"
+          :deposits="approvalDeposits"
           :token-info="resolveAssetInfo"
           :currency-symbol="networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)"
         />
@@ -2288,6 +2289,9 @@ const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenAp
 
 // The full approval summary. Shared builder (txApprovalSummary.ts) so the popup
 // fallback shows the same effects.
+// One object while the parameters stand: an inline call made a new one on every render (the
+// expiry countdown ticks each second), which rebuilt the diagram and folded "+N more" again.
+const approvalDeposits = computed(() => approvalDepositsFrom(networkStore.epochParams));
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   const tx = approvalTx.value;
   if (!tx) return null;

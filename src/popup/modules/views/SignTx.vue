@@ -82,13 +82,14 @@
           :inputs-misreported="inputsMisreported"
         />
         <!-- Display only, after every warning above: inputs to outputs, an input the wallet can't
-             resolve shown as unknown. Draws nothing when the transaction did not parse. -->
+             resolve shown as unknown. Drawn only beside a summary: when the summary could not be built,
+             the decode-failed warning stands alone rather than next to a simpler, confident picture. -->
         <TxApprovalFlow
           class="mt-2"
-          :tx="tx ?? null"
+          :tx="approvalSummary ? (tx ?? null) : null"
           :own-addresses="flowOwnAddresses"
           :own-utxos="provenOwnUtxos"
-          :deposits="approvalDepositsFrom(networkStore.epochParams)"
+          :deposits="approvalDeposits"
           :token-info="flowTokenInfo"
           :currency-symbol="networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)"
         />
@@ -378,6 +379,9 @@ const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenAp
   computed(() => loggedWallet.value?.network),
   () => walletStore.transactions as unknown[],
 );
+// One object while the parameters stand: an inline call made a new one on every render (each
+// keystroke), which rebuilt the diagram and folded its expanded columns again.
+const approvalDeposits = computed(() => approvalDepositsFrom(networkStore.epochParams));
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   if (!tx.value?.body) return null;
   try {
