@@ -79,6 +79,7 @@ import { formatSol } from '@/chains/solana/solanaAmount';
 import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import {
   stakeActions,
+  stakeValidatorName,
   stakeStateKey,
   totalActiveLamports,
   totalStakedLamports,
@@ -86,7 +87,7 @@ import {
 } from '@/chains/solana/solanaStaking';
 import type { SolanaStakeAction } from '@/chains/solana/solanaStakeTransfer';
 
-const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, owner } = useSolanaStaking();
+const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, ensureValidators, owner } = useSolanaStaking();
 
 const networkName = computed(() => walletStore.loggedWallet?.network ?? '');
 const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, networkName.value));
@@ -98,6 +99,7 @@ const dialogAction = ref<SolanaStakeAction>('stake');
 const dialogAccount = shallowRef<SolanaStakeAccount | null>(null);
 
 function open(action: SolanaStakeAction, account: SolanaStakeAccount | null = null): void {
+  if (action === 'stake') ensureValidators();
   dialogAction.value = action;
   dialogAccount.value = account;
   dialogOpen.value = true;
@@ -111,10 +113,8 @@ function shortId(id: string): string {
   return `${id.slice(0, 6)}…${id.slice(-6)}`;
 }
 
-/** The validator's published name (self-declared), else its vote account; none when undelegated. */
 function validatorName(account: SolanaStakeAccount): string {
-  if (!account.voter) return '—';
-  return byVote.value.get(account.voter)?.name ?? shortId(account.voter);
+  return stakeValidatorName(account, byVote.value);
 }
 </script>
 

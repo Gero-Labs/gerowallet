@@ -249,6 +249,15 @@ export function totalActiveLamports(accounts: readonly SolanaStakeAccount[]): bi
   return accounts.reduce((sum, account) => sum + account.activeStake, 0n);
 }
 
+/**
+ * How a stake account's validator is named on screen: the name it published (self-declared), else
+ * its vote account shortened; an em dash for an account that is not delegated.
+ */
+export function stakeValidatorName(account: SolanaStakeAccount, byVote: ReadonlyMap<string, SolanaValidator>): string {
+  if (!account.voter) return '—';
+  return byVote.get(account.voter)?.name ?? `${account.voter.slice(0, 6)}…${account.voter.slice(-6)}`;
+}
+
 /** The i18n key of a stake account's state. */
 export function stakeStateKey(state: SolanaStakeState): string {
   return `solana.staking.state.${state}`;
