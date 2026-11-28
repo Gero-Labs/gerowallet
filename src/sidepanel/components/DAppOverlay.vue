@@ -197,6 +197,19 @@
           </div>
         </div>
 
+        <!-- Display only, after every warning above: inputs to outputs, an input the wallet can't
+             resolve shown as unknown. Drawn only beside a summary: when the summary could not be built,
+             the decode-failed warning stands alone rather than next to a simpler, confident picture. -->
+        <TxApprovalFlow
+          class="mb-3"
+          :tx="approvalSummary ? approvalTx : null"
+          :own-addresses="flowOwnAddresses"
+          :own-utxos="provenOwnUtxos"
+          :deposits="approvalDeposits"
+          :token-info="resolveAssetInfo"
+          :currency-symbol="networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)"
+        />
+
         <!-- Normal wallet: password input -->
         <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
           <v-text-field
@@ -1393,6 +1406,7 @@ import TransactionDetailsCard, {
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
+import TxApprovalFlow from '@/shared/components/TxApprovalFlow.vue';
 import BitcoinPsbtReview from '@/shared/components/BitcoinPsbtReview.vue';
 import { useBitcoinPsbtReview } from '@/shared/composables/useBitcoinPsbtReview';
 import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
@@ -2275,6 +2289,9 @@ const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenAp
 
 // The full approval summary. Shared builder (txApprovalSummary.ts) so the popup
 // fallback shows the same effects.
+// One object while the parameters stand: an inline call made a new one on every render (the
+// expiry countdown ticks each second), which rebuilt the diagram and folded "+N more" again.
+const approvalDeposits = computed(() => approvalDepositsFrom(networkStore.epochParams));
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   const tx = approvalTx.value;
   if (!tx) return null;
@@ -2298,6 +2315,13 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return null;
   }
 });
+
+// The flow diagram's view of the same wallet (display only).
+const flowOwnAddresses = computed(() => new Set(
+  [...(WalletStore.state.keys?.payment ?? []), ...(WalletStore.state.keys?.change ?? [])]
+    .map((key) => key.address)
+    .filter((address): address is string => !!address),
+));
 
 const signTxSummary = computed<SignTxSummary | null>(() => {
   const s = approvalSummary.value;

@@ -81,6 +81,18 @@
           v-model:inputs-misreported-ack="inputsMisreportedAck"
           :inputs-misreported="inputsMisreported"
         />
+        <!-- Display only, after every warning above: inputs to outputs, an input the wallet can't
+             resolve shown as unknown. Drawn only beside a summary: when the summary could not be built,
+             the decode-failed warning stands alone rather than next to a simpler, confident picture. -->
+        <TxApprovalFlow
+          class="mt-2"
+          :tx="approvalSummary ? (tx ?? null) : null"
+          :own-addresses="flowOwnAddresses"
+          :own-utxos="provenOwnUtxos"
+          :deposits="approvalDeposits"
+          :token-info="flowTokenInfo"
+          :currency-symbol="networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)"
+        />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
         <div class="flex-grow-1">
@@ -279,6 +291,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
 import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
+import TxApprovalFlow from '@/shared/components/TxApprovalFlow.vue';
 import { approvalContextFromKeys, approvalDepositsFrom, approvalMarketContext, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { useProvenApprovalUtxos } from '@/shared/composables/useProvenApprovalUtxos';
 import filters from '@/shared/utils/filters';
@@ -366,6 +379,9 @@ const { ownUtxos: provenOwnUtxos, misreported: inputsMisreported } = useProvenAp
   computed(() => loggedWallet.value?.network),
   () => walletStore.transactions as unknown[],
 );
+// One object while the parameters stand: an inline call made a new one on every render (each
+// keystroke), which rebuilt the diagram and folded its expanded columns again.
+const approvalDeposits = computed(() => approvalDepositsFrom(networkStore.epochParams));
 const approvalSummary = computed<TxApprovalSummary | null>(() => {
   if (!tx.value?.body) return null;
   try {
@@ -390,6 +406,11 @@ const approvalSummary = computed<TxApprovalSummary | null>(() => {
     return null;
   }
 });
+// The flow diagram's view of the same wallet (display only).
+const flowOwnAddresses = computed(() => new Set(
+  [...(keys.value?.payment ?? []), ...(keys.value?.change ?? [])].map((key) => key.address).filter((address): address is string => !!address),
+));
+const flowTokenInfo = (unit: string) => ({ name: filters.truncate(unit), decimals: 0 });
 const approvalCard = computed(() =>
   approvalSummary.value ? toTransactionDetailsCardProps(approvalSummary.value, filters.truncate) : null,
 );

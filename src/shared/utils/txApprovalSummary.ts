@@ -403,7 +403,7 @@ const REFUNDS_DEPOSIT: ReadonlySet<string> = new Set([
  * protocol's keyDeposit / poolDeposit. (A pool re-registration locks nothing,
  * which the transaction alone can't tell, so the pool deposit is an upper bound.)
  */
-function certificateDeposit(
+export function certificateDeposit(
   cert: Cardano.Certificate,
   deposits: ApprovalDeposits | undefined,
 ): { lovelace: bigint; direction: 'paid' | 'refunded' } | null {

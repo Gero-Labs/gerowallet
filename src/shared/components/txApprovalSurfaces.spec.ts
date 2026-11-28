@@ -52,6 +52,26 @@ describe('signTx approval surfaces share one summary', () => {
     });
   }
 
+  // The flow diagram is display only: it comes after every warning and acknowledgement, counts the
+  // same proven UTxOs as the summary, and nothing that gates Sign reads it.
+  for (const [file, lastWarning] of [
+    ['sidepanel/components/DAppOverlay.vue', 'ttlDisplay.expired'],
+    ['popup/modules/views/SignTx.vue', '<TxApprovalIntents'],
+  ] as const) {
+    it(`${file} draws the flow diagram after its warnings, from the proven UTxOs, outside the Sign gate`, () => {
+      const src = read(file);
+      const template = src.slice(0, src.indexOf('<script'));
+      const at = template.indexOf('<TxApprovalFlow');
+      expect(at).toBeGreaterThan(-1);
+      expect(template.indexOf('<TxApprovalIntents')).toBeLessThan(at);
+      expect(template.indexOf('signTx.decodeFailedTitle')).toBeLessThan(at);
+      expect(template.indexOf(lastWarning)).toBeLessThan(at);
+      expect(template.slice(at, template.indexOf('/>', at))).toContain(':own-utxos="provenOwnUtxos"');
+      const gate = src.slice(src.indexOf(file.includes('popup') ? 'const signBlocked' : 'const signTxBlocked'));
+      expect(gate.slice(0, gate.indexOf(');'))).not.toMatch(/flow/i);
+    });
+  }
+
   it('the side panel forgets the market acknowledgement with every other per-request one', () => {
     const src = read('sidepanel/components/DAppOverlay.vue');
     expect(src).toMatch(/foreignValueAck\.value = false;\s*marketAck\.value = false;/);
