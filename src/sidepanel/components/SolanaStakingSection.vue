@@ -24,6 +24,14 @@
       <li v-for="account in stakes.accounts" :key="account.address" class="sol-stk__row" data-test="sol-panel-stake-row">
         <div class="sol-stk__main">
           <span class="sol-stk__name">{{ stakeValidatorName(account, byVote) }}</span>
+          <!-- Two accounts with one validator and like amounts are told apart by their address. -->
+          <a
+            :href="solscanUrl('account', account.address, network)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="t-caption g-mono sol-stk__address"
+            :title="account.address"
+          >{{ shortAddress(account.address) }}</a>
           <span :class="['t-caption', `sol-stk__state--${account.state}`]">
             {{ $t(stakeStateKey(account.state)) }}<template v-if="account.lockedUp"> · {{ $t('solana.staking.lockedUp') }}</template>
           </span>
@@ -62,6 +70,7 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import SolanaStakeSheet from './flows/SolanaStakeSheet.vue';
 import { useSolanaStaking } from '@/shared/composables/useSolanaStaking';
 import { formatSol } from '@/chains/solana/solanaAmount';
+import { solscanUrl } from '@/chains/solana/solanaExplorer';
 import {
   stakeActions,
   stakeStateKey,
@@ -73,7 +82,8 @@ import type { SolanaStakeAction } from '@/chains/solana/solanaStakeTransfer';
 
 const { stakes, validators, info, byVote, loading, failed, validatorsFailed, load, reloadAfterAction, ensureValidators, owner } = useSolanaStaking();
 
-const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network));
+const network = computed(() => walletStore.loggedWallet?.network ?? '');
+const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedWallet?.chain, network.value));
 const hide = computed(() => walletStore.config?.hideBalances || false);
 const epochPercent = computed(() => (info.value ? Math.floor((info.value.slotIndex * 100) / info.value.slotsInEpoch) : 0));
 const namedValidators = computed(() => !!stakes.value?.accounts.some((a) => a.voter && byVote.value.get(a.voter)?.name));
@@ -87,6 +97,10 @@ function open(action: SolanaStakeAction, account: SolanaStakeAccount | null = nu
   sheetAction.value = action;
   sheetAccount.value = account;
   sheetOpen.value = true;
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-6)}`;
 }
 
 function actionsOf(account: SolanaStakeAccount) {
@@ -168,6 +182,10 @@ function actionsOf(account: SolanaStakeAccount) {
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sol-stk__address {
+  color: var(--g-text-3);
 }
 
 .sol-stk__value {

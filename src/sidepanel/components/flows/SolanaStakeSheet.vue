@@ -8,6 +8,7 @@
     @update:model-value="onUpdate"
   >
     <div class="solana-stake-sheet">
+      <p class="t-caption solana-stake-sheet__subtitle">{{ subtitle }}</p>
       <SolanaStakeForm
         :open="modelValue"
         :action="action"
@@ -54,6 +55,7 @@ const ticker = computed(() => networks.resolveCurrencyTicker(walletStore.loggedW
 const title = computed(() => (props.action === 'stake'
   ? t('solana.staking.stakeTitle', { ticker: ticker.value })
   : t(`solana.staking.${props.action}`)));
+const subtitle = computed(() => t(`solana.staking.${props.action}Subtitle`, { ticker: ticker.value }));
 
 function onUpdate(value: boolean): void {
   // Held while a PassKey ceremony, a device or the action itself is in flight.
@@ -65,5 +67,10 @@ function onUpdate(value: boolean): void {
 <style scoped lang="scss">
 .solana-stake-sheet {
   padding: 0 var(--g-s-4) var(--g-s-4);
+}
+
+.solana-stake-sheet__subtitle {
+  margin: 0 0 var(--g-s-3);
+  color: var(--g-text-2);
 }
 </style>
